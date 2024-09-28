@@ -1,0 +1,67 @@
+{
+  "name": "bdbdg-contest",
+  "version": "1.8.01",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.10.6",
+    "@emotion/styled": "^11.10.6",
+    "@mui/material": "^5.11.13",
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^13.0.0",
+    "@testing-library/user-event": "^13.2.1",
+    "antd": "^5.20.4",
+    "colorthief": "^2.4.0",
+    "crypto-js": "^4.1.1",
+    "date-fns": "^2.30.0",
+    "dayjs": "^1.11.7",
+    "firebase": "^9.17.1",
+    "firebase-tools": "^11.30.0",
+    "formik": "^2.2.9",
+    "lodash": "^4.17.21",
+    "node-sass": "^9.0.0",
+    "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-datepicker": "^4.11.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^4.10.1",
+    "react-loader-spinner": "^5.3.4",
+    "react-modern-drawer": "^1.2.0",
+    "react-player": "^2.12.0",
+    "react-router-dom": "^6.8.0",
+    "react-scripts": "5.0.1",
+    "react-to-print": "^2.14.12",
+    "react-virtuoso": "^4.3.8",
+    "recharts": "^2.12.7",
+    "uuid": "^9.0.0",
+    "web-vitals": "^2.1.0",
+    "yarn": "^1.22.19",
+    "yup": "^1.1.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.3.2"
+  }
+}
