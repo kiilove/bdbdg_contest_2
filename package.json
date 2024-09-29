@@ -1,6 +1,6 @@
 {
-  "name": "bdbdg-contest",
-  "version": "1.8.01",
+  "name": "contest-bdbdg-2",
+  "version": "1.0.00",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.10.6",

@@ -1,32 +1,25 @@
-import React, { useCallback } from "react";
-import { useState } from "react";
+import React, { useCallback, useState, useEffect, useContext } from "react";
 import _ from "lodash";
 import LoadingPage from "./LoadingPage";
-import { TbHeartRateMonitor } from "react-icons/tb";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { useContext } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useEffect } from "react";
 import {
   useFirebaseRealtimeAddData,
-  useFirebaseRealtimeDeleteData,
   useFirebaseRealtimeGetDocument,
-  useFirebaseRealtimeQuery,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
 import { useNavigate } from "react-router-dom";
-import { debounce } from "lodash";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { where } from "firebase/firestore";
 import { Modal } from "@mui/material";
 import CompareSetting from "../modals/CompareSetting";
 import ContestRankingSummary from "../modals/ContestRankingSummary";
 import ContestPointSummary from "../modals/ContestPointSummary";
-import dayjs from "dayjs"; // 날짜 형식을 위한 dayjs
+import dayjs from "dayjs";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -64,7 +57,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const [currentCompareInfo, setCurrentCompareInfo] = useState({});
   const [matchedOriginalPlayers, setMatchedOriginalPlayers] = useState([]);
   const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
-  const [realtimeData, setrealtimeData] = useState({});
+  const [prevRealtimeData, setPrevRealtimeData] = useState({});
   const [compareStatus, setCompareStatus] = useState({
     compareStart: false,
     compareEnd: false,
@@ -74,8 +67,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const [normalScoreData, setNormalScoreData] = useState([]);
   const [normalScoreTable, setNormalScoreTable] = useState([]);
 
-  const [currentScoreTableByJudge, setCurrentScoreTableByJudge] = useState([]);
-
   const fetchNotice = useFirestoreGetDocument("contest_notice");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
@@ -83,8 +74,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const updateCompare = useFirestoreUpdateData("contest_compares_list");
   const fetchScoreCardQuery = useFirestoreQuery();
 
-  const { data: fetchRealTimeCurrentStage, getDocument: currentStageFunction } =
-    useFirebaseRealtimeGetDocument();
+  // 개선된 훅 사용 (onValue 활용)
+  const {
+    data: realtimeData,
+    loading: realtimeLoading,
+    error: realtimeError,
+  } = useFirebaseRealtimeGetDocument(
+    currentContest?.contests?.id
+      ? `currentStage/${currentContest.contests.id}`
+      : null
+  );
 
   const addCurrentStage = useFirebaseRealtimeAddData();
   const updateRealtimeCompare = useFirebaseRealtimeUpdateData();
@@ -131,9 +130,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           setCurrentCompareInfo({});
         }
         if (returnCompareList.compares.length > 0) {
-          console.log(
-            returnCompareList.compares[returnCompareList.compares.length - 1]
-          );
           setCurrentCompareInfo({
             ...returnCompareList.compares[
               returnCompareList.compares.length - 1
@@ -152,7 +148,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   };
 
   const fetchScoreTable = async (grades) => {
-    //setIsLoading(true);
+    if (!grades || grades.length === 0) return;
+
     const allData = [];
 
     for (let grade of grades) {
@@ -170,20 +167,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
 
     setNormalScoreData(allData);
-    // setIsLoading(false);
   };
 
   const handleJudgeIsLoginedValidated = (judgesArray) => {
     if (judgesArray?.length <= 0) {
       return;
     }
-    // console.log(judgesArray);
     const validate = judgesArray.some((s) => s.isLogined === false);
-    //console.log(validate);
     return validate;
   };
   const handleForceScoreTableRefresh = (grades) => {
-    console.log(grades);
     if (grades?.length <= 0) {
       return;
     }
@@ -192,7 +185,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   };
 
   const handleScoreTableByJudge = (grades) => {
-    if (!_.isEqual(realtimeData?.judges, fetchRealTimeCurrentStage?.judges)) {
+    if (!_.isEqual(realtimeData?.judges, prevRealtimeData?.judges)) {
       fetchScoreTable(grades);
     }
   };
@@ -204,8 +197,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     if (grades?.length === 0) {
       gradeTitle = "오류발생";
       gradeId = "";
-    }
-    if (grades.length === 1) {
+    } else if (grades.length === 1) {
       gradeTitle = grades[0].gradeTitle;
       gradeId = grades[0].gradeId;
     } else if (grades.length > 1) {
@@ -229,8 +221,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       grades,
     } = stagesArray[0];
 
-    const gradeTitle = handleGradeInfo(grades).gradeTitle;
-    const gradeId = handleGradeInfo(grades).gradeId;
+    const { gradeTitle, gradeId } = handleGradeInfo(grades);
 
     const judgeInitState = Array.from(
       { length: categoryJudgeCount },
@@ -250,13 +241,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       judges: judgeInitState,
     };
     try {
-      await addCurrentStage
-        .addData(
-          "currentStage",
-          newCurrentStateInfo,
-          currentContest.contests.id
-        )
-        .then((data) => setrealtimeData({ ...data }));
+      await addCurrentStage.addData(
+        "currentStage",
+        newCurrentStateInfo,
+        currentContest.contests.id
+      );
     } catch (error) {
       console.log(error);
     }
@@ -280,7 +269,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         compareIng: false,
       },
     };
-    let newRealtimePlayers = [];
 
     if (compareIndex > 0) {
       newRealtimeInfo = {
@@ -298,34 +286,26 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
 
     try {
-      await updateRealtimeCompare
-        .updateData(collectionInfoByCompares, {
-          ...newRealtimeInfo,
-        })
-        .then((data) => console.log(data))
-        .then(() =>
-          setCompareStatus(() => ({
-            compareStart: false,
-            compareEnd: false,
-            compareCancel: true,
-            compareIng: false,
-          }))
-        )
-        .then(async () => {
-          await updateCompare.updateData(comparesList.id, {
-            ...comparesList,
-            compares: [...newCompareArray],
-          });
-        })
-        .then(() => {
-          setComparesList(() => ({
-            ...comparesList,
-            compares: [...newCompareArray],
-          }));
-          setComparesArray(() => [...newCompareArray]);
-        })
-        .then(() => setParentRefresh(true))
-        .then(() => setCompareCancelMsgOpen(false));
+      await updateRealtimeCompare.updateData(collectionInfoByCompares, {
+        ...newRealtimeInfo,
+      });
+      setCompareStatus(() => ({
+        compareStart: false,
+        compareEnd: false,
+        compareCancel: true,
+        compareIng: false,
+      }));
+      await updateCompare.updateData(comparesList.id, {
+        ...comparesList,
+        compares: [...newCompareArray],
+      });
+      setComparesList(() => ({
+        ...comparesList,
+        compares: [...newCompareArray],
+      }));
+      setComparesArray(() => [...newCompareArray]);
+      setParentRefresh(true);
+      setCompareCancelMsgOpen(false);
     } catch (error) {
       console.log(error);
     }
@@ -361,58 +341,18 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   }, [parentRefresh]);
 
   useEffect(() => {
-    setrealtimeData(fetchRealTimeCurrentStage);
     setCurrentStageInfo({
-      ...stagesArray.find(
-        (f) => f.stageId === fetchRealTimeCurrentStage?.stageId
-      ),
+      ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
     });
-  }, [fetchRealTimeCurrentStage]);
-
-  // 데이터 갱신을 위한 useCallback 함수
-  const debouncedGetDocument = useCallback(
-    debounce(() => {
-      if (currentContest?.contests?.id) {
-        currentStageFunction(`currentStage/${currentContest.contests.id}`);
-        setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss")); // 마지막 갱신 시각 설정
-        if (currentStageInfo?.grades) {
-          handleForceScoreTableRefresh(currentStageInfo.grades);
-        }
-      }
-    }, 20000), // 20초마다 갱신
-    [currentContest, currentStageFunction]
-  );
-
-  // useEffect로 20초마다 갱신하도록 설정
-  useEffect(() => {
-    if (!isHolding) {
-      debouncedGetDocument();
-
-      // Cleanup으로 debounced 함수를 취소
-      return () => {
-        debouncedGetDocument.cancel();
-      };
-    }
-  }, [debouncedGetDocument, isHolding]);
-
-  // 수동 갱신 함수
-  const handleForceUpdate = () => {
-    if (currentContest?.contests?.id) {
-      currentStageFunction(`currentStage/${currentContest.contests.id}`);
-      setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss")); // 마지막 갱신 시각 설정
-    }
-    if (currentStageInfo?.grades) {
-      handleForceScoreTableRefresh(currentStageInfo.grades);
-    }
-  };
+  }, [realtimeData, stagesArray]);
 
   useEffect(() => {
-    if (fetchRealTimeCurrentStage?.judgex) {
-      setrealtimeData(() => ({ ...fetchRealTimeCurrentStage }));
+    if (realtimeData?.judges) {
+      setPrevRealtimeData(() => ({ ...realtimeData }));
     }
 
     if (
-      fetchRealTimeCurrentStage?.stageJudgeCount &&
+      realtimeData?.stageJudgeCount &&
       currentStageInfo?.grades?.length > 0 &&
       playersArray?.length > 0
     ) {
@@ -426,8 +366,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       );
     }
   }, [
-    fetchRealTimeCurrentStage?.stageJudgeCount,
-    fetchRealTimeCurrentStage?.judges,
+    realtimeData?.stageJudgeCount,
+    realtimeData?.judges,
     playersArray,
     currentStageInfo,
   ]);
@@ -452,14 +392,23 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   }, [compareInfo]);
 
+  // 수동 갱신 함수
+  const handleForceUpdate = useCallback(() => {
+    if (currentContest?.contests?.id) {
+      setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
+    }
+    if (currentStageInfo?.grades) {
+      handleForceScoreTableRefresh(currentStageInfo.grades);
+    }
+  }, [currentContest, currentStageInfo]);
+
   return (
     <>
-      {isLoading && (
+      {isLoading || realtimeLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
-      )}
-      {!isLoading && (
+      ) : (
         <div className="flex flex-col w-full h-full bg-white rounded-lg p-0 px-2 gap-y-2 justify-start items-start">
           <ConfirmationModal
             isOpen={msgOpen}
@@ -554,23 +503,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                     className="flex bg-gray-100 p-2 w-full h-auto rounded-lg flex-col justify-start items-center"
                     style={{ minHeight: "70px" }}
                   >
-                    {/* {!handleJudgeIsLoginedValidated(realtimeData.judges) &&
-                      comparesArray && (
-                        <div className="flex w-full h-auto justify-center items-center">
-                          <button
-                            className="bg-blue-400 w-full h-full p-2 rounded-lg text-gray-100 text-lg font-semibold"
-                            style={{ minHeight: "50px" }}
-                            onClick={() =>
-                              setCompareMode(() => ({
-                                ...compareMode,
-                                compareStart: true,
-                              }))
-                            }
-                          >
-                            {comparesArray.length + 1}차 비교심사시작
-                          </button>
-                        </div>
-                      )} */}
                     {realtimeData.judges && comparesArray && (
                       <div className="flex w-full h-auto justify-center items-center">
                         <button
@@ -618,10 +550,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                             const { players, compareIndex } = compare;
 
                             return (
-                              <div className="flex w-full justify-start items-center h-auto p-2">
+                              <div
+                                key={cIdx}
+                                className="flex w-full justify-start items-center h-auto p-2"
+                              >
                                 <div className="flex w-2/3 justify-start items-center gap-x-2 p-2 border border-gray-400 rounded-lg">
                                   {players?.map((top, tIdx) => (
-                                    <div className="flex w-10 h-10 rounded-lg bg-blue-500 justify-center items-center font-semibold border-2 border-blue-800 flex-col text-xl text-gray-100">
+                                    <div
+                                      key={tIdx}
+                                      className="flex w-10 h-10 rounded-lg bg-blue-500 justify-center items-center font-semibold border-2 border-blue-800 flex-col text-xl text-gray-100"
+                                    >
                                       {top.playerNumber}
                                     </div>
                                   ))}
@@ -692,7 +630,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                             )
                             .sort((a, b) => a.playerIndex - b.playerIndex);
                           return (
-                            <div className="flex w-full h-auto p-2 flex-col">
+                            <div
+                              key={gIdx}
+                              className="flex w-full h-auto p-2 flex-col"
+                            >
                               <div className="flex w-full h-20 justify-start items-center gap-x-2">
                                 <span>
                                   {categoryTitle}({gradeTitle})
@@ -742,6 +683,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                     const { seatIndex } = judge;
                                     return (
                                       <div
+                                        key={jIdx}
                                         className="h-full p-2 justify-center items-start flex w-full border-t border-b-2 border-r border-gray-400 "
                                         style={{ maxWidth: "15%" }}
                                       >
@@ -754,7 +696,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 const { playerNumber } = player;
 
                                 return (
-                                  <div className="flex">
+                                  <div key={pIdx} className="flex">
                                     <div
                                       className="h-full p-2 justify-center items-start flex w-full border-l border-b border-r  border-gray-400 "
                                       style={{ maxWidth: "15%" }}
@@ -774,6 +716,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
                                           return (
                                             <div
+                                              key={jIdx}
                                               className="h-auto p-2 justify-center items-start flex w-full  border-r border-b border-gray-400 "
                                               style={{ maxWidth: "15%" }}
                                             >

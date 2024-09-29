@@ -116,6 +116,8 @@ const ContestRankingSummary = ({
     let rank = 0; // Start from rank 1
     let prevScore = null; // To keep track of previous score
     let sameRankCount = 0; // To keep track of how many players have the same rank
+    let isAlertSet = false; // Track if alert has been set for the group
+
     for (let i = 0; i < groupedObj.length; i++) {
       groupedObj[i].isAlert = false; // Initially set isAlert to false for every player
 
@@ -129,19 +131,19 @@ const ContestRankingSummary = ({
               groupedObj[i - j - 1].isAlert = true;
             }
           }
-
           rank += sameRankCount + 1; // Increment rank by the number of players with the same rank
           sameRankCount = 0; // Reset the count
+          isAlertSet = false; // Reset alert flag for new score group
         } else {
           sameRankCount++;
-          groupedObj[i].isAlert = true; // If current score is the same as previous, set isAlert to true
+          groupedObj[i].isAlert = true; // If current score is the same as previous, set isAlert to true for all
         }
         groupedObj[i].playerRank = rank;
         prevScore = groupedObj[i].totalScore;
       }
     }
 
-    // Check after the loop to ensure the last set of players with the same rank also get the alert
+    // 마지막으로, 같은 순위의 선수들이 남아있다면 alert를 설정
     if (sameRankCount >= 1) {
       for (let j = 0; j <= sameRankCount; j++) {
         groupedObj[groupedObj.length - 1 - j].isAlert = true;
@@ -423,7 +425,6 @@ const ContestRankingSummary = ({
                                           pIdx
                                         )
                                       }
-                                      disabled={!isAlert}
                                       className={
                                         isAlert
                                           ? "w-10 h-10 bg-transparent border border-blue-400 rounded-lg text-center outline-none"

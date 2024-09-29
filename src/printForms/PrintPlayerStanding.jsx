@@ -410,6 +410,12 @@ const PrintPlayerStanding = () => {
                                               playerNumber,
                                               playerGym,
                                             } = player;
+
+                                            // playerRank가 1000 이상이면 건너뛰기
+                                            if (playerRank >= 1000) {
+                                              return null;
+                                            }
+
                                             return (
                                               <div className="flex w-full h-10 last:border-b-2 border-black ">
                                                 <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">

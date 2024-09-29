@@ -1,15 +1,11 @@
-import React, { useContext } from "react";
-import { useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import LoadingPage from "../pages/LoadingPage";
-import { useEffect } from "react";
-import { debounce, isNumber } from "lodash";
 import { MdLiveHelp } from "react-icons/md";
 import {
   useFirebaseRealtimeDeleteData,
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
-import { generateUUID } from "../functions/functions";
 import {
   useFirestoreAddData,
   useFirestoreGetDocument,
@@ -17,7 +13,6 @@ import {
 } from "../hooks/useFirestores";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { setRef } from "@mui/material";
 
 const CompareSetting = ({
   stageInfo,
@@ -29,6 +24,8 @@ const CompareSetting = ({
   const [isLoading, setIsLoading] = useState(true);
   const [compareList, setCompareList] = useState({});
   const [compareArray, setCompareArray] = useState([]);
+  const [isVotedPlayerLengthInput, setIsVotedPlayerLengthInput] =
+    useState(false);
 
   const [compareMsgOpen, setCompareMsgOpen] = useState(false);
   const [msgOpen, setMsgOpen] = useState(false);
@@ -47,16 +44,10 @@ const CompareSetting = ({
     compareIng: false,
   });
 
-  const [compareId, setCompareId] = useState("");
-
-  const [isVotedPlayerLengthInput, setIsVotedPlayerLengthInput] =
-    useState(false);
-
   const [votedResult, setVotedResult] = useState([]);
   const [topResult, setTopResult] = useState([]);
   const [votedValidate, setVotedValidate] = useState(true);
-  const { data: realtimeData, getDocument: realtimeFunction } =
-    useFirebaseRealtimeGetDocument();
+
   const updateRealtimeCompare = useFirebaseRealtimeUpdateData();
 
   const fetchCompare = useFirestoreGetDocument("contest_compares_list");
@@ -64,8 +55,15 @@ const CompareSetting = ({
 
   const { currentContest } = useContext(CurrentContestContext);
 
+  // 실시간 데이터 가져오기
+  const { data: realtimeData } = useFirebaseRealtimeGetDocument(
+    currentContest?.contests?.id
+      ? `currentStage/${currentContest.contests.id}`
+      : null
+  );
+
   const fetchPool = async (gradeId, compareListId) => {
-    if (gradeId === undefined || compareId === undefined) {
+    if (gradeId === undefined || compareListId === undefined) {
       setMessage({
         body: "데이터 로드에 문제가 발생했습니다.",
         body2: "다시 시도해주세요.",
@@ -77,20 +75,13 @@ const CompareSetting = ({
     }
 
     try {
-      await fetchCompare
-        .getDocument(compareListId)
-        .then((data) => {
-          console.log(data);
-          setCompareList({ ...data });
-          return data;
-        })
-        .then((data) => {
-          console.log(data.compares);
-          console.log(data.compares.length);
-          data?.compares?.length > 0 && setCompareArray([...data.compares]);
-        });
+      const compareData = await fetchCompare.getDocument(compareListId);
+      setCompareList({ ...compareData });
+      if (compareData?.compares?.length > 0) {
+        setCompareArray([...compareData.compares]);
+      }
     } catch (error) {
-      console.log(error);
+      console.error("Error fetching compare data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -100,76 +91,60 @@ const CompareSetting = ({
     const collectionInfo = `currentStage/${contestId}/compares`;
     try {
       setVotedInfo({});
-      await updateRealtimeCompare.updateData(collectionInfo, data).then(() =>
-        setCompareStatus(() => ({
-          compareStart: true,
-          compareEnd: false,
-          compareCancel: false,
-          compareIng: false,
-        }))
-      );
+      await updateRealtimeCompare.updateData(collectionInfo, data);
+      setCompareStatus({
+        compareStart: true,
+        compareEnd: false,
+        compareCancel: false,
+        compareIng: false,
+      });
     } catch (error) {
-      console.log(error);
+      console.error("Error starting compare mode:", error);
     }
   };
 
   const handleCompareCancel = async (contestId) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
     const newCompareArray = [...compareArray];
-    newCompareArray.splice(compareArray?.length - 1, 1);
+    newCompareArray.splice(compareArray.length - 1, 1);
 
     try {
-      await updateRealtimeCompare
-        .updateData(collectionInfoByCompares, {
-          status: {
-            compareStart: false,
-            compareEnd: false,
-            compareCancel: false,
-            compareIng: false,
-          },
-        })
-        .then((data) => console.log(data))
-        .then(() =>
-          setCompareStatus(() => ({
-            compareStart: false,
-            compareEnd: false,
-            compareCancel: true,
-            compareIng: false,
-          }))
-        )
-        .then(async () => {
-          await updateCompare.updateData(compareList.id, {
-            ...compareList,
-            compares: [...newCompareArray],
-          });
-        })
-        .then(() => {
-          setCompareList(() => ({
-            ...compareList,
-            compares: [...newCompareArray],
-          }));
-          setCompareArray(() => [...newCompareArray]);
-        })
+      await updateRealtimeCompare.updateData(collectionInfoByCompares, {
+        status: {
+          compareStart: false,
+          compareEnd: false,
+          compareCancel: false,
+          compareIng: false,
+        },
+      });
 
-        .then(() =>
-          setCompareStatus(() => ({
-            compareStart: false,
-            compareEnd: false,
-            compareCancel: true,
-            compareIng: false,
-          }))
-        )
-        .then(() => setRefresh(true))
-        .then(() => setClose(false));
+      setCompareStatus({
+        compareStart: false,
+        compareEnd: false,
+        compareCancel: true,
+        compareIng: false,
+      });
+
+      await updateCompare.updateData(compareList.id, {
+        ...compareList,
+        compares: [...newCompareArray],
+      });
+
+      setCompareList({
+        ...compareList,
+        compares: [...newCompareArray],
+      });
+      setCompareArray([...newCompareArray]);
+
+      setRefresh(true);
+      setClose(false);
     } catch (error) {
-      console.log(error);
+      console.error("Error cancelling compare:", error);
     }
   };
 
-  const handleAdd = async (contestId, compareId) => {
-    const collection = `currentStage/${contestId}/compare`;
-    setTopResult({});
-
+  const handleAdd = async (contestId) => {
+    setTopResult([]);
     const newCompareMode = {
       compareStart: true,
       compareEnd: false,
@@ -177,13 +152,11 @@ const CompareSetting = ({
       compareIng: false,
     };
 
-    //상황판
-    const judgeMessageInfo = realtimeData?.judges.map((judge, sIdx) => {
+    const judgeMessageInfo = realtimeData?.judges.map((judge) => {
       const { seatIndex } = judge;
       return { seatIndex, messageStatus: "확인전" };
     });
 
-    //realtime Update
     const realtimeCompareInfo = {
       compareIndex: propCompareIndex,
       status: { ...newCompareMode },
@@ -194,12 +167,9 @@ const CompareSetting = ({
     };
 
     try {
-      await handleCompareModeStart(
-        currentContest.contests.id,
-        realtimeCompareInfo
-      );
+      await handleCompareModeStart(contestId, realtimeCompareInfo);
     } catch (error) {
-      console.log(error);
+      console.error("Error adding compare:", error);
     }
   };
 
@@ -209,9 +179,6 @@ const CompareSetting = ({
     contestId,
     compareListId
   ) => {
-    //console.log(playerVoteResult);
-
-    //firestore Update
     const compareInfo = {
       contestId,
       categoryId: stageInfo.categoryId,
@@ -234,33 +201,26 @@ const CompareSetting = ({
         compareCancel: false,
         compareIng: true,
       };
-      const newCompares = [...compareArray];
-      newCompares.push({ ...compareInfo });
+      const newCompares = [...compareArray, compareInfo];
 
-      await updateRealtimeCompare
-        .updateData(collectionInfoCompares, {
-          ...realtimeData.compares,
-          status: { ...newStatus },
-          players: [...playerTopResult],
-        })
-        .then(
-          async () =>
-            await updateCompare.updateData(compareListId, {
-              ...compareList,
-              compares: [...newCompares],
-            })
-        )
-        .then(() => setCompareArray(() => [...newCompares]))
-        .then(() =>
-          setCompareList(() => ({
-            ...compareList,
-            compares: [...newCompares],
-          }))
-        )
-        .then(() => setRefresh(true))
-        .then(() => setClose(false));
+      await updateRealtimeCompare.updateData(collectionInfoCompares, {
+        ...realtimeData.compares,
+        status: { ...newStatus },
+        players: [...playerTopResult],
+      });
+
+      await updateCompare.updateData(compareListId, {
+        ...compareList,
+        compares: [...newCompares],
+      });
+
+      setCompareArray([...newCompares]);
+      setCompareList({ ...compareList, compares: [...newCompares] });
+
+      setRefresh(true);
+      setClose(false);
     } catch (error) {
-      console.log(error);
+      console.error("Error updating compare players:", error);
     }
   };
 
@@ -269,13 +229,10 @@ const CompareSetting = ({
       return [];
     }
 
-    // votedCount 기준으로 내림차순 정렬
     const sortedPlayers = players.sort((a, b) => b.votedCount - a.votedCount);
 
-    // playerLength만큼 상위 선수 추출
     let topPlayers = sortedPlayers.slice(0, playerLength);
 
-    // 만약 playerLength번째 선수와 같은 투표수를 가진 다른 선수가 있다면 그들도 포함
     const lastVotedCount = topPlayers[topPlayers.length - 1].votedCount;
     let i = playerLength;
     while (sortedPlayers[i] && sortedPlayers[i].votedCount === lastVotedCount) {
@@ -285,12 +242,12 @@ const CompareSetting = ({
 
     return topPlayers;
   };
+
   const handleCountPlayerVotes = (data) => {
     const voteCounts = {};
 
     if (data?.length > 0) {
       data.forEach((entry) => {
-        // votedPlayerNumber가 존재하고, 배열이며, 그 길이가 0보다 클 경우에만 처리
         if (
           entry.votedPlayerNumber &&
           Array.isArray(entry.votedPlayerNumber) &&
@@ -311,18 +268,11 @@ const CompareSetting = ({
       });
     }
 
-    // 결과 객체 배열 생성
-    const result = [];
-    for (let key in voteCounts) {
-      result.push(voteCounts[key]);
-    }
-
+    const result = Object.values(voteCounts);
     return result;
   };
 
   useEffect(() => {
-    console.log(stageInfo);
-    console.log(currentContest);
     if (
       stageInfo.grades[0].gradeId &&
       currentContest.contests.contestComparesListId
@@ -332,24 +282,21 @@ const CompareSetting = ({
         currentContest.contests.contestComparesListId
       );
     }
-  }, [
-    stageInfo.grades[0].gradeId,
-    currentContest.contests.contestComparesListId,
-  ]);
+  }, [stageInfo.grades, currentContest.contests.contestComparesListId]);
 
   useEffect(() => {
     if (realtimeData?.compares?.status?.compareStart) {
-      setVotedInfo(() => ({
+      setVotedInfo({
         playerLength: realtimeData.compares.playerLength,
         scoreMode: realtimeData.compares.scoreMode,
         voteRange: realtimeData.compares.voteRange,
-      }));
+      });
     }
   }, [realtimeData?.compares]);
 
   useEffect(() => {
     if (realtimeData?.compares?.judges?.length > 0) {
-      setVotedResult(handleCountPlayerVotes(realtimeData?.compares?.judges));
+      setVotedResult(handleCountPlayerVotes(realtimeData.compares.judges));
       const validatedMessages = realtimeData.compares.judges.some(
         (s) => s.messageStatus !== "투표완료"
       );
@@ -360,28 +307,10 @@ const CompareSetting = ({
   useEffect(() => {
     if (votedResult?.length > 0) {
       setTopResult(
-        handleGetTopPlayers(votedResult, realtimeData?.compares?.playerLength)
+        handleGetTopPlayers(votedResult, realtimeData.compares.playerLength)
       );
     }
-
-    // console.log(topResult);
-  }, [votedResult]);
-
-  useEffect(() => {
-    if (currentContest?.contests?.id) {
-      const debouncedGetDocument = debounce(
-        () => realtimeFunction(`currentStage/${currentContest.contests.id}`),
-        2000
-      );
-      debouncedGetDocument();
-    }
-
-    return () => {};
-  }, [realtimeFunction]);
-
-  useEffect(() => {
-    // /console.log(stageInfo);
-  }, [stageInfo]);
+  }, [votedResult, realtimeData?.compares?.playerLength]);
 
   return (
     <>
