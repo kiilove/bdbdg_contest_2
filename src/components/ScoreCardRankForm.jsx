@@ -159,6 +159,9 @@ const ScoreCardRankForm = ({
                   .sort((a, b) => a.playerIndex - b.playerIndex)
                   .map((player, pIdx) => {
                     const { playerNumber, playerScore } = player;
+                    if (playerScore >= 1000) {
+                      return null;
+                    }
                     return (
                       <div className="flex w-auto border-t-2 border-black">
                         <div

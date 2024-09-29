@@ -22,6 +22,7 @@ import StandingTableType1 from "./pages/StandingTableType1";
 import RandomPlayerGenerator from "./pages/RandomPlayerGenerator";
 import ContestSearchAndDelete from "./pages/ContestSearchAndDelete";
 import PrintPlayerStanding from "./printForms/PrintPlayerStanding";
+import RankingAnnouncement from "./pages/RankingAnnouncement";
 
 function App() {
   return (
@@ -107,6 +108,7 @@ function App() {
             path="/awardlist"
             element={<ManagementHome children={<AwardList />} />}
           />
+          <Route path="/ranking" element={<RankingAnnouncement />} />
           <Route
             path="/clear"
             element={<ManagementHome children={<ContestSearchAndDelete />} />}

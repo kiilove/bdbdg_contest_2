@@ -1,0 +1,39 @@
+/* 전체 화면에 중앙 정렬 */
+.ranking-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.title {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 4rem;
+  margin-bottom: 50px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.ranking-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 2rem;
+  /* background-color: #ffffff; */ /* 배경색 제거 */
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 각 글자 스타일 */
+.char {
+  display: inline-block;
+}
