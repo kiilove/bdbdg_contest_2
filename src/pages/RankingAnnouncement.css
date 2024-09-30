@@ -4,6 +4,7 @@
   width: 100%;
   height: 100vh;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.5); /* 배경을 살짝 어둡게 */
 }
 
 .title {
@@ -15,25 +16,113 @@
   margin-bottom: 50px;
   font-weight: bold;
   text-align: center;
+  color: #ffffff;
+  text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.8);
 }
 
+/* 순위 아이템 스타일 - 크기를 자동으로 설정 */
 .ranking-item {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  font-size: 2rem;
-  /* background-color: #ffffff; */ /* 배경색 제거 */
+  min-width: 900px;
+  font-size: 3.5rem;
+  color: #fff;
+  text-align: center;
   padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.7); /* 어두운 반투명 배경 */
+  width: auto; /* 너비를 자동으로 조정 */
+  max-width: 90%; /* 긴 텍스트를 처리하기 위한 최대 너비 설정 */
+  height: auto; /* 높이를 자동으로 조정 */
+  word-wrap: break-word; /* 긴 단어를 줄바꿈 처리 */
+  white-space: normal; /* 긴 텍스트 줄바꿈 */
 }
 
-/* 각 글자 스타일 */
-.char {
+/* 자간과 단어 간 공백을 위한 스타일 */
+.rank,
+.player-number,
+.player-name {
   display: inline-block;
+  margin-right: 20px; /* 각 항목 사이에 공백 추가 */
+}
+
+.rank {
+  font-size: 5rem;
+  font-weight: bold;
+  color: #ffcc00;
+}
+
+.player-number {
+  font-size: 5rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.player-name {
+  font-size: 5rem;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 40px;
+}
+
+/* 전체 순위표 스타일 */
+.final-ranking {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 900px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 15px;
+  color: #fff;
+  text-align: center;
+  font-size: 3.5rem;
+  z-index: 1;
+  /* opacity와 transition 제거 */
+}
+
+/* 채점 결과 스타일 */
+.score-result {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 900px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 15px;
+  color: #fff;
+  text-align: center;
+  font-size: 3.5rem;
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+  z-index: 2; /* final-ranking보다 위에 위치 */
+}
+
+.score-result.show {
+  opacity: 1;
+}
+
+@keyframes glow {
+  0% {
+    text-shadow: 0 0 5px #ffcc00, 0 0 10px #ff6600, 0 0 15px #ff6600,
+      0 0 20px #ff3300;
+  }
+  100% {
+    text-shadow: 0 0 10px #ffcc00, 0 0 20px #ff6600, 0 0 30px #ff3300,
+      0 0 40px #ff0000;
+  }
+}
+
+/* p 스타일 조정 (소속 스타일) */
+.ranking-item p {
+  font-size: 4rem; /* 글자 크기 증가 */
+  font-weight: 600;
+  margin: 10px 0;
+  color: #ffffff;
+  word-wrap: break-word; /* 긴 단어를 줄바꿈 처리 */
+  white-space: normal; /* 긴 텍스트 줄바꿈 */
 }

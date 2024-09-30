@@ -23,6 +23,7 @@ import RandomPlayerGenerator from "./pages/RandomPlayerGenerator";
 import ContestSearchAndDelete from "./pages/ContestSearchAndDelete";
 import PrintPlayerStanding from "./printForms/PrintPlayerStanding";
 import RankingAnnouncement from "./pages/RankingAnnouncement";
+import PrintSummary from "./printForms/PrintSummary";
 
 function App() {
   return (
@@ -103,6 +104,10 @@ function App() {
           <Route
             path="/printplayerstanding"
             element={<ManagementHome children={<PrintPlayerStanding />} />}
+          />
+          <Route
+            path="/printsummary"
+            element={<ManagementHome children={<PrintSummary />} />}
           />
           <Route
             path="/awardlist"

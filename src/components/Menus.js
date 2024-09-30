@@ -162,13 +162,14 @@ export const MenuArray = [
       },
 
       {
-        id: 5,
+        id: 6,
         title: "집계표 출력",
         icon: <BsCardChecklist />,
         isActive: user.userGroup === "admin" ? true : false,
+        link: "/printsummary",
       },
       {
-        id: 6,
+        id: 7,
         title: "상장 출력",
         icon: <TbCertificate />,
         isActive: true,

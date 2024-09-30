@@ -311,13 +311,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleForceUpdate = useCallback(() => {
-    if (currentContest?.contests?.id) {
-      // Since we're using the improved hook, data is updated via onValue
-      setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
-    }
-    if (currentStageInfo?.grades) {
-      handleForceScoreTableRefresh(currentStageInfo.grades);
-    }
+    // if (currentContest?.contests?.id) {
+    //   // Since we're using the improved hook, data is updated via onValue
+    //   setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
+    // }
+    // if (currentStageInfo?.grades) {
+    //   handleForceScoreTableRefresh(currentStageInfo.grades);
+    // }
   }, [currentContest, currentStageInfo]);
 
   useEffect(() => {

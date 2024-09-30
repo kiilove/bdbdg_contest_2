@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { gsap } from "gsap";
 import "./RankingAnnouncement.css";
+import AwardVideo from "../assets/mov/award3.mp4";
+import ReactPlayer from "react-player";
 
-// 플레이어 데이터
 const players = [
   { uid: 1, name: "김철수", team: "A팀", playerNumber: 23 },
   { uid: 2, name: "박영희", team: "B팀", playerNumber: 45 },
@@ -16,82 +17,153 @@ const players = [
 // 순위를 무작위로 섞음
 const shuffledRankings = [...players].sort(() => Math.random() - 0.5);
 
-const RankingAnnouncement = () => {
-  const rankRefs = useRef([]);
+const RankingAnnouncement = ({
+  categoryTitle,
+  gradeTitle,
+  rankOrder = [],
+  results = [],
+}) => {
+  const totalRanks = 5; // 발표할 순위 수 (5위부터 1위까지)
+  const [showFinalRank, setShowFinalRank] = useState(false); // 전체 순위표를 보여줄 상태 변수
+  const [showScoreResult, setShowScoreResult] = useState(false); // 채점 결과를 보여줄 상태 변수
+  const [unmountFinalRank, setUnmountFinalRank] = useState(false); // 최종 순위표를 언마운트하기 위한 상태 변수
+  const rankRefs = useRef([]); // 순위 요소들에 대한 참조 배열
+  const finalRankingRef = useRef(null); // final-ranking 요소에 대한 참조
 
   useEffect(() => {
-    const totalRanks = 5;
+    const timelines = [];
+    const lastDelay = 4.5 * totalRanks + 2.5; // 마지막 순위 발표 후 딜레이
 
     for (let i = 0; i < totalRanks; i++) {
       const rankRef = rankRefs.current[i];
-      const chars = rankRef.querySelectorAll(".char");
 
-      // 등장 애니메이션: 부서진 상태에서 중앙으로 모임
-      gsap.fromTo(
-        chars,
-        {
-          x: () => gsap.utils.random(-100, 100), // 랜덤 X 위치
-          y: () => gsap.utils.random(-100, 100), // 랜덤 Y 위치
-          opacity: 0,
-          scale: 0.1,
-          rotation: () => gsap.utils.random(-360, 360),
-        },
+      // 초기 위치 설정
+      gsap.set(rankRef, {
+        x: -800,
+        opacity: 0,
+        scale: 0.3,
+        rotate: -90,
+      });
+
+      const timeline = gsap.timeline();
+
+      // 등장 애니메이션
+      timeline.fromTo(
+        rankRef,
+        { x: -800, opacity: 0, scale: 0.3, rotate: -90 },
         {
           x: 0,
-          y: 0,
           opacity: 1,
           scale: 1,
-          rotation: 0,
-          stagger: 0.05, // 글자 하나씩 순차적으로
+          rotate: 0,
           duration: 1.5,
-          delay: i * 4.5, // 순위마다 딜레이 추가
           ease: "back.out(1.7)",
+          delay: i * 4.5, // 각 순위별로 딜레이를 줘서 순차적으로 등장
         }
       );
 
-      // 중앙에 모인 후 사라지는 애니메이션
-      gsap.to(chars, {
-        x: () => gsap.utils.random(100, 300),
-        y: () => gsap.utils.random(100, 300),
-        opacity: 0,
-        scale: 0.1,
-        rotation: () => gsap.utils.random(360, -360),
-        stagger: 0.05,
-        delay: i * 4.5 + 2.5, // 2.5초 후에 사라짐
-        duration: 1.5,
-        ease: "power3.in",
-      });
+      // 사라지는 애니메이션 (마지막 순위는 사라지지 않음)
+      if (i < totalRanks - 1) {
+        timeline.to(rankRef, {
+          x: 800,
+          opacity: 0,
+          scale: 0.7,
+          rotate: 90,
+          duration: 1.5,
+          ease: "power1.in",
+          delay: 2.5, // 중앙에서 머무르는 시간
+        });
+      }
+
+      timelines.push(timeline);
     }
-  }, []);
+
+    // 전체 순위표를 표시하기 위한 딜레이
+    setTimeout(() => {
+      setShowFinalRank(true);
+    }, lastDelay * 1000); // 딜레이 후 전체 순위표 표시
+
+    // 채점 결과를 표시하기 위한 추가 딜레이
+    setTimeout(() => {
+      setShowScoreResult(true);
+
+      // final-ranking을 서서히 사라지게 하고, 사라진 후 언마운트
+      gsap.to(finalRankingRef.current, {
+        opacity: 0,
+        duration: 1,
+        onComplete: () => {
+          setUnmountFinalRank(true);
+        },
+      });
+    }, lastDelay * 1000 + 5000); // 전체 순위표 이후 5초 후에 채점 결과 표시
+  }, [totalRanks]);
+
+  // 순위를 1위부터 정렬하여 렌더링
+  const sortedRankings = shuffledRankings
+    .slice(0, totalRanks)
+    .sort((a, b) => a.uid - b.uid);
 
   return (
     <div className="ranking-container">
-      <h1 className="title">순위 발표</h1>
+      <ReactPlayer
+        url={AwardVideo}
+        width="100%"
+        height="auto"
+        playing
+        loop
+        muted
+      />
+      {!showFinalRank &&
+        Array.from({ length: totalRanks }).map((_, i) => (
+          <div
+            key={i}
+            ref={(el) => (rankRefs.current[i] = el)}
+            className="ranking-item"
+            style={{ zIndex: totalRanks - i }}
+          >
+            <h2 className="gap-x-5">
+              <span className="rank">{5 - i}위</span>
+              <span className="player-number ml-5">
+                {shuffledRankings[i].playerNumber}번
+              </span>
+              <span className="player-name ml-10">
+                {shuffledRankings[i].name}
+              </span>
+            </h2>
+            <p>{shuffledRankings[i].team}</p> {/* 소속은 아랫줄에 배치 */}
+          </div>
+        ))}
+      {showFinalRank && (
+        <>
+          {!unmountFinalRank && (
+            <div className="final-ranking" ref={finalRankingRef}>
+              <h2>전체 순위표</h2>
+              <ul>
+                {sortedRankings.map((player, i) => (
+                  <li key={player.uid}>
+                    {i + 1}위: {player.playerNumber}번 {player.name} (
+                    {player.team})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          ref={(el) => (rankRefs.current[i] = el)}
-          className="ranking-item"
-          style={{ zIndex: 5 - i }}
-        >
-          <h2>{splitText(`${5 - i}위 발표!`)}</h2>
-          <p>{splitText(`이름: ${shuffledRankings[i].name}`)}</p>
-          <p>{splitText(`소속: ${shuffledRankings[i].team}`)}</p>
-          <p>{splitText(`선수번호: ${shuffledRankings[i].playerNumber}`)}</p>
-        </div>
-      ))}
+          <div className={`score-result ${showScoreResult ? "show" : ""}`}>
+            <h2>채점 결과</h2>
+            <ul>
+              {sortedRankings.map((player, i) => (
+                <li key={player.uid}>
+                  {i + 1}위: {player.playerNumber}번 {player.name} - 최종 점수:{" "}
+                  {Math.floor(Math.random() * 100)}점
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
     </div>
   );
-};
-
-// 텍스트를 글자 단위로 쪼개서 span으로 감쌈
-const splitText = (text) => {
-  return text.split("").map((char, index) => (
-    <span key={index} className="char">
-      {char}
-    </span>
-  ));
 };
 
 export default RankingAnnouncement;
