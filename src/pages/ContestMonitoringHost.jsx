@@ -1,11 +1,25 @@
-import React, { useEffect, useState } from "react";
-import { useFirestoreQuery } from "../hooks/useFirestores";
-import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime"; // 커스텀 훅 사용
+import React, { useContext, useEffect, useState } from "react";
+import {
+  useFirestoreGetDocument,
+  useFirestoreQuery,
+} from "../hooks/useFirestores";
+import {
+  useFirebaseRealtimeGetDocument,
+  useFirebaseRealtimeUpdateData,
+} from "../hooks/useFirebaseRealtime"; // 커스텀 훅 사용
 import { where } from "firebase/firestore";
+import { CurrentContestContext } from "../contexts/CurrentContestContext";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const [players, setPlayers] = useState([]);
-  const fetchFinalPlayers = useFirestoreQuery();
+  const [stagesArray, setStagesArray] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [playersArray, setPlayersArray] = useState([]);
+  const [contestInfo, setContestInfo] = useState({});
+  const [message, setMessage] = useState({});
+  const { currentContest } = useContext(CurrentContestContext);
+  const [normalScoreData, setNormalScoreData] = useState([]);
+  const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
 
   // realtimeData 불러오기
   const {
@@ -15,6 +29,109 @@ const ContestMonitoringHost = ({ contestId }) => {
   } = useFirebaseRealtimeGetDocument(
     contestId ? `currentStage/${contestId}` : null
   );
+  const fetchNotice = useFirestoreGetDocument("contest_notice");
+  const fetchStages = useFirestoreGetDocument("contest_stages_assign");
+  const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
+  const fetchScoreCardQuery = useFirestoreQuery();
+  const fetchResultQuery = useFirestoreQuery();
+  const updateCurrentStage = useFirebaseRealtimeUpdateData();
+
+  const fetchPool = async (noticeId, stageAssignId, playerFinalId) => {
+    try {
+      const returnNotice = await fetchNotice.getDocument(noticeId);
+      const returnContestStage = await fetchStages.getDocument(stageAssignId);
+      const returnPlayersFinal = await fetchFinalPlayers.getDocument(
+        playerFinalId
+      );
+
+      if (returnNotice && returnContestStage) {
+        setStagesArray(
+          returnContestStage.stages.sort(
+            (a, b) => a.stageNumber - b.stageNumber
+          )
+        );
+        setContestInfo({ ...returnNotice });
+        setPlayersArray(
+          returnPlayersFinal.players
+            .sort((a, b) => a.playerIndex - b.playerIndex)
+            .filter((f) => f.playerNoShow === false)
+        );
+        console.log(stagesArray);
+        console.log(playersArray);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setMessage({
+        body: "데이터를 로드하지 못했습니다.",
+        body4: error.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+    }
+  };
+
+  const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
+    const condition = [where("gradeId", "==", gradeId)];
+    try {
+      const data = await fetchResultQuery.getDocuments(
+        "contest_results_list",
+        condition
+      );
+
+      if (data?.length === 0) {
+        window.alert("데이터가 없습니다.");
+        return;
+      }
+
+      const standingData = data[0].result.sort(
+        (a, b) => a.playerRank - b.playerRank
+      );
+
+      const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
+      const newState = {
+        players: [...standingData],
+        gradeTitle: gradeTitle,
+        status: { playStart: true },
+      };
+      await updateCurrentStage.updateData(collectionInfo, { ...newState });
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleScreenEnd = async () => {
+    const collectionInfo = `currentStage/${currentContest.contests.id}/screen/status`;
+    const newState = {
+      playStart: false,
+      standingStart: false,
+    };
+    await updateCurrentStage.updateData(collectionInfo, { ...newState });
+  };
+
+  const fetchScoreTable = async (grades) => {
+    if (!grades || grades.length === 0) return;
+
+    const allData = [];
+
+    for (let grade of grades) {
+      const { gradeId } = grade;
+      try {
+        const condition = [where("gradeId", "==", gradeId)];
+        const data = await fetchScoreCardQuery.getDocuments(
+          contestInfo.contestCollectionName,
+          condition
+        );
+        allData.push(...data);
+      } catch (error) {
+        console.log(error);
+      }
+    }
+
+    setNormalScoreData(allData);
+    setIsLoading(false);
+  };
+
+  const handlePlayerList = (stages, players, currentStageId) => {};
 
   // 선수 데이터를 Firestore에서 불러오기
   useEffect(() => {
@@ -41,6 +158,20 @@ const ContestMonitoringHost = ({ contestId }) => {
 
     fetchPlayers();
   }, [realtimeData, fetchFinalPlayers]);
+
+  useEffect(() => {
+    if (
+      currentContest?.contests?.contestNoticeId &&
+      currentContest?.contests?.contestStagesAssignId &&
+      currentContest?.contests?.contestPlayersFinalId
+    ) {
+      fetchPool(
+        currentContest.contests.contestNoticeId,
+        currentContest.contests.contestStagesAssignId,
+        currentContest?.contests?.contestPlayersFinalId
+      );
+    }
+  }, [currentContest]);
 
   if (realtimeLoading) {
     return <p>로딩 중...</p>;
