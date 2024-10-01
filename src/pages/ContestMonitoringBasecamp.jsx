@@ -148,7 +148,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       const newState = {
         players: [...standingData],
         gradeTitle: gradeTitle,
-        status: { playStart: false, standingStart: true },
+        status: { playStart: true },
       };
       await updateCurrentStage.updateData(collectionInfo, { ...newState });
     } catch (error) {
@@ -625,17 +625,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                   >
                                     화면종료
                                   </button>
-                                  <button
-                                    className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
-                                    onClick={() => {
-                                      fetchResultAndRealtimeUpdate(
-                                        gradeId,
-                                        gradeTitle
-                                      );
-                                    }}
-                                  >
-                                    순위표공개
-                                  </button>
+
                                   <button
                                     className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
                                     onClick={() => {
@@ -645,7 +635,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                       );
                                     }}
                                   >
-                                    채점표공개
+                                    순위표공개
                                   </button>
                                   <button
                                     className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"

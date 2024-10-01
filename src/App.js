@@ -24,6 +24,8 @@ import ContestSearchAndDelete from "./pages/ContestSearchAndDelete";
 import PrintPlayerStanding from "./printForms/PrintPlayerStanding";
 import RankingAnnouncement from "./pages/RankingAnnouncement";
 import PrintSummary from "./printForms/PrintSummary";
+import ScreenLobby from "./pages/ScreenLobby";
+import Idle from "./pages/Idle";
 
 function App() {
   return (
@@ -113,7 +115,9 @@ function App() {
             path="/awardlist"
             element={<ManagementHome children={<AwardList />} />}
           />
+          <Route path="/screenlobby" element={<ScreenLobby />} />
           <Route path="/ranking" element={<RankingAnnouncement />} />
+          <Route path="/idle" element={<Idle />} />
           <Route
             path="/clear"
             element={<ManagementHome children={<ContestSearchAndDelete />} />}

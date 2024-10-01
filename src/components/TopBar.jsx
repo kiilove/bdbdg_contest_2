@@ -120,6 +120,7 @@ const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
             <select
               className=" bg-transparent text-base"
               onClick={(e) => setContestNoticeId(e.target.value)}
+              onChange={(e) => setContestNoticeId(e.target.value)}
             >
               {contestList.length > 0 &&
                 contestList.map((list, lIdx) => (

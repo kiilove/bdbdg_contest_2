@@ -229,7 +229,7 @@ export const MenuArray = [
         title: "스크린",
         isActive: true,
         icon: <TbHeartRateMonitor />,
-        link: "/screen1",
+        link: "/screenlobby",
       },
     ],
   },

@@ -12,6 +12,7 @@ import StandingTableType1 from "./StandingTableType1";
 import ContestMonitoringStage from "./ContestMonitoringStage";
 import { useParams } from "react-router-dom";
 import ContestMonitoringMC from "./ContestMonitoringMC";
+import ContestMonitoringHost from "./ContestMonitoringHost";
 
 const ContestMonitoring = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -120,7 +121,7 @@ const ContestMonitoring = () => {
                   />
                 )}
                 {currentTab === 2 && (
-                  <ContestMonitoringMC
+                  <ContestMonitoringHost
                     contestId={currentContest?.contests.id}
                   />
                 )}
