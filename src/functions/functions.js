@@ -28,6 +28,23 @@ export const handleCategoriesWithGrades = (categories, grades) => {
   return dummy;
 };
 
+export const matchedGradewWithPlayers = (
+  contestId = "",
+  gradeId = "",
+  players = []
+) => {
+  let filteredPlayers;
+  if (contestId === "" || gradeId === "" || players.length === 0) {
+    filteredPlayers = [];
+  }
+
+  filteredPlayers = players
+    .filter((f) => f.contestId === contestId && f.contestGradeId === gradeId)
+    .sort((a, b) => a.playerIndex - b.playerIndex);
+
+  return filteredPlayers;
+};
+
 export function getRandomNumber(min, max) {
   // min과 max 사이의 임의의 소수를 얻고, 그 소수를 min과 max 사이의 범위로 변환합니다.
   return Math.floor(Math.random() * (max - min + 1)) + min;

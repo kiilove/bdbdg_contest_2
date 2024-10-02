@@ -37,7 +37,7 @@ const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
 
   const fetchList = async () => {
     const condition = [
-      where("contestStatus", "in", ["접수중", "수정됨", "데모용"]),
+      where("contestStatus", "in", ["접수중", "수정됨", "데모용", "수동접수"]),
     ];
 
     const returnData = await fetchQuery.getDocuments(

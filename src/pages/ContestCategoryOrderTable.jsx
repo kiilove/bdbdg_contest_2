@@ -166,7 +166,7 @@ const ContestCategoryOrderTable = () => {
   }, [isRefresh]);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-y-2 w-full h-auto bg-white mb-3 rounded-tr-lg rounded-b-lg p-2 gap-x-4">
+    <div className="flex flex-col lg:flex-row gap-y-2 w-full h-auto bg-white mb-3 rounded-tr-lg rounded-b-lg p-2 gap-x-4 overflow-y-auto">
       <Modal open={isOpen.grandPrix} onClose={handleGrandPrixClose}>
         <div
           className="flex w-full lg:w-full h-screen lg:h-auto absolute top-1/2 left-1/2 lg:shadow-md lg:rounded-lg bg-white p-3"
@@ -207,8 +207,8 @@ const ContestCategoryOrderTable = () => {
         </div>
       </Modal>
 
-      <div className="w-full blue-100 flex rounded-lg flex-col p-0 h-full gap-y-2">
-        <div className="flex bg-gray-100 w-full h-auto rounded-lg p-2 flex-col gap-y-2">
+      <div className="w-full blue-100 flex rounded-lg flex-col p-0 h-full gap-y-2 ">
+        <div className="flex bg-gray-100 w-full h-full rounded-lg p-2 flex-col gap-y-2">
           <div className="flex w-full justify-start items-center gap-x-1">
             <button
               className="w-1/2 h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
@@ -238,7 +238,7 @@ const ContestCategoryOrderTable = () => {
             </button>
           </div>
 
-          <div className="w-full rounded-lg flex flex-col gap-y-2">
+          <div className="w-full rounded-lg flex flex-col gap-y-2 ">
             <div className="flex flex-col gap-y-2 w-full">
               {categoriesArray?.length <= 0 ? (
                 <div className="h-auto">
@@ -248,6 +248,7 @@ const ContestCategoryOrderTable = () => {
                   </div>
                 </div>
               ) : (
+                // 여기
                 <div className="flex w-full h-auto">
                   <DragDropContext onDragEnd={onDragCategoryEnd}>
                     <Droppable droppableId="dropCategory">

@@ -1003,7 +1003,7 @@ const ContestTimetable = () => {
   // 심판 리스트 받아오는 부분 다시 체크해야함 의도하지 않게 예전 데이터 불러오고 있음
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2">
+    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2 ">
       <div className="flex w-full h-14">
         <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
           <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
@@ -1036,10 +1036,12 @@ const ContestTimetable = () => {
                 </>
               ))}
             </div>
-            {currentTab === 0 && <ContestCategoryOrderTable />}
-            {currentTab === 1 && <ContestPlayerOrderTableTabType />}
-            {currentTab === 2 && <ContestJudgeAssignTable />}
-            {currentTab === 3 && <ContestStagetable />}
+            <div className="flex w-full h-auto">
+              {currentTab === 0 && <ContestCategoryOrderTable />}
+              {currentTab === 1 && <ContestPlayerOrderTableTabType />}
+              {currentTab === 2 && <ContestJudgeAssignTable />}
+              {currentTab === 3 && <ContestStagetable />}
+            </div>
           </div>
         </div>
       </div>

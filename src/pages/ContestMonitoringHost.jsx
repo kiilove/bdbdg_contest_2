@@ -6,22 +6,20 @@ import {
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
-} from "../hooks/useFirebaseRealtime"; // 커스텀 훅 사용
+} from "../hooks/useFirebaseRealtime";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
+import { matchedGradewWithPlayers } from "../functions/functions";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const [players, setPlayers] = useState([]);
   const [stagesArray, setStagesArray] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [playersArray, setPlayersArray] = useState([]);
+  const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
   const [contestInfo, setContestInfo] = useState({});
   const [message, setMessage] = useState({});
   const { currentContest } = useContext(CurrentContestContext);
-  const [normalScoreData, setNormalScoreData] = useState([]);
-  const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
 
-  // realtimeData 불러오기
   const {
     data: realtimeData,
     loading: realtimeLoading,
@@ -29,36 +27,57 @@ const ContestMonitoringHost = ({ contestId }) => {
   } = useFirebaseRealtimeGetDocument(
     contestId ? `currentStage/${contestId}` : null
   );
+
   const fetchNotice = useFirestoreGetDocument("contest_notice");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
-  const fetchScoreCardQuery = useFirestoreQuery();
-  const fetchResultQuery = useFirestoreQuery();
-  const updateCurrentStage = useFirebaseRealtimeUpdateData();
 
-  const fetchPool = async (noticeId, stageAssignId, playerFinalId) => {
+  const fetchPool = async (
+    noticeId,
+    contestId,
+    stageAssignId,
+    playerFinalId,
+    currentStageId
+  ) => {
     try {
-      const returnNotice = await fetchNotice.getDocument(noticeId);
-      const returnContestStage = await fetchStages.getDocument(stageAssignId);
-      const returnPlayersFinal = await fetchFinalPlayers.getDocument(
-        playerFinalId
-      );
+      const [returnNotice, returnContestStage, returnPlayersFinal] =
+        await Promise.all([
+          fetchNotice.getDocument(noticeId),
+          fetchStages.getDocument(stageAssignId),
+          fetchFinalPlayers.getDocument(playerFinalId),
+        ]);
 
-      if (returnNotice && returnContestStage) {
+      if (returnNotice && returnContestStage && returnPlayersFinal) {
         setStagesArray(
           returnContestStage.stages.sort(
             (a, b) => a.stageNumber - b.stageNumber
           )
         );
-        setContestInfo({ ...returnNotice });
-        setPlayersArray(
-          returnPlayersFinal.players
-            .sort((a, b) => a.playerIndex - b.playerIndex)
-            .filter((f) => f.playerNoShow === false)
+        setContestInfo(returnNotice);
+        const players = returnPlayersFinal.players
+          .sort((a, b) => a.playerIndex - b.playerIndex)
+          .filter((f) => f.playerNoShow === false);
+
+        const currentStage = returnContestStage.stages.find(
+          (f) => f.stageId === currentStageId
         );
-        console.log(stagesArray);
-        console.log(playersArray);
-        setIsLoading(false);
+        const currentStageGrades = currentStage ? currentStage.grades : [];
+
+        const playerList = currentStageGrades.length
+          ? currentStageGrades.map((grade) => {
+              const matchedPlayers = matchedGradewWithPlayers(
+                contestId,
+                grade.gradeId,
+                players
+              );
+              return {
+                gradeTitle: grade.gradeTitle,
+                players: matchedPlayers,
+              };
+            })
+          : [];
+
+        setCurrentPlayersArray(playerList);
       }
     } catch (error) {
       setMessage({
@@ -67,113 +86,35 @@ const ContestMonitoringHost = ({ contestId }) => {
         isButton: true,
         confirmButtonText: "확인",
       });
+    } finally {
+      setIsLoading(false); // 데이터를 모두 불러온 후 로딩 상태 해제
     }
   };
 
-  const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
-    const condition = [where("gradeId", "==", gradeId)];
-    try {
-      const data = await fetchResultQuery.getDocuments(
-        "contest_results_list",
-        condition
-      );
-
-      if (data?.length === 0) {
-        window.alert("데이터가 없습니다.");
-        return;
-      }
-
-      const standingData = data[0].result.sort(
-        (a, b) => a.playerRank - b.playerRank
-      );
-
-      const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
-      const newState = {
-        players: [...standingData],
-        gradeTitle: gradeTitle,
-        status: { playStart: true },
-      };
-      await updateCurrentStage.updateData(collectionInfo, { ...newState });
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const handleScreenEnd = async () => {
-    const collectionInfo = `currentStage/${currentContest.contests.id}/screen/status`;
-    const newState = {
-      playStart: false,
-      standingStart: false,
-    };
-    await updateCurrentStage.updateData(collectionInfo, { ...newState });
-  };
-
-  const fetchScoreTable = async (grades) => {
-    if (!grades || grades.length === 0) return;
-
-    const allData = [];
-
-    for (let grade of grades) {
-      const { gradeId } = grade;
-      try {
-        const condition = [where("gradeId", "==", gradeId)];
-        const data = await fetchScoreCardQuery.getDocuments(
-          contestInfo.contestCollectionName,
-          condition
+  // Fetch data for players
+  useEffect(() => {
+    const loadData = async () => {
+      if (
+        currentContest?.contests?.contestNoticeId &&
+        currentContest?.contests?.contestStagesAssignId &&
+        currentContest?.contests?.contestPlayersFinalId &&
+        realtimeData?.stageId
+      ) {
+        setIsLoading(true);
+        await fetchPool(
+          currentContest.contests.contestNoticeId,
+          currentContest.contests.id,
+          currentContest.contests.contestStagesAssignId,
+          currentContest.contests.contestPlayersFinalId,
+          realtimeData.stageId
         );
-        allData.push(...data);
-      } catch (error) {
-        console.log(error);
-      }
-    }
-
-    setNormalScoreData(allData);
-    setIsLoading(false);
-  };
-
-  const handlePlayerList = (stages, players, currentStageId) => {};
-
-  // 선수 데이터를 Firestore에서 불러오기
-  useEffect(() => {
-    const fetchPlayers = async () => {
-      if (realtimeData?.categoryId && realtimeData?.gradeId) {
-        try {
-          // categoryId와 gradeId로 필터링하여 선수 데이터를 가져옴
-          const condition = [
-            where("categoryId", "==", realtimeData.categoryId),
-            where("gradeId", "==", realtimeData.gradeId),
-          ];
-          const data = await fetchFinalPlayers.getDocuments(
-            "contest_players_final",
-            condition
-          );
-          if (data.length > 0) {
-            setPlayers(data);
-          }
-        } catch (error) {
-          console.error("선수 데이터를 불러오는 중 오류 발생: ", error);
-        }
       }
     };
 
-    fetchPlayers();
-  }, [realtimeData, fetchFinalPlayers]);
+    loadData();
+  }, [currentContest, realtimeData?.stageId]); // realtimeData.stageId 변경 시마다 fetch 호출
 
-  useEffect(() => {
-    if (
-      currentContest?.contests?.contestNoticeId &&
-      currentContest?.contests?.contestStagesAssignId &&
-      currentContest?.contests?.contestPlayersFinalId
-    ) {
-      fetchPool(
-        currentContest.contests.contestNoticeId,
-        currentContest.contests.contestStagesAssignId,
-        currentContest?.contests?.contestPlayersFinalId
-      );
-    }
-  }, [currentContest]);
-
-  if (realtimeLoading) {
+  if (isLoading || realtimeLoading) {
     return <p>로딩 중...</p>;
   }
 
@@ -194,25 +135,43 @@ const ContestMonitoringHost = ({ contestId }) => {
       </div>
       <div>
         <h3 className="font-semibold mb-2">참가 선수 명단:</h3>
-        {players.length > 0 ? (
-          <table className="w-full table-auto">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-2">번호</th>
-                <th className="px-4 py-2">이름</th>
-                <th className="px-4 py-2">소속</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((player, index) => (
-                <tr key={index} className="text-center">
-                  <td className="border px-4 py-2">{player.playerNumber}</td>
-                  <td className="border px-4 py-2">{player.playerName}</td>
-                  <td className="border px-4 py-2">{player.playerGym}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {currentPlayersArray.length > 0 ? (
+          currentPlayersArray.map((current, cIdx) => (
+            <div key={cIdx} className="mb-4">
+              {/* 등급 제목 표시 */}
+              <h4 className="font-bold mb-2">{current.gradeTitle}</h4>
+              <table className="w-full table-auto">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-2">번호</th>
+                    <th className="px-4 py-2">이름</th>
+                    <th className="px-4 py-2">소속</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {current.players.length > 0 ? (
+                    current.players.map((player, index) => (
+                      <tr key={index} className="text-center">
+                        <td className="border px-4 py-2">
+                          {player.playerNumber}
+                        </td>
+                        <td className="border px-4 py-2">
+                          {player.playerName}
+                        </td>
+                        <td className="border px-4 py-2">{player.playerGym}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="text-center py-4">
+                        참가한 선수가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ))
         ) : (
           <p>참가한 선수가 없습니다.</p>
         )}
