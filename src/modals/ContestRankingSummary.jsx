@@ -17,6 +17,7 @@ const ContestRankingSummary = ({
   categoryId,
   gradeId,
   setClose,
+  currentResultSaved,
   categoryJudgeType,
   stageId,
 }) => {
@@ -226,11 +227,26 @@ const ContestRankingSummary = ({
     }
   };
 
-  const handleRealtimeUpdate = async (contestId) => {
-    const collectionInfo = `currentStage/${contestId}/judgeHead`;
+  const handleRealtimeUpdate = async (contestId, gradeId) => {
+    const collectionInfo = `currentStage/${contestId}`;
+
+    // currentResultSaved가 undefined이면 빈 배열로 초기화
+    const newResultSaved = currentResultSaved ? [...currentResultSaved] : [];
+
+    // newResultSaved 배열에 gradeId가 있는지 확인
+    const gradeExists = newResultSaved.includes(gradeId);
+
+    if (!gradeExists) {
+      // gradeId가 없다면 추가
+      newResultSaved.push(gradeId);
+    }
+
+    // 업데이트 후 Firebase Realtime Database에 저장
     await realtimeResultStateUpdate.updateData(collectionInfo, {
-      resultSaved: true,
+      resultSaved: newResultSaved, // resultSaved에 배열을 저장
     });
+
+    console.log("Updated resultSaved array:", newResultSaved);
   };
 
   // 만들다가 그만둔 이유는 굳이 여기서 한번에 처리하지 않고 본부석 화면에서 다음으로 넘길때 업데이트 해도 무방하다고 판단함
@@ -263,16 +279,18 @@ const ContestRankingSummary = ({
     } catch (error) {
       console.log(error);
     } finally {
-      await handleRealtimeUpdate(currentContest.contests.id).then(() => {
-        setMessage({
-          body: "저장되었습니다.",
-          body2: "확인 버튼을 누르시면 모니터링화면으로 돌아갑니다.",
-          isButton: true,
-          cancelButtonText: "되돌아가기",
-          confirmButtonText: "확인",
-        });
-        setMsgOpen(true);
-      });
+      await handleRealtimeUpdate(currentContest.contests.id, gradeId).then(
+        () => {
+          setMessage({
+            body: "저장되었습니다.",
+            body2: "확인 버튼을 누르시면 모니터링화면으로 돌아갑니다.",
+            isButton: true,
+            cancelButtonText: "되돌아가기",
+            confirmButtonText: "확인",
+          });
+          setMsgOpen(true);
+        }
+      );
     }
   };
 
@@ -358,10 +376,10 @@ const ContestRankingSummary = ({
                 </div>
               </div>
               <div className="flex w-full h-auto">
-                <div className="flex w-full h-auto bg-gray-100 justify-start items-center rounded-lg p-3">
+                <div className="flex w-full h-[400px] bg-gray-100 justify-start items-center rounded-lg p-3 overflow-y-auto">
                   <div className="flex w-full h-full justify-center items-center bg-red-200">
                     <div className="flex bg-white w-full h-auto p-2">
-                      <div className="flex w-full flex-col px-5 py-2border">
+                      <div className="flex w-full flex-col px-5 py-2 border">
                         <div className="flex w-full border-b-2 border-b-gray-600">
                           <div className="flex w-full justify-center items-center p-2">
                             선수번호
@@ -381,105 +399,109 @@ const ContestRankingSummary = ({
                                 </div>
                               );
                             })}
-
                           <div className="flex w-full justify-center items-center p-2">
                             기표합산
                           </div>
                         </div>
-                        {result?.length > 0 &&
-                          result
-                            .sort((a, b) => a.playerIndex - b.playerIndex)
-                            .map((player, pIdx) => {
-                              const {
-                                playerNumber,
-                                totalScore,
-                                playerRank,
-                                score,
-                                isAlert,
-                              } = player;
-                              if (totalScore >= 1000) {
-                                return null;
-                              }
-                              return (
-                                <div
-                                  key={playerNumber}
-                                  className={
-                                    isAlert
-                                      ? "flex w-full border-b border-b-gray-300 bg-blue-200"
-                                      : "flex w-full border-b border-b-gray-300"
-                                  }
-                                >
-                                  <div className="flex w-full justify-center items-center p-2">
-                                    {playerNumber}
+
+                        {/* 선수 리스트 */}
+                        <div className="flex w-full flex-col h-[300px] overflow-y-auto">
+                          {result?.length > 0 &&
+                            result
+                              .sort((a, b) => a.playerIndex - b.playerIndex)
+                              .map((player, pIdx) => {
+                                const {
+                                  playerNumber,
+                                  totalScore,
+                                  playerRank,
+                                  score,
+                                  isAlert,
+                                } = player;
+                                if (totalScore >= 1000) {
+                                  return null;
+                                }
+                                return (
+                                  <div
+                                    key={playerNumber}
+                                    className={
+                                      isAlert
+                                        ? "flex w-full border-b border-b-gray-300 bg-blue-200 b"
+                                        : "flex w-full border-b border-b-gray-300"
+                                    }
+                                  >
+                                    <div className="flex w-full justify-center items-center p-2">
+                                      {playerNumber}
+                                    </div>
+                                    <div className="flex w-full justify-center items-center p-2 bg-transparent">
+                                      <input
+                                        type="number"
+                                        name="playerRank"
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) =>
+                                          handleSummaryTable(
+                                            result,
+                                            e,
+                                            tIdx,
+                                            pIdx
+                                          )
+                                        }
+                                        className={
+                                          isAlert
+                                            ? "w-10 h-10 bg-transparent border border-blue-400 rounded-lg text-center outline-none"
+                                            : "w-10 h-10 bg-transparent text-center"
+                                        }
+                                        value={playerRank}
+                                      />
+                                    </div>
+                                    {score.map((score, sIdx) => {
+                                      const {
+                                        seatIndex,
+                                        playerScore,
+                                        isMin,
+                                        isMax,
+                                      } = score;
+                                      return (
+                                        <div
+                                          className="flex w-full justify-center items-center p-2"
+                                          key={seatIndex}
+                                        >
+                                          {isMin && (
+                                            <span className="w-auto h-auto p-3 px-5 rounded-lg bg-blue-400">
+                                              {playerScore >= 100
+                                                ? "제외"
+                                                : playerScore}
+                                            </span>
+                                          )}
+                                          {isMax && (
+                                            <span className="w-auto h-auto p-3 px-5 rounded-lg bg-red-500">
+                                              {playerScore >= 100
+                                                ? "제외"
+                                                : playerScore}
+                                            </span>
+                                          )}
+                                          {!isMax && !isMin && (
+                                            <span className="w-auto h-auto p-3 rounded-lg ">
+                                              {playerScore >= 100
+                                                ? "제외"
+                                                : playerScore}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    <div className="flex w-full justify-center items-center p-2">
+                                      {totalScore}
+                                    </div>
                                   </div>
-                                  <div className="flex w-full justify-center items-center p-2 bg-transparent">
-                                    <input
-                                      type="number"
-                                      name="playerRank"
-                                      onFocus={(e) => e.target.select()}
-                                      onChange={(e) =>
-                                        handleSummaryTable(
-                                          result,
-                                          e,
-                                          tIdx,
-                                          pIdx
-                                        )
-                                      }
-                                      className={
-                                        isAlert
-                                          ? "w-10 h-10 bg-transparent border border-blue-400 rounded-lg text-center outline-none"
-                                          : "w-10 h-10 bg-transparent text-center"
-                                      }
-                                      value={playerRank}
-                                    />
-                                  </div>
-                                  {score.map((score, sIdx) => {
-                                    const {
-                                      seatIndex,
-                                      playerScore,
-                                      isMin,
-                                      isMax,
-                                    } = score;
-                                    return (
-                                      <div
-                                        className="flex w-full justify-center items-center p-2"
-                                        key={seatIndex}
-                                      >
-                                        {isMin && (
-                                          <span className="w-auto h-auto p-3 px-5 rounded-lg bg-blue-400">
-                                            {playerScore >= 1000
-                                              ? "제외"
-                                              : playerScore}
-                                          </span>
-                                        )}
-                                        {isMax && (
-                                          <span className="w-auto h-auto p-3 px-5 rounded-lg bg-red-500">
-                                            {playerScore >= 1000
-                                              ? "제외"
-                                              : playerScore}
-                                          </span>
-                                        )}
-                                        {!isMax && !isMin && (
-                                          <span className="w-auto h-auto p-3 rounded-lg ">
-                                            {playerScore >= 1000
-                                              ? "제외"
-                                              : playerScore}
-                                          </span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                  <div className="flex w-full justify-center items-center p-2">
-                                    {totalScore}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
+
               <div className="flex w-full h-auto">
                 <div className="flex w-full h-20 bg-gray-100 justify-start items-center rounded-lg px-3">
                   <div className="flex w-full h-full justify-end ml-5 items-center px-2">

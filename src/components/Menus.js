@@ -231,6 +231,13 @@ export const MenuArray = [
         icon: <TbHeartRateMonitor />,
         link: "/screenlobby",
       },
+      {
+        id: 31,
+        title: "스크린딜레이세팅",
+        isActive: true,
+        icon: <TbHeartRateMonitor />,
+        link: "/delay",
+      },
     ],
   },
   {

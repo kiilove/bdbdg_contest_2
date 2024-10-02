@@ -46,12 +46,7 @@ const ManagementHome = ({ children }) => {
             <div className="hidden w-72 h-full bg-sky-800 shadow-md">
               <Sidebar />
             </div>
-            <div
-              className="flex w-full h-full p-2 overflow-y-auto"
-              style={{ maxHeight: "900px" }}
-            >
-              {children}
-            </div>
+            <div className="flex w-full h-full p-2 ">{children}</div>
           </div>
         </div>
       )}

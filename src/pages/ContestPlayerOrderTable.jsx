@@ -230,6 +230,75 @@ const ContestPlayerOrderTable = () => {
         entry.playerUid === currentPlayerUid
     );
 
+    if (e.target.checked) {
+      // 다음 grade가 있는지 확인
+      if (entryFindIndex < newMatched.length - 1) {
+        const {
+          contestGradeId: nextGradeId,
+          contestGradeTitle: nextGradeTitle,
+        } = newMatched[entryFindIndex + 1];
+
+        const newPlayerInfo = {
+          ...currentPlayerInfo,
+          contestGradeId: nextGradeId,
+          contestGradeTitle: nextGradeTitle,
+          isGradeChanged: true,
+          playerIndex: currentPlayerInfo.playerIndex + 1000,
+        };
+        newPlayers.splice(playerFindIndex, 1, { ...newPlayerInfo });
+      } else {
+        // 다음 grade가 없으면 불가 사유를 console에 출력
+        console.log(
+          `불가: 선수 ${currentPlayerInfo.playerName} (UID: ${currentPlayerInfo.playerUid}) 는 마지막 grade에 속해있습니다. 다음 grade가 없습니다.`
+        );
+      }
+    } else {
+      const newPlayerInfo = {
+        ...currentPlayerInfo,
+        contestGradeId: currentPlayerInfo.originalGradeId,
+        contestGradeTitle: currentPlayerInfo.originalGradeTitle,
+        isGradeChanged: false,
+        playerIndex: currentPlayerInfo.playerIndex - 1000,
+      };
+      newPlayers.splice(playerFindIndex, 1, { ...newPlayerInfo });
+    }
+
+    setPlayersArray([...newPlayers]);
+    initEntryList();
+    setIsLoading(false);
+  };
+
+  const handleGradeChageOld = async (
+    e,
+    currentCategoryId,
+    currentGradeId,
+    currentGradeTitle,
+    currentPlayerUid
+  ) => {
+    setIsLoading(true);
+    const newMatched = [...matchedArray];
+    const newPlayers = [...playersArray];
+
+    const entryFindIndex = newMatched.findIndex(
+      (entry) =>
+        entry.contestCategoryId === currentCategoryId &&
+        entry.contestGradeId === currentGradeId
+    );
+
+    const playerFindIndex = playersArray.findIndex(
+      (entry) =>
+        entry.contestCategoryId === currentCategoryId &&
+        entry.contestGradeId === currentGradeId &&
+        entry.playerUid === currentPlayerUid
+    );
+
+    const currentPlayerInfo = newPlayers.find(
+      (entry) =>
+        entry.contestCategoryId === currentCategoryId &&
+        entry.contestGradeId === currentGradeId &&
+        entry.playerUid === currentPlayerUid
+    );
+
     const { contestGradeId: nextGradeId, contestGradeTitle: nextGradeTitle } =
       newMatched[entryFindIndex + 1];
 

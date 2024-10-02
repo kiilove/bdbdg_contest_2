@@ -276,6 +276,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       gradeTitle,
       stageJudgeCount: categoryJudgeCount,
       judges: judgeInitState,
+      resultSaved: [],
       compares: {
         status: {
           compareStart: false,
@@ -615,6 +616,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                               <div className="flex w-full h-20 justify-start items-center">
                                 <div className="flex w-1/2">
                                   {categoryTitle}({gradeTitle})
+                                  {/* realtimeData?.resultSave가 undefined일 경우 빈 배열로 처리 */}
+                                  {(realtimeData?.resultSaved || []).includes(
+                                    gradeId
+                                  ) && (
+                                    <span className="ml-2 text-red-500 font-semibold">
+                                      순위표확정
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex w-2/3 justify-end items-center gap-x-2">
                                   <button

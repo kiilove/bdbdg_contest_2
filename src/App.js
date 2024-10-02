@@ -26,6 +26,7 @@ import RankingAnnouncement from "./pages/RankingAnnouncement";
 import PrintSummary from "./printForms/PrintSummary";
 import ScreenLobby from "./pages/ScreenLobby";
 import Idle from "./pages/Idle";
+import DelaySettings from "./pages/DelaySettings";
 
 function App() {
   return (
@@ -121,6 +122,10 @@ function App() {
           <Route
             path="/clear"
             element={<ManagementHome children={<ContestSearchAndDelete />} />}
+          />
+          <Route
+            path="/delay"
+            element={<ManagementHome children={<DelaySettings />} />}
           />
           <Route path="/screen1/:contestId" element={<StandingTableType1 />} />
         </Routes>

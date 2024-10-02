@@ -442,6 +442,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               gradeId={rankingSummaryProp?.gradeId}
               stageId={realtimeData?.stageId}
               setClose={setRankingSummaryOpen}
+              currentResultSaved={realtimeData?.resultSaved}
             />
           </Modal>
           <Modal open={pointSummaryOpen}>
@@ -450,6 +451,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               gradeId={pointSummaryProp?.gradeId}
               stageId={realtimeData?.stageId}
               setClose={setPointSummaryOpen}
+              currentResultSaved={realtimeData?.resultSaved}
             />
           </Modal>
           <div className="flex w-full h-auto ">
@@ -469,7 +471,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   </h1>
                 )}
               </div>
-              <div className="flex w-2/5 h-full gap-x-2">
+              {/* <div className="flex w-2/5 h-full gap-x-2">
                 <button
                   className="bg-red-500  w-full h-full text-white text-lg rounded-lg"
                   onClick={handleForceUpdate}
@@ -492,7 +494,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                     모니터링 시작
                   </button>
                 )}
-              </div>
+              </div> */}
             </div>
           </div>
           <div className="flex flex-col w-full h-auto">
@@ -641,31 +643,63 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 <div className="flex">
                                   {categoryJudgeType === "point" ? (
                                     <button
-                                      className="w-auto h-10  text-gray-100 bg-blue-800 rounded-lg px-5 py-2"
+                                      className={`w-auto h-10 text-gray-100 rounded-lg px-5 py-2 ${
+                                        (
+                                          realtimeData?.resultSave || []
+                                        ).includes(gradeId)
+                                          ? "bg-red-600"
+                                          : "bg-blue-800"
+                                      }`}
                                       onClick={() => {
-                                        setPointSummaryProp({
-                                          categoryId,
-                                          gradeId,
-                                          categoryJudgeType,
-                                        });
-                                        setPointSummaryOpen(true);
+                                        if (
+                                          !(
+                                            realtimeData?.resultSave || []
+                                          ).includes(gradeId)
+                                        ) {
+                                          setPointSummaryProp({
+                                            categoryId,
+                                            gradeId,
+                                            categoryJudgeType,
+                                          });
+                                          setPointSummaryOpen(true);
+                                        }
                                       }}
                                     >
-                                      점수형 집계및 순위확인
+                                      {(
+                                        realtimeData?.resultSave || []
+                                      ).includes(gradeId)
+                                        ? "순위표확정됨"
+                                        : "점수형 집계및 순위확인"}
                                     </button>
                                   ) : (
                                     <button
-                                      className="w-auto h-10  text-gray-100 bg-blue-800 rounded-lg px-5 py-2"
+                                      className={`w-auto h-10 text-gray-100 rounded-lg px-5 py-2 ${
+                                        (
+                                          realtimeData?.resultSave || []
+                                        ).includes(gradeId)
+                                          ? "bg-red-600"
+                                          : "bg-blue-800"
+                                      }`}
                                       onClick={() => {
-                                        setRankingSummaryProp({
-                                          categoryId,
-                                          gradeId,
-                                          categoryJudgeType,
-                                        });
-                                        setRankingSummaryOpen(true);
+                                        if (
+                                          !(
+                                            realtimeData?.resultSave || []
+                                          ).includes(gradeId)
+                                        ) {
+                                          setRankingSummaryProp({
+                                            categoryId,
+                                            gradeId,
+                                            categoryJudgeType,
+                                          });
+                                          setRankingSummaryOpen(true);
+                                        }
                                       }}
                                     >
-                                      랭킹형 집계및 순위확인
+                                      {(
+                                        realtimeData?.resultSave || []
+                                      ).includes(gradeId)
+                                        ? "순위표확정됨"
+                                        : "랭킹형 집계및 순위확인"}
                                     </button>
                                   )}
                                 </div>
