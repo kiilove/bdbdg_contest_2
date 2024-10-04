@@ -1,8 +1,11 @@
 import React from "react";
 import ybbf from "../assets/img/ybbf_logo.png";
+import sbbf from "../assets/img/sbbf_logo.png";
+
 import CanvasWithImageData from "./CanvasWithImageData";
 
 const ScoreCardRankForm = ({
+  contestInfo,
   seatIndex,
   categoryTitle,
   gradeTitle,
@@ -24,7 +27,7 @@ const ScoreCardRankForm = ({
           <div className="flex w-1/3"></div>
           <div className="flex w-1/3 justify-center items-center">
             <div className="flex">
-              <img src={ybbf} alt="" className="w-32" />
+              <img src={contestInfo?.contestOrgLogo} alt="" className="w-32" />
             </div>
           </div>
           <div className="flex w-1/3 justify-end">
@@ -41,7 +44,7 @@ const ScoreCardRankForm = ({
           </div>
         </div>
         <div className="flex w-full h-auto justify-center items-center p-2 gap-x-2">
-          <span>6th</span> <span>YONGIN</span> <span>BODYBUILDING</span>
+          <span>BODYBUILDING</span>
           <span>FERDERATIONS</span>
         </div>
         <div className="flex w-full justify-center items-center p-2 gap-x-3 bg-black h-7 text-white font-light text-sm">
@@ -55,7 +58,7 @@ const ScoreCardRankForm = ({
               COMPETITION :
             </div>
             <div className="flex w-1/2 justify-start ml-2">
-              제6회 용인특례시 보디빌딩협회장배 Mr&Ms 보디빌딩 및 피트니스 대회
+              {contestInfo?.contestTitle}
             </div>
             <div className="flex justify-end" style={{ width: "90px" }}>
               CATEGORY :
@@ -69,12 +72,14 @@ const ScoreCardRankForm = ({
               PLACE :
             </div>
             <div className="flex w-1/2 justify-start ml-2">
-              용인시청 에이스홀
+              {contestInfo?.contestLocation}
             </div>
             <div className="flex justify-end" style={{ width: "90px" }}>
               DATE :
             </div>
-            <div className="flex justify-start ml-2">2023-08-26</div>
+            <div className="flex justify-start ml-2">
+              {contestInfo?.contestDate}
+            </div>
           </div>
         </div>
         <div

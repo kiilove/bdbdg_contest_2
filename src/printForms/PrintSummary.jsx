@@ -188,7 +188,7 @@ const PrintSummary = () => {
       setCollectionName(currentContest.contests.collectionName);
       fetchCategoryAndGrades(currentContest.contests.id);
     }
-  }, [currentContest?.contests]);
+  }, [currentContest?.contests, currentSection]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">

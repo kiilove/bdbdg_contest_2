@@ -116,6 +116,13 @@ export const MenuArray = [
         isActive: user.userGroup === "admin" ? true : false,
       },
       {
+        id: 11,
+        title: "최종명단강제등록",
+        icon: <BiUserPlus />,
+        link: "/contestforcemanual",
+        isActive: true,
+      },
+      {
         id: 43,
         title: "참가신청서 랜덤",
         icon: <BiUserPlus />,

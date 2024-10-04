@@ -61,6 +61,7 @@ const ContestStagetable = () => {
 
     if (returnPlayersFinal) {
       setPlayersArray([...returnPlayersFinal.players]);
+      console.log(returnPlayersFinal.players);
     }
 
     if (returnStagesAssign) {

@@ -42,7 +42,6 @@ const ContestInfo = () => {
   const [judgePasswords, setJudgePasswords] = useState(generatePasswords());
   const updateContestInfo = useFirestoreUpdateData("contest_notice");
   const [files, setFiles] = useState([]);
-  const [orgLogo, setOrgLogo] = useState([]);
 
   const { currentContest, setCurrentContest } = useContext(
     CurrentContestContext
@@ -51,11 +50,6 @@ const ContestInfo = () => {
     files,
     "images/poster"
   );
-  const {
-    progress: orgLogoProgress,
-    urls: orgLogoUrls,
-    errors: orgLogoErrors,
-  } = useFirebaseStorage(orgLogo, "org/logos");
 
   const addCollection = useFirestoreAddData(
     currentContest.contests.collectionName
@@ -88,7 +82,6 @@ const ContestInfo = () => {
     contestStatus: "",
     contestTitle: "",
     contestTitleShort: "",
-    contestOrgLogo: "", // Added field for organization logo
   };
   const formatNumber = (value) => {
     if (isNaN(value) || value === "") {
@@ -223,15 +216,8 @@ const ContestInfo = () => {
   }, [urls]);
 
   useEffect(() => {
-    if (orgLogoUrls.length > 0) {
-      setOrgLogo([]);
-
-      setCurrentContestInfo((prev) => ({
-        ...prev,
-        contestOrgLogo: orgLogoUrls[0].compressedUrl,
-      }));
-    }
-  }, [orgLogoUrls]);
+    console.log(currentContest);
+  }, [currentContest]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2 justify-start items-start">
@@ -260,17 +246,6 @@ const ContestInfo = () => {
                 style={{ letterSpacing: "2px" }}
               >
                 대회포스터
-              </h3>
-            </div>
-            <div
-              className="flex w-full h-12 justify-end items-center"
-              style={{ height: "130px" }}
-            >
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                협회로고
               </h3>
             </div>
             <div className="flex w-full h-12 justify-end items-center">
@@ -388,7 +363,7 @@ const ContestInfo = () => {
                 {currentContestInfo?.contestPoster && (
                   <img
                     src={currentContestInfo.contestPoster}
-                    className="w-32 h-32 rounded-lg"
+                    className="w-24 h-32 rounded-lg"
                   />
                 )}
               </div>
@@ -404,34 +379,6 @@ const ContestInfo = () => {
                   />
                   <div className="w-32 h-8 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg mt-2 flex justify-center items-center">
                     포스터올리기
-                  </div>
-                </label>
-              </div>
-            </div>
-            <div className="flex lg:hidden px-3">
-              <h3 className="font-sans font-semibold">협회로고</h3>
-            </div>
-            <div className="flex w-full h-auto lg:h-32 justify-start items-center rounded-lg mb-3 lg:mb-0 gap-x-2">
-              <div className="flex justify-start items-center">
-                {currentContestInfo?.contestOrgLogo && (
-                  <img
-                    src={currentContestInfo.contestOrgLogo}
-                    className="w-32 h-32 rounded-lg"
-                  />
-                )}
-              </div>
-              <div className="flex justify-start items-end h-full">
-                <label htmlFor="orgLogo">
-                  <input
-                    type="file"
-                    multiple
-                    name="orgLogo"
-                    id="orgLogo"
-                    hidden
-                    onChange={(e) => setOrgLogo(e.target.files)}
-                  />
-                  <div className="w-32 h-8 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg mt-2 flex justify-center items-center">
-                    로고올리기
                   </div>
                 </label>
               </div>

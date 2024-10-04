@@ -73,7 +73,9 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   const handleInitGrandPrixFromCategoriesToGrades = () => {
     setGrandPrixArray([]);
     const grandPrixGrades = categorysArray.filter(
-      (f) => f.contestCategoryIsOverall === true
+      (f) =>
+        f.contestCategoryIsOverall === true &&
+        f.contestCategorySection !== "그랑프리"
     );
     setGrandPrixArray([...grandPrixGrades]);
     console.log(grandPrixGrades);

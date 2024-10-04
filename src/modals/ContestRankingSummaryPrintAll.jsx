@@ -258,6 +258,7 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                                 {props.categoryJudgeType === "point" ? (
                                   <div className="flex w-full h-auto justify-center items-start break-after-page">
                                     <ScoreCardPointForm
+                                      contestInfo={currentContest.contestInfo}
                                       seatIndex={seatIndex}
                                       categoryTitle={categoryTitle}
                                       gradeTitle={gradeTitle}
@@ -270,6 +271,7 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                                 ) : (
                                   <div className="flex w-full h-auto justify-center items-start break-after-page">
                                     <ScoreCardRankForm
+                                      contestInfo={currentContest.contestInfo}
                                       seatIndex={seatIndex}
                                       categoryTitle={categoryTitle}
                                       gradeTitle={gradeTitle}

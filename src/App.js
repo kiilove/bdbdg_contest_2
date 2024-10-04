@@ -27,6 +27,7 @@ import PrintSummary from "./printForms/PrintSummary";
 import ScreenLobby from "./pages/ScreenLobby";
 import Idle from "./pages/Idle";
 import DelaySettings from "./pages/DelaySettings";
+import ContestForceManual from "./pages/ContestForceManual";
 
 function App() {
   return (
@@ -69,7 +70,11 @@ function App() {
           <Route
             path="/contestnewinvoicemanual"
             element={<ManagementHome children={<ContestNewInvoiceManual />} />}
-          />{" "}
+          />
+          <Route
+            path="/contestforcemanual"
+            element={<ManagementHome children={<ContestForceManual />} />}
+          />
           <Route
             path="/randomgenerator"
             element={<ManagementHome children={<RandomPlayerGenerator />} />}

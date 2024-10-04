@@ -18,7 +18,7 @@ const ContestMonitoringHost = ({ contestId }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
   const [contestInfo, setContestInfo] = useState({});
-  const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(null); // 선택된 선수의 index
+  const [selectedPlayerUid, setSelectedPlayerUid] = useState(null); // 선택된 선수의 Uid
   const { currentContest } = useContext(CurrentContestContext);
   const fetchResultQuery = useFirestoreQuery();
   const [rankingData, setRankingData] = useState(null);
@@ -94,27 +94,34 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
-  // 순위 확인 함수 (사회자가 미리 확인)
+  // 순위확인 함수 (사회자가 미리 확인)
   const handleViewRanking = async (gradeId, gradeTitle) => {
-    const condition = [where("gradeId", "==", gradeId)];
-    try {
-      const data = await fetchResultQuery.getDocuments(
-        "contest_results_list",
-        condition
-      );
+    if (isRankingView) {
+      // 순위확인 모드인 경우, 명단확인 모드로 돌아가기
+      setIsRankingView(false);
+      setRankingData(null); // 순위 데이터를 초기화
+    } else {
+      // 순위가 아닌 경우 순위 데이터를 조회하고 보여줌
+      const condition = [where("gradeId", "==", gradeId)];
+      try {
+        const data = await fetchResultQuery.getDocuments(
+          "contest_results_list",
+          condition
+        );
 
-      if (!data || data.length === 0) {
-        console.log("데이터가 없습니다.");
-        return;
+        if (!data || data.length === 0) {
+          console.log("데이터가 없습니다.");
+          return;
+        }
+
+        const standingData = data[0].result.sort(
+          (a, b) => a.playerRank - b.playerRank
+        );
+        setRankingData(standingData); // 순위 데이터를 상태에 저장
+        setIsRankingView(true); // 순위확인 모드로 전환
+      } catch (error) {
+        console.log("에러 발생:", error);
       }
-
-      const standingData = data[0].result.sort(
-        (a, b) => a.playerRank - b.playerRank
-      );
-      setRankingData(standingData); // 순위 데이터를 상태에 저장
-      setIsRankingView(true); // 순위확인 모드로 변경
-    } catch (error) {
-      console.log("에러 발생:", error);
     }
   };
 
@@ -155,6 +162,10 @@ const ContestMonitoringHost = ({ contestId }) => {
     } catch (error) {
       console.log(error);
     }
+  };
+
+  const handleRowClick = (playerUid) => {
+    setSelectedPlayerUid(playerUid); // 클릭한 선수의 Uid 저장
   };
 
   // 정렬 상태를 저장하는 함수
@@ -293,15 +304,15 @@ const ContestMonitoringHost = ({ contestId }) => {
             </thead>
             <tbody>
               {(isReversed ? [...rankingData].reverse() : rankingData).map(
-                (player, index) => (
+                (player) => (
                   <tr
-                    key={index}
+                    key={player.playerUid} // playerUid로 key 설정
                     className={`text-center cursor-pointer ${
-                      selectedPlayerIndex === index
-                        ? "font-bold text-xl bg-yellow-200"
+                      selectedPlayerUid === player.playerUid
+                        ? "font-bold text-xl bg-yellow-200" // 선택된 행의 스타일 적용
                         : "hover:bg-blue-100"
                     }`}
-                    onClick={() => setSelectedPlayerIndex(index)} // 클릭 시 선택된 선수의 인덱스를 저장
+                    onClick={() => setSelectedPlayerUid(player.playerUid)} // 클릭 시 playerUid를 저장
                   >
                     <td className="border px-4 py-2">{player.playerRank}</td>
                     <td className="border px-4 py-2">
@@ -317,25 +328,30 @@ const ContestMonitoringHost = ({ contestId }) => {
           currentPlayersArray.map((current, cIdx) => (
             <div key={cIdx} className="mb-4">
               <h4 className="font-bold mb-2">{current.gradeTitle}</h4>
-              <table className="w-full table-auto text-lg">
+              <table className="w-full table-fixed text-lg">
+                {" "}
+                {/* table-fixed로 테이블 레이아웃 고정 */}
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-4 py-2">번호</th>
-                    <th className="px-4 py-2">이름</th>
-                    <th className="px-4 py-2">소속</th>
+                    <th className="px-4 py-2 w-1/6">번호</th>{" "}
+                    {/* 열 너비 지정 */}
+                    <th className="px-4 py-2 w-1/4">이름</th>
+                    <th className="px-4 py-2 w-1/4">소속</th>
+                    <th className="px-4 py-2 w-1/3">출전동기</th>{" "}
+                    {/* 열 너비 지정 */}
                   </tr>
                 </thead>
                 <tbody>
                   {current.players.length > 0 ? (
-                    current.players.map((player, index) => (
+                    current.players.map((player) => (
                       <tr
-                        key={index}
+                        key={player.playerUid} // playerUid로 key 설정
                         className={`text-center cursor-pointer ${
-                          selectedPlayerIndex === index
-                            ? "font-bold text-xl bg-yellow-200"
+                          selectedPlayerUid === player.playerUid
+                            ? "font-bold text-xl bg-yellow-200" // 선택된 행의 스타일 적용
                             : "hover:bg-blue-100"
                         }`}
-                        onClick={() => setSelectedPlayerIndex(index)} // 클릭 시 선택된 선수의 인덱스를 저장
+                        onClick={() => setSelectedPlayerUid(player.playerUid)} // 클릭 시 playerUid를 저장
                       >
                         <td className="border px-4 py-2">
                           {player.playerNumber}
@@ -344,11 +360,16 @@ const ContestMonitoringHost = ({ contestId }) => {
                           {player.playerName}
                         </td>
                         <td className="border px-4 py-2">{player.playerGym}</td>
+                        <td className="border px-4 py-2 text-left whitespace-pre-wrap">
+                          {" "}
+                          {/* 줄바꿈 처리 */}
+                          {player?.playerText}
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="3" className="text-center py-4">
+                      <td colSpan="4" className="text-center py-4">
                         참가한 선수가 없습니다.
                       </td>
                     </tr>

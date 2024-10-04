@@ -16,7 +16,7 @@ const ScoreSheet = ({
       <div className="flex w-full h-auto p-10">
         <div className="flex w-1/6">
           <div className="flex p-2 w-full justify-center items-center border border-gray-500">
-            <img src={YbbfLogo} className="w-42" />
+            <img src={contestInfo?.contestOrgLogo} className="w-42" />
           </div>
         </div>
         <div className="flex w-5/6 justify-start pl-5 py-3">

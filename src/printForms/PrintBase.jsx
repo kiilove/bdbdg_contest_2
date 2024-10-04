@@ -230,7 +230,36 @@ const PrintBase = () => {
                         </button>
                       )}
                       content={() => printRef.current}
-                      pageStyle={`@page { size: A4; margin: 0; margin-top: 50px; margin-bottom: 50px; }`}
+                      pageStyle={`
+    @page {
+      size: A4;
+      margin: 0;
+      margin-top: 50px;
+      margin-bottom: 50px;
+    }
+    @page::after {
+      content: counter(page);
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 16px;
+    }
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+      }
+      .footer {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 12px;
+      }
+      .page-break { page-break-inside:avoid; page-break-after:auto }
+    }
+  `}
                     />
                   </div>
                 </div>
@@ -242,8 +271,11 @@ const PrintBase = () => {
                   <div className="flex w-full h-14 border border-r-2 border-b-2 border-black justify-center items-center">
                     <span
                       className="text-2xl font-semibold"
-                      style={{ letterSpacing: "30px" }}
+                      style={{ letterSpacing: "10px" }}
                     >
+                      <span className="mr-3">
+                        {currentContest?.contestInfo?.contestTitleShort}
+                      </span>
                       계측명단({currentSection})
                     </span>
                   </div>
