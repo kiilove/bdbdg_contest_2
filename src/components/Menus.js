@@ -249,9 +249,9 @@ export const MenuArray = [
   },
   {
     id: 4,
-    title: "접수링크",
+    title: "QRCode",
     isActive: true,
     icon: <BsFillHandIndexThumbFill />,
-    subMenus: [{ id: 1, title: "QR코드확인", icon: <MdOutlineTouchApp /> }],
+    link: "/qrcode",
   },
 ];
