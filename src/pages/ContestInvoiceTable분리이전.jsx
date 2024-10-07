@@ -25,6 +25,8 @@ const ContestInvoiceTable = () => {
   const [entryList, setEntryList] = useState([]);
   const [searchInfo, setSearchInfo] = useState();
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Items per page state
+  const [currentPage, setCurrentPage] = useState(1); // Current page state
 
   const [isOpen, setIsOpen] = useState({
     category: false,
@@ -39,6 +41,7 @@ const ContestInvoiceTable = () => {
   const updateInvoice = useFirestoreUpdateData("invoices_pool");
   const deleteEntry = useFirestoreDeleteData("contest_entrys_list");
   const addEntry = useFirestoreAddData("contest_entrys_list");
+
   const fetchQuery = async (contestId) => {
     setIsLoading(true);
     const invoiceCondition = [where("contestId", "==", contestId)];
@@ -165,6 +168,7 @@ const ContestInvoiceTable = () => {
       children: "",
     },
   ];
+
   const handleInoviceClose = () => {
     setIsOpen(() => ({
       invoice: false,
@@ -183,9 +187,34 @@ const ContestInvoiceTable = () => {
       }));
     }
   };
+
+  const paginatedData = useMemo(() => {
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    return filteredData.slice(startIdx, endIdx);
+  }, [filteredData, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+
   const handleSearchKeyword = () => {
-    setSearchKeyword(searchInfo);
+    if (searchInfo === "") {
+      setSearchKeyword(""); // Clear the filter to show all data
+    } else {
+      setSearchKeyword(searchInfo); // Apply the search filter
+    }
+    setCurrentPage(1); // Reset pagination to the first page
   };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset page to 1 when items per page change
+  };
+
+  const pageNumbers = [...Array(totalPages)].map((_, i) => i + 1);
 
   const initInvoice = async (playerUid) => {
     const invoiceCondition = [
@@ -296,6 +325,13 @@ const ContestInvoiceTable = () => {
     //console.log(filteredData);
   }, [filteredData]);
 
+  useEffect(() => {
+    // If searchInfo is empty, reset searchKeyword to show all data
+    if (searchInfo === "") {
+      setSearchKeyword(""); // Show all items
+    }
+  }, [searchInfo]); // This will trigger whenever searchInfo changes
+
   const ContestInvoiceUncompleteRender = (
     <div className="flex flex-col lg:flex-row gap-y-2 w-full h-auto bg-white mb-3 rounded-tr-lg rounded-b-lg p-2 gap-x-4">
       <Modal open={isOpen.invoice} onClose={handleInoviceClose}>
@@ -324,13 +360,20 @@ const ContestInvoiceTable = () => {
                   type="text"
                   name="contestCategoryTitle"
                   value={searchInfo}
-                  onChange={(e) => setSearchInfo(e.target.value.trim())}
+                  onChange={(e) => {
+                    setSearchInfo(e.target.value); // Remove trim here
+                    if (e.target.value === "") {
+                      // Check for empty value directly
+                      handleSearchKeyword(); // Show all items
+                    }
+                  }}
                   onKeyDown={(e) => {
                     e.key === "Enter" && handleSearchKeyword();
                   }}
                   className="h-12 outline-none w-full"
                   placeholder="검색(이름, 전화번호, 소속)"
                 />
+
                 <button
                   className="w-20 bg-blue-200 h-full"
                   onClick={handleSearchKeyword}
@@ -368,8 +411,8 @@ const ContestInvoiceTable = () => {
                     참가비용
                   </th>
                 </tr>
-                {filteredData?.length > 0 &&
-                  filteredData.map((filtered, fIdx) => {
+                {paginatedData?.length > 0 &&
+                  paginatedData.map((filtered, fIdx) => {
                     const {
                       id,
                       joins,
@@ -456,6 +499,60 @@ const ContestInvoiceTable = () => {
                     );
                   })}
               </table>
+              {/* Paging controls */}
+              <div className="flex flex-col sm:flex-row justify-between mt-4 items-center">
+                {/* Items per page selector */}
+                <div className="flex items-center mb-2 sm:mb-0">
+                  <span className="mr-2">한 페이지당 표시할 목록 갯수:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                    className="px-2 py-1 border rounded"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
+
+                {/* Page numbers for larger screens */}
+                <div className="hidden sm:flex space-x-2">
+                  {pageNumbers.map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-1 border rounded ${
+                        currentPage === page
+                          ? "bg-blue-500 text-white"
+                          : "bg-white"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Mobile pagination controls (visible only on small screens) */}
+                <div className="flex sm:hidden justify-between items-center w-full mt-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+                  >
+                    이전
+                  </button>
+                  <span>
+                    페이지 {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -42,7 +42,7 @@ const Login = () => {
     if (user) {
       // 로그인 성공
       sessionStorage.setItem("user", JSON.stringify(user));
-      navigate("/management");
+      navigate("/selectdatabase");
     } else {
       // 로그인 실패
       setError("아이디 또는 비밀번호가 일치하지 않습니다.");

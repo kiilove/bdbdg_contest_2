@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Do+Hyeon&family=Nanum+Gothic:wght@400;700;800&display=swap");
 
 body {
   margin: 0;
-  font-family: "Noto Sans KR", "Apple SD Gothic", sans-serif;
+  font-family: "Nanum Gothic", "Apple SD Gothic", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-y: auto;
@@ -15,4 +15,34 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
     monospace;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+  }
+
+  .break-page {
+    page-break-inside: avoid;
+  }
+
+  .page-footer {
+    position: running(footer);
+  }
+
+  @page {
+    @bottom-center {
+      content: element(footer);
+    }
+  }
+
+  .page-footer::after {
+    content: "페이지 " counter(page) " / 총 " counter(pages);
+    font-size: 12px;
+  }
 }

@@ -1,361 +1,206 @@
+// PrintBase.js
 import React, { useState, useEffect, useRef, useContext, useMemo } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
-import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { MdOutlineScale } from "react-icons/md";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
 
-const tabArray = [
-  {
-    id: 0,
-    title: "전체",
-  },
-  {
-    id: 1,
-    title: "섹션별",
-  },
-  {
-    id: 2,
-    title: "종목별",
-  },
-];
-
 const PrintBase = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState({});
-  const [msgOpen, setMsgOpen] = useState(false);
-  const [currentTab, setCurrentTab] = useState(0);
   const [currentSection, setCurrentSection] = useState("전체");
   const printRef = useRef();
 
   const [categoriesArray, setCategoriesArray] = useState([]);
   const [gradesArray, setGradesArray] = useState([]);
   const [playerAssignArray, setPlayerAssignArray] = useState([]);
-
   const { currentContest } = useContext(CurrentContestContext);
+
   const fetchCategories = useFirestoreGetDocument("contest_categorys_list");
   const fetchGrades = useFirestoreGetDocument("contest_grades_list");
   const fetchPlayersAssign = useFirestoreGetDocument("contest_players_assign");
 
-  const fetchPool = async (contestId, categoryId, gradeId, playerAssignId) => {
+  const fetchPool = async (categoryId, gradeId, playerAssignId) => {
     try {
-      await fetchCategories.getDocument(categoryId).then((data) => {
-        if (data) {
-          setCategoriesArray(() => [...data.categorys]);
-        }
-      });
-
-      await fetchGrades.getDocument(gradeId).then((data) => {
-        if (data) {
-          setGradesArray(() => [...data.grades]);
-        }
-      });
-
-      await fetchPlayersAssign.getDocument(playerAssignId).then((data) => {
-        if (data) {
-          setPlayerAssignArray(() => [...data.players]);
-        }
-      });
+      const [categories, grades, players] = await Promise.all([
+        fetchCategories.getDocument(categoryId),
+        fetchGrades.getDocument(gradeId),
+        fetchPlayersAssign.getDocument(playerAssignId),
+      ]);
+      setCategoriesArray(categories?.categorys || []);
+      setGradesArray(grades?.grades || []);
+      setPlayerAssignArray(players?.players || []);
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
-  const groupByCategory = (categories, grades, players, currentSection) => {
-    const filteredCategories = categories.filter((category) => {
-      if (currentSection === "전체") return true;
-      return category.contestCategorySection === currentSection;
-    });
-
-    return filteredCategories.map((category) => {
-      const {
-        contestCategoryIndex: categoryIndex,
-        contestCategoryTitle: categoryTitle,
-        contestCategoryId: categoryId,
-        contestCategorySection: categorySection,
-      } = category;
-
-      const relevantGrades = grades
-        .filter((grade) => grade.refCategoryId === categoryId)
-        .sort((a, b) => a.gradeIndex - b.gradeIndex)
-        .map((grade) => {
-          const playersForGrade = players
-            .filter((player) => player.contestGradeId === grade.contestGradeId)
-            .sort((a, b) => a.playerIndex - b.playerIndex);
-          return {
-            ...grade,
-            players: playersForGrade,
-          };
-        });
-
-      return {
-        categoryIndex,
-        categoryTitle,
-        categorySection,
-        grades: relevantGrades,
-      };
-    });
-  };
-
-  // useMemo 사용
   const filteredPlayerList = useMemo(() => {
-    return groupByCategory(
-      categoriesArray,
-      gradesArray,
-      playerAssignArray,
-      currentSection
-    );
+    const filteredCategories = categoriesArray.filter((category) => {
+      return (
+        currentSection === "전체" ||
+        category.contestCategorySection === currentSection
+      );
+    });
+
+    return filteredCategories
+      .map((category) => {
+        const grades = gradesArray
+          .filter((grade) => grade.refCategoryId === category.contestCategoryId)
+          .map((grade) => ({
+            ...grade,
+            players: playerAssignArray.filter(
+              (player) => player.contestGradeId === grade.contestGradeId
+            ),
+          }))
+          .filter((grade) => grade.players.length > 0);
+
+        return { ...category, grades };
+      })
+      .filter((category) => category.grades.length > 0);
   }, [categoriesArray, gradesArray, playerAssignArray, currentSection]);
 
-  // contestCategorySection을 동적으로 그룹화하여 버튼 생성
   const sections = useMemo(() => {
-    const uniqueSections = [
+    return [
+      "전체",
       ...new Set(
         categoriesArray.map((category) => category.contestCategorySection)
       ),
     ];
-    return ["전체", ...uniqueSections];
   }, [categoriesArray]);
 
-  const renderEmptyRows = (numPlayers) => {
-    const emptyRows = [];
-    const emptyRowCount = numPlayers <= 10 ? 3 : 5;
-
-    for (let i = 0; i < emptyRowCount; i++) {
-      emptyRows.push(
-        <div
-          key={i}
-          className={`flex w-full h-10 ${
-            i === emptyRowCount - 1 ? "border-b-2" : ""
-          } border-black`}
-        >
-          <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-            <span></span>
-          </div>
-          <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-            <span></span>
-          </div>
-          <div className="flex w-1/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-            <span></span>
-          </div>
-          <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-            <span></span>
-          </div>
-          <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r-2 border-t first:border-l">
-            <span></span>
-          </div>
-        </div>
+  useEffect(() => {
+    if (currentContest?.contests?.id) {
+      fetchPool(
+        currentContest.contests.contestCategorysListId,
+        currentContest.contests.contestGradesListId,
+        currentContest.contests.contestPlayersAssignId
       );
     }
-    return emptyRows;
-  };
-
-  useEffect(() => {
-    if (!currentContest?.contests?.id) {
-      return;
-    }
-
-    fetchPool(
-      currentContest.contests.id,
-      currentContest.contests.contestCategorysListId,
-      currentContest.contests.contestGradesListId,
-      currentContest.contests.contestPlayersAssignId
-    );
-  }, [currentContest?.contests]);
+  }, [currentContest]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
-      {isLoading && <LoadingPage />}
-      {!isLoading && (
+      {isLoading ? (
+        <LoadingPage />
+      ) : (
         <>
+          {/* 헤더 부분 */}
           <div className="flex w-full h-14">
-            <ConfirmationModal
-              isOpen={msgOpen}
-              message={message}
-              onCancel={() => setMsgOpen(false)}
-              onConfirm={() => setMsgOpen(false)}
-            />
             <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
               <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
                 <MdOutlineScale />
               </span>
-              <h1
-                className="font-sans text-lg font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                계측명단 출력
-              </h1>
+              <h1 className="font-sans text-lg font-semibold">계측명단 출력</h1>
             </div>
           </div>
 
-          <div className="flex w-full h-full justify-start px-3 pt-3 flex-col bg-gray-100 rounded-lg">
-            <div className="flex w-full">
-              {sections.map((section, idx) => (
-                <button
-                  key={idx}
-                  className={`${
-                    currentSection === section
-                      ? "flex w-auto h-10 bg-white px-4"
-                      : "flex w-auto h-10 bg-gray-100 px-4"
-                  } h-14 rounded-t-lg justify-center items-center`}
-                  style={{ minWidth: "130px" }}
-                  onClick={() => setCurrentSection(section)}
-                >
-                  <span>{section}</span>
-                </button>
-              ))}
-            </div>
+          {/* 섹션 버튼 */}
+          <div className="flex w-full mb-4 gap-2">
+            {sections.map((section, idx) => (
+              <button
+                key={idx}
+                className={`flex-grow px-4 py-2 rounded-lg border ${
+                  currentSection === section
+                    ? "bg-blue-500 text-white"
+                    : "bg-white text-gray-700"
+                } hover:bg-blue-400 hover:text-white`}
+                onClick={() => setCurrentSection(section)}
+              >
+                {section}
+              </button>
+            ))}
+          </div>
 
-            <div className="flex h-full w-full gap-x-2 bg-gray-100">
-              <div className="flex flex-col w-full h-full bg-white rounded-b-lg p-2 gap-y-2">
-                <div className="flex w-full justify-center px-5">
-                  <div className="flex w-2/3 gap-x-1">
-                    {sections.map((section, idx) => (
-                      <button
-                        key={idx}
-                        className="w-24 h-10 bg-white rounded-lg border border-blue-500"
-                        onClick={() => setCurrentSection(section)}
-                      >
-                        {section}
-                      </button>
-                    ))}
-                  </div>
+          {/* 출력 내용 */}
+          <div className="flex w-full h-full bg-white overflow-y-auto">
+            <div className="flex flex-col w-full h-full bg-white rounded-b-lg p-2 gap-y-2">
+              <div className="flex w-full justify-center mb-4">
+                <ReactToPrint
+                  trigger={() => (
+                    <button className="w-40 h-10 bg-blue-300 rounded-lg">
+                      출력
+                    </button>
+                  )}
+                  content={() => printRef.current}
+                />
+              </div>
 
-                  <div className="flex w-1/3 justify-end">
-                    <ReactToPrint
-                      trigger={() => (
-                        <button className="w-40 h-10 bg-blue-300 rounded-lg">
-                          출력
-                        </button>
-                      )}
-                      content={() => printRef.current}
-                      pageStyle={`
-    @page {
-      size: A4;
-      margin: 0;
-      margin-top: 50px;
-      margin-bottom: 50px;
-    }
-    @page::after {
-      content: counter(page);
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 16px;
-    }
-    @media print {
-      body {
-        -webkit-print-color-adjust: exact;
-      }
-      .footer {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 12px;
-      }
-      .page-break { page-break-inside:avoid; page-break-after:auto }
-    }
-  `}
-                    />
-                  </div>
-                </div>
-
+              {/* 인쇄 영역 */}
+              <div
+                ref={printRef}
+                className="print-container flex flex-col w-full"
+              >
                 <div
-                  className="flex w-full h-full p-5 flex-col gap-y-2"
-                  ref={printRef}
+                  className="flex w-full mb-5 h-14 justify-center items-center bg-white border border-gray-400 rounded-md"
+                  style={{
+                    borderTopColor: "#cbd5e0",
+                    borderLeftColor: "#cbd5e0",
+                    borderBottomColor: "#4a5568",
+                    borderRightColor: "#4a5568",
+                  }}
                 >
-                  <div className="flex w-full h-14 border border-r-2 border-b-2 border-black justify-center items-center">
-                    <span
-                      className="text-2xl font-semibold"
-                      style={{ letterSpacing: "10px" }}
-                    >
-                      <span className="mr-3">
-                        {currentContest?.contestInfo?.contestTitleShort}
-                      </span>
-                      계측명단({currentSection})
-                    </span>
-                  </div>
-                  <div className="flex w-full h-full justify-center items-center flex-col gap-y-2">
-                    {filteredPlayerList?.length > 0 &&
-                      filteredPlayerList.map((filter, fIdx) => {
-                        const { categoryTitle, categoryId, grades } = filter;
-
-                        return grades.map((grade, gIdx) => {
-                          const { contestGradeId, contestGradeTitle, players } =
-                            grade;
-
-                          return (
-                            <>
-                              {players.length === 0 ? null : (
-                                <div
-                                  key={gIdx}
-                                  className="flex w-full h-auto p-2 flex-col border-0 border-black page-break"
-                                >
-                                  <div className="flex h-10 gap-x-2 text-lg font-semibold">
-                                    <span>{categoryTitle}</span>
-                                    <span>{contestGradeTitle}</span>
-                                  </div>
-                                  <div className="flex w-full h-auto flex-col">
-                                    <div className="flex w-full h-10">
-                                      <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                        <span>순번</span>
-                                      </div>
-                                      <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                        <span>선수번호</span>
-                                      </div>
-                                      <div className="flex w-1/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                        <span>이름</span>
-                                      </div>
-                                      <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                        <span>신장/체중</span>
-                                      </div>
-                                      <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r-2 border-t first:border-l">
-                                        <span>비고</span>
-                                      </div>
-                                    </div>
-                                    {players.map((player, pIdx) => {
-                                      const { playerNumber, playerName } =
-                                        player;
-
-                                      return (
-                                        <div
-                                          key={pIdx}
-                                          className="flex w-full h-10 last:border-b-2 border-black"
-                                        >
-                                          <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                            <span>{pIdx + 1}</span>
-                                          </div>
-                                          <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                            <span>{playerNumber}</span>
-                                          </div>
-                                          <div className="flex w-1/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                            <span>{playerName}</span>
-                                          </div>
-                                          <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
-                                            <span>/</span>
-                                          </div>
-                                          <div className="flex w-2/6 justify-center items-center font-semibold border-b-0 border-black border-r-2 border-t first:border-l">
-                                            <span></span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                    {/* 빈 공백줄 생성 */}
-                                    {renderEmptyRows(players.length)}
-                                    <div className="flex w-full h-10 page-break"></div>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          );
-                        });
-                      })}
-                  </div>
+                  <span className="text-lg font-semibold text-gray-800">
+                    {currentContest?.contestInfo?.contestTitle} 계측명단
+                  </span>
                 </div>
+
+                {filteredPlayerList.map((category, cIdx) =>
+                  category.grades.map((grade, gIdx) => (
+                    <div
+                      key={`${cIdx}-${gIdx}`}
+                      className="mb-6 break-page"
+                      style={{ pageBreakInside: "avoid" }}
+                    >
+                      <h2 className="text-left font-bold text-lg mb-2 ml-4">
+                        {category.contestCategoryTitle} /{" "}
+                        {grade.contestGradeTitle}
+                      </h2>
+                      <table
+                        className="w-full border-collapse border border-gray-400 text-center"
+                        style={{ fontSize: "14px", marginBottom: "20px" }}
+                      >
+                        <thead>
+                          <tr className="bg-gray-300">
+                            <th className="border px-2 py-1 w-1/12">순번</th>
+                            <th className="border px-2 py-1 w-1/12">
+                              선수번호
+                            </th>
+                            <th className="border px-2 py-1 w-1/4">이름</th>
+                            <th className="border px-2 py-1 w-1/4">
+                              신장/체중
+                            </th>
+                            <th className="border px-2 py-1 w-1/4">비고</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {grade.players.map((player, pIdx) => (
+                            <tr key={pIdx} className="border-t">
+                              <td className="p-2 border">{pIdx + 1}</td>
+                              <td className="p-2 border">
+                                {player.playerNumber}
+                              </td>
+                              <td className="p-2 border">
+                                {player.playerName}
+                              </td>
+                              <td className="p-2 border">/</td>
+                              <td className="p-2 border"></td>
+                            </tr>
+                          ))}
+                          {[...Array(3)].map((_, idx) => (
+                            <tr key={`empty-${idx}`} className="border-t">
+                              <td className="p-2 border">&nbsp;</td>
+                              <td className="p-2 border">&nbsp;</td>
+                              <td className="p-2 border">&nbsp;</td>
+                              <td className="p-2 border">&nbsp;</td>
+                              <td className="p-2 border">&nbsp;</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

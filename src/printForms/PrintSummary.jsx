@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useContext, useMemo } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import LoadingPage from "../pages/LoadingPage";
-import ReactToPrint from "react-to-print";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { HiUserGroup } from "react-icons/hi";
 import { useFirestoreQuery } from "../hooks/useFirestores";
@@ -18,183 +17,165 @@ const PrintSummary = () => {
   const [currentGradeId, setCurrentGradeId] = useState("all");
   const [categoriesArray, setCategoriesArray] = useState([]);
   const [gradesArray, setGradesArray] = useState([]);
-  const [resultArray, setResultArray] = useState([]);
   const [sectionArray, setSectionArray] = useState([]);
-  const [filteredResults, setFilteredResults] = useState([]); // 검색 후 보여줄 필터링된 결과
-  const [noData, setNoData] = useState(false); // No data 처리
+  const [filteredResults, setFilteredResults] = useState([]); // Filtered results after search
+  const [noData, setNoData] = useState(false); // No data flag
   const [showContestRankingSummary, setShowContestRankingSummary] =
-    useState(false); // 추가
-  const [searchParams, setSearchParams] = useState({}); // 검색 시 넘길 파라미터 추가
+    useState(false);
+  const [searchParams, setSearchParams] = useState({});
   const printRef = useRef();
   const { currentContest } = useContext(CurrentContestContext);
   const fetchCategories = useFirestoreQuery();
   const fetchGrades = useFirestoreQuery();
   const fetchResults = useFirestoreQuery();
 
-  // Function to fetch categories and grades
+  // Function to fetch categories, grades, and sections
   const fetchCategoryAndGrades = async (contestId) => {
     const condition = [where("refContestId", "==", contestId)];
     const condition2 = [where("contestId", "==", contestId)];
 
     try {
       setIsLoading(true); // Start loading
-      let sortedCategories;
-      let sortedGrades;
+
       // Fetch and set categories
-      await fetchCategories
-        .getDocuments("contest_categorys_list", condition)
-        .then((categoriesData) => {
-          if (categoriesData[0]) {
-            sortedCategories = categoriesData[0].categorys.sort(
-              (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-            );
-            setCategoriesArray(sortedCategories);
-          }
-        });
+      const categoriesData = await fetchCategories.getDocuments(
+        "contest_categorys_list",
+        condition
+      );
+      let sortedCategories = [];
+      if (categoriesData[0]) {
+        sortedCategories = categoriesData[0].categorys.sort(
+          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+        );
+        setCategoriesArray(sortedCategories);
+      }
 
       // Fetch and set grades
-      await fetchGrades
-        .getDocuments("contest_grades_list", condition)
-        .then((gradesData) => {
-          if (gradesData[0]) {
-            sortedGrades = gradesData[0].grades.sort(
-              (a, b) => a.gradeIndex - b.gradeIndex
-            );
-            setGradesArray(sortedGrades);
-          }
-        });
+      const gradesData = await fetchGrades.getDocuments(
+        "contest_grades_list",
+        condition
+      );
+      let sortedGrades = [];
+      if (gradesData[0]) {
+        sortedGrades = gradesData[0].grades.sort(
+          (a, b) => a.gradeIndex - b.gradeIndex
+        );
+        setGradesArray(sortedGrades);
+      }
 
-      // Fetch results and modify them by adding category and grade indexes
-      await fetchResults
-        .getDocuments("contest_results_list", condition2)
-        .then((resultsData) => {
-          const updatedResults = resultsData.map((result) => {
-            const matchingCategory = sortedCategories.find(
-              (category) => category.contestCategoryId === result.categoryId
-            );
+      // Extract unique sections from categories
+      const sectionsGroup = sortedCategories.reduce((acc, category) => {
+        const { contestCategorySection } = category;
+        if (!acc.includes(contestCategorySection)) {
+          acc.push(contestCategorySection);
+        }
+        return acc;
+      }, []);
 
-            const matchingGrade = sortedGrades.find(
-              (grade) => grade.contestGradeId === result.gradeId
-            );
-
-            return {
-              ...result,
-              contestCategoryIndex: matchingCategory
-                ? matchingCategory.contestCategoryIndex
-                : null,
-              contestCategoryTitle: matchingCategory
-                ? matchingCategory.contestCategoryTitle
-                : null,
-              contestCategorySection: matchingCategory
-                ? matchingCategory.contestCategorySection
-                : null,
-              contestGradeIndex: matchingGrade
-                ? matchingGrade.contestGradeIndex
-                : null,
-            };
-          });
-
-          const groupedResults = updatedResults
-            .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
-            .reduce((acc, result) => {
-              const { categoryId } = result;
-              if (!acc[categoryId]) {
-                acc[categoryId] = {
-                  categoryId,
-                  contestCategoryTitle: result.contestCategoryTitle,
-                  contestCategoryIndex: result.contestCategoryIndex,
-                  contestCategorySection: result.contestCategorySection,
-                  matchedGrades: [],
-                };
-              }
-
-              acc[categoryId].matchedGrades.push(result);
-
-              acc[categoryId].matchedGrades.sort(
-                (a, b) => a.contestGradeIndex - b.contestGradeIndex
-              );
-
-              return acc;
-            }, {});
-
-          // Group by contestCategorySection
-          const sectionsGroup = updatedResults.reduce((acc, result) => {
-            const { contestCategorySection } = result;
-            if (!acc[contestCategorySection]) {
-              acc[contestCategorySection] = {
-                contestCategorySection,
-                categories: [],
-              };
-            }
-
-            acc[contestCategorySection].categories.push(result);
-
-            return acc;
-          }, {});
-
-          const finalGroupedResults = Object.values(groupedResults);
-          const finalSectionsGroup = Object.values(sectionsGroup);
-
-          setResultArray(finalGroupedResults);
-          setSectionArray(finalSectionsGroup);
-        });
+      setSectionArray(sectionsGroup);
     } catch (error) {
-      console.log(error);
+      console.error("Error fetching categories and grades:", error);
     } finally {
       setIsLoading(false); // End loading
     }
   };
 
-  // 필터링된 데이터를 검색 버튼을 눌렀을 때만 설정
-  const handleSearch = () => {
-    let newResult = [...resultArray];
+  // Function to fetch results based on search parameters
+  const fetchResultsData = async (contestId, categoryId, gradeId) => {
+    const conditions = [where("contestId", "==", contestId)];
+    if (categoryId !== "all") {
+      conditions.push(where("categoryId", "==", categoryId));
+    }
+    if (gradeId !== "all") {
+      conditions.push(where("gradeId", "==", gradeId));
+    }
 
-    if (currentSection !== "all") {
-      newResult = resultArray.filter(
-        (f) => f.contestCategorySection === currentSection
+    try {
+      setIsLoading(true); // Start loading
+      const resultsData = await fetchResults.getDocuments(
+        "contest_results_list",
+        conditions
       );
-    }
 
-    if (currentCategoryId !== "all") {
-      newResult = newResult.filter((f) => f.categoryId === currentCategoryId);
-    }
+      if (resultsData.length === 0) {
+        setNoData(true);
+        setFilteredResults([]);
+        return;
+      }
 
-    if (currentGradeId !== "all") {
-      newResult = newResult.map((category) => {
-        const filteredGrades = category.matchedGrades.filter(
-          (grade) => grade.gradeId === currentGradeId
+      // Enrich results with category and grade details
+      const enrichedResults = resultsData.map((result) => {
+        const category = categoriesArray.find(
+          (cat) => cat.contestCategoryId === result.categoryId
         );
-        return { ...category, matchedGrades: filteredGrades };
+        const grade = gradesArray.find(
+          (grd) => grd.contestGradeId === result.gradeId
+        );
+        return {
+          ...result,
+          contestCategoryTitle: category ? category.contestCategoryTitle : "",
+          contestGradeTitle: grade ? grade.gradeTitle : "",
+        };
       });
+
+      setFilteredResults(enrichedResults);
+      setNoData(false);
+    } catch (error) {
+      console.error("Error fetching results:", error);
+      setNoData(true);
+      setFilteredResults([]);
+    } finally {
+      setIsLoading(false); // End loading
+    }
+  };
+
+  // Handle search button click
+  const handleSearch = () => {
+    if (!currentContest?.contests?.id) {
+      setMessage({ text: "대회 정보가 없습니다." });
+      setMsgOpen(true);
+      return;
+    }
+
+    if (currentCategoryId === "all" || currentGradeId === "all") {
+      setMessage({ text: "종목과 체급을 선택해주세요." });
+      setMsgOpen(true);
+      return;
     }
 
     setSearchParams({
-      contestId: currentContest?.contests?.id,
+      contestId: currentContest.contests.id,
       categoryId: currentCategoryId,
       gradeId: currentGradeId,
     });
 
-    setFilteredResults(newResult); // 기존 결과 필터링
-    console.log(newResult);
-    setShowContestRankingSummary(true); // 검색 후 컴포넌트 보여주기
+    fetchResultsData(
+      currentContest.contests.id,
+      currentCategoryId,
+      currentGradeId
+    );
+    setShowContestRankingSummary(true); // Show results
   };
 
-  const clearDeafult = () => {
+  // Clear category and grade selections
+  const clearDefault = () => {
     setCurrentCategoryId("all");
     setCurrentGradeId("all");
   };
 
+  // Fetch categories and grades on component mount or when contest changes
   useEffect(() => {
     if (currentContest?.contests?.id) {
       setCollectionName(currentContest.contests.collectionName);
       fetchCategoryAndGrades(currentContest.contests.id);
     }
-  }, [currentContest?.contests, currentSection]);
+    // Only run when currentContest changes to avoid infinite loops
+  }, [currentContest?.contests?.id]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
       {isLoading && <LoadingPage />}
-      {!isLoading && resultArray.length > 0 && (
+      {!isLoading && (
         <>
           <div className="flex w-full h-14">
             <ConfirmationModal
@@ -224,41 +205,46 @@ const PrintSummary = () => {
                     className="w-24 h-10 bg-white rounded-lg border border-blue-500"
                     onClick={() => {
                       setCurrentSection("all");
-                      clearDeafult();
+                      clearDefault();
                     }}
                   >
                     전체
                   </button>
-                  {sectionArray?.length > 0 &&
-                    sectionArray.map((section) => {
-                      const { contestCategorySection } = section;
-                      return (
-                        <button
-                          key={contestCategorySection}
-                          className="w-24 h-10 bg-white rounded-lg border border-blue-500"
-                          onClick={() => {
-                            setCurrentSection(contestCategorySection);
-                            clearDeafult();
-                          }}
-                        >
-                          {contestCategorySection}
-                        </button>
-                      );
-                    })}
+                  {sectionArray.length > 0 &&
+                    sectionArray.map((section) => (
+                      <button
+                        key={section}
+                        className="w-24 h-10 bg-white rounded-lg border border-blue-500"
+                        onClick={() => {
+                          setCurrentSection(section);
+                          clearDefault();
+                        }}
+                      >
+                        {section}
+                      </button>
+                    ))}
 
                   <select
                     value={currentCategoryId}
-                    onChange={(e) => setCurrentCategoryId(e.target.value)}
+                    onChange={(e) => {
+                      setCurrentCategoryId(e.target.value);
+                      setCurrentGradeId("all"); // Reset grade selection when category changes
+                    }}
                     className="w-48 h-10 border border-blue-500"
                   >
                     <option value="all">종목선택</option>
-                    {resultArray.length > 0 &&
-                      resultArray.map((category) => (
+                    {categoriesArray
+                      .filter(
+                        (category) =>
+                          currentSection === "all" ||
+                          category.contestCategorySection === currentSection
+                      )
+                      .map((category) => (
                         <option
-                          key={category.categoryId}
-                          value={category.categoryId}
+                          key={category.contestCategoryId}
+                          value={category.contestCategoryId}
                         >
-                          {category?.contestCategoryTitle}
+                          {category.contestCategoryTitle}
                         </option>
                       ))}
                   </select>
@@ -266,15 +252,22 @@ const PrintSummary = () => {
                     value={currentGradeId}
                     onChange={(e) => setCurrentGradeId(e.target.value)}
                     className="w-48 h-10 border border-blue-500 ml-2"
+                    disabled={currentCategoryId === "all"}
                   >
                     <option value="all">체급선택</option>
-                    {resultArray
-                      .find((f) => f.categoryId === currentCategoryId)
-                      ?.matchedGrades?.map((grade) => (
-                        <option key={grade.gradeId} value={grade.gradeId}>
-                          {grade.gradeTitle}
-                        </option>
-                      ))}
+                    {currentCategoryId !== "all" &&
+                      gradesArray
+                        .filter(
+                          (grade) => grade.refCategoryId === currentCategoryId
+                        )
+                        .map((grade) => (
+                          <option
+                            key={grade.contestGradeId}
+                            value={grade.contestGradeId}
+                          >
+                            {grade.contestGradeTitle}
+                          </option>
+                        ))}
                   </select>
 
                   {/* 검색 버튼 추가 */}
@@ -291,13 +284,21 @@ const PrintSummary = () => {
                   ref={printRef}
                 >
                   {showContestRankingSummary ? (
-                    <ContestRankingSummaryPrintAll
-                      props={searchParams} // 검색된 파라미터를 전달
-                      setClose={() => setShowContestRankingSummary(false)} // 닫기 버튼 핸들러
-                    />
+                    noData ? (
+                      <div className="text-center text-red-500">
+                        데이터가 없습니다.
+                      </div>
+                    ) : (
+                      <ContestRankingSummaryPrintAll
+                        props={searchParams} // Pass search parameters
+                        results={filteredResults} // Pass fetched results
+                        setClose={() => setShowContestRankingSummary(false)} // Close handler
+                      />
+                    )
                   ) : (
-                    // 기존 테이블 렌더링 로직은 여기서 제외하거나 유지할 수 있습니다.
-                    <div>검색을 통해 결과를 확인하세요.</div>
+                    <div className="text-center text-gray-500">
+                      검색을 통해 결과를 확인하세요.
+                    </div>
                   )}
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./App.css";
+
 import Login from "./pages/Login";
 import ManagementHome from "./homes/ManagementHome";
 import ContestInfo from "./pages/ContestInfo";
@@ -29,6 +30,9 @@ import Idle from "./pages/Idle";
 import DelaySettings from "./pages/DelaySettings";
 import ContestForceManual from "./pages/ContestForceManual";
 import QRCodeGenerator from "./pages/QRcodeGenerator";
+import SelectDatabase from "./pages/SelectDatabase";
+import MeasurePrint from "./printForms/MeasurePrint";
+import FinalPlayerListPrint from "./printForms/FinalPlayerListPrint";
 
 function App() {
   return (
@@ -103,12 +107,12 @@ function App() {
             element={<ManagementHome children={<ContestRankSummary />} />}
           />
           <Route
-            path="/printbase"
-            element={<ManagementHome children={<PrintBase />} />}
+            path="/measureprint"
+            element={<ManagementHome children={<MeasurePrint />} />}
           />
           <Route
-            path="/printplayersfinal"
-            element={<ManagementHome children={<PrintPlayersFinal />} />}
+            path="/finalplayerlistprint"
+            element={<ManagementHome children={<FinalPlayerListPrint />} />}
           />
           <Route
             path="/printplayerstanding"
@@ -137,6 +141,7 @@ function App() {
             path="/delay"
             element={<ManagementHome children={<DelaySettings />} />}
           />
+          <Route path="/selectdatabase" element={<SelectDatabase />} />
           <Route path="/screen1/:contestId" element={<StandingTableType1 />} />
         </Routes>
       </BrowserRouter>
