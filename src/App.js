@@ -28,6 +28,7 @@ import ScreenLobby from "./pages/ScreenLobby";
 import Idle from "./pages/Idle";
 import DelaySettings from "./pages/DelaySettings";
 import ContestForceManual from "./pages/ContestForceManual";
+import QRCodeGenerator from "./pages/QRcodeGenerator";
 
 function App() {
   return (
@@ -124,6 +125,10 @@ function App() {
           <Route path="/screenlobby" element={<ScreenLobby />} />
           <Route path="/ranking" element={<RankingAnnouncement />} />
           <Route path="/idle" element={<Idle />} />
+          <Route
+            path="/qrcode"
+            element={<ManagementHome children={<QRCodeGenerator />} />}
+          />
           <Route
             path="/clear"
             element={<ManagementHome children={<ContestSearchAndDelete />} />}

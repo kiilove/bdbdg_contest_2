@@ -1,3 +1,5 @@
+// Idle.jsx
+
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
@@ -13,6 +15,18 @@ const Idle = () => {
   const sponsorRef = useRef(null); // 스폰서 로고에 대한 참조
   const [contestId, setContestId] = useState("");
   const [sponsors, setSponsors] = useState([]);
+
+  // 커서 가시성 상태 관리
+  const [isCursorVisible, setIsCursorVisible] = useState(true);
+  const isCursorVisibleRef = useRef(isCursorVisible); // Ref로 상태 추적
+  const cursorTimerRef = useRef(null);
+
+  // Ref 업데이트
+  useEffect(() => {
+    isCursorVisibleRef.current = isCursorVisible;
+    console.log("isCursorVisible state updated to:", isCursorVisible);
+  }, [isCursorVisible]);
+
   const {
     data: realtimeData,
     loading: realtimeLoading,
@@ -32,6 +46,9 @@ const Idle = () => {
       );
       if (data.length > 0) {
         setSponsors([...data[0]?.sponsors]);
+        console.log("Sponsors fetched:", data[0]?.sponsors);
+      } else {
+        console.log("No sponsors found for contestId:", contestId);
       }
     } catch (error) {
       console.error("Failed to fetch sponsors:", error);
@@ -41,15 +58,17 @@ const Idle = () => {
   useEffect(() => {
     if (location?.state?.contestId) {
       setContestId(location.state.contestId);
+      console.log("Contest ID set to:", location.state.contestId);
       fetchSponsors(location.state.contestId);
     }
   }, [location]);
 
   useEffect(() => {
     if (realtimeData?.screen?.status?.playStart) {
+      console.log("Play started, navigating to /ranking");
       navigate("/ranking", { state: { contestId } });
     }
-  }, [realtimeData]);
+  }, [realtimeData, navigate, contestId]);
 
   // GSAP 애니메이션 설정
   useEffect(() => {
@@ -57,8 +76,14 @@ const Idle = () => {
       // 이미지와 DOM 요소가 렌더링되기까지 대기
       setTimeout(() => {
         const sponsorLogos = sponsorRef.current;
+        if (!sponsorLogos.firstChild) {
+          console.log("No sponsor logos found.");
+          return;
+        }
         const logoWidth = sponsorLogos.firstChild.offsetWidth; // 로고 한 개의 너비
         const totalWidth = logoWidth * sponsorLogos.children.length; // 전체 가로 길이
+
+        console.log("Starting GSAP animation with totalWidth:", totalWidth);
 
         // 부드러운 무한 반복 애니메이션
         gsap.fromTo(
@@ -74,21 +99,66 @@ const Idle = () => {
             },
           }
         );
-      }, 1000); // 100ms 정도 대기 후 애니메이션 실행
+      }, 1000); // 1초 정도 대기 후 애니메이션 실행
     }
-  }, [sponsors]); // sponsors 배열이 업데이트될 때만 애니메이션 실행
+  }, [sponsors]);
 
   // 스폰서 목록을 100번 반복
   const repeatedSponsors = Array.from({ length: 100 }, () => sponsors).flat();
 
+  // 커서 가시성 관리
+  useEffect(() => {
+    const handleMouseMove = () => {
+      console.log("Mouse moved");
+      if (!isCursorVisibleRef.current) {
+        setIsCursorVisible(true);
+        console.log("Cursor made visible");
+      }
+
+      if (cursorTimerRef.current) {
+        clearTimeout(cursorTimerRef.current);
+        console.log("Existing cursor hide timer cleared");
+      }
+
+      cursorTimerRef.current = setTimeout(() => {
+        setIsCursorVisible(false);
+        console.log("Cursor hidden after 2 seconds of inactivity");
+      }, 2000); // 2000ms = 2초
+    };
+
+    // 마우스 이동 이벤트 리스너 추가
+    window.addEventListener("mousemove", handleMouseMove);
+    console.log("Mousemove event listener added");
+
+    // 초기 타이머 설정
+    handleMouseMove();
+
+    // 컴포넌트 언마운트 시 정리
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      console.log("Mousemove event listener removed");
+      if (cursorTimerRef.current) {
+        clearTimeout(cursorTimerRef.current);
+        console.log("Cursor hide timer cleared on unmount");
+      }
+    };
+  }, []); // 빈 배열로 의존성 제한
+
+  // isCursorVisible 상태 변경 시 로그 출력
+  useEffect(() => {
+    console.log("isCursorVisible state changed to:", isCursorVisible);
+  }, [isCursorVisible]);
+
   return (
     <div
-      className="w-full h-screen flex justify-center items-center relative"
+      className="fixed top-0 left-0 w-full h-full flex justify-center items-center z-50"
       style={{
         backgroundImage: `url(${background})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
+        cursor: isCursorVisible ? "auto" : "none", // 인라인 스타일로 커서 제어
+        pointerEvents: "auto",
       }}
     >
       <div className="flex flex-col w-full h-full justify-center items-center relative">
