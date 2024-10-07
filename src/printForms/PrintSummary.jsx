@@ -175,6 +175,7 @@ const PrintSummary = () => {
     });
 
     setFilteredResults(newResult); // 기존 결과 필터링
+    console.log(newResult);
     setShowContestRankingSummary(true); // 검색 후 컴포넌트 보여주기
   };
 
