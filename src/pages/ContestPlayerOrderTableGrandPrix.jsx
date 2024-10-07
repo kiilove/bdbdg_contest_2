@@ -214,25 +214,27 @@ const ContestPlayerOrderTableGrandPrix = () => {
     setMessage({ body: "저장중", isButton: false });
     setMsgOpen(true);
 
-    // 기존 선수 목록에서 중복되지 않은 선수들만 추가하도록 필터링
-    const uniqueNewPlayers = data.filter(
-      (newPlayer) =>
-        !playersFinalArray.some(
-          (existingPlayer) => existingPlayer.playerUid === newPlayer.playerUid
-        )
-    );
+    console.log(data);
+    // console.log(playersFinalArray);
+    // // 기존 선수 목록에서 중복되지 않은 선수들만 추가하도록 필터링
+    // const uniqueNewPlayers = data.filter(
+    //   (newPlayer) =>
+    //     !playersFinalArray.some(
+    //       (existingPlayer) => existingPlayer.playerUid === newPlayer.playerUid
+    //     )
+    // );
 
-    if (uniqueNewPlayers.length === 0) {
-      setMessage({
-        body: "이미 저장된 명단입니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setMsgOpen(true);
-      return;
-    }
+    // if (uniqueNewPlayers.length === 0) {
+    //   setMessage({
+    //     body: "이미 저장된 명단입니다.",
+    //     isButton: true,
+    //     confirmButtonText: "확인",
+    //   });
+    //   setMsgOpen(true);
+    //   return;
+    // }
 
-    const finalPlayers = [...playersFinalArray, ...uniqueNewPlayers];
+    const finalPlayers = [...playersFinalArray, ...data];
 
     try {
       await updatePlayerFinal
@@ -250,6 +252,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
     } catch (error) {
       console.log(error);
     }
+    console.log({
+      ...playersFinalList,
+      players: finalPlayers,
+    });
   };
 
   useEffect(() => {
