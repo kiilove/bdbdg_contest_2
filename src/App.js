@@ -33,118 +33,136 @@ import QRCodeGenerator from "./pages/QRcodeGenerator";
 import SelectDatabase from "./pages/SelectDatabase";
 import MeasurePrint from "./printForms/MeasurePrint";
 import FinalPlayerListPrint from "./printForms/FinalPlayerListPrint";
+import StandingPrint from "./printForms/StandingPrint";
+import { DeviceProvider } from "./contexts/DeviceContext";
+import UnifiedPrint from "./printForms/UnifiedPrint";
 
 function App() {
   return (
     <CurrentContestProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/management" element={<ManagementHome />} />
-          <Route
-            path="/newcontest"
-            element={<ManagementHome children={<NewContest />} />}
-          />
-          <Route
-            path="/contestinfo/"
-            element={<ManagementHome children={<ContestInfo />} />}
-          />
-          <Route
-            path="/contesttimetable"
-            element={<ManagementHome children={<ContestTimetable />} />}
-          />
-          <Route
-            path="/contestinvoicetable"
-            element={<ManagementHome children={<ContestInvoiceTable />} />}
-          />
-          <Route
-            path="/contestplayerordertable"
-            element={<ManagementHome children={<ContestPlayerOrderTable />} />}
-          />
-          <Route
-            path="/contestplayerordertableafter"
-            element={
-              <ManagementHome children={<ContestPlayerOrderTableAfter />} />
-            }
-          />
-          <Route
-            path="/conteststagetable"
-            element={<ManagementHome children={<ContestStagetable />} />}
-          />
-          <Route
-            path="/contestnewinvoicemanual"
-            element={<ManagementHome children={<ContestNewInvoiceManual />} />}
-          />
-          <Route
-            path="/contestforcemanual"
-            element={<ManagementHome children={<ContestForceManual />} />}
-          />
-          <Route
-            path="/randomgenerator"
-            element={<ManagementHome children={<RandomPlayerGenerator />} />}
-          />
-          <Route
-            path="/contestjudgetable"
-            element={<ManagementHome children={<ContestJudgeTable />} />}
-          />
-          <Route
-            path="/contestplayerordergrandprix"
-            element={
-              <ManagementHome children={<ContestPlayerOrderTableGrandPrix />} />
-            }
-          />
-          {/* <Route
+      <DeviceProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Login />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/management" element={<ManagementHome />} />
+            <Route
+              path="/newcontest"
+              element={<ManagementHome children={<NewContest />} />}
+            />
+            <Route
+              path="/contestinfo/"
+              element={<ManagementHome children={<ContestInfo />} />}
+            />
+            <Route
+              path="/contesttimetable"
+              element={<ManagementHome children={<ContestTimetable />} />}
+            />
+            <Route
+              path="/contestinvoicetable"
+              element={<ManagementHome children={<ContestInvoiceTable />} />}
+            />
+            <Route
+              path="/contestplayerordertable"
+              element={
+                <ManagementHome children={<ContestPlayerOrderTable />} />
+              }
+            />
+            <Route
+              path="/contestplayerordertableafter"
+              element={
+                <ManagementHome children={<ContestPlayerOrderTableAfter />} />
+              }
+            />
+            <Route
+              path="/conteststagetable"
+              element={<ManagementHome children={<ContestStagetable />} />}
+            />
+            <Route
+              path="/contestnewinvoicemanual"
+              element={
+                <ManagementHome children={<ContestNewInvoiceManual />} />
+              }
+            />
+            <Route
+              path="/contestforcemanual"
+              element={<ManagementHome children={<ContestForceManual />} />}
+            />
+            <Route
+              path="/randomgenerator"
+              element={<ManagementHome children={<RandomPlayerGenerator />} />}
+            />
+            <Route
+              path="/contestjudgetable"
+              element={<ManagementHome children={<ContestJudgeTable />} />}
+            />
+            <Route
+              path="/contestplayerordergrandprix"
+              element={
+                <ManagementHome
+                  children={<ContestPlayerOrderTableGrandPrix />}
+                />
+              }
+            />
+            {/* <Route
             path="/contestmonitoring"
             element={<ManagementHome children={<ContestMonitoring />} />}
           /> */}
-          <Route
-            path="/contestmonitoring/:target"
-            element={<ManagementHome children={<ContestMonitoring />} />}
-          />
-          <Route
-            path="/contestranksummary"
-            element={<ManagementHome children={<ContestRankSummary />} />}
-          />
-          <Route
-            path="/measureprint"
-            element={<ManagementHome children={<MeasurePrint />} />}
-          />
-          <Route
-            path="/finalplayerlistprint"
-            element={<ManagementHome children={<FinalPlayerListPrint />} />}
-          />
-          <Route
-            path="/printplayerstanding"
-            element={<ManagementHome children={<PrintPlayerStanding />} />}
-          />
-          <Route
-            path="/printsummary"
-            element={<ManagementHome children={<PrintSummary />} />}
-          />
-          <Route
-            path="/awardlist"
-            element={<ManagementHome children={<AwardList />} />}
-          />
-          <Route path="/screenlobby" element={<ScreenLobby />} />
-          <Route path="/ranking" element={<RankingAnnouncement />} />
-          <Route path="/idle" element={<Idle />} />
-          <Route
-            path="/qrcode"
-            element={<ManagementHome children={<QRCodeGenerator />} />}
-          />
-          <Route
-            path="/clear"
-            element={<ManagementHome children={<ContestSearchAndDelete />} />}
-          />
-          <Route
-            path="/delay"
-            element={<ManagementHome children={<DelaySettings />} />}
-          />
-          <Route path="/selectdatabase" element={<SelectDatabase />} />
-          <Route path="/screen1/:contestId" element={<StandingTableType1 />} />
-        </Routes>
-      </BrowserRouter>
+            <Route
+              path="/contestmonitoring/:target"
+              element={<ManagementHome children={<ContestMonitoring />} />}
+            />
+            <Route
+              path="/contestranksummary"
+              element={<ManagementHome children={<ContestRankSummary />} />}
+            />
+            <Route
+              path="/measureprint"
+              element={<ManagementHome children={<MeasurePrint />} />}
+            />
+            <Route
+              path="/finalplayerlistprint"
+              element={<ManagementHome children={<FinalPlayerListPrint />} />}
+            />
+            <Route
+              path="/standingprint"
+              element={<ManagementHome children={<StandingPrint />} />}
+            />
+            <Route
+              path="/print/:printType"
+              element={<ManagementHome children={<UnifiedPrint />} />}
+            />
+            <Route
+              path="/printsummary"
+              element={<ManagementHome children={<PrintSummary />} />}
+            />
+            <Route
+              path="/awardlist"
+              element={<ManagementHome children={<AwardList />} />}
+            />
+            <Route path="/screenlobby" element={<ScreenLobby />} />
+            <Route path="/ranking" element={<RankingAnnouncement />} />
+            <Route path="/idle" element={<Idle />} />
+            <Route
+              path="/qrcode"
+              element={<ManagementHome children={<QRCodeGenerator />} />}
+            />
+            <Route
+              path="/clear"
+              element={<ManagementHome children={<ContestSearchAndDelete />} />}
+            />
+            <Route
+              path="/delay"
+              element={<ManagementHome children={<DelaySettings />} />}
+            />
+            <Route path="/selectdatabase" element={<SelectDatabase />} />
+            <Route
+              path="/screen1/:contestId"
+              element={<StandingTableType1 />}
+            />
+          </Routes>
+        </BrowserRouter>
+      </DeviceProvider>
     </CurrentContestProvider>
   );
 }

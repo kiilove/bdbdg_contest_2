@@ -96,7 +96,7 @@ const FinalPlayerListPrint = () => {
   const columns = [
     { label: "순번", key: "index", width: 10 },
     {
-      label: "선수번호. 이름",
+      label: "선수",
       mergeKeys: ["playerNumber", "playerName"],
       width: 30,
     },

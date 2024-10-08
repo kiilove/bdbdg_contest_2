@@ -185,6 +185,18 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
       currentContest?.contestInfo?.contestCollectionName
     );
   }, [props, currentContest?.contestInfo]);
+
+  useEffect(() => {
+    if (
+      currentContest?.contestInfo?.contestTitle &&
+      resultTable?.[0]?.categoryTitle &&
+      resultTable?.[0]?.gradeTitle
+    ) {
+      const { contestTitle } = currentContest.contestInfo;
+      const { categoryTitle, gradeTitle } = resultTable[0];
+      document.title = `${contestTitle}_${categoryTitle}_${gradeTitle}_집계표`;
+    }
+  }, [currentContest, resultTable]);
   return (
     <div className="w-full h-auto flex flex-col bg-gray-100 justify-start items-center overflow-auto">
       {isLoading && <LoadingPage />}

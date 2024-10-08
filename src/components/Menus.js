@@ -95,19 +95,19 @@ export const MenuArray = [
       {
         id: 1,
         title: "계측명단",
-        link: "/measureprint",
+        link: "/print/measurement",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 3,
         title: "출전명단",
-        link: "/finalplayerlistprint",
+        link: "/print/final",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 4,
         title: "순위표",
-        link: "/printplayerstanding",
+        link: "/print/ranking",
         requiredGroup: ["admin", "orgManager"],
       },
       {

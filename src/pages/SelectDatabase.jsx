@@ -26,7 +26,13 @@ const SelectDatabase = () => {
   // 대회 목록 가져오기 함수
   const fetchList = async (userData) => {
     const condition = [
-      where("contestStatus", "in", ["접수중", "수정됨", "데모용", "수동접수"]),
+      where("contestStatus", "in", [
+        "접수중",
+        "수정됨",
+        "데모용",
+        "수동접수",
+        "대회마감",
+      ]),
     ];
 
     try {
