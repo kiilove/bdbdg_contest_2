@@ -11,6 +11,7 @@ import {
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import RegistrationTrendChart from "../components/dashboard/RegistrationTrendChart";
+import AgeGenderDistributionChart from "../components/dashboard/AgeGenderDistributionChart";
 
 const mockData = {
   unconfirmedAthletes: [
@@ -144,6 +145,7 @@ const Dashboard = () => {
   return (
     <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
       <CategoryDistributionChart data={categoriesWithPlayers} />
+      <AgeGenderDistributionChart invoices={invoices} />
       <RegistrationTrendChart invoices={invoices} />
       <UnconfirmedAthletesTable data={mockData.unconfirmedAthletes} />
       <NoRegistrationCategories categories={noRegistrationCategories} />
