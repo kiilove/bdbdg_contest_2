@@ -180,7 +180,7 @@ const SelectDatabase = () => {
       alert("먼저 대회를 선택해주세요.");
       return;
     }
-    navigate("/management", { state: { showTopBar: true } }); // 올바른 경로로 수정
+    navigate("/", { state: { showTopBar: true } }); // 올바른 경로로 수정
   };
 
   return (

@@ -11,7 +11,7 @@ export const generateToday = () => {
   return currentDateTime;
 };
 
-export const handleCategoriesWithGrades = (categories, grades) => {
+export const matchingCategoriesWithGrades = (categories, grades) => {
   let dummy = [];
 
   categories

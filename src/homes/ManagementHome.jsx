@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Menu, Layout, Drawer, Button, Typography } from "antd";
-import { MenuOutlined, CloseOutlined } from "@ant-design/icons"; // CloseOutlined 아이콘 추가
+import { MenuOutlined, CloseOutlined } from "@ant-design/icons";
 import LoadingPage from "../pages/LoadingPage";
 import { MenuArray } from "../components/Menus";
 import { useMediaQuery } from "react-responsive";
@@ -16,6 +16,7 @@ const ManagementHome = ({ children }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [openKeys, setOpenKeys] = useState([]); // openKeys 상태 추가
   const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1024px)" });
 
   const { currentContest } = useContext(CurrentContestContext);
@@ -47,7 +48,12 @@ const ManagementHome = ({ children }) => {
         if (menu.title === "로그아웃") {
           return {
             key: menu.link,
-            label: menu.title,
+            label: (
+              <>
+                {menu.icon}
+                <span style={{ marginLeft: "8px" }}>{menu.title}</span>
+              </>
+            ),
             onClick: () => {
               sessionStorage.removeItem("user");
               navigate("/login");
@@ -62,30 +68,36 @@ const ManagementHome = ({ children }) => {
           if (filteredSubMenus.length > 0) {
             return {
               key: menu.link,
-              label: menu.title,
+              label: (
+                <>
+                  {menu.icon}
+                  <span style={{ marginLeft: "8px" }}>{menu.title}</span>
+                </>
+              ),
               children: filteredSubMenus.map((subMenu) => ({
                 key: subMenu.link,
-                label: subMenu.title,
+                label: (
+                  <>
+                    {subMenu.icon}
+                    <span style={{ marginLeft: "8px" }}>{subMenu.title}</span>
+                  </>
+                ),
                 onClick: () => {
                   navigate(subMenu.link);
                   if (isTabletOrMobile) toggleDrawer();
                 },
               })),
             };
-          } else if (menu.link) {
-            return {
-              key: menu.link,
-              label: menu.title,
-              onClick: () => {
-                navigate(menu.link);
-                if (isTabletOrMobile) toggleDrawer();
-              },
-            };
           }
         } else {
           return {
             key: menu.link,
-            label: menu.title,
+            label: (
+              <>
+                {menu.icon}
+                <span style={{ marginLeft: "8px" }}>{menu.title}</span>
+              </>
+            ),
             onClick: () => {
               navigate(menu.link);
               if (isTabletOrMobile) toggleDrawer();
@@ -103,6 +115,17 @@ const ManagementHome = ({ children }) => {
   // 드로어 토글 핸들러
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
+    if (!drawerOpen) setOpenKeys([]); // Drawer가 닫힐 때 모든 메뉴를 닫기
+  };
+
+  // 대분류 메뉴 클릭 시 서브메뉴 토글
+  const onOpenChange = (keys) => {
+    const latestOpenKey = keys.find((key) => !openKeys.includes(key));
+    if (MenuArray.map((menu) => menu.link).includes(latestOpenKey)) {
+      setOpenKeys(latestOpenKey ? [latestOpenKey] : []);
+    } else {
+      setOpenKeys(keys);
+    }
   };
 
   return (
@@ -154,12 +177,14 @@ const ManagementHome = ({ children }) => {
                 style={{
                   backgroundColor: "#002864",
                 }}
-                closeIcon={<CloseOutlined style={{ color: "#fff" }} />} // CloseOutlined 아이콘 사용
+                closeIcon={<CloseOutlined style={{ color: "#fff" }} />}
               >
                 <Menu
                   mode="inline"
                   items={filteredMenuItems}
                   selectable={false}
+                  openKeys={openKeys}
+                  onOpenChange={onOpenChange} // openChange 핸들러 추가
                   style={{
                     fontSize: "18px",
                     fontWeight: 500,

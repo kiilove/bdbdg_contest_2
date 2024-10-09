@@ -34,8 +34,9 @@ import SelectDatabase from "./pages/SelectDatabase";
 import MeasurePrint from "./printForms/MeasurePrint";
 import FinalPlayerListPrint from "./printForms/FinalPlayerListPrint";
 import StandingPrint from "./printForms/StandingPrint";
-import { DeviceProvider } from "./contexts/DeviceContext";
+import Dashboard from "./pages/Dashboard";
 import UnifiedPrint from "./printForms/UnifiedPrint";
+import { DeviceProvider } from "./contexts/DeviceContext";
 
 function App() {
   return (
@@ -43,9 +44,12 @@ function App() {
       <DeviceProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Login />} />
+            <Route
+              path="/"
+              element={<ManagementHome children={<Dashboard />} />}
+            />
             <Route path="/login" element={<Login />} />
-            <Route path="/management" element={<ManagementHome />} />
+
             <Route
               path="/newcontest"
               element={<ManagementHome children={<NewContest />} />}
@@ -104,10 +108,6 @@ function App() {
                 />
               }
             />
-            {/* <Route
-            path="/contestmonitoring"
-            element={<ManagementHome children={<ContestMonitoring />} />}
-          /> */}
             <Route
               path="/contestmonitoring/:target"
               element={<ManagementHome children={<ContestMonitoring />} />}
@@ -116,18 +116,7 @@ function App() {
               path="/contestranksummary"
               element={<ManagementHome children={<ContestRankSummary />} />}
             />
-            <Route
-              path="/measureprint"
-              element={<ManagementHome children={<MeasurePrint />} />}
-            />
-            <Route
-              path="/finalplayerlistprint"
-              element={<ManagementHome children={<FinalPlayerListPrint />} />}
-            />
-            <Route
-              path="/standingprint"
-              element={<ManagementHome children={<StandingPrint />} />}
-            />
+
             <Route
               path="/print/:printType"
               element={<ManagementHome children={<UnifiedPrint />} />}
@@ -136,10 +125,7 @@ function App() {
               path="/printsummary"
               element={<ManagementHome children={<PrintSummary />} />}
             />
-            <Route
-              path="/awardlist"
-              element={<ManagementHome children={<AwardList />} />}
-            />
+
             <Route path="/screenlobby" element={<ScreenLobby />} />
             <Route path="/ranking" element={<RankingAnnouncement />} />
             <Route path="/idle" element={<Idle />} />

@@ -1,191 +1,288 @@
 // components/Menu.js
+
+import {
+  FaTrophy,
+  FaClipboardList,
+  FaUsers,
+  FaCog,
+  FaSignOutAlt,
+  FaChartLine,
+  FaClipboardCheck,
+  FaChartPie,
+  FaQuestionCircle,
+  FaPrint,
+  FaFileExport,
+  FaFileInvoice,
+} from "react-icons/fa";
+import {
+  AiOutlineFileText,
+  AiOutlineUser,
+  AiOutlineSetting,
+  AiFillDashboard,
+  AiFillPrinter,
+} from "react-icons/ai";
+import {
+  RiDashboardLine,
+  RiFileList3Line,
+  RiSettings3Line,
+  RiPrinterFill,
+} from "react-icons/ri";
+import { BiBarcodeReader, BiDesktop } from "react-icons/bi";
+import {
+  GiPodiumWinner,
+  GiGearStickPattern,
+  GiMagicLamp,
+} from "react-icons/gi";
+import { PiProjectorScreenChartThin, PiChartBarThin } from "react-icons/pi";
+import {
+  MdAdminPanelSettings,
+  MdReportProblem,
+  MdMonitor,
+} from "react-icons/md";
+
 export const MenuArray = [
   {
     id: 0,
-    title: "대회관리",
-    link: "/contest-management",
-    requiredGroup: ["admin", "orgManager"], // admin과 orgManager에게 노출
+    title: "대시보드",
+    link: "/",
+    // icon: <AiFillDashboard />, // 아이콘 제거
+    requiredGroup: ["admin", "orgManager"],
+  },
+  {
+    id: 1,
+    title: "대회 준비",
+    link: "/contest-preparation",
+    // icon: <FaClipboardCheck />, // 아이콘 제거
+    requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
         id: 1,
-        title: "새로운대회개설",
+        title: "대회 개설",
+        icon: <FaTrophy />,
         link: "/newcontest",
         requiredGroup: ["admin"],
       },
       {
         id: 2,
-        title: "대회정보관리",
+        title: "대회 정보",
+        icon: <AiOutlineUser />,
         link: "/contestinfo",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 3,
-        title: "참가신청서",
+        title: "참가 신청 관리",
+        icon: <FaClipboardList />,
         link: "/contestinvoicetable",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 4,
-        title: "참가신청서 수동작성",
+        title: "참가 신청서 작성",
+        icon: <AiOutlineFileText />,
         link: "/contestnewinvoicemanual",
         requiredGroup: ["admin", "orgManager"],
-      },
-      {
-        id: 5,
-        title: "기초데이터(1단계)",
-        link: "/contesttimetable",
-        requiredGroup: ["admin", "orgManager"],
-      },
-      {
-        id: 6,
-        title: "계측(2단계)",
-        link: "/contestplayerordertable",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 7,
-        title: "최종명단(3단계)",
-        link: "/contestplayerordertableafter",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 8,
-        title: "무대설정(4단계)",
-        link: "/conteststagetable",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 9,
-        title: "심판선발",
-        link: "/contestjudgetable",
-        requiredGroup: ["admin", "orgManager"],
-      },
-      {
-        id: 10,
-        title: "그랑프리명단",
-        link: "/contestplayerordergrandprix",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 11,
-        title: "최종명단강제등록",
-        link: "/contestforcemanual",
-        requiredGroup: ["admin", "orgManager"],
-      },
-      {
-        id: 43,
-        title: "참가신청서 랜덤",
-        link: "/randomgenerator",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 44,
-        title: "참가신청서 클리어",
-        link: "/clear",
-        requiredGroup: ["admin"],
       },
     ],
   },
   {
-    id: 1,
-    title: "출력관리",
-    link: "/print-management",
+    id: 2,
+    title: "경기 관리",
+    link: "/contest-management",
+    // icon: <FaChartLine />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
         id: 1,
-        title: "계측명단",
-        link: "/print/measurement",
+        title: "기초 데이터 입력 (1단계)",
+        icon: <AiOutlineFileText />,
+        link: "/contesttimetable",
         requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 2,
+        title: "선수 계측 (2단계)",
+        icon: <FaUsers />,
+        link: "/contestplayerordertable",
+        requiredGroup: ["admin"],
       },
       {
         id: 3,
-        title: "출전명단",
-        link: "/print/final",
-        requiredGroup: ["admin", "orgManager"],
+        title: "최종 명단 (3단계)",
+        icon: <RiFileList3Line />,
+        link: "/contestplayerordertableafter",
+        requiredGroup: ["admin"],
       },
       {
         id: 4,
-        title: "순위표",
-        link: "/print/ranking",
+        title: "무대 설정 (4단계)",
+        icon: <RiSettings3Line />,
+        link: "/conteststagetable",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 5,
+        title: "심판 관리",
+        icon: <FaUsers />,
+        link: "/contestjudgetable",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 6,
-        title: "집계표",
+        title: "그랑프리 명단",
+        icon: <GiPodiumWinner />,
+        link: "/contestplayerordergrandprix",
+        requiredGroup: ["admin"],
+      },
+    ],
+  },
+
+  {
+    id: 3,
+    title: "출력 관리",
+    link: "/print-management",
+    // icon: <FaPrint />, // 아이콘 제거
+    requiredGroup: ["admin", "orgManager"],
+    subMenus: [
+      {
+        id: 1,
+        title: "계측 명단 출력",
+        icon: <RiPrinterFill />, // 새로운 아이콘
+        link: "/print/measurement",
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 2,
+        title: "출전 명단 출력",
+        icon: <FaFileExport />, // 새로운 아이콘
+        link: "/print/final",
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 3,
+        title: "순위표 출력",
+        icon: <FaChartPie />,
+        link: "/print/ranking",
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 4,
+        title: "집계표 출력",
+        icon: <FaFileInvoice />, // 새로운 아이콘
         link: "/printsummary",
         requiredGroup: ["admin"],
       },
     ],
   },
   {
-    id: 2,
-    title: "수동모드",
-    link: "/manual-mode",
+    id: 4,
+    title: "자동 모니터링",
+    link: "/auto-monitoring",
+    // icon: <MdMonitor />, // 아이콘 제거
     requiredGroup: ["admin"],
     subMenus: [
       {
         id: 1,
-        title: "심사표 입력",
+        title: "전체 모니터링",
+        icon: <RiDashboardLine />,
+        link: "/contestmonitoring/all",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 2,
+        title: "본부석 모니터링",
+        icon: <BiDesktop />,
+        link: "/contestmonitoring/main",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 3,
+        title: "심판장 모니터링",
+        icon: <GiGearStickPattern />,
+        link: "/contestmonitoring/judgeHead",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 4,
+        title: "사회자 모니터링",
+        icon: <GiMagicLamp />,
+        link: "/contestmonitoring/MC",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 5,
+        title: "스크린",
+        icon: <PiProjectorScreenChartThin />,
+        link: "/screenlobby",
+        requiredGroup: ["admin"],
+      },
+    ],
+  },
+  {
+    id: 5,
+    title: "관리자메뉴",
+    link: "/admin-tools",
+    // icon: <MdAdminPanelSettings />, // 아이콘 제거
+    requiredGroup: ["admin"],
+    subMenus: [
+      {
+        id: 1,
+        title: "최종 명단 강제 등록",
+        icon: <AiOutlineSetting />,
+        link: "/contestforcemanual",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 2,
+        title: "스크린 딜레이 설정",
+        icon: <RiSettings3Line />,
+        link: "/delay",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 3,
+        title: "랜덤 신청서 생성",
+        icon: <FaQuestionCircle />,
+        link: "/randomgenerator",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 4,
+        title: "신청서 초기화",
+        icon: <MdReportProblem />,
+        link: "/clear",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 5,
+        title: "심사 결과 입력",
+        icon: <AiOutlineFileText />,
         link: "/manual-input",
         requiredGroup: ["admin"],
       },
     ],
   },
   {
-    id: 3,
-    title: "자동모드",
-    link: "/auto-mode",
+    id: 6,
+    title: "기타",
+    link: "/miscellaneous",
+    // icon: <FaChartLine />, // 아이콘 제거
     requiredGroup: ["admin"],
     subMenus: [
       {
         id: 1,
-        title: "전체 모니터링 화면",
-        link: "/contestmonitoring/all",
-        requiredGroup: ["admin"],
+        title: "QR Code",
+        icon: <BiBarcodeReader />,
+        link: "/qrcode",
+        requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 2,
-        title: "본부석 모니터링 화면",
-        link: "/contestmonitoring/main",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 3,
-        title: "심판위원장 모니터링 화면",
-        link: "/contestmonitoring/judgeHead",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 4,
-        title: "사회자 모니터링 화면",
-        link: "/contestmonitoring/MC",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 30,
-        title: "스크린",
-        link: "/screenlobby",
-        requiredGroup: ["admin"],
-      },
-      {
-        id: 31,
-        title: "스크린딜레이세팅",
-        link: "/delay",
-        requiredGroup: ["admin"],
+        title: "로그아웃",
+        icon: <FaSignOutAlt />,
+        link: "/logout",
+        requiredGroup: ["admin", "orgManager"],
       },
     ],
-  },
-  {
-    id: 4,
-    title: "QRCode",
-    link: "/qrcode",
-    requiredGroup: ["admin", "orgManager"],
-  },
-  {
-    id: 5,
-    title: "로그아웃",
-    link: "/logout",
-    requiredGroup: ["admin", "orgManager"],
   },
 ];

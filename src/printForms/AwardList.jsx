@@ -11,7 +11,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useContext } from "react";
 import { useEffect } from "react";
 import { where } from "firebase/firestore";
-import { handleCategoriesWithGrades } from "../functions/functions";
+import { matchingCategoriesWithGrades } from "../functions/functions";
 import { useMemo } from "react";
 import PrintAwardForm from "./PrintAwardForm";
 import ReactToPrint from "react-to-print";
@@ -137,7 +137,7 @@ const AwardList = () => {
   useEffect(() => {
     if (categoriesArray?.length > 0 && gradesArray?.length > 0) {
       setCategoryTable(() => [
-        ...handleCategoriesWithGrades(categoriesArray, gradesArray),
+        ...matchingCategoriesWithGrades(categoriesArray, gradesArray),
       ]);
     }
   }, [categoriesArray, gradesArray]);

@@ -65,7 +65,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       : null
   );
 
-  const addCurrentStage = useFirebaseRealtimeAddData();
   const updateCurrentStage = useFirebaseRealtimeUpdateData();
 
   const fetchPool = async (noticeId, stageAssignId, playerFinalId) => {
@@ -97,35 +96,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         isButton: true,
         confirmButtonText: "확인",
       });
-    }
-  };
-
-  const fetchResultAndRealtimeUpdate = async (gradeId, gradeTitle) => {
-    const condition = [where("gradeId", "==", gradeId)];
-    try {
-      const data = await fetchResultQuery.getDocuments(
-        "contest_results_list",
-        condition
-      );
-
-      if (data?.length === 0) {
-        window.alert("데이터가 없습니다.");
-        return;
-      }
-
-      const standingData = data[0].result.sort(
-        (a, b) => a.playerRank - b.playerRank
-      );
-
-      const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
-      const newState = {
-        players: [...standingData],
-        gradeTitle: gradeTitle,
-        status: { playStart: true },
-      };
-      await updateCurrentStage.updateData(collectionInfo, { ...newState });
-    } catch (error) {
-      console.log(error);
     }
   };
 
@@ -248,7 +218,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  const handleUpdateCurrentStage = async (currentStageId, actionType) => {
+  const handleUpdateCurrentStage = async (currentStageId) => {
     const {
       stageId,
       stageNumber,
@@ -299,8 +269,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     } catch (error) {
       console.log(error);
     }
-
-    handleForceUpdate();
   };
 
   const handleJudgeIsEndValidated = (judgesArray) => {
@@ -312,16 +280,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     const validate = judgesArray.some((s) => s.isEnd === false);
     return validate;
   };
-
-  const handleForceUpdate = useCallback(() => {
-    // if (currentContest?.contests?.id) {
-    //   // Since we're using the improved hook, data is updated via onValue
-    //   setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
-    // }
-    // if (currentStageInfo?.grades) {
-    //   handleForceScoreTableRefresh(currentStageInfo.grades);
-    // }
-  }, [currentContest, currentStageInfo]);
 
   useEffect(() => {
     if (
