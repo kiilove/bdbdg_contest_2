@@ -267,7 +267,7 @@ export const MenuArray = [
     title: "기타",
     link: "/miscellaneous",
     // icon: <FaChartLine />, // 아이콘 제거
-    requiredGroup: ["admin"],
+    requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
         id: 1,
@@ -278,6 +278,13 @@ export const MenuArray = [
       },
       {
         id: 2,
+        title: "데이터베이스선택",
+        icon: <FaSignOutAlt />,
+        link: "/selectdatabase",
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 3,
         title: "로그아웃",
         icon: <FaSignOutAlt />,
         link: "/logout",

@@ -37,6 +37,7 @@ import StandingPrint from "./printForms/StandingPrint";
 import Dashboard from "./pages/Dashboard";
 import UnifiedPrint from "./printForms/UnifiedPrint";
 import { DeviceProvider } from "./contexts/DeviceContext";
+import Logout from "./pages/Logout";
 
 function App() {
   return (
@@ -146,6 +147,7 @@ function App() {
               path="/screen1/:contestId"
               element={<StandingTableType1 />}
             />
+            <Route path="/logout" element={<Logout />} />
           </Routes>
         </BrowserRouter>
       </DeviceProvider>
