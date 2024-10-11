@@ -7,12 +7,14 @@ const { Option } = Select;
 
 const AgeGenderDistributionChart = ({ invoices }) => {
   const chartRef = useRef(null);
-  const [chartType, setChartType] = useState("bar");
+  const [chartType, setChartType] = useState("scatter"); // 기본값을 'scatter'로 설정
+
   useEffect(() => {
     // 데이터 구조 초기화
-    const ageCounts = { 남성: {}, 여성: {} };
-    const scatterData = { 남성: [], 여성: [] };
     const groupedData = { 남성: {}, 여성: {} };
+
+    let minAge = Infinity;
+    let maxAge = -Infinity;
 
     invoices.forEach((invoice) => {
       const { playerBirth, playerGender } = invoice;
@@ -37,13 +39,10 @@ const AgeGenderDistributionChart = ({ invoices }) => {
 
           const gender = playerGender.toLowerCase() === "m" ? "남성" : "여성";
 
-          if (chartType === "scatter") {
-            // 산점도용 데이터: x = 나이, y = 인원수, size = 인원수
-            if (!ageCounts[gender][age]) {
-              ageCounts[gender][age] = 0;
-            }
-            ageCounts[gender][age] += 1;
-          } else {
+          if (age < minAge) minAge = age;
+          if (age > maxAge) maxAge = age;
+
+          if (chartType !== "scatter") {
             // 막대 및 선 그래프용 데이터: 10년 단위로 그룹화
             const ageGroup = Math.floor(age / 10) * 10;
             if (!groupedData[gender][ageGroup]) {
@@ -55,31 +54,17 @@ const AgeGenderDistributionChart = ({ invoices }) => {
       }
     });
 
-    // 산점도 데이터 생성
-    if (chartType === "scatter") {
-      Object.keys(ageCounts["남성"]).forEach((age) => {
-        scatterData["남성"].push({
-          value: [parseInt(age, 10), ageCounts["남성"][age]],
-          symbolSize: ageCounts["남성"][age] * 5, // 인원수에 비례하여 크기 설정
-        });
-      });
-      Object.keys(ageCounts["여성"]).forEach((age) => {
-        scatterData["여성"].push({
-          value: [parseInt(age, 10), ageCounts["여성"][age]],
-          symbolSize: ageCounts["여성"][age] * 5, // 인원수에 비례하여 크기 설정
-        });
-      });
+    // 10년 단위로 ageGroups 생성
+    const startAgeGroup = Math.floor(minAge / 10) * 10;
+    const endAgeGroup = Math.floor(maxAge / 10) * 10;
+    const ageGroups = [];
+    for (
+      let ageGroup = startAgeGroup;
+      ageGroup <= endAgeGroup;
+      ageGroup += 10
+    ) {
+      ageGroups.push(ageGroup);
     }
-
-    // 10년 단위 그룹화된 데이터를 배열로 변환
-    const ageGroups = [
-      ...new Set([
-        ...Object.keys(groupedData["남성"]),
-        ...Object.keys(groupedData["여성"]),
-      ]),
-    ]
-      .map((key) => parseInt(key, 10))
-      .sort((a, b) => a - b);
 
     const maleGroupedData = ageGroups.map(
       (key) => groupedData["남성"][key] || 0
@@ -91,25 +76,13 @@ const AgeGenderDistributionChart = ({ invoices }) => {
     // 시리즈 데이터 생성
     const seriesData =
       chartType === "scatter"
-        ? [
-            {
-              name: "남성",
-              type: "scatter",
-              data: scatterData["남성"],
-              itemStyle: { color: "#1f77b4" }, // 남성 색상
-            },
-            {
-              name: "여성",
-              type: "scatter",
-              data: scatterData["여성"],
-              itemStyle: { color: "#ff69b4" }, // 여성 색상 (핑크)
-            },
-          ]
+        ? [] // 산점도는 별도로 처리
         : [
             {
               name: "남성",
               type: chartType,
-              stack: "total",
+              // stack은 막대 그래프일 때만 적용
+              stack: chartType === "bar" ? "total" : undefined,
               data: maleGroupedData,
               itemStyle: { color: "#1f77b4" }, // 남성 색상
               smooth: chartType === "line",
@@ -117,12 +90,72 @@ const AgeGenderDistributionChart = ({ invoices }) => {
             {
               name: "여성",
               type: chartType,
-              stack: "total",
+              stack: chartType === "bar" ? "total" : undefined,
               data: femaleGroupedData,
               itemStyle: { color: "#ff69b4" }, // 여성 색상 (핑크)
               smooth: chartType === "line",
             },
           ];
+
+    // 산점도 데이터 처리
+    if (chartType === "scatter") {
+      const scatterData = { 남성: [], 여성: [] };
+      const scatterYCounters = { 남성: {}, 여성: {} }; // 산점도 y축 카운터
+
+      invoices.forEach((invoice) => {
+        const { playerBirth, playerGender } = invoice;
+
+        if (
+          playerBirth &&
+          typeof playerBirth === "string" &&
+          playerGender &&
+          typeof playerGender === "string"
+        ) {
+          const birthDate = new Date(playerBirth);
+          if (!isNaN(birthDate)) {
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (
+              monthDiff < 0 ||
+              (monthDiff === 0 && today.getDate() < birthDate.getDate())
+            ) {
+              age--;
+            }
+
+            const gender = playerGender.toLowerCase() === "m" ? "남성" : "여성";
+
+            // 산점도용 데이터: x = 나이, y = 인원수, size = 인원수
+            if (!scatterYCounters[gender][age]) {
+              scatterYCounters[gender][age] = 1;
+            } else {
+              scatterYCounters[gender][age] += 1;
+            }
+            scatterData[gender].push({
+              value: [age, scatterYCounters[gender][age]],
+              symbolSize: scatterYCounters[gender][age] * 5, // 인원수에 비례하여 크기 설정
+            });
+          }
+        }
+      });
+
+      seriesData.push(
+        {
+          name: "남성",
+          type: "scatter",
+          data: scatterData["남성"],
+          symbolSize: (data) => data.symbolSize, // 인원 수에 비례하여 원의 크기 설정
+          itemStyle: { color: "#1f77b4" }, // 남성 색상
+        },
+        {
+          name: "여성",
+          type: "scatter",
+          data: scatterData["여성"],
+          symbolSize: (data) => data.symbolSize, // 인원 수에 비례하여 원의 크기 설정
+          itemStyle: { color: "#ff69b4" }, // 여성 색상 (핑크)
+        }
+      );
+    }
 
     // 차트 옵션 설정
     if (chartRef.current) {
@@ -135,12 +168,18 @@ const AgeGenderDistributionChart = ({ invoices }) => {
         },
         tooltip: {
           trigger: chartType === "scatter" ? "item" : "axis",
-          formatter: (params) =>
-            chartType === "scatter"
-              ? `나이: ${params.value[0]}<br/>인원수: ${params.value[1]}`
-              : `나이대: ${ageGroups[params.dataIndex]}대<br/>인원수: ${
-                  params.value
-                }`,
+          formatter: (params) => {
+            if (chartType === "scatter") {
+              return `나이: ${params.value[0]}<br/>인원수: ${params.value[1]}`;
+            } else {
+              // 'axis' 트리거일 때 params는 배열입니다.
+              let tooltipText = `나이대: ${params[0].name}대<br/>`;
+              params.forEach((item) => {
+                tooltipText += `${item.seriesName}: ${item.value}<br/>`;
+              });
+              return tooltipText;
+            }
+          },
         },
         legend: {
           top: "bottom",
@@ -157,7 +196,7 @@ const AgeGenderDistributionChart = ({ invoices }) => {
         yAxis: {
           type: "value",
           name: "인원수",
-          show: chartType !== "scatter",
+          show: true, // y축 항상 표시
         },
         series: seriesData,
       };

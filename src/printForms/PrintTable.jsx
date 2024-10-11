@@ -1,3 +1,4 @@
+// PrintTable.js
 import React from "react";
 
 const PrintTable = ({ data, columns, addEmptyRows, documentTitle }) => {
@@ -58,17 +59,54 @@ const PrintTable = ({ data, columns, addEmptyRows, documentTitle }) => {
                       <tr key={pIdx} className="border-t">
                         {columns.map((col) => {
                           let cellContent;
-                          if (col.key === "index") {
-                            cellContent = pIdx + 1;
+
+                          if (col.key === "playerName") {
+                            // note가 "불참"인 경우 스타일 적용
+                            if (player.note === "불참") {
+                              cellContent = (
+                                <span className="text-gray-500 line-through">
+                                  {player.playerName}
+                                </span>
+                              );
+                            } else {
+                              cellContent = player.playerName;
+                            }
+                          } else if (col.key === "note") {
+                            cellContent = player.note;
                           } else if (col.mergeKeys) {
+                            // mergeKeys가 있는 경우 React 요소를 유지하며 합침
                             cellContent = col.mergeKeys
-                              .map((key) => player[key] || "")
+                              .map((key, idx) => {
+                                const value = player[key] || "";
+                                if (value === "") return null;
+                                // 조건에 따라 스타일링된 요소 반환
+                                if (
+                                  key === "playerName" &&
+                                  player.note === "불참"
+                                ) {
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="text-gray-500 line-through"
+                                    >
+                                      {player[key]}
+                                    </span>
+                                  );
+                                }
+                                return <span key={idx}>{value}</span>;
+                              })
                               .filter(Boolean)
-                              .join(". ");
+                              .reduce((acc, curr, idx) => {
+                                if (idx > 0) {
+                                  return [acc, ". ", curr];
+                                }
+                                return [curr];
+                              }, []);
                           } else {
                             cellContent =
                               col.forcedValue || player[col.key] || "";
                           }
+
                           return (
                             <td
                               key={col.key || col.label}

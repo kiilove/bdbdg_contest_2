@@ -51,7 +51,7 @@ const UnifiedPrint = () => {
         currentContest.contests.contestGradesListId
       );
     }
-  }, [currentContest, currentSection]);
+  }, [currentContest, currentSection, printType]);
 
   const fetchPool = async (categoryId, gradeId) => {
     try {
@@ -72,6 +72,9 @@ const UnifiedPrint = () => {
           currentContest.contests.contestPlayersFinalId
         );
         setPlayersArray(playerData?.players || []);
+      } else {
+        // ranking이나 다른 타입일 경우 playersArray 초기화
+        setPlayersArray([]);
       }
     } catch (error) {
       console.error(error);
@@ -163,7 +166,6 @@ const UnifiedPrint = () => {
       ],
     }));
   };
-
   const processCategoriesGradesPlayers = useCallback(
     (filteredCategories, gradesArray, playersArray) => {
       return filteredCategories
@@ -174,22 +176,39 @@ const UnifiedPrint = () => {
             )
             .map((grade) => {
               const players = playersArray
-                .filter(
-                  (player) => player.contestGradeId === grade.contestGradeId
-                )
-                .map((player, index) => ({
-                  index: index + 1,
-                  playerNumber: player.playerNumber,
-                  playerIndex: player.playerIndex,
-                  playerName: player.playerName,
-                  heightWeight: player.heightWeight || "",
-                  playerGym: player.playerGym || "",
-                  note: player.note || "",
-                }));
+                .filter((player) => {
+                  if (printType === "measurement") {
+                    return player.originalGradeId === grade.contestGradeId;
+                  } else {
+                    return player.contestGradeId === grade.contestGradeId;
+                  }
+                })
+                .map((player, index) => {
+                  let note = player.note || "";
+                  let playerName = player.playerName;
+
+                  if (printType === "final") {
+                    if (player.playerNoShow) {
+                      note = "불참";
+                    } else if (player.isGradeChanged) {
+                      note = "월체";
+                    }
+                  }
+
+                  return {
+                    index: index + 1,
+                    playerNumber: player.playerNumber,
+                    playerIndex: player.playerIndex,
+                    playerName,
+                    heightWeight: player.heightWeight || "",
+                    playerGym: player.playerGym || "",
+                    note,
+                  };
+                });
 
               return {
                 contestGradeTitle: grade.contestGradeTitle,
-                players,
+                players: players,
               };
             })
             .filter((grade) => grade.players.length > 0);
@@ -201,8 +220,48 @@ const UnifiedPrint = () => {
         })
         .filter((category) => category.grades.length > 0);
     },
-    []
+    [printType] // Ensure that printType is included in dependencies
   );
+
+  // const processCategoriesGradesPlayers = useCallback(
+  //   (filteredCategories, gradesArray, playersArray) => {
+  //     return filteredCategories
+  //       .map((category) => {
+  //         const grades = gradesArray
+  //           .filter(
+  //             (grade) => grade.refCategoryId === category.contestCategoryId
+  //           )
+  //           .map((grade) => {
+  //             const players = playersArray
+  //               .filter(
+  //                 (player) => player.contestGradeId === grade.contestGradeId
+  //               )
+  //               .map((player, index) => ({
+  //                 index: index + 1,
+  //                 playerNumber: player.playerNumber,
+  //                 playerIndex: player.playerIndex,
+  //                 playerName: player.playerName,
+  //                 heightWeight: player.heightWeight || "",
+  //                 playerGym: player.playerGym || "",
+  //                 note: player.note || "",
+  //               }));
+
+  //             return {
+  //               contestGradeTitle: grade.contestGradeTitle,
+  //               players,
+  //             };
+  //           })
+  //           .filter((grade) => grade.players.length > 0);
+
+  //         return {
+  //           contestCategoryTitle: category.contestCategoryTitle,
+  //           grades,
+  //         };
+  //       })
+  //       .filter((category) => category.grades.length > 0);
+  //   },
+  //   []
+  // );
 
   useEffect(() => {
     const contestTitle = currentContest?.contestInfo?.contestTitle;
@@ -221,7 +280,12 @@ const UnifiedPrint = () => {
         { label: "순번", key: "index", width: 10 },
         { label: "선수번호", key: "playerNumber", width: 15 },
         { label: "이름", key: "playerName", width: 20 },
-        { label: "신장/체중", key: "heightWeight", width: 30 },
+        {
+          label: "신장/체중",
+          key: "heightWeight",
+          width: 30,
+          forcedValue: "/",
+        },
         { label: "비고", key: "notes", width: 25 },
       ];
     } else if (printType === "final") {

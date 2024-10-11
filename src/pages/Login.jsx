@@ -32,6 +32,13 @@ const Login = () => {
       userGroup: "admin",
       userContext: "관리자",
     },
+    {
+      id: 101,
+      userID: "demo",
+      userPass: "123456",
+      userGroup: "admin1",
+      userContext: "관리자",
+    },
   ];
 
   const handleLogin = () => {

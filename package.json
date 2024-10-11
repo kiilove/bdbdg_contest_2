@@ -1,6 +1,6 @@
 {
   "name": "contest-bdbdg-2",
-  "version": "1.0.00",
+  "version": "2.0.00",
   "private": true,
   "dependencies": {
     "@ant-design/icons": "^5.5.1",

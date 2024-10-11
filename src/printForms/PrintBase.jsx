@@ -49,9 +49,35 @@ const PrintBase = () => {
           .filter((grade) => grade.refCategoryId === category.contestCategoryId)
           .map((grade) => ({
             ...grade,
-            players: playerAssignArray.filter(
-              (player) => player.contestGradeId === grade.contestGradeId
-            ),
+            players: playerAssignArray
+              .filter(
+                (player) => player.contestGradeId === grade.contestGradeId
+              )
+              .map((player, index) => {
+                let note = player.note || "";
+                let playerName = player.playerName;
+
+                if (player.playerNoShow) {
+                  note = "불참";
+                  playerName = (
+                    <span style={{ color: "gray" }}>
+                      <s>{player.playerName}</s>
+                    </span>
+                  );
+                } else if (player.isGradeChanged) {
+                  note = "월체";
+                }
+
+                return {
+                  index: index + 1,
+                  playerNumber: player.playerNumber,
+                  playerName,
+                  heightWeight: player.heightWeight || "",
+                  playerGym: player.playerGym || "",
+                  note,
+                };
+              })
+              .filter((player) => player.players.length > 0),
           }))
           .filter((grade) => grade.players.length > 0);
 
@@ -176,15 +202,17 @@ const PrintBase = () => {
                         <tbody>
                           {grade.players.map((player, pIdx) => (
                             <tr key={pIdx} className="border-t">
-                              <td className="p-2 border">{pIdx + 1}</td>
+                              <td className="p-2 border">{player.index}</td>
                               <td className="p-2 border">
                                 {player.playerNumber}
                               </td>
                               <td className="p-2 border">
                                 {player.playerName}
                               </td>
-                              <td className="p-2 border">/</td>
-                              <td className="p-2 border"></td>
+                              <td className="p-2 border">
+                                {player.heightWeight}
+                              </td>
+                              <td className="p-2 border">{player.note}</td>
                             </tr>
                           ))}
                           {[...Array(3)].map((_, idx) => (

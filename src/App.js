@@ -50,7 +50,6 @@ function App() {
               element={<ManagementHome children={<Dashboard />} />}
             />
             <Route path="/login" element={<Login />} />
-
             <Route
               path="/newcontest"
               element={<ManagementHome children={<NewContest />} />}
@@ -117,7 +116,6 @@ function App() {
               path="/contestranksummary"
               element={<ManagementHome children={<ContestRankSummary />} />}
             />
-
             <Route
               path="/print/:printType"
               element={<ManagementHome children={<UnifiedPrint />} />}
@@ -126,7 +124,14 @@ function App() {
               path="/printsummary"
               element={<ManagementHome children={<PrintSummary />} />}
             />
-
+            <Route
+              path="/measureprint"
+              element={<ManagementHome children={<MeasurePrint />} />}
+            />
+            <Route
+              path="/printbase"
+              element={<ManagementHome children={<PrintBase />} />}
+            />
             <Route path="/screenlobby" element={<ScreenLobby />} />
             <Route path="/ranking" element={<RankingAnnouncement />} />
             <Route path="/idle" element={<Idle />} />
