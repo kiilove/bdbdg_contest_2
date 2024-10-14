@@ -84,6 +84,7 @@ const ContestStagetable = () => {
     categoriesArray
       .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
       .forEach((category) => {
+        console.log(category);
         const {
           contestCategoryId: categoryId,
           contestCategoryTitle: categoryTitle,
@@ -91,6 +92,7 @@ const ContestStagetable = () => {
           contestCategoryIsOverall: categoryIsOverall,
           contestCategoryJudgeType: categoryJudgeType,
           contestCategoryJudgeCount: categoryJudgeCount,
+          contestCategorySection: categorySection,
         } = category;
         const matchedGrades = gradesArray.filter(
           (grade) => grade.refCategoryId === categoryId
@@ -127,6 +129,7 @@ const ContestStagetable = () => {
               categoryTitle,
               categoryIsOverall,
               categoryJudgeType,
+              categorySection,
               grades: [
                 {
                   categoryId,
@@ -239,6 +242,7 @@ const ContestStagetable = () => {
               categoryTitle: category.contestCategoryTitle,
               categoryIsOverall: category.contestCategoryIsOverall,
               categoryJudgeType: category.contestCategoryJudgeType,
+              categorySection: category.contestCategorySection,
               grades: [
                 {
                   categoryId: category.contestCategoryId,

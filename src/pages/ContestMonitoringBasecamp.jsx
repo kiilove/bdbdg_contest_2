@@ -8,6 +8,7 @@ import {
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   useFirebaseRealtimeAddData,
+  useFirebaseRealtimeDeleteData,
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
@@ -43,6 +44,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const [stagesArray, setStagesArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
+  const [judgesArray, setJudgesArray] = useState([]);
   const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
   const [prevRealtimeData, setPrevRealtimeData] = useState({});
 
@@ -50,6 +52,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const fetchNotice = useFirestoreGetDocument("contest_notice");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
+  const fetchJudgesAssign = useFirestoreGetDocument("contest_judges_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
   const fetchScoreCardQuery = useFirestoreQuery();
   const fetchResultQuery = useFirestoreQuery();
@@ -66,16 +69,25 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   );
 
   const updateCurrentStage = useFirebaseRealtimeUpdateData();
+  const deleteCompare = useFirebaseRealtimeDeleteData();
 
-  const fetchPool = async (noticeId, stageAssignId, playerFinalId) => {
+  const fetchPool = async (
+    noticeId,
+    stageAssignId,
+    playerFinalId,
+    judgeAssignId
+  ) => {
     try {
       const returnNotice = await fetchNotice.getDocument(noticeId);
       const returnContestStage = await fetchStages.getDocument(stageAssignId);
       const returnPlayersFinal = await fetchFinalPlayers.getDocument(
         playerFinalId
       );
+      const returnJudgesAssign = await fetchJudgesAssign.getDocument(
+        judgeAssignId
+      );
 
-      if (returnNotice && returnContestStage) {
+      if (returnNotice && returnContestStage && returnJudgesAssign) {
         setStagesArray(
           returnContestStage.stages.sort(
             (a, b) => a.stageNumber - b.stageNumber
@@ -87,6 +99,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             .sort((a, b) => a.playerIndex - b.playerIndex)
             .filter((f) => f.playerNoShow === false)
         );
+        console.log(returnJudgesAssign?.judges);
+        setJudgesArray(returnJudgesAssign?.judges || []);
+
         setIsLoading(false);
       }
     } catch (error) {
@@ -175,10 +190,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleGradeInfo = (grades) => {
+    //console.log(grades);
+
     let gradeTitle = "";
     let gradeId = "";
     let matchedJudgesCount = 0;
     let matchedPlayersCount = 0;
+    let matchedJudgeAssignCount = 0;
 
     if (grades?.length === 0) {
       gradeTitle = "오류발생";
@@ -188,12 +206,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       gradeTitle = grades[0].gradeTitle;
       gradeId = grades[0].gradeId;
       matchedJudgesCount = grades[0].categoryJudgeCount;
+      matchedJudgeAssignCount = judgesArray.filter(
+        (f) => f.contestGradeId === gradeId
+      ).length;
       matchedPlayersCount = grades[0].playerCount;
     } else if (grades.length > 1) {
       const madeTitle = grades.map((grade) => {
         return grade.gradeTitle + " ";
       });
       matchedJudgesCount = grades[0].categoryJudgeCount;
+
+      matchedJudgeAssignCount = judgesArray.filter(
+        (f) => f.contestGradeId === grades[0].gradeId
+      ).length;
       grades.forEach((grade) => {
         matchedPlayersCount += parseInt(grade.playerCount);
       });
@@ -201,7 +226,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       gradeTitle = madeTitle + "통합";
     }
 
-    return { gradeTitle, gradeId, matchedJudgesCount, matchedPlayersCount };
+    return {
+      gradeTitle,
+      gradeId,
+      matchedJudgesCount,
+      matchedPlayersCount,
+      matchedJudgeAssignCount,
+    };
   };
 
   const handleForceReStart = async (judgeIndex, contestId) => {
@@ -237,6 +268,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     ).map((number) => {
       return { seatIndex: number, isLogined: false, isEnd: false };
     });
+    await deleteCompare.deleteData(
+      `currentStage/${currentContest.contests.id}/compares`
+    );
 
     const newCurrentStateInfo = {
       stageId,
@@ -285,12 +319,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     if (
       currentContest?.contests?.contestNoticeId &&
       currentContest?.contests?.contestStagesAssignId &&
-      currentContest?.contests?.contestPlayersFinalId
+      currentContest?.contests?.contestPlayersFinalId &&
+      currentContest?.contests?.contestJudgesAssignId
     ) {
       fetchPool(
         currentContest.contests.contestNoticeId,
         currentContest.contests.contestStagesAssignId,
-        currentContest?.contests?.contestPlayersFinalId
+        currentContest?.contests?.contestPlayersFinalId,
+        currentContest?.contests?.contestJudgesAssignId
       );
     }
   }, [currentContest]);
@@ -714,6 +750,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                               stageId,
                               categoryTitle,
                               categoryJudgeType,
+
                               categoryId,
                             } = stage;
                             const gradeTitle =
@@ -721,14 +758,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                             const playersCount =
                               handleGradeInfo(grades).matchedPlayersCount;
 
-                            const judgesCount =
-                              handleGradeInfo(grades).matchedJudgesCount;
+                            const judgesAssignCount =
+                              handleGradeInfo(grades).matchedJudgeAssignCount;
                             return (
                               <div
                                 className={`${
                                   realtimeData.stageId === stageId
-                                    ? "flex w-full h-16 justify-start items-center px-5 bg-blue-400 rounded-lg text-gray-100"
-                                    : "flex w-full h-10 justify-start items-center px-5 bg-blue-100 rounded-lg"
+                                    ? "flex w-full h-auto py-2 justify-start items-center px-5 bg-blue-400 rounded-lg text-gray-100"
+                                    : "flex w-full h-auto py-2 justify-start items-center px-5 bg-blue-100 rounded-lg"
                                 }`}
                               >
                                 <div className="flex w-1/2 justify-start items-center flex-wrap">
@@ -768,10 +805,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     )}
                                   </div>
 
-                                  <div className="flex w-auto px-2 text-base font-normal">
+                                  <div
+                                    className="flex w-auto px-2"
+                                    style={{ fontSize: 14 }}
+                                  >
                                     <span className="mx-2">출전인원수 : </span>
                                     <span className="font-semibold">
                                       {playersCount}
+                                    </span>
+                                    <span className="mx-2">
+                                      , 실제배정된심판수 :
+                                    </span>
+                                    <span className="font-semibold">
+                                      {judgesAssignCount}
                                     </span>
                                   </div>
                                 </div>

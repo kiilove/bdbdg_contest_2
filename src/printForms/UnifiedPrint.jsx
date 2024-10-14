@@ -148,12 +148,14 @@ const UnifiedPrint = () => {
   };
 
   const formatResultArray = (data) => {
+    console.log(data);
     return data.map((item) => ({
       contestCategoryTitle: item.categoryTitle,
       grades: [
         {
           contestGradeTitle: item.gradeTitle,
           players: item.result
+            .filter((f) => f.playerRank < 1000)
             .sort((a, b) => a.playerRank - b.playerRank)
             .map((player) => ({
               playerNumber: player.playerNumber,

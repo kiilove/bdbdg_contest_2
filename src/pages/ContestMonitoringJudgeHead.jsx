@@ -325,7 +325,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         currentContest?.contests?.contestComparesListId
       );
     }
-  }, [currentContest]);
+  }, [currentContest, realtimeData?.compares]);
 
   useEffect(() => {
     if (parentRefresh) {
@@ -434,6 +434,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               matchedOriginalPlayers={matchedOriginalPlayers}
               setRefresh={setParentRefresh}
               propCompareIndex={comparesArray?.length + 1}
+              handleCompareCancel={() =>
+                handleCompareCancel(
+                  currentContest.contests.id,
+                  comparesArray?.length - 1
+                )
+              }
             />
           </Modal>
           <Modal open={rankingSummaryOpen}>

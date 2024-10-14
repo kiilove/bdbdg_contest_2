@@ -19,6 +19,7 @@ const ContestPointSummary = ({
   setClose,
   categoryJudgeType,
   stageId,
+  handleCompareCancel,
 }) => {
   const [scoreData, setScoreData] = useState([]);
   const [summaryTable, setSummaryTable] = useState([]);
@@ -321,7 +322,10 @@ const ContestPointSummary = ({
         isOpen={msgOpen}
         message={message}
         onCancel={() => setMsgOpen(false)}
-        onConfirm={() => setClose(false)}
+        onConfirm={() => {
+          handleCompareCancel();
+          setClose(false);
+        }}
       />
       <div className="flex w-full h-14">
         <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">

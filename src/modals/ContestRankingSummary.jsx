@@ -155,6 +155,7 @@ const ContestRankingSummary = ({
   };
 
   const groupByGrade = (arr, sortType) => {
+    console.log(arr);
     return arr
       .reduce((acc, curr) => {
         let group = acc.find((g) => g.gradeId === curr.gradeId);
