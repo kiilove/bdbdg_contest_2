@@ -168,9 +168,16 @@ export const MenuArray = [
       {
         id: 4,
         title: "집계표 출력",
-        icon: <FaFileInvoice />, // 새로운 아이콘
+        icon: <FaFileInvoice />,
         link: "/printsummary",
-        requiredGroup: ["admin"],
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 5,
+        title: "클럽별 집계 출력",
+        icon: <FaFileInvoice />,
+        link: "/printgymgroup",
+        requiredGroup: ["admin", "orgManager"],
       },
     ],
   },

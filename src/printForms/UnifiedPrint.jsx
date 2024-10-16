@@ -147,8 +147,51 @@ const UnifiedPrint = () => {
     }
   };
 
+  const groupAndCountPlayersByGymAndRank = (data) => {
+    // players를 flat하게 변환하고 각 player에 카테고리와 등급 정보를 추가
+    const playersFlat = data.flatMap((category) =>
+      category.grades.flatMap((grade) =>
+        grade.players.map((player) => ({
+          ...player,
+          contestCategoryTitle: category.contestCategoryTitle,
+          contestGradeTitle: grade.contestGradeTitle,
+        }))
+      )
+    );
+
+    // 전체 데이터에서 최대 순위를 동적으로 결정
+    const maxRank = Math.max(...playersFlat.map((player) => player.playerRank));
+
+    // playerGym으로 그룹화 후 rankTitle별로 선수 집계 및 정보 추가
+    const result = playersFlat.reduce((acc, player) => {
+      const { playerGym, playerRank } = player;
+
+      // 각 Gym을 위한 객체 초기화
+      if (!acc[playerGym]) acc[playerGym] = {};
+
+      // 모든 rankTitle을 0으로 초기화 (1부터 maxRank까지)
+      for (let rank = 1; rank <= maxRank; rank++) {
+        const rankTitle = `rankTitle:${rank}`;
+        if (!acc[playerGym][rankTitle]) {
+          acc[playerGym][rankTitle] = {
+            count: 0,
+            players: [],
+          };
+        }
+      }
+
+      // 실제 선수의 순위 데이터를 추가
+      const rankTitle = `rankTitle:${playerRank}`;
+      acc[playerGym][rankTitle].players.push(player);
+      acc[playerGym][rankTitle].count += 1;
+
+      return acc;
+    }, {});
+
+    return result;
+  };
+
   const formatResultArray = (data) => {
-    console.log(data);
     return data.map((item) => ({
       contestCategoryTitle: item.categoryTitle,
       grades: [
@@ -344,6 +387,11 @@ const UnifiedPrint = () => {
     if (printType === "ranking") {
       // Format the resultArray using formatResultArray function
       const formattedResults = formatResultArray(resultArray);
+
+      console.log(
+        "클럽그룹화",
+        groupAndCountPlayersByGymAndRank(formattedResults)
+      );
       return formattedResults;
     } else {
       // For other print types, use the new function

@@ -38,6 +38,7 @@ import Dashboard from "./pages/Dashboard";
 import UnifiedPrint from "./printForms/UnifiedPrint";
 import { DeviceProvider } from "./contexts/DeviceContext";
 import Logout from "./pages/Logout";
+import GymGroupPrint from "./printForms/GymGroupPrint";
 
 function App() {
   return (
@@ -119,6 +120,10 @@ function App() {
             <Route
               path="/print/:printType"
               element={<ManagementHome children={<UnifiedPrint />} />}
+            />
+            <Route
+              path="/printgymgroup"
+              element={<ManagementHome children={<GymGroupPrint />} />}
             />
             <Route
               path="/printsummary"
