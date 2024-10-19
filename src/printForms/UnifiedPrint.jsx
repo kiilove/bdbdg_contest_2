@@ -219,6 +219,7 @@ const UnifiedPrint = () => {
             .filter(
               (grade) => grade.refCategoryId === category.contestCategoryId
             )
+            .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
             .map((grade) => {
               const players = playersArray
                 .filter((player) => {
