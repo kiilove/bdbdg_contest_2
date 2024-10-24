@@ -163,7 +163,7 @@ const Idle = () => {
     >
       <div className="flex flex-col w-full h-full justify-center items-center relative">
         {/* SBBF 이미지 */}
-        <img
+        {/* <img
           src={sbbf}
           alt="SBBF Logo"
           className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
@@ -172,7 +172,7 @@ const Idle = () => {
             height: "auto",
             opacity: 0.8,
           }}
-        />
+        /> */}
 
         {/* 반투명 배경을 포함한 텍스트 박스 */}
         <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full flex justify-center">
