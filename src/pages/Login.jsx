@@ -26,6 +26,13 @@ const Login = () => {
       userContext: "시흥시보디빌딩협회",
     },
     {
+      id: 2,
+      userID: "gbbf01",
+      userPass: "20241103",
+      userGroup: "orgManager",
+      userContext: "구리시보디빌딩협회",
+    },
+    {
       id: 100,
       userID: "jncore",
       userPass: "1201",

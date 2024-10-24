@@ -1,6 +1,4 @@
-import React, { useMemo } from "react";
-import { useContext } from "react";
-import { useState } from "react";
+import React, { useContext, useState } from "react";
 import { ThreeDots } from "react-loader-spinner";
 import { useNavigate } from "react-router-dom";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
@@ -9,10 +7,9 @@ import {
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 
-import Body from "../assets/img/body4.jpg";
-
 const NewContest = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [newContestId, setNewContestId] = useState();
   const contestHook = useFirestoreAddData("contests");
   const updateContest = useFirestoreUpdateData("contests");
   const contestNoticeHook = useFirestoreAddData("contest_notice");
@@ -31,6 +28,9 @@ const NewContest = () => {
 
     try {
       const addedContest = await contestHook.addData({ isCompleted: false });
+      if (addedContest) {
+        setNewContestId(addedContest.id);
+      }
 
       const [
         contestNoticeData,
@@ -86,7 +86,6 @@ const NewContest = () => {
           }),
       ]);
 
-      // Check if any errors occurred during the Promise.all execution
       if (
         contestNoticeData &&
         contestCategorysListData &&
@@ -105,11 +104,10 @@ const NewContest = () => {
           contestGradesListId: contestGradesListData.id,
         });
 
-        // Save the contest data to local storage
         localStorage.setItem(
           "currentContest",
           JSON.stringify({
-            contestId: addedContest.id,
+            contestId: newContestId,
             contestNoticeId: contestNoticeData.id,
             contestCategorysListId: contestCategorysListData.id,
             contestGradesListId: contestGradesListData.id,
@@ -129,56 +127,31 @@ const NewContest = () => {
   };
 
   return (
-    <div
-      className="flex w-full bg-transparent flex-col justify-center items-center"
-      style={{ minHeight: "850px" }}
-    >
-      <div
-        className="flex w-full h-full p-10 bg-white rounded-lg shadow-lg"
-        style={{
-          backgroundImage: `url(${Body})`,
-          backgroundSize: "cover",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "left",
-          minHeight: "100%",
-        }}
-      >
-        <div
-          className="flex w-full justify-center items-end mt-5 flex-col p-10 rounded-lg shadow-lg"
-          style={{ backgroundColor: "rgba(7,11,41,0.7)" }}
-        >
-          <div className="flex w-full h-full justify-center items-center lg:items-end flex-col">
-            <div className="flex w-full h-full justify-center items-center lg:justify-end">
-              <h1 className="text-2xl lg:text-3xl text-gray-200">
-                새로운 대회를 개설합니다.
-              </h1>
-            </div>
-            <div className="flex h-full">
-              {isLoading ? (
-                <button className=" w-40 h-10 md:h-14 bg-gray-900 border text-white text-lg font-bold">
-                  <span className="flex w-full h-full text-white text-base justify-center items-center">
-                    <ThreeDots
-                      height="40"
-                      width="40"
-                      radius="9"
-                      color="#fff"
-                      ariaLabel="three-dots-loading"
-                      wrapperStyle={{}}
-                      wrapperClassName=""
-                      visible={true}
-                    />
-                  </span>
-                </button>
-              ) : (
-                <button
-                  className=" w-40 h-10 md:h-14 bg-gray-900 border text-white text-lg font-bold"
-                  onClick={() => handleStart()}
-                >
-                  <span>대회개설</span>
-                </button>
-              )}
-            </div>
-          </div>
+    <div className="flex flex-col justify-center items-center w-full h-screen bg-gray-100">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+        <h1 className="text-2xl text-center mb-4">새로운 대회를 개설합니다</h1>
+        <div className="flex justify-center">
+          {isLoading ? (
+            <button className="w-40 h-12 bg-gray-900 text-white font-bold rounded-lg flex justify-center items-center">
+              <ThreeDots
+                height="40"
+                width="40"
+                radius="9"
+                color="#fff"
+                ariaLabel="three-dots-loading"
+                wrapperStyle={{}}
+                wrapperClassName=""
+                visible={true}
+              />
+            </button>
+          ) : (
+            <button
+              className="w-40 h-12 bg-blue-600 text-white font-bold rounded-lg"
+              onClick={() => handleStart()}
+            >
+              대회개설
+            </button>
+          )}
         </div>
       </div>
     </div>
