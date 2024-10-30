@@ -17,6 +17,7 @@ import { Checkbox } from "@mui/material";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { TbWorldWww } from "react-icons/tb";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import { Button, Form, Input, InputNumber } from "antd";
 
 const ContestPlayerOrderTable = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,7 @@ const ContestPlayerOrderTable = () => {
   const [playersFinal, setPlayersFinal] = useState({});
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
+  const [startPlayerNumber, setStartPlayerNumber] = useState(1);
   const [entryTitle, setEntryTitle] = useState("");
   const { currentContest, setCurrentContest } = useContext(
     CurrentContestContext
@@ -51,6 +53,9 @@ const ContestPlayerOrderTable = () => {
   const fetchEntry = useFirestoreQuery();
 
   const fetchPool = async () => {
+    if (currentContest?.contests?.startPlayerNumber) {
+      setStartPlayerNumber(currentContest.contests.startPlayerNumber - 1);
+    }
     if (currentContest.contests.contestCategorysListId) {
       const returnCategorys = await fetchCategoryDocument.getDocument(
         currentContest.contests.contestCategorysListId
@@ -100,7 +105,7 @@ const ContestPlayerOrderTable = () => {
 
   const initEntryList = async () => {
     let dummy = [];
-    let playerNumber = 0;
+    let playerNumber = startPlayerNumber;
 
     const condition = [where("contestId", "==", currentContest.contests.id)];
 
@@ -135,6 +140,8 @@ const ContestPlayerOrderTable = () => {
               };
               matchedPlayerWithPlayerNumber.push({ ...newPlayer });
             });
+
+            console.log(matchedPlayerWithPlayerNumber);
 
             const matchedInfo = {
               ...category,
@@ -203,8 +210,8 @@ const ContestPlayerOrderTable = () => {
 
     // Update playerNumber and playerIndex based on the new order
     allPlayers.forEach((player, index) => {
-      player.playerNumber = index + 1;
-      player.playerIndex = index + 1; // If you want to update playerIndex based on playerNumber, use 'player.playerNumber' instead of 'index + 1'
+      player.playerNumber = index + startPlayerNumber + 1;
+      player.playerIndex = index + startPlayerNumber + 1; // If you want to update playerIndex based on playerNumber, use 'player.playerNumber' instead of 'index + 1'
     });
 
     setMatchedArray(newMatchedArray);
@@ -215,6 +222,7 @@ const ContestPlayerOrderTable = () => {
   }, [currentContest]);
 
   useEffect(() => {
+    console.log(startPlayerNumber);
     if (categorysArray.length > 0 && playersArray?.length === 0) {
       initEntryList();
     }

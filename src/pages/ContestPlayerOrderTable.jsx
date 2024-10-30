@@ -335,6 +335,7 @@ const ContestPlayerOrderTable = () => {
   }, [currentContest]);
 
   useEffect(() => {
+    console.log(playersArray);
     if (categorysArray.length > 0) {
       initEntryList();
     }

@@ -5,7 +5,10 @@ import { gsap } from "gsap";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
 import { useLocation, useNavigate } from "react-router-dom";
 import background from "../assets/img/darkBackground_upscale.png";
+import ybbf from "../assets/img/ybbf_idlebackground.png";
+
 import sbbf from "../assets/img/sbbf_idlebackground.png";
+import gbbf from "../assets/img/gbbf_idlebackground.png";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 
@@ -163,16 +166,16 @@ const Idle = () => {
     >
       <div className="flex flex-col w-full h-full justify-center items-center relative">
         {/* SBBF 이미지 */}
-        {/* <img
-          src={sbbf}
-          alt="SBBF Logo"
+        <img
+          src={gbbf}
+          alt="GBBF Logo"
           className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
           style={{
-            width: "35%",
+            width: "45%",
             height: "auto",
             opacity: 0.8,
           }}
-        /> */}
+        />
 
         {/* 반투명 배경을 포함한 텍스트 박스 */}
         <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full flex justify-center">
