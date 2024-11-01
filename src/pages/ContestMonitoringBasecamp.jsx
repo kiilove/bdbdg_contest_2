@@ -332,6 +332,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   }, [currentContest]);
 
   useEffect(() => {
+    console.log(realtimeData);
     setCurrentStageInfo({
       ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
     });

@@ -83,6 +83,13 @@ export const MenuArray = [
         link: "/contestnewinvoicemanual",
         requiredGroup: ["admin", "orgManager"],
       },
+      {
+        id: 5,
+        title: "대회 음원 설정",
+        icon: <AiOutlineFileText />,
+        link: "/contestmusicsetting",
+        requiredGroup: ["admin"],
+      },
     ],
   },
   {
@@ -221,6 +228,13 @@ export const MenuArray = [
         title: "스크린",
         icon: <PiProjectorScreenChartThin />,
         link: "/screenlobby",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 6,
+        title: "음원 모니터링",
+        icon: <GiMagicLamp />,
+        link: "/realtimeaudiocenter",
         requiredGroup: ["admin"],
       },
     ],

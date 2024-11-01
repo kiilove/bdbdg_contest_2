@@ -39,6 +39,8 @@ import UnifiedPrint from "./printForms/UnifiedPrint";
 import { DeviceProvider } from "./contexts/DeviceContext";
 import Logout from "./pages/Logout";
 import GymGroupPrint from "./printForms/GymGroupPrint";
+import ContestMusicSetting from "./pages/ContestMusicSetting";
+import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
 
 function App() {
   return (
@@ -62,6 +64,14 @@ function App() {
             <Route
               path="/contesttimetable"
               element={<ManagementHome children={<ContestTimetable />} />}
+            />
+            <Route
+              path="/contestmusicsetting"
+              element={<ManagementHome children={<ContestMusicSetting />} />}
+            />
+            <Route
+              path="/realtimeaudiocenter"
+              element={<ManagementHome children={<RealtimeAudioCenter />} />}
             />
             <Route
               path="/contestinvoicetable"
