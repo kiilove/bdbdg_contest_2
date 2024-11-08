@@ -61,13 +61,6 @@ const ContestMonitoring = () => {
       children: "",
       visible: params.target === "all" || params.target === "MC" ? true : false,
     },
-    {
-      id: 3,
-      title: "전광판 화면",
-      children: "",
-      visible:
-        params.target === "all" || params.target === "screen" ? true : false,
-    },
   ];
 
   return (

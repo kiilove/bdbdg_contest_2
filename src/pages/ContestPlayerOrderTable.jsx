@@ -138,6 +138,7 @@ const ContestPlayerOrderTable = () => {
         playerGym,
         playerIndex,
         playerNoShow,
+        playerText,
         isGradeChanged,
       } = player;
       const playerInfo = {
@@ -150,6 +151,7 @@ const ContestPlayerOrderTable = () => {
         playerGym,
         playerIndex,
         playerNoShow,
+        playerText,
         isGradeChanged,
       };
       return playerInfo;

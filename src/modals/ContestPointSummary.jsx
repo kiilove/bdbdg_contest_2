@@ -19,7 +19,6 @@ const ContestPointSummary = ({
   setClose,
   categoryJudgeType,
   stageId,
-  handleCompareCancel,
 }) => {
   const [scoreData, setScoreData] = useState([]);
   const [summaryTable, setSummaryTable] = useState([]);
@@ -323,7 +322,6 @@ const ContestPointSummary = ({
         message={message}
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => {
-          handleCompareCancel();
           setClose(false);
         }}
       />

@@ -11,6 +11,7 @@ import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { matchedGradewWithPlayers } from "../functions/functions";
 import { FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { message } from "antd";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const [players, setPlayers] = useState([]);
@@ -85,6 +86,8 @@ const ContestMonitoringHost = ({ contestId }) => {
             })
           : [];
 
+        console.log(playerList);
+
         setCurrentPlayersArray(playerList);
       }
     } catch (error) {
@@ -110,6 +113,8 @@ const ContestMonitoringHost = ({ contestId }) => {
         );
 
         if (!data || data.length === 0) {
+          setRankingData([]);
+          message.error("순위결과가 없습니다.");
           console.log("데이터가 없습니다.");
           return;
         }
@@ -266,7 +271,17 @@ const ContestMonitoringHost = ({ contestId }) => {
                     </button>
                   </div>
                 ) : (
-                  <span className="ml-4">심사 진행 중...</span>
+                  <div className="flex w-auto justify-start gap-x-2 items-center">
+                    <span className="ml-4">심사 진행 중...</span>
+                    <button
+                      className="bg-red-500 text-white px-4 py-2 rounded-lg"
+                      onClick={() =>
+                        handleViewRanking(current.gradeId, current.gradeTitle)
+                      }
+                    >
+                      순위강제확인
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

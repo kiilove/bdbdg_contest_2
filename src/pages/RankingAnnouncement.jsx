@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { gsap } from "gsap";
 import "./RankingAnnouncement.css";
-import AwardVideo from "../assets/mov/award3.mp4";
+import AwardVideo from "../assets/mov/award2.mp4";
 import ReactPlayer from "react-player";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -510,10 +510,17 @@ const RankingAnnouncement = () => {
                   채점 결과는 최고점과 최저점을 제외한 점수들의 합으로
                   계산됩니다.
                 </li>
-                <li>
-                  랭킹형 채점 방식에서는 숫자가 낮을수록 더 높은 순위를
-                  의미합니다.
-                </li>
+                {realtimeData?.categoryJudgeType === "point" ? (
+                  <li>
+                    점수형 채점 방식에서는 숫자가 높을수록 더 높은 순위를
+                    의미합니다.
+                  </li>
+                ) : (
+                  <li>
+                    랭킹형 채점 방식에서는 숫자가 낮을수록 더 높은 순위를
+                    의미합니다.
+                  </li>
+                )}
               </ul>
             </div>
           </div>
