@@ -32,7 +32,7 @@ const RealtimeAudioCenter = () => {
   const [poseDownTracks, setPoseDownTracks] = useState([]);
 
   // 추가된 상태들
-  const [commonTracks, setCommonTracks] = useState([]);
+  const [awardsMusic, setAwardsMusic] = useState([]);
   const [resultAnnouncementTracks, setResultAnnouncementTracks] = useState([]);
   const [waitingTracks, setWaitingTracks] = useState([]);
 
@@ -120,12 +120,18 @@ const RealtimeAudioCenter = () => {
         }
       };
 
-      processCommonMusic(contestPlayList.commonMusic, setCommonTracks);
       processCommonMusic(
-        contestPlayList.resultAnnouncementMusic,
+        contestPlayList?.commonMusic?.awardsMusic,
+        setAwardsMusic
+      );
+      processCommonMusic(
+        contestPlayList?.commonMusic?.resultAnnouncementMusic,
         setResultAnnouncementTracks
       );
-      processCommonMusic(contestPlayList.waitingMusic, setWaitingTracks);
+      processCommonMusic(
+        contestPlayList?.commonMusic?.waitingMusic,
+        setWaitingTracks
+      );
     }
   }, [contestPlayList, trackPlayList, tracks]);
 
@@ -545,7 +551,7 @@ const RealtimeAudioCenter = () => {
               extra={
                 <Button
                   onClick={() =>
-                    handleAddAllToPlaylistAndPlay(commonTracks, "common")
+                    handleAddAllToPlaylistAndPlay(awardsMusic, "common")
                   }
                   style={{ width: "100px", height: "40px" }}
                 >
@@ -554,7 +560,7 @@ const RealtimeAudioCenter = () => {
               }
             >
               <List
-                dataSource={commonTracks}
+                dataSource={awardsMusic}
                 renderItem={(track) => (
                   <List.Item
                     onClick={() => handlePlaySingleTrack(track, "common")}
@@ -730,12 +736,14 @@ const RealtimeAudioCenter = () => {
                   dataSource={entryTracks}
                   renderItem={(track) => (
                     <List.Item
+                      onClick={() => handlePlaySingleTrack(track, "entry")}
                       style={{
                         backgroundColor:
                           currentPlaylistType === "entry" &&
                           track.id === audioPlaylist[currentTrackIndex]?.id
                             ? "#e6f7ff"
                             : "transparent",
+                        cursor: "pointer",
                       }}
                     >
                       <List.Item.Meta
@@ -785,12 +793,14 @@ const RealtimeAudioCenter = () => {
                   dataSource={lineupTracks}
                   renderItem={(track) => (
                     <List.Item
+                      onClick={() => handlePlaySingleTrack(track, "lineup")}
                       style={{
                         backgroundColor:
                           currentPlaylistType === "lineup" &&
                           track.id === audioPlaylist[currentTrackIndex]?.id
                             ? "#e6f7ff"
                             : "transparent",
+                        cursor: "pointer",
                       }}
                     >
                       <List.Item.Meta

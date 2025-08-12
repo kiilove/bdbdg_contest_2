@@ -427,7 +427,6 @@ const ContestPointSummary = ({
                                           pIdx
                                         )
                                       }
-                                      disabled={!isAlert}
                                       className={
                                         isAlert
                                           ? "w-10 h-10 bg-transparent border border-blue-400 rounded-lg text-center outline-none"
