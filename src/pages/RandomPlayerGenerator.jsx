@@ -164,121 +164,153 @@ const RandomPlayerGenerator = () => {
   };
 
   const generatePlayer = () => {
-    const age = generateAgeBasedOnDistribution();
-    const currentYear = dayjs().year();
-    const birthYear = currentYear - age;
-    const birthMonth = Math.floor(Math.random() * 12) + 1;
-    const birthDay = Math.floor(Math.random() * 28) + 1;
-    const birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`).format(
-      "YYYY-MM-DD"
-    );
+    try {
+      console.log("Starting generatePlayer...");
+      const age = generateAgeBasedOnDistribution();
+      console.log("Generated age:", age);
+      const currentYear = dayjs().year();
+      const birthYear = currentYear - age;
+      const birthMonth = Math.floor(Math.random() * 12) + 1;
+      const birthDay = Math.floor(Math.random() * 28) + 1;
+      const birthDate = dayjs(`${birthYear}-${birthMonth}-${birthDay}`).format(
+        "YYYY-MM-DD"
+      );
 
-    const isFemale = Math.random() < 0.3;
-    const surname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
-    const givenName = isFemale
-      ? FEMALE_NAMES[Math.floor(Math.random() * FEMALE_NAMES.length)]
-      : MALE_NAMES[Math.floor(Math.random() * MALE_NAMES.length)];
-    const name = `${surname}${givenName}`;
+      const isFemale = Math.random() < 0.3;
+      const surname = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
+      const givenName = isFemale
+        ? FEMALE_NAMES[Math.floor(Math.random() * FEMALE_NAMES.length)]
+        : MALE_NAMES[Math.floor(Math.random() * MALE_NAMES.length)];
+      const name = `${surname}${givenName}`;
 
-    const phoneNumber =
-      PHONE_NUMBERS[Math.floor(Math.random() * PHONE_NUMBERS.length)];
-    const email = `${name.toLowerCase()}@example.com`;
+      const phoneNumber =
+        PHONE_NUMBERS[Math.floor(Math.random() * PHONE_NUMBERS.length)];
+      const email = `${name.toLowerCase()}@example.com`;
 
-    const gym =
-      Math.random() < 0.1
-        ? "무소속"
-        : FITNESS_CLUBS[Math.floor(Math.random() * FITNESS_CLUBS.length)];
+      const gym =
+        Math.random() < 0.1
+          ? "무소속"
+          : FITNESS_CLUBS[Math.floor(Math.random() * FITNESS_CLUBS.length)];
 
-    let school = null;
-    if (age <= 19) {
-      school = HIGH_SCHOOLS[Math.floor(Math.random() * HIGH_SCHOOLS.length)];
-    }
+      let school = null;
+      if (age <= 19) {
+        school = HIGH_SCHOOLS[Math.floor(Math.random() * HIGH_SCHOOLS.length)];
+      }
 
-    const playerTexts = [
-      "우승하자",
-      "최고를 향해!",
-      "한계를 넘어서!",
-      "최고의 순간을 위해",
-      "끝까지 포기하지 않는다!",
-    ];
-    const playerText =
-      playerTexts[Math.floor(Math.random() * playerTexts.length)];
+      const playerTexts = [
+        "우승하자",
+        "최고를 향해!",
+        "한계를 넘어서!",
+        "최고의 순간을 위해",
+        "끝까지 포기하지 않는다!",
+      ];
+      const playerText =
+        playerTexts[Math.floor(Math.random() * playerTexts.length)];
 
-    const newPlayer = {
-      playerUid: uuidv4(),
-      playerName: name,
-      playerTel: phoneNumber,
-      playerEmail: email,
-      playerBirth: birthDate,
-      playerGym: school || gym,
-      playerGender: isFemale ? "f" : "m",
-      playerText: playerText,
-      isPriceCheck: false,
-      isCanceled: false,
-      joins: [],
-      createBy: "manual",
-      invoiceCreateAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
-      ...currentContest?.contestInfo,
-      contestId: currentContest?.contestInfo.refContestId,
-    };
+      const newPlayer = {
+        playerUid: uuidv4(),
+        playerName: name,
+        playerTel: phoneNumber,
+        playerEmail: email,
+        playerBirth: birthDate,
+        playerGym: school || gym,
+        playerGender: isFemale ? "f" : "m",
+        playerText: playerText,
+        isPriceCheck: false,
+        isCanceled: false,
+        joins: [],
+        createBy: "manual",
+        invoiceCreateAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
+        ...currentContest?.contestInfo,
+        contestId: currentContest?.contestInfo.refContestId,
+      };
 
-    delete newPlayer.id;
-    delete newPlayer.refContestId;
+      delete newPlayer.id;
+      delete newPlayer.refContestId;
 
-    const availableCategories = filterCategories(age, isFemale);
+      // 카테고리 선택 로직 개선
+      const availableCategories = filterCategories(age, isFemale);
+      if (!availableCategories || availableCategories.length === 0) {
+        console.log("No valid categories found for this player");
+        return null;
+      }
 
-    if (availableCategories.length === 0) {
-      console.log("No valid categories found for this player");
-      return null;
-    }
+      // 카테고리 수 결정 (1-3개)
+      const numberOfCategories = Math.min(
+        age <= 19 ? 1 : Math.floor(Math.random() * 3) + 1,
+        availableCategories.length
+      );
 
-    const numberOfCategories =
-      age <= 19 ? 1 : Math.floor(Math.random() * 3) + 1;
-    const selectedCategories = [];
-    const selectedGrades = [];
+      // 사용 가능한 카테고리에서 무작위로 선택
+      const shuffledCategories = [...availableCategories].sort(
+        () => Math.random() - 0.5
+      );
+      const selectedCategories = shuffledCategories.slice(
+        0,
+        numberOfCategories
+      );
 
-    while (selectedCategories.length < numberOfCategories) {
-      const randomCategory =
-        availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
-        ];
+      const selectedGrades = [];
 
-      if (!selectedCategories.includes(randomCategory)) {
-        selectedCategories.push(randomCategory);
-
+      // 각 선택된 카테고리에 대해 등급 선택
+      for (const category of selectedCategories) {
         const relatedGrades = gradesArray.filter(
-          (grade) => grade.refCategoryId === randomCategory.contestCategoryId
+          (grade) => grade.refCategoryId === category.contestCategoryId
         );
 
-        if (relatedGrades.length > 0) {
+        if (relatedGrades && relatedGrades.length > 0) {
           const randomGrade =
             relatedGrades[Math.floor(Math.random() * relatedGrades.length)];
           selectedGrades.push({
-            contestCategoryId: randomCategory.contestCategoryId,
-            contestCategoryTitle: randomCategory.contestCategoryTitle,
-            contestCategoryPriceType: randomCategory.contestCategoryPriceType,
+            contestCategoryId: category.contestCategoryId,
+            contestCategoryTitle: category.contestCategoryTitle,
+            contestCategoryPriceType: category.contestCategoryPriceType,
             contestGradeId: randomGrade.contestGradeId,
             contestGradeTitle: randomGrade.contestGradeTitle,
           });
         }
       }
-    }
 
-    newPlayer.joins = selectedGrades;
-    return newPlayer;
+      // 최소한 하나의 등급이 선택되었는지 확인
+      if (selectedGrades.length === 0) {
+        console.log("No valid grades found for selected categories");
+        return null;
+      }
+
+      newPlayer.joins = selectedGrades;
+      return newPlayer;
+    } catch (error) {
+      console.error("Error in generatePlayer:", error);
+      return null;
+    }
   };
 
   const handleGeneratePlayers = () => {
+    console.log("Starting handleGeneratePlayers with count:", playerCount);
     const newPlayers = [];
+    let attempts = 0;
+    const MAX_ATTEMPTS = playerCount * 2; // 최대 시도 횟수 제한
 
     for (let i = 0; i < playerCount; i++) {
+      console.log(`Attempting to generate player ${i + 1} of ${playerCount}`);
       const player = generatePlayer();
       if (player) {
         newPlayers.push(player);
+        console.log(`Successfully generated player ${i + 1}`);
+      } else {
+        console.log(`Failed to generate player ${i + 1}, retrying...`);
+        i--; // 실패한 경우 다시 시도
+      }
+
+      attempts++;
+      if (attempts >= MAX_ATTEMPTS) {
+        console.log("Reached maximum attempts, stopping generation");
+        break;
       }
     }
 
-    setPlayers([...newPlayers]); // 기존 배열을 비우고 새롭게 생성된 플레이어로만 덮어씀
+    console.log(`Generation complete. Generated ${newPlayers.length} players`);
+    setPlayers([...newPlayers]);
 
     const {
       categoryDistribution: updatedCategoryDistribution,

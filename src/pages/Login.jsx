@@ -14,7 +14,7 @@ const Login = () => {
     {
       id: 0,
       userID: "ybbf",
-      userPass: "20241110",
+      userPass: "20251026",
       userGroup: "orgManager",
       userContext: "용인특례시보디빌딩협회",
     },
@@ -35,7 +35,7 @@ const Login = () => {
     {
       id: 100,
       userID: "jncore",
-      userPass: "1201",
+      userPass: "0904",
       userGroup: "admin",
       userContext: "관리자",
     },
