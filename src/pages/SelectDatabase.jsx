@@ -1,5 +1,9 @@
+"use client";
+
 // components/SelectDatabase.js
-import React, { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { Card, Select, Button, Typography, Space, Alert } from "antd";
+import { DatabaseOutlined, RightOutlined } from "@ant-design/icons";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
@@ -8,6 +12,9 @@ import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
 import LoadingPage from "./LoadingPage";
+
+const { Title, Text } = Typography;
+const { Option } = Select;
 
 const SelectDatabase = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -170,8 +177,8 @@ const SelectDatabase = () => {
   }, [contestNoticeId]);
 
   // 대회 선택 핸들러
-  const handleSelectChange = (e) => {
-    setContestNoticeId(e.target.value);
+  const handleSelectChange = (value) => {
+    setContestNoticeId(value);
   };
 
   // 관리페이지로 이동 핸들러
@@ -184,44 +191,88 @@ const SelectDatabase = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-4">
-      {isLoading ? (
-        <LoadingPage />
-      ) : (
-        <>
-          <h2 className="text-xl font-semibold mb-4">대회 선택</h2>
-          {contestList.length > 0 ? (
-            <>
-              <label
-                htmlFor="contest-select"
-                className="mb-2 text-lg font-medium"
-              >
-                대회 선택:
-              </label>
-              <select
-                id="contest-select"
-                value={contestNoticeId || ""}
-                onChange={handleSelectChange}
-                className="w-64 p-2 border border-gray-300 rounded mb-4"
-              >
-                {contestList.map((contest) => (
-                  <option key={contest.id} value={contest.id}>
-                    {contest.contestTitle}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleNavigate}
-                className="w-64 p-2 bg-blue-500 text-white rounded"
-              >
-                관리페이지로 이동
-              </button>
-            </>
-          ) : (
-            <div className="text-red-500">선택 가능한 대회가 없습니다.</div>
-          )}
-        </>
-      )}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {isLoading ? (
+          <LoadingPage />
+        ) : (
+          <Card
+            className="shadow-2xl border-0 backdrop-blur-sm bg-white/90"
+            style={{
+              borderRadius: "20px",
+              overflow: "hidden",
+            }}
+          >
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4">
+                <DatabaseOutlined className="text-2xl text-white" />
+              </div>
+              <Title level={2} className="!mb-2 !text-gray-800">
+                대회 선택
+              </Title>
+              <Text type="secondary" className="text-base">
+                관리할 대회를 선택해주세요
+              </Text>
+            </div>
+
+            {contestList.length > 0 ? (
+              <Space direction="vertical" size="large" className="w-full">
+                <div>
+                  <Text strong className="block mb-3 text-gray-700">
+                    대회 목록
+                  </Text>
+                  <Select
+                    size="large"
+                    value={contestNoticeId || ""}
+                    onChange={handleSelectChange}
+                    className="w-full"
+                    placeholder="대회를 선택하세요"
+                    style={{
+                      borderRadius: "12px",
+                    }}
+                  >
+                    {contestList.map((contest) => (
+                      <Option key={contest.id} value={contest.id}>
+                        {contest.contestTitle}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+
+                <Button
+                  type="primary"
+                  size="large"
+                  onClick={handleNavigate}
+                  className="w-full h-12 text-base font-medium"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    borderRadius: "12px",
+                    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                  }}
+                  icon={<RightOutlined />}
+                  iconPosition="end"
+                >
+                  관리페이지로 이동
+                </Button>
+              </Space>
+            ) : (
+              <Alert
+                message="선택 가능한 대회가 없습니다"
+                description="현재 접수 중인 대회가 없습니다. 관리자에게 문의하세요."
+                type="warning"
+                showIcon
+                className="text-center"
+                style={{
+                  borderRadius: "12px",
+                  border: "none",
+                }}
+              />
+            )}
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

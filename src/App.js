@@ -8,7 +8,7 @@ import ContestTimetable from "./pages/ContestTimetable";
 import { CurrentContestProvider } from "./contexts/CurrentContestContext";
 import NewContest from "./pages/NewContest";
 import ContestInvoiceTable from "./pages/ContestInvoiceTable";
-import ContestPlayerOrderTable from "./pages/ContestPlayerOrderTable";
+import ContestPlayerOrderTable from "./pages/ContestPlayerWeighInTable";
 import ContestNewInvoiceManual from "./pages/ContestNewInvoiceManual";
 import ContestJudgeTable from "./pages/ContestJudgeTable";
 import ContestPlayerOrderTableAfter from "./pages/ContestPlayerOrderTableAfter";
@@ -41,6 +41,8 @@ import Logout from "./pages/Logout";
 import GymGroupPrint from "./printForms/GymGroupPrint";
 import ContestMusicSetting from "./pages/ContestMusicSetting";
 import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
+import AssociationManagers from "./pages/AssociationManagers";
+import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 
 function App() {
   return (
@@ -78,9 +80,9 @@ function App() {
               element={<ManagementHome children={<ContestInvoiceTable />} />}
             />
             <Route
-              path="/contestplayerordertable"
+              path="/contestplayerweighintable"
               element={
-                <ManagementHome children={<ContestPlayerOrderTable />} />
+                <ManagementHome children={<ContestPlayerWeighInTable />} />
               }
             />
             <Route
@@ -168,6 +170,10 @@ function App() {
               element={<StandingTableType1 />}
             />
             <Route path="/logout" element={<Logout />} />
+            <Route
+              path="/association-managers"
+              element={<ManagementHome children={<AssociationManagers />} />}
+            />
           </Routes>
         </BrowserRouter>
       </DeviceProvider>

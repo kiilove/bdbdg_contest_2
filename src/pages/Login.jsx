@@ -1,235 +1,176 @@
-import React, { useState } from "react";
-import LoginBg3 from "../assets/img/loginbg3.jpg";
-import LoginBg4 from "../assets/img/loginbg4.jpg";
-import { FaUser, FaKey } from "react-icons/fa";
+"use client";
+
+import { useState } from "react";
+import { UserOutlined, LockOutlined } from "@ant-design/icons";
+import { Input, Button, Card, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+import bcrypt from "bcryptjs";
+
+const { Title, Text } = Typography;
 
 const Login = () => {
   const navigate = useNavigate();
   const [userID, setUserID] = useState("");
   const [userPass, setUserPass] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const userTable = [
-    {
-      id: 0,
-      userID: "ybbf",
-      userPass: "20251026",
-      userGroup: "orgManager",
-      userContext: "용인특례시보디빌딩협회",
-    },
-    {
-      id: 1,
-      userID: "sbbf",
-      userPass: "01056106006",
-      userGroup: "orgManager",
-      userContext: "시흥시보디빌딩협회",
-    },
-    {
-      id: 2,
-      userID: "gbbf01",
-      userPass: "20241103",
-      userGroup: "orgManager",
-      userContext: "구리시보디빌딩협회",
-    },
-    {
-      id: 100,
-      userID: "jncore",
-      userPass: "0904",
-      userGroup: "admin",
-      userContext: "관리자",
-    },
-    {
-      id: 101,
-      userID: "demo",
-      userPass: "123456",
-      userGroup: "admin1",
-      userContext: "관리자",
-    },
-  ];
+  const handleLogin = async () => {
+    setError("");
+    if (!userID || !userPass) {
+      return setError("아이디와 비밀번호를 입력하세요.");
+    }
 
-  const handleLogin = () => {
-    const user = userTable.find(
-      (u) => u.userID === userID && u.userPass === userPass
-    );
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "association_managers"),
+        where("userID", "==", userID)
+      );
+      const snapshot = await getDocs(q);
 
-    if (user) {
-      // 로그인 성공
+      if (snapshot.empty) {
+        setError("존재하지 않는 아이디입니다.");
+        setLoading(false);
+        return;
+      }
+
+      const userData = snapshot.docs[0].data();
+
+      const match = await bcrypt.compare(userPass, userData.passwordHash);
+      if (!match) {
+        setError("비밀번호가 일치하지 않습니다.");
+        setLoading(false);
+        return;
+      }
+
+      const user = {
+        id: snapshot.docs[0].id,
+        userID: userData.userID,
+        userGroup: userData.userGroup,
+        userContext: userData.userContext,
+      };
       sessionStorage.setItem("user", JSON.stringify(user));
       navigate("/selectdatabase");
-    } else {
-      // 로그인 실패
-      setError("아이디 또는 비밀번호가 일치하지 않습니다.");
+    } catch (err) {
+      console.error(err);
+      setError("로그인 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="w-full h-screen bg-gradient-to-br from-blue-300 to-sky-700">
-      <div className="hidden md:flex justify-center items-center h-full px-3 lg:px-0">
-        <div
-          className="rounded-lg shadow-lg flex w-full lg:w-3/4 lg:h-3/4"
-          style={{
-            backgroundColor: "#f9f9f9",
-            backgroundImage: `url(${LoginBg4})`,
-            backgroundSize: "90% 100%",
-            backgroundRepeat: "no-repeat",
-          }}
-        >
-          <div className="flex w-full h-full py-10 lg:mt-16">
-            <div className="h-full flex flex-col p-10" style={{ width: "60%" }}>
-              <div className="flex w-full justify-start items-start h-full flex-col gap-y-1">
-                <div className="flex flex-col items-start my-10">
-                  <h1 className="text-4xl font-san font-semibold text-gray-200">
-                    BDBDg
-                  </h1>
-                  <h1 className="text-3xl font-san font-semibold text-gray-200">
-                    협회 시스템
-                  </h1>
-                </div>
-
-                <h2 className="text-gray-300 text-lg">
-                  협회업무와 심사를 위한{" "}
-                </h2>
-                <h2 className="text-gray-300 text-lg">시스템입니다.</h2>
-              </div>
-            </div>
-            <div
-              className="flex w-auto h-full flex-col px-5 py-10"
-              style={{ minWidth: "35%" }}
-            >
-              <div className="flex w-full justify-start items-center h-full flex-col gap-y-3">
-                <div className="flex flex-col items-center my-5">
-                  <h1 className="text-2xl font-san font-semibold text-gray-800">
-                    사용자 로그인
-                  </h1>
-                </div>
-                <div className="flex flex-col items-center w-full px-5 ml-5 gap-y-5">
-                  <div className="flex w-full bg-gray-200 h-10 rounded-lg">
-                    <div className="flex w-10 h-10 justify-center items-center">
-                      <FaUser className="text-gray-600 text-lg" />
-                    </div>
-                    <input
-                      name="userID"
-                      type="text"
-                      className=" bg-transparent outline-none w-full"
-                      value={userID}
-                      onChange={(e) => setUserID(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex w-full bg-gray-200 h-10 rounded-lg">
-                    <div className="flex w-10 h-10 justify-center items-center">
-                      <FaKey className="text-gray-600 text-lg" />
-                    </div>
-                    <input
-                      name="userPass"
-                      type="password"
-                      className=" bg-transparent outline-none w-full"
-                      value={userPass}
-                      onChange={(e) => setUserPass(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleLogin();
-                        }
-                      }}
-                    />
-                  </div>
-                  {error && (
-                    <div className="text-red-500 text-sm mt-2">{error}</div>
-                  )}
-                  <div className="flex w-full h-20">
-                    <button
-                      className="w-full bg-gradient-to-r from-amber-400 to-pink-600 h-10 rounded-3xl mt-2"
-                      onClick={handleLogin}
-                    >
-                      <span
-                        className="font-semibold font-san text-gray-100"
-                        style={{ letterSpacing: "10px" }}
-                      >
-                        로그인
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div
-        className="flex md:hidden h-full p-5 flex-col justify-start"
-        style={{
-          backgroundColor: "#f9f9f9",
-          backgroundImage: `url(${LoginBg3})`,
-          backgroundSize: "cover",
-          backgroundRepeat: "no-repeat",
-        }}
-      >
-        <div className="w-full h-auto flex flex-col justify-start items-start">
-          <div className="flex w-full justify-start items-end h-full flex-col gap-y-1">
-            <div className="flex flex-col items-start my-10">
-              <h1 className="text-3xl font-san font-semibold text-gray-200">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+      {/* Desktop & Mobile Unified Design */}
+      <div className="w-full max-w-4xl">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          {/* Left Side - Branding */}
+          <div className="text-center lg:text-left space-y-6">
+            <div className="space-y-2">
+              <Title
+                level={1}
+                className="!text-4xl lg:!text-5xl !font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent !mb-0"
+              >
                 BDBDg
-              </h1>
-              <h1 className="text-2xl font-san font-semibold text-gray-200">
+              </Title>
+              <Title
+                level={2}
+                className="!text-2xl lg:!text-3xl !font-semibold !text-gray-700 !mt-0"
+              >
                 협회 시스템
-              </h1>
+              </Title>
+            </div>
+
+            <div className="space-y-2">
+              <Text className="text-lg text-gray-600 block">
+                협회 업무와 심사를 위한
+              </Text>
+              <Text className="text-lg text-gray-600 block">
+                스마트 관리 시스템입니다
+              </Text>
+            </div>
+
+            {/* Decorative Elements */}
+            <div className="hidden lg:flex space-x-4 justify-start">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full opacity-20"></div>
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full opacity-30 mt-2"></div>
+              <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-full opacity-25 mt-3"></div>
             </div>
           </div>
-        </div>
-        <div className="flex w-full h-auto flex-col mt-20">
-          <div className="flex w-full h-auto flex-col px-5 py-10 ">
-            <div className="flex w-full justify-start items-center flex-col gap-y-1">
-              <div className="flex flex-col items-center my-5">
-                <h1 className="text-2xl font-san font-semibold text-gray-800">
-                  사용자 로그인
-                </h1>
+
+          {/* Right Side - Login Form */}
+          <div className="flex justify-center">
+            <Card
+              className="w-full max-w-md shadow-xl border-0"
+              style={{
+                background: "rgba(255, 255, 255, 0.9)",
+                backdropFilter: "blur(10px)",
+                borderRadius: "20px",
+              }}
+            >
+              <div className="text-center mb-8">
+                <Title level={3} className="!text-gray-800 !mb-2">
+                  관리자 로그인
+                </Title>
+                <Text className="text-gray-500">계정 정보를 입력해주세요</Text>
               </div>
-              <div className="flex flex-col items-center w-full px-5 ml-5 gap-y-2">
-                <div className="flex w-full bg-gray-200 h-10 rounded-lg">
-                  <div className="flex w-10 h-10 justify-center items-center">
-                    <FaUser className="text-gray-600 text-lg" />
-                  </div>
-                  <input
-                    type="text"
-                    className=" bg-transparent"
-                    value={userID}
-                    onChange={(e) => setUserID(e.target.value)}
-                  />
-                </div>
-                <div className="flex w-full bg-gray-200 h-10 rounded-lg">
-                  <div className="flex w-10 h-10 justify-center items-center">
-                    <FaKey className="text-gray-600 text-lg" />
-                  </div>
-                  <input
-                    type="password"
-                    className=" bg-transparent"
-                    value={userPass}
-                    onChange={(e) => setUserPass(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleLogin();
-                      }
-                    }}
-                  />
-                </div>
+
+              <div className="space-y-4">
+                <Input
+                  size="large"
+                  prefix={<UserOutlined className="text-gray-400" />}
+                  placeholder="아이디를 입력하세요"
+                  value={userID}
+                  onChange={(e) => setUserID(e.target.value)}
+                  className="rounded-xl border-gray-200 hover:border-blue-400 focus:border-blue-500"
+                  style={{ height: "48px" }}
+                />
+
+                <Input.Password
+                  size="large"
+                  prefix={<LockOutlined className="text-gray-400" />}
+                  placeholder="비밀번호를 입력하세요"
+                  value={userPass}
+                  onChange={(e) => setUserPass(e.target.value)}
+                  onPressEnter={handleLogin}
+                  className="rounded-xl border-gray-200 hover:border-blue-400 focus:border-blue-500"
+                  style={{ height: "48px" }}
+                />
+
                 {error && (
-                  <div className="text-red-500 text-sm mt-2">{error}</div>
+                  <div className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg border border-red-200">
+                    {error}
+                  </div>
                 )}
-                <div className="flex w-full h-20">
-                  <button
-                    className="w-full bg-gradient-to-r from-amber-400 to-pink-600 h-10 rounded-3xl mt-2"
-                    onClick={handleLogin}
-                  >
-                    <span
-                      className="font-semibold font-san text-gray-100"
-                      style={{ letterSpacing: "10px" }}
-                    >
-                      로그인
-                    </span>
-                  </button>
-                </div>
+
+                <Button
+                  type="primary"
+                  size="large"
+                  loading={loading}
+                  onClick={handleLogin}
+                  className="w-full h-12 rounded-xl font-semibold text-base"
+                  style={{
+                    background: loading
+                      ? "#d1d5db"
+                      : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                  }}
+                >
+                  {loading ? "로그인 중..." : "로그인"}
+                </Button>
               </div>
-            </div>
+
+              {/* Footer */}
+              <div className="text-center mt-6 pt-4 border-t border-gray-100">
+                <Text className="text-xs text-gray-400">
+                  © 2025 BDBDg 협회 시스템
+                </Text>
+              </div>
+            </Card>
           </div>
         </div>
       </div>

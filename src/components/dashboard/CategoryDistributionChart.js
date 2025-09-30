@@ -10,15 +10,15 @@ const { Option } = Select;
 const CategoryDistributionChart = ({ data }) => {
   const { isMobile } = useDevice();
   const chartRef = useRef(null);
-  const [chartType, setChartType] = useState("pie");
-  const [selectedGrades, setSelectedGrades] = useState(null); // 하위 체급 데이터 상태
-  const [totalRegistrations, setTotalRegistrations] = useState(0); // 총 접수 인원 상태
+  const [chartType, setChartType] = useState("pie"); // ✅ 기본값 파이차트
+  const [selectedGrades, setSelectedGrades] = useState(null); // { categoryTitle, grades }
+  const [totalRegistrations, setTotalRegistrations] = useState(0);
 
   useEffect(() => {
     if (chartRef.current && data && data.length > 0) {
       const chartInstance = echarts.init(chartRef.current);
 
-      const transformedData = selectedGrades || data;
+      const transformedData = selectedGrades ? selectedGrades.grades : data;
       const filteredData = transformedData.filter(
         (item) => item.playerCount > 0
       );
@@ -26,13 +26,11 @@ const CategoryDistributionChart = ({ data }) => {
         (sum, item) => sum + item.playerCount,
         0
       );
-      setTotalRegistrations(totalPlayers); // 총 접수 인원 업데이트
+      setTotalRegistrations(totalPlayers);
 
+      /** ✅ 파이차트 옵션 */
       const pieOptions = {
-        tooltip: {
-          trigger: "item",
-          formatter: "{a} <br/>{b}: {c} ({d}%)",
-        },
+        tooltip: { trigger: "item", formatter: "{a} <br/>{b}: {c} ({d}%)" },
         series: [
           {
             name: selectedGrades ? "체급별 분포" : "카테고리별 참가 신청 분포",
@@ -45,10 +43,7 @@ const CategoryDistributionChart = ({ data }) => {
               borderColor: "#fff",
               borderWidth: 2,
             },
-            label: {
-              fontSize: 12,
-              fontWeight: "bold",
-            },
+            label: { fontSize: 12, fontWeight: "bold" },
             emphasis: {
               itemStyle: {
                 shadowBlur: 10,
@@ -59,8 +54,8 @@ const CategoryDistributionChart = ({ data }) => {
             data: filteredData.map((item, index) => ({
               value: item.playerCount,
               name: selectedGrades
-                ? item.contestGradeTitle
-                : item.contestCategoryTitle,
+                ? item.contestGradeTitle || "이름 없는 체급"
+                : item.contestCategoryTitle || "이름 없는 카테고리",
               itemStyle: {
                 color: echarts.color.lerp(index / filteredData.length, [
                   "#FF6347",
@@ -95,6 +90,7 @@ const CategoryDistributionChart = ({ data }) => {
         ],
       };
 
+      /** ✅ 막대그래프 옵션 */
       const barOptions = {
         tooltip: {
           trigger: "axis",
@@ -108,19 +104,43 @@ const CategoryDistributionChart = ({ data }) => {
         xAxis: {
           type: "category",
           data: filteredData.map((item) =>
-            selectedGrades ? item.contestGradeTitle : item.contestCategoryTitle
+            selectedGrades
+              ? item.contestGradeTitle || "이름 없는 체급"
+              : item.contestCategoryTitle || "이름 없는 카테고리"
           ),
+          axisLabel: {
+            interval: 0,
+            rotate: isMobile ? 30 : 0,
+            fontSize: isMobile ? 10 : 12,
+            formatter: (value) => {
+              if (isMobile && value.length > 6) {
+                return value.slice(0, 6) + "\n" + value.slice(6);
+              }
+              return value;
+            },
+          },
         },
-        yAxis: {
-          type: "value",
-        },
+        yAxis: { type: "value" },
+        dataZoom: isMobile
+          ? [
+              {
+                type: "slider",
+                show: true,
+                start: 0,
+                end: 60,
+                height: 20,
+                bottom: 0,
+              },
+              { type: "inside" },
+            ]
+          : [],
         series: [
           {
             data: filteredData.map((item) => ({
               value: item.playerCount,
               name: selectedGrades
-                ? item.contestGradeTitle
-                : item.contestCategoryTitle,
+                ? item.contestGradeTitle || "이름 없는 체급"
+                : item.contestCategoryTitle || "이름 없는 카테고리",
             })),
             type: "bar",
             itemStyle: {
@@ -168,7 +188,6 @@ const CategoryDistributionChart = ({ data }) => {
 
       const chartOptions = chartType === "pie" ? pieOptions : barOptions;
       chartInstance.setOption(chartOptions);
-
       chartInstance.on("click", handleCategoryClick);
 
       return () => {
@@ -178,12 +197,20 @@ const CategoryDistributionChart = ({ data }) => {
     }
   }, [data, isMobile, chartType, selectedGrades]);
 
+  /** ✅ 클릭 시 단계별 이동 */
   const handleCategoryClick = (params) => {
-    const category = data.find(
-      (cat) => cat.contestCategoryTitle === params.name
-    );
-    if (category) {
-      setSelectedGrades(category.grades);
+    if (!selectedGrades) {
+      const category = data.find(
+        (cat) =>
+          cat.contestCategoryTitle === params.name ||
+          (!cat.contestCategoryTitle && params.name === "이름 없는 카테고리")
+      );
+      if (category) {
+        setSelectedGrades({
+          categoryTitle: category.contestCategoryTitle || "이름 없는 카테고리",
+          grades: category.grades,
+        });
+      }
     }
   };
 
@@ -200,7 +227,9 @@ const CategoryDistributionChart = ({ data }) => {
             </Button>
           ) : null}
           <span>
-            {selectedGrades ? "체급별 분포" : "종목별 참가 신청 분포"}
+            {selectedGrades
+              ? `체급별 분포 (${selectedGrades.categoryTitle})`
+              : "종목별 참가 신청 분포"}
           </span>
           {!selectedGrades && (
             <Select
@@ -229,7 +258,7 @@ const CategoryDistributionChart = ({ data }) => {
             justifyContent: "center",
             alignItems: "center",
             width: "100%",
-            height: isMobile ? "350px" : "450px",
+            height: isMobile ? "400px" : "450px",
           }}
         />
       </>

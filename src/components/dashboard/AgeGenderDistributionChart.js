@@ -7,7 +7,7 @@ const { Option } = Select;
 
 const AgeGenderDistributionChart = ({ invoices }) => {
   const chartRef = useRef(null);
-  const [chartType, setChartType] = useState("scatter"); // 기본값을 'scatter'로 설정
+  const [chartType, setChartType] = useState("bar"); // 기본값을 'scatter'로 설정
 
   useEffect(() => {
     // 데이터 구조 초기화

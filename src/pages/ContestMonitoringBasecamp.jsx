@@ -1,4 +1,6 @@
-import React, { useCallback, useState, useEffect, useContext } from "react";
+"use client";
+
+import { useState, useEffect, useContext } from "react";
 import _ from "lodash";
 import LoadingPage from "./LoadingPage";
 import {
@@ -7,21 +9,42 @@ import {
 } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
-  useFirebaseRealtimeAddData,
   useFirebaseRealtimeDeleteData,
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
 import { useNavigate } from "react-router-dom";
-import { debounce } from "lodash";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { where } from "firebase/firestore";
-import { PiSpinner } from "react-icons/pi";
 import { Modal } from "@mui/material";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
 import ContestAwardCreator from "./ContestAwardCreator";
-import dayjs from "dayjs";
 import { useDevice } from "../contexts/DeviceContext";
+import {
+  Card,
+  Button,
+  Tabs,
+  Table,
+  Tag,
+  Space,
+  Typography,
+  Spin,
+  Divider,
+} from "antd";
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  ReloadOutlined,
+  TrophyOutlined,
+  PrinterOutlined,
+  EyeOutlined,
+  CloseCircleOutlined,
+  StopOutlined,
+  FastForwardOutlined,
+  RedoOutlined,
+} from "@ant-design/icons";
+import { where } from "firebase/firestore";
+
+const { Title, Text } = Typography;
 
 const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -57,7 +80,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const fetchScoreCardQuery = useFirestoreQuery();
   const fetchResultQuery = useFirestoreQuery();
 
-  // Use the improved hook with onValue
   const {
     data: realtimeData,
     loading: realtimeLoading,
@@ -157,7 +179,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
     const allData = [];
 
-    for (let grade of grades) {
+    for (const grade of grades) {
       const { gradeId } = grade;
       try {
         const condition = [where("gradeId", "==", gradeId)];
@@ -190,8 +212,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleGradeInfo = (grades) => {
-    //console.log(grades);
-
     let gradeTitle = "";
     let gradeId = "";
     let matchedJudgesCount = 0;
@@ -220,7 +240,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         (f) => f.contestGradeId === grades[0].gradeId
       ).length;
       grades.forEach((grade) => {
-        matchedPlayersCount += parseInt(grade.playerCount);
+        matchedPlayersCount += Number.parseInt(grade.playerCount);
       });
       gradeId = grades[0].gradeId;
       gradeTitle = madeTitle + "통합";
@@ -250,6 +270,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleUpdateCurrentStage = async (currentStageId) => {
+    // 현재 선택된 스테이지의 메타데이터를 stagesArray에서 가져온다.
     const {
       stageId,
       stageNumber,
@@ -258,20 +279,47 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       categoryId,
       categoryTitle,
       grades,
-    } = stagesArray[currentStageId];
+    } = stagesArray[currentStageId] || {};
 
+    // 단일/통합 그레이드 모두 대응: handleGradeInfo가 대표 gradeId/gradeTitle을 반환
     const { gradeTitle, gradeId } = handleGradeInfo(grades);
 
+    /**
+     * [중요]
+     * 훅(useFirebaseRealtimeUpdateData 등)을 직접 수정하지 않고
+     * 컴포넌트 내부에서만 사용 이유:
+     * - 이 컴포넌트를 제외한 다른 곳에서 해당 훅을 이미 다수 사용 중
+     * - 공통 훅에 기능을 추가하면 역호환 이슈 위험
+     * - 따라서 여기에서만 seatIndex + gradeId로 judgesArray를 조회해
+     *   judgeName, judgeUid를 주입한다.
+     */
+
+    // 좌석 수(categoryJudgeCount)만큼 초기 심판 상태를 만든 뒤,
+    // judgesArray에서 contestGradeId(= gradeId)와 seatIndex로 매칭하여
+    // judgeName, judgeUid를 함께 저장한다.
     const judgeInitState = Array.from(
       { length: categoryJudgeCount },
-      (_, jIdx) => jIdx + 1
-    ).map((number) => {
-      return { seatIndex: number, isLogined: false, isEnd: false };
-    });
+      (_, jIdx) => {
+        const seat = jIdx + 1;
+        const assigned = (judgesArray || []).find(
+          (j) => j?.contestGradeId === gradeId && Number(j?.seatIndex) === seat
+        );
+        return {
+          seatIndex: seat,
+          isLogined: false,
+          isEnd: false,
+          judgeName: assigned?.judgeName ?? null,
+          judgeUid: assigned?.judgeUid ?? null,
+        };
+      }
+    );
+
+    // 비교(컴페어) 영역 초기화
     await deleteCompare.deleteData(
       `currentStage/${currentContest.contests.id}/compares`
     );
 
+    // 실시간 DB에 기록할 새 현재 스테이지 상태
     const newCurrentStateInfo = {
       stageId,
       stageNumber,
@@ -302,6 +350,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       });
     } catch (error) {
       console.log(error);
+      // 필요 시 사용자 알림 모달/토스트 추가 가능
     }
   };
 
@@ -354,12 +403,307 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     ) {
       handleScoreTableByJudge(currentStageInfo.grades);
     }
-  }, [
-    realtimeData?.stageJudgeCount,
-    realtimeData?.judges,
-    playersArray,
-    currentStageInfo,
-  ]);
+  }, [realtimeData, playersArray, currentStageInfo]);
+
+  const JudgeCardView = ({ judges }) => (
+    <div className="space-y-3">
+      {judges?.map((judge, index) => {
+        const { isEnd, isLogined, seatIndex, judgeName, judgeUid } = judge;
+        let statusColor = "default";
+        let statusText = "로그인대기";
+
+        if (isEnd && isLogined) {
+          statusColor = "success";
+          statusText = "심사종료";
+        } else if (!isEnd && isLogined) {
+          statusColor = "processing";
+          statusText = "심사중";
+        }
+
+        return (
+          <Card key={index} size="small" className="shadow-sm">
+            <div className="flex justify-between items-center">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Text strong className="text-base">
+                    {seatIndex}번 심판석
+                  </Text>
+                  <Tag color={statusColor}>{statusText}</Tag>
+                </div>
+                {judgeName ? (
+                  <div className="flex flex-col">
+                    <Text strong>{judgeName}</Text>
+                    {judgeUid && (
+                      <Text type="secondary" className="text-xs">
+                        {judgeUid}
+                      </Text>
+                    )}
+                  </div>
+                ) : (
+                  <Text type="secondary">정보 없음</Text>
+                )}
+              </div>
+              <Button
+                size="small"
+                icon={<RedoOutlined />}
+                onClick={() =>
+                  handleForceReStart(index, currentContest.contests.id)
+                }
+              >
+                재시작
+              </Button>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
+  const StageCardView = ({ stages }) => (
+    <div className="space-y-3">
+      {stages?.map((stage, index) => {
+        const {
+          categoryTitle,
+          grades,
+          categoryJudgeType,
+          stageId,
+          stageNumber,
+        } = stage;
+        const gradeTitle = handleGradeInfo(grades).gradeTitle;
+        const playersCount = handleGradeInfo(grades).matchedPlayersCount;
+        const judgesAssignCount =
+          handleGradeInfo(grades).matchedJudgeAssignCount;
+        const isCurrentStage = realtimeData?.stageId === stageId;
+
+        return (
+          <Card key={stageId} size="small" className="shadow-sm">
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <Text strong className="text-base">
+                      {stageNumber}. {categoryTitle}
+                    </Text>
+                    <Tag
+                      color={categoryJudgeType === "point" ? "blue" : "green"}
+                    >
+                      {categoryJudgeType === "point" ? "P" : "R"}
+                    </Tag>
+                    {isCurrentStage && (
+                      <Tag icon={<Spin size="small" />} color="processing">
+                        진행중
+                      </Tag>
+                    )}
+                  </div>
+                  <Text type="secondary" className="text-sm block mb-1">
+                    {gradeTitle}
+                  </Text>
+                  <Text type="secondary" className="text-xs">
+                    출전: {playersCount}명 | 심판: {judgesAssignCount}명
+                  </Text>
+                </div>
+                <Button
+                  type={isCurrentStage ? "default" : "primary"}
+                  icon={
+                    isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />
+                  }
+                  onClick={() => handleUpdateCurrentStage(index)}
+                  size="small"
+                >
+                  {isCurrentStage ? "재시작" : "시작"}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
+  const ScoreCardView = ({
+    players,
+    judges,
+    gradeId,
+    categoryTitle,
+    gradeTitle,
+  }) => (
+    <div className="space-y-3">
+      {players?.map((player, pIdx) => {
+        const playerNumber = player.playerNumber;
+
+        return (
+          <Card key={pIdx} size="small" className="shadow-sm">
+            <div className="space-y-2">
+              <Text strong className="text-base block">
+                선수번호: {playerNumber}
+              </Text>
+              <Divider className="my-2" />
+              <div className="grid grid-cols-2 gap-2">
+                {judges?.map((judge, jIdx) => {
+                  const finded = normalScoreData.find(
+                    (f) =>
+                      f.playerNumber === playerNumber &&
+                      f.seatIndex === judge.seatIndex
+                  );
+
+                  let scoreDisplay = "-";
+                  if (finded?.playerScore === 1000) {
+                    scoreDisplay = <Tag color="error">순위제외</Tag>;
+                  } else if (
+                    finded?.playerScore !== 0 &&
+                    finded?.playerScore !== undefined
+                  ) {
+                    scoreDisplay = (
+                      <Text strong className="text-base">
+                        {finded.playerScore}
+                      </Text>
+                    );
+                  } else {
+                    scoreDisplay = <Text type="secondary">-</Text>;
+                  }
+
+                  return (
+                    <div
+                      key={jIdx}
+                      className="flex justify-between items-center p-2 bg-gray-50 rounded"
+                    >
+                      <Text type="secondary" className="text-sm">
+                        {judge.seatIndex}번
+                      </Text>
+                      {scoreDisplay}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
+  const judgeColumns = [
+    {
+      title: "심판석",
+      dataIndex: "seatIndex",
+      key: "seatIndex",
+      align: "center",
+      width: isTabletOrMobile ? 80 : 100,
+      render: (text) => <Text strong>{text}</Text>,
+    },
+    {
+      title: "심판정보",
+      dataIndex: "judgeInfo",
+      key: "judgeInfo",
+      align: "center",
+      render: (_, record) => {
+        if (record?.judgeName) {
+          return (
+            <div className="flex flex-col items-center">
+              <Text strong>{record.judgeName}</Text>
+              {record?.judgeUid && (
+                <Text type="secondary" className="text-xs">
+                  {record.judgeUid}
+                </Text>
+              )}
+            </div>
+          );
+        }
+        return <Text type="secondary">정보 없음</Text>;
+      },
+    },
+    {
+      title: "상태",
+      dataIndex: "status",
+      key: "status",
+      align: "center",
+      render: (_, record) => {
+        const { isEnd, isLogined } = record;
+        if (isEnd && isLogined) {
+          return <Tag color="success">심사종료</Tag>;
+        }
+        if (!isEnd && isLogined) {
+          return <Tag color="processing">심사중</Tag>;
+        }
+        return <Tag color="default">로그인대기</Tag>;
+      },
+    },
+    {
+      title: "관리",
+      key: "action",
+      align: "center",
+      render: (_, record, index) => (
+        <Button
+          size="small"
+          icon={<RedoOutlined />}
+          onClick={() => handleForceReStart(index, currentContest.contests.id)}
+        >
+          강제 재시작
+        </Button>
+      ),
+    },
+  ];
+
+  const stageColumns = [
+    {
+      title: "순서",
+      dataIndex: "stageNumber",
+      key: "stageNumber",
+      align: "center",
+      width: 80,
+      render: (text) => <Text strong>{text}</Text>,
+    },
+    {
+      title: "종목 정보",
+      key: "info",
+      render: (_, record) => {
+        const { categoryTitle, grades, categoryJudgeType, stageId } = record;
+        const gradeTitle = handleGradeInfo(grades).gradeTitle;
+        const playersCount = handleGradeInfo(grades).matchedPlayersCount;
+        const judgesAssignCount =
+          handleGradeInfo(grades).matchedJudgeAssignCount;
+
+        return (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Text strong className="text-base">
+                {categoryTitle} ({gradeTitle})
+              </Text>
+              <Tag color={categoryJudgeType === "point" ? "blue" : "green"}>
+                {categoryJudgeType === "point" ? "P" : "R"}
+              </Tag>
+              {realtimeData?.stageId === stageId && (
+                <Tag icon={<Spin size="small" />} color="processing">
+                  진행중
+                </Tag>
+              )}
+            </div>
+            <Text type="secondary" className="text-sm">
+              출전인원: {playersCount}명 | 배정심판: {judgesAssignCount}명
+            </Text>
+          </div>
+        );
+      },
+    },
+    {
+      title: "관리",
+      key: "action",
+      align: "center",
+      width: isTabletOrMobile ? 120 : 150,
+      render: (_, record, index) => {
+        const isCurrentStage = realtimeData?.stageId === record.stageId;
+        return (
+          <Button
+            type={isCurrentStage ? "default" : "primary"}
+            icon={isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />}
+            onClick={() => handleUpdateCurrentStage(index)}
+          >
+            {isCurrentStage ? "재시작" : "시작"}
+          </Button>
+        );
+      },
+    },
+  ];
 
   return (
     <>
@@ -368,7 +712,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2 justify-start items-start">
+        <div className="flex flex-col w-full h-full bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen p-4 md:p-6">
           <ConfirmationModal
             isOpen={msgOpen}
             message={message}
@@ -389,467 +733,384 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             />
           </Modal>
 
-          <div className="flex w-full h-auto">
-            <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg p-3">
-              <div className="flex w-3/5 px-2 flex-col gap-y-2">
-                <h1 className="font-sans text-base font-semibold">
-                  대회명 : {contestInfo.contestTitle}
-                </h1>
-                <h1 className="font-sans text-base font-semibold">
-                  채점표DB : {contestInfo.contestCollectionName}
-                </h1>
-                <h1 className="font-sans text-base font-semibold">
-                  모니터링상태 :{" "}
-                  {realtimeData?.stageId && !isHolding && "실시간모니터링중"}
-                  {isHolding && "모니터링 일시정지"}
-                  {!realtimeData?.stageId && !isHolding && "대회시작전"}
-                </h1>
-                {/* 마지막으로 갱신된 시간 표시 */}
-                {lastUpdated && (
-                  <h1 className="font-sans text-sm text-gray-500">
-                    마지막 업데이트: {lastUpdated}
-                  </h1>
-                )}
+          <Card className="mb-4 shadow-md">
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+              <div className="flex-1 space-y-2">
+                <Title level={4} className="!mb-1">
+                  {contestInfo.contestTitle}
+                </Title>
+                <div className="space-y-1">
+                  <Text type="secondary" className="block text-sm">
+                    채점표DB: {contestInfo.contestCollectionName}
+                  </Text>
+                  <div className="flex items-center gap-2">
+                    <Text type="secondary" className="text-sm">
+                      모니터링 상태:
+                    </Text>
+                    {realtimeData?.stageId && !isHolding && (
+                      <Tag color="success" icon={<PlayCircleOutlined />}>
+                        실시간 모니터링중
+                      </Tag>
+                    )}
+                    {isHolding && (
+                      <Tag color="warning" icon={<PauseCircleOutlined />}>
+                        일시정지
+                      </Tag>
+                    )}
+                    {!realtimeData?.stageId && !isHolding && (
+                      <Tag color="default">대회 시작 전</Tag>
+                    )}
+                  </div>
+                  {lastUpdated && (
+                    <Text type="secondary" className="block text-xs">
+                      마지막 업데이트: {lastUpdated}
+                    </Text>
+                  )}
+                </div>
               </div>
 
-              <div className="flex w-2/5 h-full gap-x-2">
-                {isHolding && (
-                  <button
-                    className="bg-blue-600 w-full h-full text-white text-lg rounded-lg"
-                    onClick={() => setIsHolding(() => false)}
+              <div className="flex gap-2 w-full md:w-auto">
+                {!isHolding && realtimeData?.stageId && (
+                  <Button
+                    size="large"
+                    icon={<PauseCircleOutlined />}
+                    onClick={() => {
+                      setIsHolding(true);
+                      setLastUpdated(new Date().toLocaleString("ko-KR"));
+                    }}
+                    className="flex-1 md:flex-none"
                   >
-                    모니터링 시작
-                  </button>
+                    모니터링 일시정지
+                  </Button>
+                )}
+                {isHolding && (
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => setIsHolding(false)}
+                    className="flex-1 md:flex-none"
+                  >
+                    모니터링 재개
+                  </Button>
                 )}
                 {!realtimeData?.stageId && !isHolding && (
-                  <button
-                    className="bg-blue-400 w-full h-full text-white text-lg rounded-lg"
-                    onClick={() => handleUpdateCurrentStage(0, "add")}
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => handleUpdateCurrentStage(0)}
+                    className="flex-1 md:flex-none"
                   >
-                    대회시작
-                  </button>
+                    대회 시작
+                  </Button>
                 )}
               </div>
             </div>
-          </div>
-          <div className="flex flex-col w-full h-auto">
-            <div className="flex w-full h-auto justify-start items-center">
-              <button
-                onClick={() => setCurrentSubTab("0")}
-                className={`${
-                  currentSubTab === "0"
-                    ? "w-40 h-10 bg-blue-500 text-gray-100 rounded-t-lg"
-                    : "w-40 h-10 bg-white text-gray-700 rounded-t-lg border-t border-r"
-                }`}
-              >
-                현재 무대상황
-              </button>
-              <button
-                onClick={() => setCurrentSubTab("1")}
-                className={`${
-                  currentSubTab === "1"
-                    ? "w-40 h-10 bg-blue-500 text-gray-100 rounded-t-lg"
-                    : "w-40 h-10 bg-white text-gray-700 rounded-t-lg border-t border-r"
-                }`}
-              >
-                전체 무대목록
-              </button>
-            </div>
-            {currentSubTab === "0" && (
-              <div className="flex w-full h-auto justify-start items-center bg-blue-100 rounded-tr-lg rounded-b-lg p-2">
-                {realtimeData && (
-                  <div className="flex w-full flex-col h-auto gap-y-2">
-                    <div className="flex bg-white p-2 w-full h-auto rounded-lg flex-col justify-center items-start">
-                      <div className="flex w-full h-14 justify-between items-center gap-x-2 px-2">
-                        <div className="flex w-full justify-start items-center gap-x-2">
-                          <span className="font-bold text-lg">진행상황</span>
-                        </div>
+          </Card>
 
-                        {!judgesIsEndValidated && (
-                          <div className="flex w-full justify-end items-center gap-x-2">
-                            <button
-                              className="w-24 h-10 bg-blue-500 rounded-lg text-gray-100"
-                              onClick={() =>
-                                handleUpdateCurrentStage(
-                                  realtimeData.stageNumber,
-                                  "next"
-                                )
+          <Card className="shadow-md">
+            <Tabs
+              activeKey={currentSubTab}
+              onChange={setCurrentSubTab}
+              items={[
+                {
+                  key: "0",
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <PlayCircleOutlined />
+                      현재 무대상황
+                    </span>
+                  ),
+                  children: realtimeData && (
+                    <div className="space-y-4">
+                      <Card
+                        title={
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <Text strong>진행상황</Text>
+                            {!judgesIsEndValidated && (
+                              <Button
+                                type="primary"
+                                icon={<FastForwardOutlined />}
+                                onClick={() =>
+                                  handleUpdateCurrentStage(
+                                    realtimeData.stageNumber
+                                  )
+                                }
+                              >
+                                다음 진행
+                              </Button>
+                            )}
+                          </div>
+                        }
+                        className="shadow-sm"
+                      >
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Text strong className="text-lg">
+                              {realtimeData?.categoryTitle} (
+                              {realtimeData?.gradeTitle})
+                            </Text>
+                            <Tag
+                              color={
+                                stagesArray[realtimeData?.stageNumber - 1]
+                                  ?.categoryJudgeType === "point"
+                                  ? "blue"
+                                  : "green"
                               }
                             >
-                              다음진행
-                            </button>
+                              {stagesArray[realtimeData?.stageNumber - 1]
+                                ?.categoryJudgeType === "point"
+                                ? "P"
+                                : "R"}
+                            </Tag>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex w-full h-10 justify-start items-center px-2">
-                        <span className="font-semibold">
-                          {realtimeData?.categoryTitle}(
-                          {realtimeData?.gradeTitle})
-                        </span>
-                        <div className="flex w-14 justify-center items-center">
-                          {stagesArray[realtimeData?.stageNumber - 1]
-                            .categoryJudgeType === "point" ? (
-                            <span className="bg-blue-400 w-10 flex justify-center rounded-lg text-gray-100">
-                              P
-                            </span>
+
+                          {isTabletOrMobile ? (
+                            <JudgeCardView judges={realtimeData?.judges} />
                           ) : (
-                            <span className="bg-green-500 w-10 flex justify-center rounded-lg text-gray-100">
-                              R
-                            </span>
+                            <div className="overflow-x-auto">
+                              <Table
+                                columns={judgeColumns}
+                                dataSource={realtimeData?.judges?.map(
+                                  (judge, idx) => ({
+                                    ...judge,
+                                    key: idx,
+                                    judgeInfo: {
+                                      judgeName: judge.judgeName,
+                                      judgeUid: judge.judgeUid,
+                                    },
+                                  })
+                                )}
+                                pagination={false}
+                                size="small"
+                                bordered
+                              />
+                            </div>
                           )}
                         </div>
-                      </div>
-                      <div className="flex w-full h-auto flex-wrap box-border flex-col px-2">
-                        {/* table Header */}
-                        <div className="flex w-full h-10 text-lg ">
-                          {realtimeData?.judges &&
-                            realtimeData.judges.map((judge, jIdx) => {
-                              const { seatIndex } = judge;
+                      </Card>
 
-                              return (
-                                <div
-                                  className="h-full p-2 justify-center items-center flex last:border-l-0 border-blue-400 border-y border-r bg-blue-200 first:border-l w-full"
-                                  style={{ maxWidth: "15%" }}
-                                >
-                                  {seatIndex}
-                                </div>
-                              );
-                            })}
-                        </div>
-                        {/* 상황판 */}
-                        <div className="flex w-full h-auto text-lg bg-gray-100 items-start">
-                          {realtimeData?.judges &&
-                            realtimeData.judges.map((judge, jIdx) => {
-                              const { isEnd, isLogined } = judge;
-
-                              return (
-                                <div
-                                  className="h-full p-2 justify-center items-start flex last:border-l-0 border-blue-400 border-y border-r border-t-0 text-sm first:border-l w-full"
-                                  style={{ maxWidth: "15%" }}
-                                >
-                                  {isEnd && isLogined && "심사종료"}
-                                  {!isEnd && isLogined && "심사중"}
-                                  {!isEnd && !isLogined && "로그인대기"}
-                                </div>
-                              );
-                            })}
-                        </div>
-                        {/* 강제전환 */}
-                        <div className="flex w-full h-auto text-lg bg-gray-100 items-start">
-                          {realtimeData?.judges &&
-                            realtimeData.judges.map((judge, jIdx) => {
-                              const { isEnd, isLogined } = judge;
-
-                              return (
-                                <div
-                                  className="h-full p-2 justify-center items-start flex last:border-l-0 border-blue-400 border-y border-r border-t-0 text-sm first:border-l w-full"
-                                  style={{ maxWidth: "15%" }}
-                                >
-                                  <button
-                                    className="w-32 h-8 rounded-lg border border-blue-500 bg-white"
-                                    onClick={() =>
-                                      handleForceReStart(
-                                        jIdx,
-                                        currentContest.contests.id
-                                      )
-                                    }
-                                  >
-                                    강제다시시작
-                                  </button>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex bg-white p-2 w-full h-auto rounded-lg flex-col justify-center items-start">
-                      <div className="flex w-full h-14 justify-between items-center gap-x-2 px-2">
-                        <span className="font-bold text-lg">집계상황</span>
-                        <button
-                          className="ml-2"
-                          onClick={() =>
-                            handleForceScoreTableRefresh(
-                              currentStageInfo.grades
-                            )
-                          }
-                        >
-                          새로고침
-                        </button>
-                      </div>
-                      {currentStageInfo?.grades?.length > 0 &&
-                        currentStageInfo.grades.map((grade, gIdx) => {
-                          const {
-                            contestId,
-                            categoryTitle,
-                            categoryId,
-                            categoryJudgeType,
-                            gradeTitle,
-                            gradeId,
-                          } = grade;
-                          const filterdPlayers = playersArray
-                            .filter(
-                              (f) =>
-                                f.contestGradeId === gradeId &&
-                                f.playerNoShow === false
-                            )
-                            .sort((a, b) => a.playerIndex - b.playerIndex);
-                          return (
-                            <div className="flex w-full h-auto p-2 flex-col">
-                              <div className="flex w-full h-20 justify-start items-center">
-                                <div className="flex w-1/2">
-                                  {categoryTitle}({gradeTitle})
-                                  {/* realtimeData?.resultSave가 undefined일 경우 빈 배열로 처리 */}
-                                  {(realtimeData?.resultSaved || []).includes(
-                                    gradeId
-                                  ) && (
-                                    <span className="ml-2 text-red-500 font-semibold">
-                                      순위표확정
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex w-2/3 justify-end items-center gap-x-2">
-                                  <button
-                                    className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
-                                    onClick={() => {
-                                      handleScreenEnd();
-                                    }}
-                                  >
-                                    화면종료
-                                  </button>
-
-                                  <button
-                                    className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
-                                    onClick={() => {
-                                      fetchResultAndScoreBoard(
-                                        gradeId,
-                                        gradeTitle
-                                      );
-                                    }}
-                                  >
-                                    순위표공개
-                                  </button>
-                                  <button
-                                    className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
-                                    onClick={() => {
-                                      setSummaryProp(() => ({
-                                        contestId: currentContest.contests.id,
-                                        gradeId,
-                                        categoryTitle,
-                                        gradeTitle,
-                                        categoryJudgeType:
-                                          currentStageInfo.categoryJudgeType,
-                                      }));
-                                      setSummaryPrintPreviewOpen(true);
-                                    }}
-                                  >
-                                    집계/채점 통합 출력
-                                  </button>
-                                  <button
-                                    className="w-auto h-10 bg-blue-900 rounded-lg text-gray-100 px-5"
-                                    onClick={() => {
-                                      setAwardProp(() => ({
-                                        contestId: currentContest.contests.id,
-                                        gradeId,
-                                        categoryTitle,
-                                        gradeTitle,
-                                        categoryJudgeType:
-                                          currentStageInfo.categoryJudgeType,
-                                      }));
-                                      setAwardPrintPreviewOpen(true);
-                                    }}
-                                  >
-                                    상장출력
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="flex w-full h-10 justify-start items-center">
-                                <div
-                                  className="h-full p-2 justify-center items-start flex w-full border border-gray-400 border-b-2"
-                                  style={{ maxWidth: "15%" }}
-                                >
-                                  구분
-                                </div>
-                                {realtimeData?.judges &&
-                                  realtimeData.judges.map((judge, jIdx) => {
-                                    const { seatIndex } = judge;
-                                    return (
-                                      <div
-                                        className="h-full p-2 justify-center items-start flex w-full border-t border-b-2 border-r border-gray-400 "
-                                        style={{ maxWidth: "15%" }}
-                                      >
-                                        {seatIndex}
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                              {filterdPlayers.map((player, pIdx) => {
-                                const { playerNumber } = player;
-
-                                return (
-                                  <div className="flex">
-                                    <div
-                                      className="h-full p-2 justify-center items-start flex w-full border-l border-b border-r  border-gray-400 "
-                                      style={{ maxWidth: "15%" }}
-                                    >
-                                      {playerNumber}
-                                    </div>
-                                    {realtimeData?.judges?.length > 0 &&
-                                      realtimeData?.judges.map(
-                                        (judge, jIdx) => {
-                                          const { seatIndex } = judge;
-                                          const finded = normalScoreData.find(
-                                            (f) =>
-                                              f.playerNumber === playerNumber &&
-                                              f.seatIndex === seatIndex
-                                          );
-
-                                          return (
-                                            <div
-                                              className="h-auto p-2 justify-center items-start flex w-full  border-r border-b border-gray-400 "
-                                              style={{ maxWidth: "15%" }}
-                                            >
-                                              {finded?.playerScore !== 0 &&
-                                              finded?.playerScore !==
-                                                undefined &&
-                                              finded?.playerScore !== 1000
-                                                ? finded.playerScore
-                                                : ""}
-                                              {finded?.playerScore === 1000 &&
-                                                "순위제외"}
-                                            </div>
-                                          );
-                                        }
-                                      )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {currentSubTab === "1" && (
-              <div className="flex w-full h-auto justify-start items-center bg-blue-100 rounded-tr-lg rounded-b-lg p-2">
-                {realtimeData && stagesArray?.length > 0 && (
-                  <div className="flex w-full flex-col h-auto gap-y-2">
-                    <div className="flex bg-white p-2 w-full h-auto rounded-lg flex-col justify-center items-start">
-                      <div className="flex w-full h-14 justify-between items-center gap-x-2 px-2">
-                        <div className="flex w-full justify-start items-center gap-x-2">
-                          <span className="font-bold text-lg">무대목록</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col w-full h-auto gap-y-2 p-2">
-                        {stagesArray
-                          .sort((a, b) => a.stageNumber - b.stageNumber)
-                          .map((stage, sIdx) => {
+                      <Card
+                        title={
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <Text strong>집계상황</Text>
+                            <Button
+                              icon={<ReloadOutlined />}
+                              onClick={() =>
+                                handleForceScoreTableRefresh(
+                                  currentStageInfo.grades
+                                )
+                              }
+                              size={isTabletOrMobile ? "small" : "middle"}
+                            >
+                              새로고침
+                            </Button>
+                          </div>
+                        }
+                        className="shadow-sm"
+                      >
+                        {currentStageInfo?.grades?.length > 0 &&
+                          currentStageInfo.grades.map((grade, gIdx) => {
                             const {
-                              grades,
-                              stageNumber,
-                              stageId,
+                              contestId,
                               categoryTitle,
-                              categoryJudgeType,
-
                               categoryId,
-                            } = stage;
-                            const gradeTitle =
-                              handleGradeInfo(grades).gradeTitle;
-                            const playersCount =
-                              handleGradeInfo(grades).matchedPlayersCount;
+                              categoryJudgeType,
+                              gradeTitle,
+                              gradeId,
+                            } = grade;
+                            const filterdPlayers = playersArray
+                              .filter(
+                                (f) =>
+                                  f.contestGradeId === gradeId &&
+                                  f.playerNoShow === false
+                              )
+                              .sort((a, b) => a.playerIndex - b.playerIndex);
 
-                            const judgesAssignCount =
-                              handleGradeInfo(grades).matchedJudgeAssignCount;
+                            const scoreColumns = [
+                              {
+                                title: "선수번호",
+                                dataIndex: "playerNumber",
+                                key: "playerNumber",
+                                align: "center",
+                                width: 100,
+                                fixed: isTabletOrMobile ? false : "left",
+                                render: (text) => <Text strong>{text}</Text>,
+                              },
+                              ...(realtimeData?.judges || []).map(
+                                (judge, jIdx) => ({
+                                  title: `${judge.seatIndex}번`,
+                                  key: `judge-${jIdx}`,
+                                  align: "center",
+                                  width: 100,
+                                  render: (_, record) => {
+                                    const finded = normalScoreData.find(
+                                      (f) =>
+                                        f.playerNumber ===
+                                          record.playerNumber &&
+                                        f.seatIndex === judge.seatIndex
+                                    );
+                                    if (
+                                      finded?.playerScore !== 0 &&
+                                      finded?.playerScore !== undefined &&
+                                      finded?.playerScore !== 1000
+                                    ) {
+                                      return (
+                                        <Text strong>{finded.playerScore}</Text>
+                                      );
+                                    }
+                                    if (finded?.playerScore === 1000) {
+                                      return <Tag color="error">순위제외</Tag>;
+                                    }
+                                    return <Text type="secondary">-</Text>;
+                                  },
+                                })
+                              ),
+                            ];
+
+                            const scoreDataSource = filterdPlayers.map(
+                              (player, pIdx) => ({
+                                key: pIdx,
+                                playerNumber: player.playerNumber,
+                              })
+                            );
+
                             return (
-                              <div
-                                className={`${
-                                  realtimeData.stageId === stageId
-                                    ? "flex w-full h-auto py-2 justify-start items-center px-5 bg-blue-400 rounded-lg text-gray-100"
-                                    : "flex w-full h-auto py-2 justify-start items-center px-5 bg-blue-100 rounded-lg"
-                                }`}
-                              >
-                                <div className="flex w-1/2 justify-start items-center flex-wrap">
-                                  <div className="flex w-10  h-auto items-center">
-                                    <span className="font-semibold">
-                                      {stageNumber}
-                                    </span>
-                                  </div>
-                                  <div
-                                    className="flex w-auto px-2 h-auto items-center"
-                                    style={{ minWidth: "450px" }}
-                                  >
-                                    <span className="font-semibold mr-2">
-                                      {categoryTitle}
-                                    </span>
-                                    <span className="font-semibold">
-                                      ({gradeTitle})
-                                    </span>
-                                    <div className="flex w-14 justify-center items-center">
-                                      {categoryJudgeType === "point" ? (
-                                        <span className="bg-blue-400 w-10 flex justify-center rounded-lg text-gray-100">
-                                          P
-                                        </span>
-                                      ) : (
-                                        <span className="bg-green-500 w-10 flex justify-center rounded-lg text-gray-100">
-                                          R
-                                        </span>
-                                      )}
-                                    </div>
-                                    {realtimeData.stageId === stageId && (
-                                      <div className="flex w-auto px-2">
-                                        <PiSpinner
-                                          className="animate-spin w-8 h-8 "
-                                          style={{ animationDuration: "1.5s" }}
-                                        />
-                                      </div>
-                                    )}
+                              <div key={gIdx} className="mb-6 last:mb-0">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Text strong className="text-base">
+                                      {categoryTitle} ({gradeTitle})
+                                    </Text>
+                                    {(realtimeData?.resultSaved || []).includes(
+                                      gradeId
+                                    ) && <Tag color="error">순위표 확정</Tag>}
                                   </div>
 
-                                  <div
-                                    className="flex w-auto px-2"
-                                    style={{ fontSize: 14 }}
-                                  >
-                                    <span className="mx-2">출전인원수 : </span>
-                                    <span className="font-semibold">
-                                      {playersCount}
-                                    </span>
-                                    <span className="mx-2">
-                                      , 실제배정된심판수 :
-                                    </span>
-                                    <span className="font-semibold">
-                                      {judgesAssignCount}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex w-1/2 justify-end items-center flex-wrap py-2">
-                                  <div className="flex w-full gap-x-2 justify-end items-center">
-                                    <button
-                                      onClick={() =>
-                                        handleUpdateCurrentStage(sIdx, "force")
-                                      }
-                                      className={`${
-                                        realtimeData.stageId === stageId
-                                          ? "flex w-24 justify-center items-center  bg-blue-100 rounded-lg p-2 text-gray-900"
-                                          : "flex w-24 justify-center items-center  bg-blue-400 rounded-lg p-2 text-gray-100"
-                                      }`}
+                                  <Space wrap size="small">
+                                    <Button
+                                      size="small"
+                                      icon={<CloseCircleOutlined />}
+                                      onClick={handleScreenEnd}
                                     >
-                                      {realtimeData.stageId === stageId
-                                        ? "강제 재시작"
-                                        : "강제시작"}
-                                    </button>
-                                  </div>
+                                      화면종료
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      type="primary"
+                                      icon={<EyeOutlined />}
+                                      onClick={() =>
+                                        fetchResultAndScoreBoard(
+                                          gradeId,
+                                          gradeTitle
+                                        )
+                                      }
+                                    >
+                                      순위표공개
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      icon={<PrinterOutlined />}
+                                      onClick={() => {
+                                        setSummaryProp(() => ({
+                                          contestId: currentContest.contests.id,
+                                          gradeId,
+                                          categoryTitle,
+                                          gradeTitle,
+                                          categoryJudgeType:
+                                            currentStageInfo.categoryJudgeType,
+                                        }));
+                                        setSummaryPrintPreviewOpen(true);
+                                      }}
+                                    >
+                                      집계출력
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      icon={<TrophyOutlined />}
+                                      onClick={() => {
+                                        setAwardProp(() => ({
+                                          contestId: currentContest.contests.id,
+                                          gradeId,
+                                          categoryTitle,
+                                          gradeTitle,
+                                          categoryJudgeType:
+                                            currentStageInfo.categoryJudgeType,
+                                        }));
+                                        setAwardPrintPreviewOpen(true);
+                                      }}
+                                    >
+                                      상장출력
+                                    </Button>
+                                  </Space>
                                 </div>
+
+                                {isTabletOrMobile ? (
+                                  <ScoreCardView
+                                    players={filterdPlayers}
+                                    judges={realtimeData?.judges}
+                                    gradeId={gradeId}
+                                    categoryTitle={categoryTitle}
+                                    gradeTitle={gradeTitle}
+                                  />
+                                ) : (
+                                  <div className="overflow-x-auto">
+                                    <Table
+                                      columns={scoreColumns}
+                                      dataSource={scoreDataSource}
+                                      pagination={false}
+                                      size="small"
+                                      bordered
+                                      scroll={{ x: "max-content" }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
-                      </div>
+                      </Card>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  ),
+                },
+                {
+                  key: "1",
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <StopOutlined />
+                      전체 무대목록
+                    </span>
+                  ),
+                  children:
+                    realtimeData && stagesArray?.length > 0 ? (
+                      <Card className="shadow-sm">
+                        {isTabletOrMobile ? (
+                          <StageCardView
+                            stages={stagesArray.sort(
+                              (a, b) => a.stageNumber - b.stageNumber
+                            )}
+                          />
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <Table
+                              columns={stageColumns}
+                              dataSource={stagesArray
+                                .sort((a, b) => a.stageNumber - b.stageNumber)
+                                .map((stage) => ({
+                                  ...stage,
+                                  key: stage.stageId,
+                                }))}
+                              pagination={false}
+                              scroll={{ x: "max-content" }}
+                            />
+                          </div>
+                        )}
+                      </Card>
+                    ) : null,
+                },
+              ]}
+            />
+          </Card>
         </div>
       )}
     </>

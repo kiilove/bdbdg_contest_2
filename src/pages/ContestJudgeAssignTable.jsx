@@ -1,19 +1,29 @@
-import React, { useContext, useEffect, useState, useMemo } from "react";
+"use client";
+
+import { useContext, useEffect, useState, useMemo } from "react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { doc, setDoc, where } from "firebase/firestore";
 import LoadingPage from "./LoadingPage";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateUUID } from "../functions/functions";
+import { Tabs, Button, Card } from "antd";
+import {
+  SaveOutlined,
+  TeamOutlined,
+  TrophyOutlined,
+  StarOutlined,
+} from "@ant-design/icons";
 
-// New modular components
+// Child components
 import SectionAssign from "../components/SectionAssign";
 import CategoryAssign from "../components/CategoryAssign";
 import GradeAssign from "../components/GradeAssign";
+import { db } from "../firebase";
 
 const ContestJudgeAssignTable = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -32,7 +42,6 @@ const ContestJudgeAssignTable = () => {
   const fetchJudgesPoolQuery = useFirestoreQuery();
   const updateJudgesAssign = useFirestoreUpdateData("contest_judges_assign");
 
-  // Data loading function
   const fetchPool = async (contestId) => {
     try {
       const [judgesPool, judgesAssign, categories, grades] = await Promise.all([
@@ -59,16 +68,18 @@ const ContestJudgeAssignTable = () => {
     }
   };
 
-  // Handle judge assignment update
   const handleUpdateJudgesAssign = async () => {
-    console.log(judgesAssignInfo);
     try {
       setMessage({ body: "저장중...", isButton: false });
       setMsgOpen(true);
-      await updateJudgesAssign.updateData(
-        judgesAssignInfo.id,
-        judgesAssignInfo
-      );
+
+      // ⚠️ 여기서는 기존 useFirestoreUpdateData 훅을 쓰지 않습니다.
+      // 이유: updateDoc(부분 업데이트) → 기존 키가 남아 일관성 깨질 수 있음
+      // 이 화면은 "완전 덮어쓰기(기존 키 삭제 포함)"가 요구되므로
+      // setDoc(merge:false)로 문서를 통째로 교체합니다.
+      const ref = doc(db, "contest_judges_assign", judgesAssignInfo.id);
+      await setDoc(ref, judgesAssignInfo, { merge: false });
+
       setMessage({
         body: "저장되었습니다.",
         isButton: true,
@@ -76,10 +87,31 @@ const ContestJudgeAssignTable = () => {
       });
     } catch (error) {
       console.log(error);
+      setMessage({
+        body: "저장 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
+  // const handleUpdateJudgesAssign = async () => {
+  //   try {
+  //     setMessage({ body: "저장중...", isButton: false });
+  //     setMsgOpen(true);
+  //     await updateJudgesAssign.updateData(
+  //       judgesAssignInfo.id,
+  //       judgesAssignInfo
+  //     );
+  //     setMessage({
+  //       body: "저장되었습니다.",
+  //       isButton: true,
+  //       confirmButtonText: "확인",
+  //     });
+  //   } catch (error) {
+  //     console.log(error);
+  //   }
+  // };
 
-  // Section filtering
   const filteredBySection = useMemo(() => {
     return categoriesArray.reduce((acc, curr) => {
       const section = acc.find(
@@ -102,7 +134,7 @@ const ContestJudgeAssignTable = () => {
 
       return acc;
     }, []);
-  }, [categoriesArray, gradesArray]);
+  }, [categoriesArray, gradesArray, judgesAssignInfo]);
 
   useEffect(() => {
     if (currentContest?.contests?.id) {
@@ -111,8 +143,76 @@ const ContestJudgeAssignTable = () => {
     setCurrentSubTab("0");
   }, [currentContest]);
 
+  const tabItems = [
+    {
+      key: "0",
+      label: (
+        <span className="flex items-center gap-2">
+          <TeamOutlined />
+          섹션별
+        </span>
+      ),
+      children: (
+        <SectionAssign
+          judgesAssignInfo={judgesAssignInfo}
+          judgesPoolArray={judgesPoolArray}
+          filteredBySection={filteredBySection}
+          setJudgesAssignInfo={setJudgesAssignInfo}
+          currentContest={currentContest}
+          generateUUID={generateUUID}
+          setMessage={setMessage}
+          setMsgOpen={setMsgOpen}
+        />
+      ),
+    },
+    {
+      key: "1",
+      label: (
+        <span className="flex items-center gap-2">
+          <TrophyOutlined />
+          종목별
+        </span>
+      ),
+      children: (
+        <CategoryAssign
+          judgesAssignInfo={judgesAssignInfo}
+          judgesPoolArray={judgesPoolArray}
+          setJudgesAssignInfo={setJudgesAssignInfo}
+          categoriesArray={categoriesArray}
+          gradesArray={gradesArray}
+          currentContest={currentContest}
+          generateUUID={generateUUID}
+          setMessage={setMessage}
+          setMsgOpen={setMsgOpen}
+        />
+      ),
+    },
+    {
+      key: "2",
+      label: (
+        <span className="flex items-center gap-2">
+          <StarOutlined />
+          체급별
+        </span>
+      ),
+      children: (
+        <GradeAssign
+          judgesAssignInfo={judgesAssignInfo}
+          judgesPoolArray={judgesPoolArray}
+          setJudgesAssignInfo={setJudgesAssignInfo}
+          categoriesArray={categoriesArray}
+          gradesArray={gradesArray}
+          currentContest={currentContest}
+          generateUUID={generateUUID}
+          setMessage={setMessage}
+          setMsgOpen={setMsgOpen}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div className="flex flex-col  gap-y-2 w-full h-auto bg-white mb-3 rounded-t-lg rounded-b-lg p-2 gap-x-4">
+    <div className="w-full mb-3">
       {isLoading ? (
         <LoadingPage />
       ) : (
@@ -121,62 +221,31 @@ const ContestJudgeAssignTable = () => {
             isOpen={msgOpen}
             message={message}
             onCancel={() => setMsgOpen(false)}
-            onConfirm={() => setMsgOpen(false)}
+            onConfirm={() => {
+              message?.onConfirm && message.onConfirm();
+              setMsgOpen(false);
+            }}
           />
-          <div className="flex w-full h-auto justify-start items-center">
-            {["섹션별", "종목별", "체급별"].map((label, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentSubTab(idx.toString())}
-                className={`w-40 h-10 ${
-                  currentSubTab === idx.toString()
-                    ? "bg-blue-500 text-gray-100"
-                    : "bg-white text-gray-700 border-t border-r"
-                } rounded-t-lg`}
+          <Card className="shadow-md">
+            <div className="mb-4">
+              <Button
+                type="primary"
+                size="large"
+                icon={<SaveOutlined />}
+                onClick={handleUpdateJudgesAssign}
+                className="w-full"
               >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-200 rounded-lg"
-            onClick={handleUpdateJudgesAssign}
-          >
-            저장
-          </button>
-          {/* Render based on the selected sub-tab */}
-          {currentSubTab === "0" && (
-            <SectionAssign
-              judgesAssignInfo={judgesAssignInfo}
-              judgesPoolArray={judgesPoolArray}
-              filteredBySection={filteredBySection}
-              setJudgesAssignInfo={setJudgesAssignInfo}
-              currentContest={currentContest}
-              generateUUID={generateUUID}
+                저장
+              </Button>
+            </div>
+
+            <Tabs
+              activeKey={currentSubTab}
+              onChange={setCurrentSubTab}
+              items={tabItems}
+              size="large"
             />
-          )}
-          {currentSubTab === "1" && (
-            <CategoryAssign
-              judgesAssignInfo={judgesAssignInfo}
-              judgesPoolArray={judgesPoolArray}
-              setJudgesAssignInfo={setJudgesAssignInfo}
-              categoriesArray={categoriesArray}
-              gradesArray={gradesArray}
-              currentContest={currentContest}
-              generateUUID={generateUUID}
-            />
-          )}
-          {currentSubTab === "2" && (
-            <GradeAssign
-              judgesAssignInfo={judgesAssignInfo}
-              judgesPoolArray={judgesPoolArray}
-              setJudgesAssignInfo={setJudgesAssignInfo}
-              categoriesArray={categoriesArray}
-              gradesArray={gradesArray}
-              currentContest={currentContest}
-              generateUUID={generateUUID}
-            />
-          )}
+          </Card>
         </>
       )}
     </div>

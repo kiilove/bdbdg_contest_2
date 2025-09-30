@@ -30,11 +30,10 @@ const ManagementHome = ({ children }) => {
         setUserInfo(parsedUser);
       } catch (e) {
         console.error("사용자 정보 파싱 오류:", e);
-        alert("사용자 정보가 유효하지 않습니다. 로그인 해주세요.");
+
         navigate("/login");
       }
     } else {
-      alert("사용자 정보가 없습니다. 로그인 해주세요.");
       navigate("/login");
     }
     setIsLoadingMain(false);

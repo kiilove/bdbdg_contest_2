@@ -45,14 +45,12 @@ export const MenuArray = [
     id: 0,
     title: "대시보드",
     link: "/",
-    // icon: <AiFillDashboard />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
   },
   {
     id: 1,
     title: "대회 준비",
     link: "/contest-preparation",
-    // icon: <FaClipboardCheck />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
@@ -96,7 +94,6 @@ export const MenuArray = [
     id: 2,
     title: "경기 관리",
     link: "/contest-management",
-    // icon: <FaChartLine />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
@@ -110,7 +107,7 @@ export const MenuArray = [
         id: 2,
         title: "선수 계측 (2단계)",
         icon: <FaUsers />,
-        link: "/contestplayerordertable",
+        link: "/contestplayerweighintable",
         requiredGroup: ["admin"],
       },
       {
@@ -148,20 +145,19 @@ export const MenuArray = [
     id: 3,
     title: "출력 관리",
     link: "/print-management",
-    // icon: <FaPrint />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
         id: 1,
         title: "계측 명단 출력",
-        icon: <RiPrinterFill />, // 새로운 아이콘
+        icon: <RiPrinterFill />,
         link: "/print/measurement",
         requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 2,
         title: "출전 명단 출력",
-        icon: <FaFileExport />, // 새로운 아이콘
+        icon: <FaFileExport />,
         link: "/print/final",
         requiredGroup: ["admin", "orgManager"],
       },
@@ -192,7 +188,6 @@ export const MenuArray = [
     id: 4,
     title: "자동 모니터링",
     link: "/auto-monitoring",
-    // icon: <MdMonitor />, // 아이콘 제거
     requiredGroup: ["admin"],
     subMenus: [
       {
@@ -243,7 +238,6 @@ export const MenuArray = [
     id: 5,
     title: "관리자메뉴",
     link: "/admin-tools",
-    // icon: <MdAdminPanelSettings />, // 아이콘 제거
     requiredGroup: ["admin"],
     subMenus: [
       {
@@ -287,7 +281,6 @@ export const MenuArray = [
     id: 6,
     title: "기타",
     link: "/miscellaneous",
-    // icon: <FaChartLine />, // 아이콘 제거
     requiredGroup: ["admin", "orgManager"],
     subMenus: [
       {
@@ -310,6 +303,13 @@ export const MenuArray = [
         icon: <FaSignOutAlt />,
         link: "/logout",
         requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 4,
+        title: "협회관리자 관리", // ✅ 추가된 메뉴
+        icon: <MdAdminPanelSettings />,
+        link: "/association-managers",
+        requiredGroup: ["admin"], // ✅ 관리자만 접근 가능
       },
     ],
   },

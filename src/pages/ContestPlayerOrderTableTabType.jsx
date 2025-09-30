@@ -1,11 +1,8 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { BsCheckAll } from "react-icons/bs";
+"use client";
+
+import { useContext, useEffect, useState } from "react";
 import LoadingPage from "./LoadingPage";
-import { TiInputChecked } from "react-icons/ti";
 import { TfiWrite } from "react-icons/tfi";
-import { CiMobile3 } from "react-icons/ci";
-import { BsBrowserChrome } from "react-icons/bs";
-import { v4 as uuidv4 } from "uuid";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
@@ -13,14 +10,19 @@ import {
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { Checkbox } from "@mui/material";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { TbWorldWww } from "react-icons/tb";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Button, Form, Input, InputNumber } from "antd";
+import { Button, Card, Space, Tag } from "antd";
+import {
+  SaveOutlined,
+  DragOutlined,
+  CalendarOutlined,
+} from "@ant-design/icons";
 
 const ContestPlayerOrderTable = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
@@ -51,6 +53,15 @@ const ContestPlayerOrderTable = () => {
   const updatePlayersAssign = useFirestoreUpdateData("contest_players_assign");
   const updatePlayersFinal = useFirestoreUpdateData("contest_players_final");
   const fetchEntry = useFirestoreQuery();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const fetchPool = async () => {
     if (currentContest?.contests?.startPlayerNumber) {
@@ -104,7 +115,7 @@ const ContestPlayerOrderTable = () => {
   };
 
   const initEntryList = async () => {
-    let dummy = [];
+    const dummy = [];
     let playerNumber = startPlayerNumber;
 
     const condition = [where("contestId", "==", currentContest.contests.id)];
@@ -140,8 +151,6 @@ const ContestPlayerOrderTable = () => {
               };
               matchedPlayerWithPlayerNumber.push({ ...newPlayer });
             });
-
-            console.log(matchedPlayerWithPlayerNumber);
 
             const matchedInfo = {
               ...category,
@@ -186,32 +195,28 @@ const ContestPlayerOrderTable = () => {
     const sourceIndex = source.index;
     const destinationIndex = destination.index;
 
-    // Find the player that was dragged
     const draggedPlayer = newMatchedArray[
       sourceIndex.parentIndex
     ].matchedPlayers.find((player) => player.playerUid === draggableId);
 
-    // Remove the player from the source category and grade
     newMatchedArray[sourceIndex.parentIndex].matchedPlayers.splice(
       sourceIndex.childIndex,
       1
     );
 
-    // Insert the player at the destination category and grade
     newMatchedArray[destinationIndex.parentIndex].matchedPlayers.splice(
       destinationIndex.childIndex,
       0,
       draggedPlayer
     );
-    // Flatten all matchedPlayers into a single array to update playerNumber and playerIndex
+
     const allPlayers = newMatchedArray.flatMap(
       (matched) => matched.matchedPlayers
     );
 
-    // Update playerNumber and playerIndex based on the new order
     allPlayers.forEach((player, index) => {
       player.playerNumber = index + startPlayerNumber + 1;
-      player.playerIndex = index + startPlayerNumber + 1; // If you want to update playerIndex based on playerNumber, use 'player.playerNumber' instead of 'index + 1'
+      player.playerIndex = index + startPlayerNumber + 1;
     });
 
     setMatchedArray(newMatchedArray);
@@ -222,13 +227,71 @@ const ContestPlayerOrderTable = () => {
   }, [currentContest]);
 
   useEffect(() => {
-    console.log(startPlayerNumber);
     if (categorysArray.length > 0 && playersArray?.length === 0) {
       initEntryList();
     }
   }, [categorysArray, gradesArray, entrysArray, playersArray]);
 
   const dummyArray = [];
+
+  const PlayerCardView = ({ player, index, provided, snapshot }) => {
+    const { playerName, playerGym, playerNumber, createBy, invoiceCreateAt } =
+      player;
+
+    return (
+      <Card
+        size="small"
+        className={`mb-2 ${
+          snapshot.isDragging ? "shadow-lg border-blue-500" : ""
+        }`}
+        ref={provided.innerRef}
+        {...provided.dragHandleProps}
+        {...provided.draggableProps}
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-between items-center">
+            <Space>
+              <DragOutlined className="text-gray-400" />
+              <span className="font-semibold text-base">순번: {index + 1}</span>
+            </Space>
+            <Tag color="gold" className="text-base font-semibold px-2 py-0.5">
+              {playerNumber}
+            </Tag>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{playerName}</span>
+              {createBy === "manual" && (
+                <Tag
+                  color="green"
+                  className="flex items-center justify-center gap-1 min-w-[60px]"
+                >
+                  <TfiWrite />
+                  <span>수기</span>
+                </Tag>
+              )}
+              {(createBy === undefined || createBy === "web") && (
+                <Tag
+                  color="blue"
+                  className="flex items-center justify-center gap-1 min-w-[60px]"
+                >
+                  <TbWorldWww />
+                  <span>웹</span>
+                </Tag>
+              )}
+            </div>
+            <div className="text-gray-600 text-sm">{playerGym}</div>
+            {invoiceCreateAt && (
+              <div className="text-gray-500 text-xs flex items-center gap-1">
+                <CalendarOutlined />
+                {invoiceCreateAt}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
@@ -238,172 +301,199 @@ const ContestPlayerOrderTable = () => {
         </div>
       ) : (
         <>
-          <div className="flex w-full h-full">
-            <ConfirmationModal
-              isOpen={msgOpen}
-              message={message}
-              onCancel={() => setMsgOpen(false)}
-              onConfirm={() => setMsgOpen(false)}
-            />
-            <div className="flex w-full justify-start items-center">
-              <div className="flex w-full h-full justify-start lg:px-2 lg:pt-2 flex-col bg-gray-100 rounded-lg gap-y-2">
-                <div className="flex w-full gap-x-5">
-                  <button
-                    className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-200 rounded-lg"
-                    onClick={() =>
-                      handleUpdatePlayersAssign(
-                        currentContest.contests.contestPlayersAssignId,
-                        currentContest.contests.contestPlayersFinalId
-                      )
-                    }
-                  >
-                    계측명단 저장
-                  </button>
-                </div>
-                {matchedArray.length > 0 &&
-                  matchedArray
-                    .sort(
-                      (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-                    )
-                    .map((matched, mIdx) => {
-                      const {
-                        contestCategoryId: categoryId,
-                        contestCategoryIndex: categoryIndex,
-                        contestCategoryTitle: categoryTitle,
-                        contestGradeId: gradeId,
-                        contestGradeIndex: gradeIndex,
-                        contestGradeTitle: gradeTitle,
-                        matchedPlayers,
-                        matchedGradesLength: gradeLength,
-                      } = matched;
-                      // console.log(matchedArray);
+          <ConfirmationModal
+            isOpen={msgOpen}
+            message={message}
+            onCancel={() => setMsgOpen(false)}
+            onConfirm={() => setMsgOpen(false)}
+          />
+          <div className="flex w-full justify-end mb-2">
+            <Button
+              type="primary"
+              size="large"
+              icon={<SaveOutlined />}
+              className="w-full"
+              onClick={() =>
+                handleUpdatePlayersAssign(
+                  currentContest.contests.contestPlayersAssignId,
+                  currentContest.contests.contestPlayersFinalId
+                )
+              }
+            >
+              계측명단 저장
+            </Button>
+          </div>
 
-                      if (matchedPlayers.length === 0) {
-                        return null;
-                      } else {
-                        dummyArray.push(...matchedPlayers);
+          <div className="flex flex-col gap-4">
+            {matchedArray.length > 0 &&
+              matchedArray
+                .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+                .map((matched, mIdx) => {
+                  const {
+                    contestCategoryId: categoryId,
+                    contestCategoryIndex: categoryIndex,
+                    contestCategoryTitle: categoryTitle,
+                    contestGradeId: gradeId,
+                    contestGradeIndex: gradeIndex,
+                    contestGradeTitle: gradeTitle,
+                    matchedPlayers,
+                    matchedGradesLength: gradeLength,
+                  } = matched;
+
+                  if (matchedPlayers.length === 0) {
+                    return null;
+                  } else {
+                    dummyArray.push(...matchedPlayers);
+                  }
+
+                  return (
+                    <Card
+                      key={mIdx}
+                      title={
+                        <span className="text-lg font-semibold">
+                          {categoryTitle} / {gradeTitle}
+                        </span>
                       }
-
-                      return (
-                        <div
-                          className="flex w-full h-auto bg-blue-300 flex-col rounded-lg"
-                          key={mIdx}
-                        >
-                          <div className="flex flex-col p-1 lg:p-2 gap-y-2">
-                            <div className="flex flex-col bg-blue-100 rounded-lg">
-                              <div className="flex h-10 items-center px-2">
-                                {categoryTitle}({gradeTitle})
-                              </div>
-
-                              <div className="flex flex-col w-full lg:p-2">
-                                <div className="flex flex-col w-full bg-white p-2 border border-b-2 border-gray-400 rounded-lg">
-                                  <div className="flex w-full border-b border-gray-300 h-8 items-center text-sm lg:px-2">
-                                    <div className="flex w-1/6">순번</div>
-                                    <div className="flex w-1/6">선수번호</div>
-                                    <div className="flex w-2/6 lg:w-1/6">
-                                      이름
+                      className="shadow-sm"
+                    >
+                      <DragDropContext onDragEnd={onDragPlayerEnd}>
+                        <Droppable droppableId="players">
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.droppableProps}
+                            >
+                              {!isMobile && (
+                                <div className="flex flex-col w-full">
+                                  <div className="flex w-full border-b-2 border-gray-200 h-12 items-center font-semibold bg-gray-50 px-4 rounded-t-lg">
+                                    <div className="flex w-1/12">
+                                      <DragOutlined />
                                     </div>
-                                    <div className="flex w-2/6 lg:w-1/6">
-                                      소속
-                                    </div>
-                                    <div className="hidden lg:flex w-1/6">
-                                      신청일
-                                    </div>
+                                    <div className="flex w-1/12">순번</div>
+                                    <div className="flex w-2/12">선수번호</div>
+                                    <div className="flex w-2/12">이름</div>
+                                    <div className="flex w-3/12">소속</div>
+                                    <div className="flex w-3/12">신청일</div>
                                   </div>
+                                  {matchedPlayers
+                                    .sort(
+                                      (a, b) => a.playerIndex - b.playerIndex
+                                    )
+                                    .map((player, pIdx) => {
+                                      const {
+                                        playerName,
+                                        playerGym,
+                                        playerUid,
+                                        playerNumber,
+                                        createBy,
+                                        invoiceCreateAt,
+                                      } = player;
 
-                                  <DragDropContext onDragEnd={onDragPlayerEnd}>
-                                    <Droppable droppableId="players">
-                                      {(provided) => (
-                                        <div
-                                          ref={provided.innerRef}
-                                          {...provided.droppableProps}
+                                      return (
+                                        <Draggable
+                                          draggableId={playerUid}
+                                          index={{
+                                            parentIndex: mIdx,
+                                            childIndex: pIdx,
+                                          }}
+                                          key={playerUid}
                                         >
-                                          {matchedPlayers
-                                            .sort(
-                                              (a, b) =>
-                                                a.playerIndex - b.playerIndex
-                                            )
-                                            .map((player, pIdx) => {
-                                              const {
-                                                playerName,
-                                                playerGym,
-                                                playerUid,
-                                                playerNumber,
-                                                createBy,
-                                                invoiceCreateAt,
-                                              } = player;
-
-                                              return (
-                                                <Draggable
-                                                  draggableId={playerUid}
-                                                  index={{
-                                                    parentIndex: mIdx,
-                                                    childIndex: pIdx,
-                                                  }}
-                                                  key={playerUid}
+                                          {(provided, snapshot) => (
+                                            <div
+                                              className={`flex w-full h-14 border-b border-gray-200 items-center px-4 hover:bg-gray-50 transition-colors ${
+                                                snapshot.isDragging
+                                                  ? "bg-blue-50 shadow-lg"
+                                                  : ""
+                                              }`}
+                                              ref={provided.innerRef}
+                                              {...provided.dragHandleProps}
+                                              {...provided.draggableProps}
+                                            >
+                                              <div className="flex w-1/12 text-gray-400">
+                                                <DragOutlined />
+                                              </div>
+                                              <div className="flex w-1/12">
+                                                {pIdx + 1}
+                                              </div>
+                                              <div className="flex w-2/12">
+                                                <Tag
+                                                  color="gold"
+                                                  className="text-base font-semibold px-2 py-0.5"
                                                 >
-                                                  {(provided, snapshot) => (
-                                                    <div
-                                                      className={`${
-                                                        snapshot.isDragging
-                                                          ? "flex w-full h-10 border-b border-gray-300 items-center text-sm lg:px-2 bg-blue-400 text-white"
-                                                          : "flex w-full h-10 border-b border-gray-300 items-center text-sm lg:px-2"
-                                                      }`}
-                                                      key={playerUid}
-                                                      id={playerUid}
-                                                      ref={provided.innerRef}
-                                                      {...provided.dragHandleProps}
-                                                      {...provided.draggableProps}
-                                                    >
-                                                      <div className="flex w-1/6 lg:text-base">
-                                                        {pIdx + 1}
-                                                      </div>
-                                                      <div className="flex w-1/6 lg:text-base">
-                                                        {playerNumber}
-                                                      </div>
-                                                      <div className="flex w-2/6 lg:w-1/6 justify-start items-center gap-x-2 lg:text-base">
-                                                        {playerName}{" "}
-                                                        {createBy ===
-                                                          "manual" && (
-                                                          <span className="text-green-600 text-lg lg:text-base">
-                                                            <TfiWrite />
-                                                          </span>
-                                                        )}
-                                                        {(createBy ===
-                                                          undefined ||
-                                                          createBy ===
-                                                            "web") && (
-                                                          <span className="text-blue-600 text-lg">
-                                                            <TbWorldWww />
-                                                          </span>
-                                                        )}
-                                                      </div>
-                                                      <div className="flex w-2/6 lg:w-1/6 lg:text-base">
-                                                        {playerGym}
-                                                      </div>
-
-                                                      <div className="hidden lg:flex w-1/6 lg:text-base">
-                                                        {invoiceCreateAt}
-                                                      </div>
-                                                    </div>
-                                                  )}
-                                                </Draggable>
-                                              );
-                                            })}
-                                          {provided.placeholder}
-                                        </div>
-                                      )}
-                                    </Droppable>
-                                  </DragDropContext>
+                                                  {playerNumber}
+                                                </Tag>
+                                              </div>
+                                              <div className="flex w-2/12 items-center gap-2">
+                                                {playerName}
+                                                {createBy === "manual" && (
+                                                  <Tag
+                                                    color="green"
+                                                    className="flex items-center justify-center gap-1 min-w-[60px]"
+                                                  >
+                                                    <TfiWrite />
+                                                    <span>수기</span>
+                                                  </Tag>
+                                                )}
+                                                {(createBy === undefined ||
+                                                  createBy === "web") && (
+                                                  <Tag
+                                                    color="blue"
+                                                    className="flex items-center justify-center gap-1 min-w-[60px]"
+                                                  >
+                                                    <TbWorldWww />
+                                                    <span>웹</span>
+                                                  </Tag>
+                                                )}
+                                              </div>
+                                              <div className="flex w-3/12">
+                                                {playerGym}
+                                              </div>
+                                              <div className="flex w-3/12 text-gray-600">
+                                                {invoiceCreateAt}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </Draggable>
+                                      );
+                                    })}
                                 </div>
-                              </div>
+                              )}
+
+                              {isMobile && (
+                                <div className="flex flex-col w-full gap-2">
+                                  {matchedPlayers
+                                    .sort(
+                                      (a, b) => a.playerIndex - b.playerIndex
+                                    )
+                                    .map((player, pIdx) => (
+                                      <Draggable
+                                        draggableId={player.playerUid}
+                                        index={{
+                                          parentIndex: mIdx,
+                                          childIndex: pIdx,
+                                        }}
+                                        key={player.playerUid}
+                                      >
+                                        {(provided, snapshot) => (
+                                          <PlayerCardView
+                                            player={player}
+                                            index={pIdx}
+                                            provided={provided}
+                                            snapshot={snapshot}
+                                          />
+                                        )}
+                                      </Draggable>
+                                    ))}
+                                </div>
+                              )}
+                              {provided.placeholder}
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-              </div>
-            </div>
+                          )}
+                        </Droppable>
+                      </DragDropContext>
+                    </Card>
+                  );
+                })}
           </div>
         </>
       )}
