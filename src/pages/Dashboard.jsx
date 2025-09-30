@@ -1,4 +1,5 @@
 // Dashboard.js
+"use client";
 import React, { useContext, useEffect, useState, useMemo } from "react";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
@@ -15,6 +16,7 @@ import {
   useFirestoreDeleteData,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
+import { writePriceCheckLog } from "../utils/priceCheckLogger"; // ✅ 로그 유틸 추가
 
 const Dashboard = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -123,7 +125,7 @@ const Dashboard = () => {
     }
   }, [currentContest]);
 
-  /** ✅ 입금확인 처리 로직 */
+  /** ✅ 입금확인 처리 로직 (로그 기록 포함) */
   const handleIsPriceCheckUpdate = async (invoiceId, playerUid, checked) => {
     const idx = invoices.findIndex((i) => i.id === invoiceId);
     if (idx < 0) return;
@@ -132,6 +134,8 @@ const Dashboard = () => {
     const newInvoice = { ...newInvoices[idx], isPriceCheck: checked };
     newInvoices.splice(idx, 1, newInvoice);
     setInvoices(newInvoices);
+
+    const sessionUser = JSON.parse(sessionStorage.getItem("user") || "{}");
 
     if (checked) {
       if (newInvoice.joins?.length) {
@@ -154,15 +158,37 @@ const Dashboard = () => {
             originalGradeTitle: join.contestGradeTitle,
             originalGradeId: join.contestGradeId,
             isGradeChanged: false,
+            clientInfo: {
+              userID: sessionUser.userID || null,
+              userGroup: sessionUser.userGroup || null,
+              userContext: sessionUser.userContext || null,
+              userDocId: sessionUser.id || null,
+              clickedAt: new Date().toISOString(),
+              clientDevice: navigator.userAgent,
+            },
           });
         }
       }
+
+      await writePriceCheckLog({
+        action: "add",
+        invoice: newInvoice,
+        sessionUser,
+        currentContest,
+      });
     } else {
       const entries = await queryInvoices.getDocuments("contest_entrys_list", [
         where("contestId", "==", currentContest.contests.id),
       ]);
       const myEntries = entries.filter((e) => e.playerUid === playerUid);
       for (let entry of myEntries) await deleteEntry.deleteData(entry.id);
+
+      await writePriceCheckLog({
+        action: "del",
+        invoice: newInvoice,
+        sessionUser,
+        currentContest,
+      });
     }
 
     await updateInvoice.updateData(invoiceId, { isPriceCheck: checked });
@@ -183,7 +209,6 @@ const Dashboard = () => {
 
   return (
     <div className="p-4 space-y-4">
-      {/* ✅ 요약 정보 카드 (전체 폭) */}
       <div className="grid grid-cols-1">
         <SummaryCards
           categories={categoriesWithPlayers}
@@ -195,7 +220,6 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* ✅ 미확정 선수 테이블 (전체 폭) */}
       <div className="grid grid-cols-1">
         <UnconfirmedAthletesTable
           data={unconfirmedAthletes}
@@ -203,7 +227,6 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* ✅ 나머지 차트들은 1줄 2개 배치 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <CategoryDistributionChart data={categoriesWithPlayers} />
         <AgeGenderDistributionChart invoices={invoices} />

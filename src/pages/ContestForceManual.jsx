@@ -190,57 +190,33 @@ const ContestForceManual = () => {
   };
 
   const handleAddInvoice = async (propData) => {
-    // setMessage({ body: "저장중", isButton: false });
-    // setAddMsgOpen(true);
-    // const added = await addInvoice.addData({
-    //   ...propData,
-    //   createBy: "manual",
-    //   playerUid: generateUUID(),
-    //   invoiceCreateAt: generateToday(),
-    //   contestPriceSum: parseInt(propData.contestPriceSum),
-    // });
-    // if (added) {
-    //   console.log(added.data);
-    //   setMessage({
-    //     body: "저장되었습니다.",
-    //     isButton: true,
-    //     confirmButtonText: "확인",
-    //   });
-    //   setInvoiceInfo(initInvoiceInfo());
-    // }
-
-    console.log(propData);
-
     if (propData?.joins?.length > 0) {
       const newData = { ...propData };
       delete newData.joins;
+
+      const startNumber = parseInt(propData.playerNumber) || 0;
       const newFinal = playerFinalInfo?.players || [];
-      propData.joins.map((join, idx) => {
+
+      propData.joins.forEach((join, idx) => {
         newFinal.push({
           ...newData,
           ...join,
-          playerNumber: playerNumber + idx,
-          playerIndex: playerNumber + idx,
+          playerNumber: startNumber + idx,
+          playerIndex: startNumber + idx,
         });
       });
 
       const newPlayersFinal = { ...playerFinalInfo, players: newFinal };
-      console.log(newPlayersFinal);
-
-      try {
-        await updatePlayersFinal.updateData(
-          currentContest.contests.contestPlayersFinalId,
-          { ...newPlayersFinal }
-        );
-        setMessage({
-          body: "최종명단에 강제추가했습니다.",
-          isButton: true,
-          confirmButtonText: "확인",
-        });
-        setErrorMsgOpen(true);
-      } catch (error) {
-        console.log(error);
-      }
+      await updatePlayersFinal.updateData(
+        currentContest.contests.contestPlayersFinalId,
+        { ...newPlayersFinal }
+      );
+      setMessage({
+        body: "최종명단에 강제추가했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setErrorMsgOpen(true);
     }
   };
 
