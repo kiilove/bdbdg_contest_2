@@ -43,6 +43,8 @@ import ContestMusicSetting from "./pages/ContestMusicSetting";
 import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
 import AssociationManagers from "./pages/AssociationManagers";
 import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
+import ScoreResultManager from "./pages/ScoreResultManager";
+import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
 
 function App() {
   return (
@@ -159,10 +161,18 @@ function App() {
             <Route
               path="/clear"
               element={<ManagementHome children={<ContestSearchAndDelete />} />}
+            />{" "}
+            <Route
+              path="/simpleinvoiceadmin"
+              element={<ManagementHome children={<SimpleInvoicesAdmin />} />}
             />
             <Route
               path="/delay"
               element={<ManagementHome children={<DelaySettings />} />}
+            />
+            <Route
+              path="/scoreresultmanager"
+              element={<ManagementHome children={<ScoreResultManager />} />}
             />
             <Route path="/selectdatabase" element={<SelectDatabase />} />
             <Route
