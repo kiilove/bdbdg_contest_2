@@ -1,4 +1,6 @@
-import React, { useContext, useEffect, useState } from "react";
+"use client";
+
+import { useContext, useEffect, useState } from "react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
@@ -10,8 +12,15 @@ import {
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { matchedGradewWithPlayers } from "../functions/functions";
-import { FaArrowUp, FaArrowDown } from "react-icons/fa";
-import { message } from "antd";
+import { Card, Button, Tag, Space, Spin, message } from "antd";
+import {
+  UpOutlined,
+  DownOutlined,
+  EyeOutlined,
+  SendOutlined,
+  TrophyOutlined,
+  UnorderedListOutlined,
+} from "@ant-design/icons";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const [players, setPlayers] = useState([]);
@@ -19,12 +28,17 @@ const ContestMonitoringHost = ({ contestId }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
   const [contestInfo, setContestInfo] = useState({});
-  const [selectedPlayerUid, setSelectedPlayerUid] = useState(null); // 선택된 선수의 Uid
+  const [selectedPlayerUid, setSelectedPlayerUid] = useState(null);
   const { currentContest } = useContext(CurrentContestContext);
   const fetchResultQuery = useFirestoreQuery();
   const [rankingData, setRankingData] = useState(null);
-  const [isRankingView, setIsRankingView] = useState(false); // 순위확인/명단확인 상태
-  const [isReversed, setIsReversed] = useState(false); // 정순/역순 상태
+  const [isRankingView, setIsRankingView] = useState(false);
+  const [isReversed, setIsReversed] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(
+    typeof window !== "undefined"
+      ? window.innerWidth > window.innerHeight
+      : false
+  );
 
   const {
     data: realtimeData,
@@ -97,14 +111,11 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
-  // 순위확인 함수 (사회자가 미리 확인)
   const handleViewRanking = async (gradeId, gradeTitle) => {
     if (isRankingView) {
-      // 순위확인 모드인 경우, 명단확인 모드로 돌아가기
       setIsRankingView(false);
-      setRankingData(null); // 순위 데이터를 초기화
+      setRankingData(null);
     } else {
-      // 순위가 아닌 경우 순위 데이터를 조회하고 보여줌
       const condition = [where("gradeId", "==", gradeId)];
       try {
         const data = await fetchResultQuery.getDocuments(
@@ -122,20 +133,21 @@ const ContestMonitoringHost = ({ contestId }) => {
         const standingData = data[0].result.sort(
           (a, b) => a.playerRank - b.playerRank
         );
-        setRankingData(standingData); // 순위 데이터를 상태에 저장
-        setIsRankingView(true); // 순위확인 모드로 전환
+        setRankingData(standingData);
+        setIsRankingView(true);
       } catch (error) {
         console.log("에러 발생:", error);
       }
     }
   };
 
-  // 스크린 송출 함수 (화면에 순위를 송출)
   const handleSendToScreen = async (gradeId, gradeTitle) => {
     try {
       await fetchResultAndScoreBoard(gradeId, gradeTitle);
+      message.success("스크린 송출 완료");
       console.log("스크린 송출 완료");
     } catch (error) {
+      message.error("스크린 송출 중 에러 발생");
       console.log("스크린 송출 중 에러:", error);
     }
   };
@@ -170,21 +182,18 @@ const ContestMonitoringHost = ({ contestId }) => {
   };
 
   const handleRowClick = (playerUid) => {
-    setSelectedPlayerUid(playerUid); // 클릭한 선수의 Uid 저장
+    setSelectedPlayerUid(playerUid);
   };
 
-  // 정렬 상태를 저장하는 함수
   const saveSortOrder = (isReversed) => {
     localStorage.setItem("sortOrder", isReversed ? "reversed" : "normal");
   };
 
-  // 로드 시 localStorage에서 정렬 방식 불러오기
   useEffect(() => {
     const storedOrder = localStorage.getItem("sortOrder");
     setIsReversed(storedOrder === "reversed");
   }, []);
 
-  // Fetch data for players
   useEffect(() => {
     const loadData = async () => {
       if (
@@ -207,193 +216,332 @@ const ContestMonitoringHost = ({ contestId }) => {
     loadData();
   }, [currentContest, realtimeData?.stageId]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   if (isLoading || realtimeLoading) {
-    return <p>로딩 중...</p>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Spin size="large" tip="로딩 중..." />
+      </div>
+    );
   }
 
   if (realtimeError) {
-    return <p>오류 발생: {realtimeError.message}</p>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Card>
+          <p className="text-red-500">오류 발생: {realtimeError.message}</p>
+        </Card>
+      </div>
+    );
   }
 
+  const rankingColumns = [
+    {
+      title: "순위",
+      dataIndex: "playerRank",
+      key: "playerRank",
+      width: 100,
+      align: "center",
+    },
+    {
+      title: "선수",
+      key: "player",
+      render: (_, record) => `${record.playerNumber}. ${record.playerName}`,
+      align: "center",
+    },
+    {
+      title: "소속",
+      dataIndex: "playerGym",
+      key: "playerGym",
+      align: "center",
+    },
+  ];
+
+  const playerColumns = [
+    {
+      title: "번호",
+      dataIndex: "playerNumber",
+      key: "playerNumber",
+      width: 100,
+      align: "center",
+    },
+    {
+      title: "이름",
+      dataIndex: "playerName",
+      key: "playerName",
+      width: 150,
+      align: "center",
+    },
+    {
+      title: "소속",
+      dataIndex: "playerGym",
+      key: "playerGym",
+      width: 200,
+      align: "center",
+    },
+    {
+      title: "출전동기",
+      dataIndex: "playerText",
+      key: "playerText",
+      align: "left",
+      render: (text) => (
+        <div className="whitespace-pre-wrap">{text || "-"}</div>
+      ),
+    },
+  ];
+
   return (
-    <div className="w-full h-auto p-4 bg-white shadow-lg rounded-lg flex flex-col gap-6">
-      {/* 상단 화면 - 현재 대회 상태 및 순위 확정 정보 */}
-      <div className="bg-gray-100 p-4 rounded-lg shadow-inner">
-        <h2 className="text-2xl font-bold mb-4 border-b pb-2">
-          현재 무대 정보
-        </h2>
-        <div className="mb-4">
-          <span className="font-semibold">카테고리: </span>
-          <span>{realtimeData?.categoryTitle || "정보 없음"} </span>
-          <span>{realtimeData?.gradeTitle || "정보 없음"}</span>
+    <div className="w-full h-auto p-4 bg-gray-50">
+      <div className={`flex ${isLandscape ? "flex-row" : "flex-col"} gap-4`}>
+        <div className={isLandscape ? "flex-[1]" : "w-full"}>
+          <Card
+            title={
+              <div className="flex items-center gap-2">
+                <TrophyOutlined className="text-2xl" />
+                <span className="text-xl">현재 무대 정보</span>
+              </div>
+            }
+            className="shadow-lg h-full"
+          >
+            <div className="mb-4">
+              <span className="font-semibold text-lg">카테고리: </span>
+              <span className="text-lg">
+                {realtimeData?.categoryTitle || "정보 없음"}{" "}
+                {realtimeData?.gradeTitle || "정보 없음"}
+              </span>
+            </div>
+
+            {currentPlayersArray.length > 0 ? (
+              currentPlayersArray.map((current, cIdx) => (
+                <div key={cIdx} className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-lg">
+                        {current.gradeTitle}
+                      </h4>
+                      {(realtimeData?.resultSaved || []).includes(
+                        current.gradeId
+                      ) ? (
+                        <Tag color="success" className="text-base">
+                          순위표 확정됨
+                        </Tag>
+                      ) : (
+                        <Tag color="warning" className="text-base">
+                          심사중
+                        </Tag>
+                      )}
+                    </div>
+
+                    <Space direction="vertical" size="small" className="w-full">
+                      {(realtimeData?.resultSaved || []).includes(
+                        current.gradeId
+                      ) ? (
+                        <>
+                          <Button
+                            type="primary"
+                            icon={<EyeOutlined />}
+                            onClick={() =>
+                              handleViewRanking(
+                                current.gradeId,
+                                current.gradeTitle
+                              )
+                            }
+                            className="w-full"
+                          >
+                            {isRankingView ? "명단확인" : "순위확인"}
+                          </Button>
+                          <Button
+                            type="primary"
+                            icon={<SendOutlined />}
+                            onClick={() =>
+                              handleSendToScreen(
+                                current.gradeId,
+                                current.gradeTitle
+                              )
+                            }
+                            className="w-full"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                              borderColor: "transparent",
+                            }}
+                          >
+                            스크린송출
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-gray-600 text-sm">
+                            심사 진행 중...
+                          </span>
+                          <Button
+                            type={isRankingView ? "default" : "primary"}
+                            danger={!isRankingView}
+                            size="large"
+                            icon={
+                              isRankingView ? (
+                                <UnorderedListOutlined />
+                              ) : (
+                                <TrophyOutlined />
+                              )
+                            }
+                            onClick={() =>
+                              handleViewRanking(
+                                current.gradeId,
+                                current.gradeTitle
+                              )
+                            }
+                            className="w-full h-20 text-xl font-bold"
+                          >
+                            {isRankingView ? "명단보기" : "순위확인"}
+                          </Button>
+                        </>
+                      )}
+                    </Space>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500">확정된 순위가 없습니다.</p>
+            )}
+          </Card>
         </div>
 
-        {currentPlayersArray.length > 0 ? (
-          currentPlayersArray.map((current, cIdx) => (
-            <div key={cIdx} className="mb-4">
-              {/* gradeTitle을 세로로 배치 */}
-              <h4 className="font-bold mb-2">{current.gradeTitle}</h4>
-
-              {/* 하위 항목들을 가로로 배치 */}
-              <div className="flex items-center">
-                {/* 심사중 또는 순위확정 구분 */}
-                {(realtimeData?.resultSaved || []).includes(current.gradeId) ? (
-                  <span className="ml-4 text-red-500 font-semibold">
-                    순위표 확정됨
-                  </span>
-                ) : (
-                  <span className="ml-4 text-yellow-500 font-semibold">
-                    심사중
-                  </span>
-                )}
-
-                {/* 버튼은 가로로 배치 */}
-                {(realtimeData?.resultSaved || []).includes(current.gradeId) ? (
-                  <div className="ml-4 flex gap-4">
-                    {/* 순위확인 버튼 */}
-                    <button
-                      className="bg-green-500 text-white px-4 py-2 rounded-lg"
-                      onClick={() =>
-                        handleViewRanking(current.gradeId, current.gradeTitle)
-                      }
-                    >
-                      {isRankingView ? "명단확인" : "순위확인"}
-                    </button>
-
-                    {/* 스크린송출 버튼 */}
-                    <button
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg"
-                      onClick={() =>
-                        handleSendToScreen(current.gradeId, current.gradeTitle)
-                      }
-                    >
-                      스크린송출
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex w-auto justify-start gap-x-2 items-center">
-                    <span className="ml-4">심사 진행 중...</span>
-                    <button
-                      className="bg-red-500 text-white px-4 py-2 rounded-lg"
-                      onClick={() =>
-                        handleViewRanking(current.gradeId, current.gradeTitle)
-                      }
-                    >
-                      순위강제확인
-                    </button>
-                  </div>
+        <div className={isLandscape ? "flex-[4]" : "w-full"}>
+          <Card
+            title={
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-bold">
+                  {isRankingView ? "순위" : "참가 선수 명단"}
+                </span>
+                {isRankingView && (
+                  <Button
+                    size="large"
+                    icon={isReversed ? <DownOutlined /> : <UpOutlined />}
+                    onClick={() => {
+                      setIsReversed((prev) => !prev);
+                      saveSortOrder(!isReversed);
+                    }}
+                  >
+                    {isReversed ? "역순" : "정순"}
+                  </Button>
                 )}
               </div>
-            </div>
-          ))
-        ) : (
-          <p>확정된 순위가 없습니다.</p>
-        )}
-      </div>
-
-      {/* 하단 화면 - 참가 선수 명단 또는 순위 */}
-      <div className="bg-gray-50 p-4 rounded-lg shadow-inner">
-        <h3 className="text-xl font-semibold mb-4 border-b pb-2 flex justify-between items-center">
-          {isRankingView ? "순위" : "참가 선수 명단"}
-          {isRankingView && (
-            <button
-              className="text-lg"
-              onClick={() => {
-                setIsReversed((prev) => !prev);
-                saveSortOrder(!isReversed);
-              }}
+            }
+            className="shadow-lg h-full"
+          >
+            <div
+              className={
+                isLandscape ? "overflow-y-auto max-h-[calc(100vh-200px)]" : ""
+              }
             >
-              {isReversed ? <FaArrowDown /> : <FaArrowUp />}
-            </button>
-          )}
-        </h3>
+              {isRankingView && rankingData ? (
+                <div className="space-y-4">
+                  {(isReversed ? [...rankingData].reverse() : rankingData)
+                    .filter((player) => player.playerRank < 1000)
+                    .map((player) => {
+                      const isSelected = selectedPlayerUid === player.playerUid;
+                      const rank = player.playerRank;
 
-        {isRankingView && rankingData ? (
-          <table className="w-full table-auto text-lg">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-2">순위</th>
-                <th className="px-4 py-2">선수</th>
-                <th className="px-4 py-2">소속</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(isReversed ? [...rankingData].reverse() : rankingData).map(
-                (player) => (
-                  <tr
-                    key={player.playerUid} // playerUid로 key 설정
-                    className={`text-center cursor-pointer ${
-                      selectedPlayerUid === player.playerUid
-                        ? "font-bold text-xl bg-yellow-200" // 선택된 행의 스타일 적용
-                        : "hover:bg-blue-100"
-                    }`}
-                    onClick={() => setSelectedPlayerUid(player.playerUid)} // 클릭 시 playerUid를 저장
-                  >
-                    <td className="border px-4 py-2">{player.playerRank}</td>
-                    <td className="border px-4 py-2">
-                      {player.playerNumber}. {player.playerName}
-                    </td>
-                    <td className="border px-4 py-2">{player.playerGym}</td>
-                  </tr>
-                )
+                      let rankColor = "bg-white";
+                      if (rank === 1)
+                        rankColor =
+                          "bg-gradient-to-r from-yellow-400 to-yellow-300";
+                      else if (rank === 2)
+                        rankColor =
+                          "bg-gradient-to-r from-gray-300 to-gray-200";
+                      else if (rank === 3)
+                        rankColor =
+                          "bg-gradient-to-r from-orange-400 to-orange-300";
+
+                      return (
+                        <div
+                          key={player.playerUid}
+                          onClick={() => handleRowClick(player.playerUid)}
+                          className={`p-6 rounded-xl cursor-pointer transition-all ${
+                            isSelected
+                              ? "bg-yellow-200 border-4 border-yellow-500 shadow-2xl"
+                              : `${rankColor} border-2 border-gray-200 hover:shadow-lg`
+                          }`}
+                        >
+                          <div className="flex items-center gap-8">
+                            <div className="text-8xl font-bold text-gray-800 min-w-[120px] text-center">
+                              {rank}위
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-5xl font-bold text-gray-900 mb-2">
+                                {player.playerNumber}. {player.playerName}
+                              </div>
+                              <div className="text-2xl text-gray-700">
+                                {player.playerGym}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                currentPlayersArray.map((current, cIdx) => (
+                  <div key={cIdx} className="mb-8">
+                    <h4 className="font-bold text-2xl mb-4 pb-2 border-b-2 border-gray-300">
+                      {current.gradeTitle}
+                    </h4>
+                    <div className="space-y-4">
+                      {current.players.length > 0 ? (
+                        current.players.map((player) => {
+                          const isSelected =
+                            selectedPlayerUid === player.playerUid;
+                          return (
+                            <div
+                              key={player.playerUid}
+                              onClick={() => handleRowClick(player.playerUid)}
+                              className={`p-6 rounded-xl cursor-pointer transition-all ${
+                                isSelected
+                                  ? "bg-yellow-200 border-4 border-yellow-500 shadow-2xl"
+                                  : "bg-white border-2 border-gray-200 hover:shadow-lg"
+                              }`}
+                            >
+                              <div className="flex items-start gap-6">
+                                <div className="text-7xl font-bold text-blue-600 min-w-[100px] text-center">
+                                  {player.playerNumber}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-4xl font-bold text-gray-900 mb-2">
+                                    {player.playerName}
+                                  </div>
+                                  <div className="text-2xl text-gray-700 mb-3">
+                                    {player.playerGym}
+                                  </div>
+                                  {player.playerText && (
+                                    <div className="text-xl text-gray-600 whitespace-pre-wrap leading-relaxed mt-4 p-4 bg-gray-50 rounded-lg">
+                                      {player.playerText}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xl text-gray-500 text-center py-8">
+                          참가한 선수가 없습니다.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))
               )}
-            </tbody>
-          </table>
-        ) : (
-          currentPlayersArray.map((current, cIdx) => (
-            <div key={cIdx} className="mb-4">
-              <h4 className="font-bold mb-2">{current.gradeTitle}</h4>
-              <table className="w-full table-fixed text-lg">
-                {" "}
-                {/* table-fixed로 테이블 레이아웃 고정 */}
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-4 py-2 w-1/6">번호</th>{" "}
-                    {/* 열 너비 지정 */}
-                    <th className="px-4 py-2 w-1/4">이름</th>
-                    <th className="px-4 py-2 w-1/4">소속</th>
-                    <th className="px-4 py-2 w-1/3">출전동기</th>{" "}
-                    {/* 열 너비 지정 */}
-                  </tr>
-                </thead>
-                <tbody>
-                  {current.players.length > 0 ? (
-                    current.players.map((player) => (
-                      <tr
-                        key={player.playerUid} // playerUid로 key 설정
-                        className={`text-center cursor-pointer ${
-                          selectedPlayerUid === player.playerUid
-                            ? "font-bold text-xl bg-yellow-200" // 선택된 행의 스타일 적용
-                            : "hover:bg-blue-100"
-                        }`}
-                        onClick={() => setSelectedPlayerUid(player.playerUid)} // 클릭 시 playerUid를 저장
-                      >
-                        <td className="border px-4 py-2">
-                          {player.playerNumber}
-                        </td>
-                        <td className="border px-4 py-2">
-                          {player.playerName}
-                        </td>
-                        <td className="border px-4 py-2">{player.playerGym}</td>
-                        <td className="border px-4 py-2 text-left whitespace-pre-wrap">
-                          {" "}
-                          {/* 줄바꿈 처리 */}
-                          {player?.playerText}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="4" className="text-center py-4">
-                        참가한 선수가 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
             </div>
-          ))
-        )}
+          </Card>
+        </div>
       </div>
     </div>
   );
