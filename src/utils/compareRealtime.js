@@ -1,227 +1,290 @@
-// src/utils/compareRealtime.js
-// Firebase Realtime Database 안정 유틸 (compare 전용)
+/**
+ * compareRealtime.js
+ * 비교심사와 일반심사에서 공통으로 사용하는 실시간 데이터 처리 유틸
+ */
 
-import {
-  getDatabase,
-  ref,
-  runTransaction,
-  update,
-  serverTimestamp,
-} from "firebase/database";
+// ================== 기존 로직 (예전부터 사용하던 함수) ==================
 
-/** 숫자 안전 변환 */
-export const toInt = (v, fallback = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-/** judges 배열 -> seatIndex Map으로 정규화 */
-export const toSeatMap = (arr = []) => {
-  const map = {};
-  arr.forEach((j) => {
-    const seat = toInt(j?.seatIndex);
-    if (!seat) return;
-    map[String(seat)] = {
-      seatIndex: seat,
-      judgeUid: j?.judgeUid || null,
-      judgeName: j?.judgeName || null,
-      messageStatus: j?.messageStatus || "확인전",
-      votedPlayerNumber: Array.isArray(j?.votedPlayerNumber)
-        ? j.votedPlayerNumber
-        : [],
-      isLogined: !!j?.isLogined, // 호환 필드 있어도 안전
-      isEnd: !!j?.isEnd,
-    };
-  });
-  return map;
-};
-
-export const toPlayerKey = (p) =>
-  `${toInt(p?.playerNumber)}::${p?.playerUid || ""}`;
-
-export const uniqPlayers = (players = []) => {
-  const seen = new Set();
-  return players.filter((p) => {
-    const k = toPlayerKey(p);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-};
-
-/** 투표 집계 (judges Map -> [{playerNumber, playerUid, votedCount}]) */
-export const countVotes = (judges = {}) => {
-  const tally = {};
-  Object.values(judges || {}).forEach((j) => {
-    const list = Array.isArray(j?.votedPlayerNumber) ? j.votedPlayerNumber : [];
-    list.forEach((v) => {
-      const key = toPlayerKey(v);
-      if (!tally[key]) {
-        tally[key] = {
-          playerNumber: toInt(v?.playerNumber),
-          playerUid: v?.playerUid || null,
-          votedCount: 0,
-        };
-      }
-      tally[key].votedCount += 1;
-    });
-  });
-  return Object.values(tally);
-};
-
-/** 동점 포함 TOP N 추출 */
-export const pickTop = (voted = [], n) => {
-  const N = toInt(n);
-  if (N <= 0) return [];
-  const sorted = [...voted].sort((a, b) => b.votedCount - a.votedCount);
-  const base = sorted.slice(0, N);
-  if (base.length === 0) return base;
-  const last = base[base.length - 1].votedCount;
-  let i = N;
-  while (sorted[i] && sorted[i].votedCount === last) {
-    base.push(sorted[i]);
-    i++;
-  }
-  return base;
-};
-
-/** 내부: phase -> status 미러링(기존 코드 호환) */
-const mirrorStatus = (phase) => {
-  switch (phase) {
-    case "voting":
-      return {
-        compareStart: true,
-        compareEnd: false,
-        compareCancel: false,
-        compareIng: false,
-      };
-    case "in_progress":
-      return {
-        compareStart: false,
-        compareEnd: false,
-        compareCancel: false,
-        compareIng: true,
-      };
-    case "ended":
-      return {
-        compareStart: false,
-        compareEnd: true,
-        compareCancel: false,
-        compareIng: false,
-      };
-    case "canceled":
-      return {
-        compareStart: false,
-        compareEnd: false,
-        compareCancel: true,
-        compareIng: false,
-      };
-    default:
-      return {
-        compareStart: false,
-        compareEnd: false,
-        compareCancel: false,
-        compareIng: false,
-      }; // idle
-  }
-};
-
-/** 비교심사 시작 (phase=voting) */
-export const startCompare = async ({
+// 비교심사 시작
+export const startCompare = async (
+  updateRealtimeCompare,
   contestId,
-  index,
-  playerLength,
-  scoreMode,
-  voteRange,
-  judgesArray, // [{seatIndex, judgeUid?, judgeName?}]
-  updatedBy, // {uid, name} | optional
-}) => {
-  const db = getDatabase();
-  const comparesRef = ref(db, `currentStage/${contestId}/compares`);
-  await runTransaction(comparesRef, (prev) => {
-    const phase = "voting";
-    return {
-      ...(prev || {}),
-      index: toInt(index, 1),
-      phase,
-      status: mirrorStatus(phase),
-      settings: {
-        playerLength: toInt(playerLength, 3),
-        scoreMode: scoreMode || "all",
-        voteRange: voteRange || "all",
-      },
-      judges: toSeatMap(judgesArray || []),
-      players: null,
-      version: (prev?.version || 0) + 1,
-      lastUpdatedAt: serverTimestamp(),
-      updatedBy: updatedBy || null,
-    };
-  });
+  compareInfo
+) => {
+  const path = `currentStage/${contestId}/compares`;
+  await updateRealtimeCompare.updateData(path, compareInfo);
 };
 
-/** 명단 확정 -> 진행중 (phase=in_progress) + history 스냅샷 */
-export const confirmCompare = async ({
+// 비교심사 확정
+export const confirmCompare = async (
+  updateRealtimeCompare,
   contestId,
-  index,
-  selectedPlayers, // [{playerNumber, playerUid}]
-  updatedBy,
-}) => {
-  const db = getDatabase();
-  const basePath = `currentStage/${contestId}/compares`;
-  const currentRef = ref(db, `${basePath}`);
-  await runTransaction(currentRef, (prev) => {
-    const phase = "in_progress";
-    const cleanPlayers = uniqPlayers(selectedPlayers || []).map((p) => ({
-      playerNumber: toInt(p?.playerNumber),
-      playerUid: p?.playerUid || null,
-    }));
-    const next = {
-      ...(prev || {}),
-      index: toInt(index, 1),
-      phase,
-      status: mirrorStatus(phase),
-      players: cleanPlayers,
-      version: (prev?.version || 0) + 1,
-      lastUpdatedAt: serverTimestamp(),
-      updatedBy: updatedBy || null,
-    };
-    return next;
-  });
+  compareInfo
+) => {
+  const path = `currentStage/${contestId}/compares`;
+  await updateRealtimeCompare.updateData(path, compareInfo);
+};
 
-  // history/{index} 스냅샷 저장 (멀티 업데이트)
-  const snapRef = ref(db, `${basePath}`);
-  const histRef = ref(db, `${basePath}/history/${toInt(index, 1)}`);
-  await update(ref(db), {
-    [`${basePath}/history/${toInt(index, 1)}`]: {
-      index: toInt(index, 1),
-      phase: "in_progress",
-      settings: (await (async () => null)()) || undefined, // 필요시 별도로 합쳐서 넣기
-      judges: undefined, // 필요시 prev를 읽어 합쳐서 저장
-      players: uniqPlayers(selectedPlayers || []).map((p) => ({
-        playerNumber: toInt(p?.playerNumber),
-        playerUid: p?.playerUid || null,
-      })),
-      lastUpdatedAt: serverTimestamp(),
-      updatedBy: updatedBy || null,
+// 비교심사 취소
+export const cancelCompare = async (updateRealtimeCompare, contestId) => {
+  const path = `currentStage/${contestId}/compares`;
+  await updateRealtimeCompare.updateData(path, {
+    status: {
+      compareStart: false,
+      compareEnd: false,
+      compareCancel: true,
+      compareIng: false,
     },
   });
 };
 
-/** 비교심사 취소 (phase=canceled) */
-export const cancelCompare = async ({ contestId, updatedBy }) => {
-  const db = getDatabase();
-  const comparesRef = ref(db, `currentStage/${contestId}/compares`);
-  await runTransaction(comparesRef, (prev) => {
-    const phase = "canceled";
-    return {
-      ...(prev || {}),
-      phase,
-      status: mirrorStatus(phase),
-      // players는 비움
-      players: null,
-      version: (prev?.version || 0) + 1,
-      lastUpdatedAt: serverTimestamp(),
-      updatedBy: updatedBy || null,
-    };
+// 투표수 집계 (기존 기본 집계 로직)
+export const countVotes = (votes = []) => {
+  const map = {};
+  votes.forEach((vote) => {
+    const key = `${vote.playerNumber}-${vote.playerUid}`;
+    if (!map[key]) {
+      map[key] = { ...vote, votedCount: 0 };
+    }
+    map[key].votedCount += 1;
   });
+  return Object.values(map);
+};
+
+// TOP N 추출 (기존 pickTop)
+export const pickTop = (players = [], length = 0) => {
+  if (!players || players.length === 0) return [];
+  const sorted = [...players].sort((a, b) => b.votedCount - a.votedCount);
+  return sorted.slice(0, length);
+};
+
+// 좌석 정보 만들기 (기존 유틸)
+export const toSeatArray = (judges = []) =>
+  judges.map((j) => ({
+    seatIndex: j.seatIndex,
+    messageStatus: j.messageStatus || "확인전",
+  }));
+
+export const toPlayerKey = (p) => `${p.playerNumber}-${p.playerUid}`;
+export const toInt = (val) => parseInt(val, 10) || 0;
+
+export const uniqPlayers = (arr = []) => {
+  const seen = new Set();
+  return arr.filter((p) => {
+    const key = toPlayerKey(p);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+// ================== 새로 추가된 공통 함수 ==================
+
+/**
+ * 현재 무대 / 심판 / 선수 정보를 실시간 DB에 저장
+ */
+export const updateRealtimeCurrentStageInfo = async (
+  updateRealtimeCompare,
+  contestId,
+  { stageInfo, judges = [], players = [] }
+) => {
+  if (!contestId) return;
+  const path = `currentStage/${contestId}`;
+  try {
+    await updateRealtimeCompare.updateData(path, {
+      stage: {
+        categoryId: stageInfo?.categoryId,
+        categoryTitle: stageInfo?.categoryTitle,
+        gradeId: stageInfo?.grades?.[0]?.gradeId,
+        gradeTitle: stageInfo?.grades?.[0]?.gradeTitle,
+      },
+      judges: judges.map((j) => ({
+        seatIndex: j.seatIndex,
+        judgeId: j.judgeId || null,
+        name: j.name || null,
+      })),
+      players: players.map((p) => ({
+        playerNumber: p.playerNumber,
+        playerUid: p.playerUid,
+        name: p.name || null,
+      })),
+    });
+  } catch (error) {
+    console.error("Error updating realtime current stage info:", error);
+  }
+};
+
+/**
+ * 득표 수 집계 (비교심사용)
+ */
+export const countPlayerVotes = (data = []) => {
+  const voteCounts = {};
+  data.forEach((entry) => {
+    if (
+      entry.votedPlayerNumber &&
+      Array.isArray(entry.votedPlayerNumber) &&
+      entry.votedPlayerNumber.length > 0
+    ) {
+      entry.votedPlayerNumber.forEach((vote) => {
+        const key = `${vote.playerNumber}-${vote.playerUid}`;
+        if (!voteCounts[key]) {
+          voteCounts[key] = {
+            playerNumber: vote.playerNumber,
+            playerUid: vote.playerUid,
+            votedCount: 0,
+          };
+        }
+        voteCounts[key].votedCount += 1;
+      });
+    }
+  });
+  return Object.values(voteCounts);
+};
+
+/**
+ * TOP N 선수 추출 (동점자 포함)
+ */
+export const getTopPlayers = (players = [], playerLength = 0) => {
+  if (!players || players.length === 0) return [];
+
+  const sortedPlayers = [...players].sort(
+    (a, b) => b.votedCount - a.votedCount
+  );
+  let topPlayers = sortedPlayers.slice(0, playerLength);
+
+  const lastVotedCount = topPlayers[topPlayers.length - 1]?.votedCount;
+  let i = playerLength;
+  while (sortedPlayers[i] && sortedPlayers[i].votedCount === lastVotedCount) {
+    topPlayers.push(sortedPlayers[i]);
+    i++;
+  }
+
+  return topPlayers;
+};
+
+/**
+ * [위원장 직권] 임시 명단 확정
+ */
+export const forceConfirmPlayers = async ({
+  updateRealtimeCompare,
+  updateCompare,
+  realtimeData,
+  compareArray,
+  compareList,
+  contestId,
+  stageInfo,
+  propCompareIndex,
+  votedInfo,
+  votedResult,
+  setCompareArray,
+  setCompareList,
+  setRefresh,
+  setClose,
+}) => {
+  try {
+    const topResult = getTopPlayers(votedResult, votedInfo.playerLength);
+
+    const compareInfo = {
+      contestId,
+      categoryId: stageInfo.categoryId,
+      gradeId: stageInfo.grades[0].gradeId,
+      categoryTitle: stageInfo.categoryTitle,
+      gradeTitle: stageInfo.grades[0].gradeTitle,
+      compareIndex: propCompareIndex,
+      comparePlayerLength: parseInt(votedInfo.playerLength),
+      compareScoreMode: votedInfo.scoreMode,
+      players: [...topResult],
+      votedResult: [...votedResult],
+    };
+
+    const path = `currentStage/${contestId}/compares`;
+    const newStatus = {
+      compareStart: false,
+      compareEnd: false,
+      compareCancel: false,
+      compareIng: true,
+    };
+    const newCompares = [...compareArray, compareInfo];
+
+    await updateRealtimeCompare.updateData(path, {
+      ...realtimeData.compares,
+      status: { ...newStatus },
+      players: [...topResult],
+    });
+
+    await updateCompare.updateData(compareList.id, {
+      ...compareList,
+      compares: [...newCompares],
+    });
+
+    setCompareArray(newCompares);
+    setCompareList({ ...compareList, compares: newCompares });
+    setRefresh(true);
+    setClose(false);
+  } catch (err) {
+    console.error("Error force confirming players:", err);
+  }
+};
+
+/**
+ * [정상] 투표 완료 후 명단 확정
+ */
+export const confirmPlayers = async ({
+  updateRealtimeCompare,
+  updateCompare,
+  realtimeData,
+  compareArray,
+  compareList,
+  contestId,
+  stageInfo,
+  propCompareIndex,
+  votedInfo,
+  topResult,
+  votedResult,
+  setCompareArray,
+  setCompareList,
+  setRefresh,
+  setClose,
+}) => {
+  try {
+    const compareInfo = {
+      contestId,
+      categoryId: stageInfo.categoryId,
+      gradeId: stageInfo.grades[0].gradeId,
+      categoryTitle: stageInfo.categoryTitle,
+      gradeTitle: stageInfo.grades[0].gradeTitle,
+      compareIndex: propCompareIndex,
+      comparePlayerLength: parseInt(votedInfo.playerLength),
+      compareScoreMode: votedInfo.scoreMode,
+      players: [...topResult],
+      votedResult: [...votedResult],
+    };
+
+    const path = `currentStage/${contestId}/compares`;
+    const newStatus = {
+      compareStart: false,
+      compareEnd: false,
+      compareCancel: false,
+      compareIng: true,
+    };
+    const newCompares = [...compareArray, compareInfo];
+
+    await updateRealtimeCompare.updateData(path, {
+      ...realtimeData.compares,
+      status: { ...newStatus },
+      players: [...topResult],
+    });
+
+    await updateCompare.updateData(compareList.id, {
+      ...compareList,
+      compares: [...newCompares],
+    });
+
+    setCompareArray(newCompares);
+    setCompareList({ ...compareList, compares: newCompares });
+    setRefresh(true);
+    setClose(false);
+  } catch (err) {
+    console.error("Error confirming players:", err);
+  }
 };

@@ -270,6 +270,20 @@ export const MenuArray = [
       },
       {
         id: 5,
+        title: "채점표관리",
+        icon: <AiOutlineFileText />,
+        link: "/scoreresultmanager",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 6,
+        title: "신청접수관리",
+        icon: <AiOutlineFileText />,
+        link: "/simpleinvoiceadmin",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 7,
         title: "심사 결과 입력",
         icon: <AiOutlineFileText />,
         link: "/manual-input",
