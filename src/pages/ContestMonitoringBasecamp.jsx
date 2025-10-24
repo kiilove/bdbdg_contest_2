@@ -310,6 +310,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           isEnd: false,
           judgeName: assigned?.judgeName ?? null,
           judgeUid: assigned?.judgeUid ?? null,
+          onedayPassword: assigned?.onedayPassword ?? null, // ✅ 추가
         };
       }
     );
@@ -381,7 +382,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   }, [currentContest]);
 
   useEffect(() => {
-    console.log(realtimeData);
     setCurrentStageInfo({
       ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
     });
@@ -405,59 +405,71 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   }, [realtimeData, playersArray, currentStageInfo]);
 
-  const JudgeCardView = ({ judges }) => (
-    <div className="space-y-3">
-      {judges?.map((judge, index) => {
-        const { isEnd, isLogined, seatIndex, judgeName, judgeUid } = judge;
-        let statusColor = "default";
-        let statusText = "로그인대기";
+  const JudgeCardView = ({ judges, handleForceReStart, currentContest }) => {
+    return (
+      <div className="space-y-3">
+        {judges?.map((judge, index) => {
+          const {
+            isEnd,
+            isLogined,
+            seatIndex,
+            judgeName,
+            judgeUid,
+            onedayPassword,
+          } = judge;
+          console.log(judge);
+          let statusColor = "default";
+          let statusText = "로그인대기";
 
-        if (isEnd && isLogined) {
-          statusColor = "success";
-          statusText = "심사종료";
-        } else if (!isEnd && isLogined) {
-          statusColor = "processing";
-          statusText = "심사중";
-        }
+          if (isEnd && isLogined) {
+            statusColor = "success";
+            statusText = "심사종료";
+          } else if (!isEnd && isLogined) {
+            statusColor = "processing";
+            statusText = "심사중";
+          }
 
-        return (
-          <Card key={index} size="small" className="shadow-sm">
-            <div className="flex justify-between items-center">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <Text strong className="text-base">
-                    {seatIndex}번 심판석
-                  </Text>
-                  <Tag color={statusColor}>{statusText}</Tag>
-                </div>
-                {judgeName ? (
-                  <div className="flex flex-col">
-                    <Text strong>{judgeName}</Text>
-                    {judgeUid && (
-                      <Text type="secondary" className="text-xs">
-                        {judgeUid}
-                      </Text>
-                    )}
+          return (
+            <Card key={index} size="small" className="shadow-sm">
+              <div className="flex justify-between items-center">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Text strong className="text-base">
+                      {seatIndex}번 심판석
+                    </Text>
+                    <Tag color={statusColor}>{statusText}</Tag>
                   </div>
-                ) : (
-                  <Text type="secondary">정보 없음</Text>
-                )}
+
+                  {judgeName ? (
+                    <div className="flex flex-col">
+                      <Text strong>{judgeName}</Text>
+                      {judgeUid && (
+                        <Text type="secondary" className="text-xs">
+                          {judgeUid} / {onedayPassword}
+                        </Text>
+                      )}
+                    </div>
+                  ) : (
+                    <Text type="secondary">정보 없음</Text>
+                  )}
+                </div>
+
+                <Button
+                  size="small"
+                  icon={<RedoOutlined />}
+                  onClick={() =>
+                    handleForceReStart(index, currentContest.contests.id)
+                  }
+                >
+                  재시작
+                </Button>
               </div>
-              <Button
-                size="small"
-                icon={<RedoOutlined />}
-                onClick={() =>
-                  handleForceReStart(index, currentContest.contests.id)
-                }
-              >
-                재시작
-              </Button>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
 
   const StageCardView = ({ stages }) => (
     <div className="space-y-3">
@@ -603,7 +615,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               <Text strong>{record.judgeName}</Text>
               {record?.judgeUid && (
                 <Text type="secondary" className="text-xs">
-                  {record.judgeUid}
+                  {record.judgeUid} / {record.onedayPassword}
                 </Text>
               )}
             </div>
@@ -879,6 +891,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     judgeInfo: {
                                       judgeName: judge.judgeName,
                                       judgeUid: judge.judgeUid,
+                                      onedayPassword: judge.onedayPassword,
                                     },
                                   })
                                 )}

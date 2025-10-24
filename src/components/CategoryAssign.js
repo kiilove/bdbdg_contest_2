@@ -13,55 +13,42 @@ import {
 } from "@ant-design/icons";
 
 const CategoryAssign = ({
-  judgesAssignInfo,
+  judgesAssignInfo, // 표시용: 부모에서 파생(제목 포함) 내려와도, 저장은 원본 필드만
   judgesPoolArray,
-  setJudgesAssignInfo,
+  setJudgesAssignInfo, // 부모가 감싼 '원본 업데이트' setter
   categoriesArray,
   gradesArray,
   currentContest,
   generateUUID,
+  setMessage, // ✨ 부모에서 내려주는 모달 메시지
+  setMsgOpen, // ✨ 부모에서 내려주는 모달 오픈
 }) => {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  /** ✅ 카테고리 ID → 이름 매핑 함수 */
-  const getCategoryName = (categoryId) => {
-    const match = categoriesArray.find(
-      (c) => c.contestCategoryId === categoryId
-    );
-    return (
-      match?.contestCategoryTitle ||
-      match?.contestCategoryName ||
-      match?.contestCategoryInfo?.name ||
-      ""
-    );
-  };
-
-  /** 카테고리별 이미 배정된 심판 */
+  /** 카테고리별 이미 배정된 심판 UID 배열 */
   const getAssignedJudgesForCategory = (categoryId) => {
-    return judgesAssignInfo.judges
+    return (judgesAssignInfo.judges || [])
       .filter((assign) => assign.categoryId === categoryId)
       .map((assign) => assign.judgeUid);
   };
 
   /** 다중 심판 체크 */
   const getSeatStatus = (categoryId, seatIndex) => {
-    const assigned = judgesAssignInfo.judges.filter(
+    const assigned = (judgesAssignInfo.judges || []).filter(
       (a) => a.categoryId === categoryId && a.seatIndex === seatIndex
     );
     const uniqueJudges = [...new Set(assigned.map((a) => a.judgeUid))];
     return uniqueJudges.length > 1 ? "multi" : "single";
   };
 
-  /** 카테고리에 심판 배정 */
+  /** 카테고리에 심판 배정 (원본 필드만 push) + grade 단위 유효성 검사 */
   const assignJudgeToCategory = (
     category,
     grades,
@@ -69,7 +56,33 @@ const CategoryAssign = ({
     seatNumber,
     updatedJudges
   ) => {
+    const allErrors = [];
+
     grades.forEach((grade) => {
+      const missing = [];
+
+      if (!category?.contestCategorySection) missing.push("sectionName");
+      if (!category?.contestCategoryId) missing.push("categoryId");
+      if (!selectedJudge?.judgeUid) missing.push("judgeUid");
+      if (!selectedJudge?.judgeName) missing.push("judgeName");
+      if (!currentContest?.contests?.id) missing.push("contestId");
+      if (seatNumber == null) missing.push("seatIndex"); // 0 허용
+
+      if (grade?.contestGradeId == null) missing.push("contestGradeId");
+      if (grade?.contestGradeIndex == null) missing.push("contestGradeIndex"); // 0 허용
+      if (!grade?.contestGradeTitle) missing.push("contestGradeTitle");
+      if (grade?.refCategoryId == null) missing.push("refCategoryId");
+
+      if (missing.length) {
+        const label =
+          grade?.contestGradeTitle ??
+          grade?.contestGradeId ??
+          "(알 수 없는 체급)";
+        allErrors.push(`${label} → ${missing.join(", ")}`);
+        return; // 이 grade는 skip
+      }
+
+      // ✅ 원본 필드만 저장 (categoryTitle 등 파생 필드는 저장하지 않음)
       updatedJudges.push({
         sectionName: category.contestCategorySection,
         categoryId: category.contestCategoryId,
@@ -78,15 +91,29 @@ const CategoryAssign = ({
         judgeName: selectedJudge.judgeName,
         judgesAssignId: generateUUID(),
         contestId: currentContest.contests.id,
-        isHead: selectedJudge.isHead,
+        isHead: !!selectedJudge.isHead,
         onedayPassword: selectedJudge.onedayPassword || null,
         contestGradeId: grade.contestGradeId,
         contestGradeIndex: grade.contestGradeIndex,
         contestGradeTitle: grade.contestGradeTitle,
-        isCompared: grade.isCompared || false,
+        isCompared: !!grade.isCompared,
         refCategoryId: grade.refCategoryId || null,
       });
     });
+
+    if (allErrors.length) {
+      setMessage?.({
+        body:
+          `배정할 수 없습니다. ${
+            category?.contestCategoryTitle ?? "(이름 없는 카테고리)"
+          } / 좌석 ${seatNumber} 누락 정보:\n- ` + allErrors.join("\n- "),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen?.(true);
+      return false;
+    }
+    return true;
   };
 
   /** 심판 선택 */
@@ -96,7 +123,7 @@ const CategoryAssign = ({
     );
     if (!selectedJudge) return;
 
-    const updatedJudges = judgesAssignInfo.judges.filter(
+    const updatedJudges = (judgesAssignInfo.judges || []).filter(
       (assign) =>
         !(
           assign.categoryId === category.contestCategoryId &&
@@ -104,27 +131,30 @@ const CategoryAssign = ({
         )
     );
 
-    const categoryGrades = gradesArray.filter(
+    const categoryGrades = (gradesArray || []).filter(
       (g) => g.refCategoryId === category.contestCategoryId
     );
 
-    assignJudgeToCategory(
-      category,
-      categoryGrades,
-      selectedJudge,
-      seatIndex,
-      updatedJudges
-    );
-
-    setJudgesAssignInfo((prev) => ({
-      ...prev,
-      judges: updatedJudges,
-    }));
+    if (
+      assignJudgeToCategory(
+        category,
+        categoryGrades,
+        selectedJudge,
+        seatIndex,
+        updatedJudges
+      )
+    ) {
+      // 부모의 원본 상태를 업데이트 → 부모가 파생(제목) 붙여서 렌더/저장
+      setJudgesAssignInfo((prev) => ({
+        ...(prev || {}),
+        judges: updatedJudges,
+      }));
+    }
   };
 
   /** 심판 제거 */
   const handleRemoveAssign = (category, seatIndex) => {
-    const updatedJudges = judgesAssignInfo.judges.filter(
+    const updatedJudges = (judgesAssignInfo.judges || []).filter(
       (assign) =>
         !(
           assign.categoryId === category.contestCategoryId &&
@@ -132,12 +162,12 @@ const CategoryAssign = ({
         )
     );
     setJudgesAssignInfo((prev) => ({
-      ...prev,
+      ...(prev || {}),
       judges: updatedJudges,
     }));
   };
 
-  /** 랜덤 배정 */
+  /** 랜덤 배정 (빈 좌석만) */
   const handleRandomAssign = (category, unassignedSeats) => {
     const availableJudges = judgesPoolArray.filter(
       (judge) =>
@@ -146,8 +176,8 @@ const CategoryAssign = ({
         )
     );
 
-    const updatedJudgesAssignInfo = [...judgesAssignInfo.judges];
-    const categoryGrades = gradesArray.filter(
+    const updatedJudgesAssignInfo = [...(judgesAssignInfo.judges || [])];
+    const categoryGrades = (gradesArray || []).filter(
       (g) => g.refCategoryId === category.contestCategoryId
     );
 
@@ -156,32 +186,33 @@ const CategoryAssign = ({
         const randomJudge =
           availableJudges[Math.floor(Math.random() * availableJudges.length)];
         if (randomJudge) {
-          assignJudgeToCategory(
+          const ok = assignJudgeToCategory(
             category,
             categoryGrades,
             randomJudge,
             seatNumber,
             updatedJudgesAssignInfo
           );
+          if (!ok) return;
           availableJudges.splice(availableJudges.indexOf(randomJudge), 1);
         }
       }
     });
 
     setJudgesAssignInfo((prev) => ({
-      ...prev,
+      ...(prev || {}),
       judges: updatedJudgesAssignInfo,
     }));
   };
 
-  /** 전체 랜덤 */
+  /** 전체 랜덤 (해당 카테고리 모두 재배정) */
   const handleAllRandomAssign = (category, allSeats) => {
     const availableJudges = [...judgesPoolArray];
-    const updatedJudgesAssignInfo = judgesAssignInfo.judges.filter(
+    const updatedJudgesAssignInfo = (judgesAssignInfo.judges || []).filter(
       (assign) => assign.categoryId !== category.contestCategoryId
     );
 
-    const categoryGrades = gradesArray.filter(
+    const categoryGrades = (gradesArray || []).filter(
       (g) => g.refCategoryId === category.contestCategoryId
     );
 
@@ -192,45 +223,46 @@ const CategoryAssign = ({
           1
         )[0];
         if (randomJudge) {
-          assignJudgeToCategory(
+          const ok = assignJudgeToCategory(
             category,
             categoryGrades,
             randomJudge,
             seatNumber,
             updatedJudgesAssignInfo
           );
+          if (!ok) return;
         }
       }
     });
 
     setJudgesAssignInfo((prev) => ({
-      ...prev,
+      ...(prev || {}),
       judges: updatedJudgesAssignInfo,
     }));
   };
 
   /** 초기화 */
   const handleResetAssign = (category) => {
-    const clearedJudges = judgesAssignInfo.judges.filter(
+    const clearedJudges = (judgesAssignInfo.judges || []).filter(
       (assign) => assign.categoryId !== category.contestCategoryId
     );
     setJudgesAssignInfo((prev) => ({
-      ...prev,
+      ...(prev || {}),
       judges: clearedJudges,
     }));
   };
 
   return (
     <div className="flex w-full flex-col gap-4 p-4">
-      {categoriesArray.map((category, idx) => {
+      {(categoriesArray || []).map((category, idx) => {
         const allSeats = Array.from(
-          { length: category.contestCategoryJudgeCount || 0 },
+          { length: Number(category.contestCategoryJudgeCount || 0) }, // 안전 캐스팅
           (_, i) => i + 1
         );
 
         const unassignedSeats = allSeats.filter(
           (seatNumber) =>
-            !judgesAssignInfo.judges.some(
+            !(judgesAssignInfo.judges || []).some(
               (assign) =>
                 assign.categoryId === category.contestCategoryId &&
                 assign.seatIndex === seatNumber
@@ -252,7 +284,6 @@ const CategoryAssign = ({
                   {category.contestCategoryTitle ||
                     category.contestCategoryName ||
                     category.contestCategoryInfo?.name ||
-                    getCategoryName(category.contestCategoryId) ||
                     "이름 없는 카테고리"}
                 </span>
               </div>
@@ -293,7 +324,8 @@ const CategoryAssign = ({
                   category.contestCategoryId,
                   seatNumber
                 );
-                const selectedJudge = judgesAssignInfo.judges.find(
+
+                const selectedJudge = (judgesAssignInfo.judges || []).find(
                   (assign) =>
                     assign.categoryId === category.contestCategoryId &&
                     assign.seatIndex === seatNumber
@@ -342,6 +374,7 @@ const CategoryAssign = ({
                           </div>
                         </div>
                       )}
+
                       <Select
                         className="w-full"
                         value={selectedJudge.judgeUid || "unselect"}
@@ -397,6 +430,7 @@ const CategoryAssign = ({
                         </Tag>
                       )}
                     </div>
+
                     <div className="flex-1">
                       <Select
                         className="w-full"
@@ -416,7 +450,9 @@ const CategoryAssign = ({
                         {judgesPoolArray
                           .filter(
                             (judge) =>
-                              !assignedJudges.includes(judge.judgeUid) ||
+                              !getAssignedJudgesForCategory(
+                                category.contestCategoryId
+                              ).includes(judge.judgeUid) ||
                               judge.judgeUid === selectedJudge.judgeUid
                           )
                           .map((judge) => (

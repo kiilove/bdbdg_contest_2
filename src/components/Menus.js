@@ -277,13 +277,20 @@ export const MenuArray = [
       },
       {
         id: 6,
+        title: "순위표관리",
+        icon: <AiOutlineFileText />,
+        link: "/contestresultmanager",
+        requiredGroup: ["admin"],
+      },
+      {
+        id: 8,
         title: "신청접수관리",
         icon: <AiOutlineFileText />,
         link: "/simpleinvoiceadmin",
         requiredGroup: ["admin"],
       },
       {
-        id: 7,
+        id: 10,
         title: "심사 결과 입력",
         icon: <AiOutlineFileText />,
         link: "/manual-input",

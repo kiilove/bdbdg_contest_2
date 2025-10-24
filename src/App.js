@@ -45,6 +45,7 @@ import AssociationManagers from "./pages/AssociationManagers";
 import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 import ScoreResultManager from "./pages/ScoreResultManager";
 import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
+import ContestResultManager from "./pages/ContestResultManager";
 
 function App() {
   return (
@@ -173,6 +174,10 @@ function App() {
             <Route
               path="/scoreresultmanager"
               element={<ManagementHome children={<ScoreResultManager />} />}
+            />
+            <Route
+              path="/contestresultmanager"
+              element={<ManagementHome children={<ContestResultManager />} />}
             />
             <Route path="/selectdatabase" element={<SelectDatabase />} />
             <Route
