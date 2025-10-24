@@ -182,6 +182,13 @@ export const MenuArray = [
         link: "/printgymgroup",
         requiredGroup: ["admin", "orgManager"],
       },
+      {
+        id: 7,
+        title: "심판별 배정 출력",
+        icon: <FaFileInvoice />,
+        link: "/judgeassignmenpPrint",
+        requiredGroup: ["admin", "orgManager"],
+      },
     ],
   },
   {

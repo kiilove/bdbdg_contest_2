@@ -46,6 +46,7 @@ import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 import ScoreResultManager from "./pages/ScoreResultManager";
 import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
 import ContestResultManager from "./pages/ContestResultManager";
+import JudgeAssignmentPrint from "./pages/JudgeAssignmentPrint";
 
 function App() {
   return (
@@ -143,6 +144,10 @@ function App() {
             <Route
               path="/printsummary"
               element={<ManagementHome children={<PrintSummary />} />}
+            />
+            <Route
+              path="/judgeassignmenpPrint"
+              element={<ManagementHome children={<JudgeAssignmentPrint />} />}
             />
             <Route
               path="/measureprint"
