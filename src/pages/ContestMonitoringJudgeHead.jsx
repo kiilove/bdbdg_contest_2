@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useContext } from "react";
+import { useCallback, useState, useEffect, useContext, useRef } from "react";
 import _ from "lodash";
 import LoadingPage from "./LoadingPage";
 import {
@@ -122,6 +122,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         playerFinalId
       );
       const returnCompareList = await fetchCompares.getDocument(compareListId);
+      console.log(returnCompareList);
 
       if (returnNotice && returnContestStage) {
         const promises = [
@@ -144,19 +145,42 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       }
 
       if (returnCompareList) {
+        console.log(returnCompareList);
+        // 원본 compare 리스트 저장 (Firestore 데이터 그대로)
         setComparesList({ ...returnCompareList });
-        setComparesArray([...returnCompareList.compares]);
 
-        if (returnCompareList?.compares?.length === 0) {
-          setCurrentCompareInfo({});
-        }
-        if (returnCompareList.compares.length > 0) {
-          setCurrentCompareInfo({
-            ...returnCompareList.compares[
-              returnCompareList.compares.length - 1
-            ],
-          });
-        }
+        const currentContestId = currentContest?.contests?.id;
+        const currentStageId = realtimeData?.stageId;
+
+        // 현재 스테이지 정보 찾기
+        const currentStageFromAssign = (returnContestStage?.stages || []).find(
+          (stage) => stage.stageId === currentStageId
+        );
+
+        const currentCategoryId = currentStageFromAssign?.categoryId;
+        const currentGradeIds = (currentStageFromAssign?.grades || []).map(
+          (g) => g.gradeId
+        );
+
+        // ✅ 현재 스테이지 조건에 맞는 compare만 필터
+        const filtered = (returnCompareList?.compares || []).filter((c) => {
+          if (!currentContestId) return false;
+          if (c.contestId !== currentContestId) return false;
+          if (currentCategoryId && c.categoryId !== currentCategoryId)
+            return false;
+          if (
+            currentGradeIds.length > 0 &&
+            !currentGradeIds.includes(c.gradeId)
+          )
+            return false;
+          return true;
+        });
+
+        // ✅ 필터된 데이터만 화면 상태에 반영
+        setComparesArray(filtered);
+        setCurrentCompareInfo(
+          filtered.length > 0 ? { ...filtered[filtered.length - 1] } : {}
+        );
       }
     } catch (error) {
       setMessage({
@@ -417,6 +441,76 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       handleForceScoreTableRefresh(currentStageInfo.grades);
     }
   }, [currentContest, currentStageInfo]);
+  // ✅ 현재 스테이지(gradeId)와 일치하는 비교심사만 화면에 표시
+  useEffect(() => {
+    const currentStageId = realtimeData?.stageId;
+    if (!currentStageId) {
+      setComparesArray([]);
+      setCurrentCompareInfo({});
+      return;
+    }
+
+    const all = comparesList?.compares || [];
+    // ✅ 이번 스테이지의 compare만 표시. stageId가 없는 예전 이력은 제외.
+    const filtered = all.filter((c) => c.stageId === currentStageId);
+
+    setComparesArray(filtered);
+    setCurrentCompareInfo(
+      filtered.length > 0 ? { ...filtered[filtered.length - 1] } : {}
+    );
+  }, [comparesList, realtimeData?.stageId]);
+
+  const prevStageIdRef = useRef(null);
+
+  const resetComparesForNewStage = async () => {
+    try {
+      // 너의 기존 경로 패턴 유지
+      const path = `currentStage/${currentContest?.contests?.id}/compares`;
+      await updateRealtimeCompare.updateData(path, {
+        compareIndex: 0,
+        status: {
+          compareStart: false,
+          compareEnd: false,
+          compareCancel: false,
+          compareIng: false,
+        },
+        playerLength: 0,
+        scoreMode: null,
+        players: [],
+        confirmed: { count: 0, numbers: [] },
+        judges: [],
+      });
+    } catch (e) {
+      console.warn("스테이지 변경 시 비교 상태 리셋 실패:", e?.message);
+    }
+    // 로컬도 정리 (Firestore 이력은 건드리지 않음)
+    setCompareMode({
+      isCompare: false,
+      compareStart: false,
+      compareEnd: false,
+      compareCancel: false,
+    });
+    setCompareStatus({
+      compareStart: false,
+      compareEnd: false,
+      compareCancel: false,
+      compareIng: false,
+    });
+    setCurrentCompareInfo({});
+    setCompareOpen(false);
+  };
+
+  useEffect(() => {
+    const currentStageId = realtimeData?.stageId || null;
+    if (
+      prevStageIdRef.current !== null &&
+      currentStageId &&
+      prevStageIdRef.current !== currentStageId
+    ) {
+      resetComparesForNewStage();
+    }
+    prevStageIdRef.current = currentStageId;
+  }, [realtimeData?.stageId]);
 
   return (
     <>
@@ -531,14 +625,15 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       size="large"
                       icon={<PlayCircleOutlined />}
                       onClick={() =>
-                        setCompareMode(() => ({
-                          ...compareMode,
+                        setCompareMode((prev) => ({
+                          ...prev,
                           compareStart: true,
                         }))
                       }
                       className={isMobile ? "w-full" : ""}
+                      // ✅ 진행 중이면 시작 버튼 잠시 비활성화
                     >
-                      {comparesArray.length + 1}차 비교심사 시작
+                      {(comparesArray?.length ?? 0) + 1}차 비교심사 시작
                     </Button>
                     <Button
                       size="large"
@@ -565,7 +660,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                         </Tag>
                         <Tag color="purple" className="text-base px-3 py-1">
                           채점모드:{" "}
-                          {currentCompareInfo?.compareScoreMode === "compare"
+                          {currentCompareInfo?.compareScoreMode === "compare" ||
+                          currentCompareInfo?.compareScoreMode === "topOnly"
                             ? "대상자만 채점"
                             : "전체 채점"}
                         </Tag>
@@ -600,7 +696,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 />
                               ))}
                             </Space>
-                            {compareIndex >= comparesArray?.length && (
+                            {/* ✅ 필터된 목록 기준 마지막 compare만 취소 가능 */}
+                            {cIdx === comparesArray.length - 1 && (
                               <Button
                                 danger
                                 icon={<CloseCircleOutlined />}

@@ -131,6 +131,7 @@ const CompareSetting = ({
           compareCancel: true,
           compareIng: false,
         },
+        confirmed: { count: 0, numbers: [] },
       });
 
       setCompareStatus({
@@ -188,50 +189,78 @@ const CompareSetting = ({
     }
   };
 
+  const getConfirmedNumbersSorted = (players) => {
+    if (!Array.isArray(players)) return [];
+    return players
+      .map((p) => Number(p.playerNumber))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b); // 번호 오름차순
+  };
+
   const handleUpdateComparePlayers = async (
     playerTopResult,
     playerVoteResult,
     contestId,
     compareListId
   ) => {
+    // 확정 정보(이력용)
     const compareInfo = {
       contestId,
+      stageId: stageInfo.stageId,
       categoryId: stageInfo.categoryId,
       gradeId: stageInfo.grades[0].gradeId,
       categoryTitle: stageInfo.categoryTitle,
       gradeTitle: stageInfo.grades[0].gradeTitle,
       compareIndex: propCompareIndex,
-      comparePlayerLength: Number.parseInt(votedInfo.playerLength),
-      compareScoreMode: votedInfo.scoreMode,
-      players: [...playerTopResult],
-      votedResult: [...playerVoteResult],
+      comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
+      compareScoreMode: votedInfo.scoreMode, // "all" | "topOnly" | "topWithSub"
+      players: [...playerTopResult], // 확정된 선수 객체 리스트
+      votedResult: [...playerVoteResult], // 득표 상세 (옵션)
     };
 
     try {
       const collectionInfoCompares = `currentStage/${contestId}/compares`;
 
+      // 진행 상태(확정 완료 후, 진행중으로 전환)
       const newStatus = {
         compareStart: false,
         compareEnd: false,
         compareCancel: false,
         compareIng: true,
       };
+
+      // Firestore 이력 append
       const newCompares = [...compareArray, compareInfo];
 
+      // ✅ 확정된 "선수 번호만" 오름차순으로 추출
+      const confirmedNumbers = (playerTopResult || [])
+        .map((p) => Number(p.playerNumber))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+
+      // 1) Realtime DB 업데이트 (상태 + 확정 번호만 저장)
       await updateRealtimeCompare.updateData(collectionInfoCompares, {
-        ...realtimeData.compares,
+        ...realtimeData?.compares,
         status: { ...newStatus },
+        // 호환성을 위해 기존 players 필드는 유지 (필요 없으면 제거 가능)
         players: [...playerTopResult],
+        confirmed: {
+          count: confirmedNumbers.length,
+          numbers: confirmedNumbers, // ← 번호만, 오름차순
+        },
       });
 
+      // 2) Firestore(compare 이력) 업데이트
       await updateCompare.updateData(compareListId, {
         ...compareList,
         compares: [...newCompares],
       });
 
-      setCompareArray([...newCompares]);
-      setCompareList({ ...compareList, compares: [...newCompares] });
+      // 3) 로컬 상태 동기화
+      setCompareArray(newCompares);
+      setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
+      // 4) 상위 리프레시 및 모달 닫기
       setRefresh(true);
       setClose(false);
     } catch (error) {

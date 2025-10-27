@@ -4,7 +4,6 @@ import { useContext, useEffect, useState, useMemo } from "react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
-  useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { doc, setDoc, where } from "firebase/firestore";
 import LoadingPage from "./LoadingPage";
@@ -30,7 +29,11 @@ const ContestJudgeAssignTable = () => {
   const [currentSubTab, setCurrentSubTab] = useState("0");
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
-  const [judgesAssignInfo, setJudgesAssignInfo] = useState({});
+  // ✅ 부모는 “원본”만 보관
+  const [judgesAssignInfoRaw, setJudgesAssignInfoRaw] = useState({
+    id: "",
+    judges: [],
+  });
   const [judgesPoolArray, setJudgesPoolArray] = useState([]);
   const [categoriesArray, setCategoriesArray] = useState([]);
   const [gradesArray, setGradesArray] = useState([]);
@@ -40,7 +43,6 @@ const ContestJudgeAssignTable = () => {
   const fetchCategories = useFirestoreGetDocument("contest_categorys_list");
   const fetchGrades = useFirestoreGetDocument("contest_grades_list");
   const fetchJudgesPoolQuery = useFirestoreQuery();
-  const updateJudgesAssign = useFirestoreUpdateData("contest_judges_assign");
 
   const fetchPool = async (contestId) => {
     try {
@@ -57,10 +59,13 @@ const ContestJudgeAssignTable = () => {
         fetchGrades.getDocument(currentContest.contests.contestGradesListId),
       ]);
 
-      setJudgesPoolArray(judgesPool);
-      setJudgesAssignInfo(judgesAssign);
-      setCategoriesArray(categories.categorys);
-      setGradesArray(grades.grades);
+      setJudgesPoolArray(judgesPool || []);
+      // 원본 상태에 저장
+      setJudgesAssignInfoRaw(
+        judgesAssign && judgesAssign.id ? judgesAssign : { id: "", judges: [] }
+      );
+      setCategoriesArray(categories?.categorys || []);
+      setGradesArray(grades?.grades || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -68,56 +73,13 @@ const ContestJudgeAssignTable = () => {
     }
   };
 
-  const handleUpdateJudgesAssign = async () => {
-    try {
-      setMessage({ body: "저장중...", isButton: false });
-      setMsgOpen(true);
-
-      // ⚠️ 여기서는 기존 useFirestoreUpdateData 훅을 쓰지 않습니다.
-      // 이유: updateDoc(부분 업데이트) → 기존 키가 남아 일관성 깨질 수 있음
-      // 이 화면은 "완전 덮어쓰기(기존 키 삭제 포함)"가 요구되므로
-      // setDoc(merge:false)로 문서를 통째로 교체합니다.
-      const ref = doc(db, "contest_judges_assign", judgesAssignInfo.id);
-      await setDoc(ref, judgesAssignInfo, { merge: false });
-
-      setMessage({
-        body: "저장되었습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-    } catch (error) {
-      console.log(error);
-      setMessage({
-        body: "저장 중 오류가 발생했습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-    }
-  };
-  // const handleUpdateJudgesAssign = async () => {
-  //   try {
-  //     setMessage({ body: "저장중...", isButton: false });
-  //     setMsgOpen(true);
-  //     await updateJudgesAssign.updateData(
-  //       judgesAssignInfo.id,
-  //       judgesAssignInfo
-  //     );
-  //     setMessage({
-  //       body: "저장되었습니다.",
-  //       isButton: true,
-  //       confirmButtonText: "확인",
-  //     });
-  //   } catch (error) {
-  //     console.log(error);
-  //   }
-  // };
-
+  // 🔎 섹션/종목/체급 필터 구조: 자식들이 재사용
   const filteredBySection = useMemo(() => {
-    return categoriesArray.reduce((acc, curr) => {
+    return (categoriesArray || []).reduce((acc, curr) => {
       const section = acc.find(
         (item) => item.sectionName === curr.contestCategorySection
       );
-      const matchingGrades = gradesArray.filter(
+      const matchingGrades = (gradesArray || []).filter(
         (grade) => grade.refCategoryId === curr.contestCategoryId
       );
 
@@ -134,13 +96,79 @@ const ContestJudgeAssignTable = () => {
 
       return acc;
     }, []);
-  }, [categoriesArray, gradesArray, judgesAssignInfo]);
+  }, [categoriesArray, gradesArray]);
+
+  // 🔎 카테고리 ID → 제목 일괄 맵
+  const categoryTitleMap = useMemo(() => {
+    const map = {};
+    (categoriesArray || []).forEach((cat) => {
+      if (cat?.contestCategoryId) {
+        map[cat.contestCategoryId] = cat.contestCategoryTitle || "";
+      }
+    });
+    return map;
+  }, [categoriesArray]);
+
+  // ✅ 파생: 원본 judges에 categoryTitle을 붙인 버전 (표시/저장 둘 다 이걸 사용)
+  const judgesAssignInfoEnriched = useMemo(() => {
+    const cloned = {
+      ...(judgesAssignInfoRaw || {}),
+      judges: [...(judgesAssignInfoRaw?.judges || [])],
+    };
+    cloned.judges = cloned.judges.map((j) => ({
+      ...j,
+      categoryTitle:
+        categoryTitleMap[j?.refCategoryId || j?.categoryId] || null,
+    }));
+    return cloned;
+  }, [judgesAssignInfoRaw, categoryTitleMap]);
+
+  // 자식이 사용하는 setter: 항상 “원본”을 업데이트하게 강제
+  const setJudgesAssignInfoFromChild = (updater) => {
+    setJudgesAssignInfoRaw((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      // 안전 가드
+      if (!next || !Array.isArray(next.judges)) {
+        return { ...(next || {}), judges: [] };
+      }
+      return next;
+    });
+  };
+
+  // 저장: 파생(제목 포함) 버전을 통째로 저장
+  const handleUpdateJudgesAssign = async () => {
+    try {
+      setMessage({ body: "저장중...", isButton: false });
+      setMsgOpen(true);
+
+      const targetId = judgesAssignInfoEnriched?.id || judgesAssignInfoRaw?.id;
+      if (!targetId) {
+        throw new Error("judgesAssignInfo 문서 id가 없습니다.");
+      }
+      const ref = doc(db, "contest_judges_assign", targetId);
+      await setDoc(ref, judgesAssignInfoEnriched, { merge: false });
+
+      setMessage({
+        body: "저장되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+    } catch (error) {
+      console.log(error);
+      setMessage({
+        body: "저장 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+    }
+  };
 
   useEffect(() => {
     if (currentContest?.contests?.id) {
       fetchPool(currentContest.contests.id);
     }
     setCurrentSubTab("0");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest]);
 
   const tabItems = [
@@ -154,10 +182,10 @@ const ContestJudgeAssignTable = () => {
       ),
       children: (
         <SectionAssign
-          judgesAssignInfo={judgesAssignInfo}
+          judgesAssignInfo={judgesAssignInfoEnriched} // 표시/랜더용 (제목 포함)
           judgesPoolArray={judgesPoolArray}
           filteredBySection={filteredBySection}
-          setJudgesAssignInfo={setJudgesAssignInfo}
+          setJudgesAssignInfo={setJudgesAssignInfoFromChild} // 원본만 업데이트
           currentContest={currentContest}
           generateUUID={generateUUID}
           setMessage={setMessage}
@@ -175,9 +203,9 @@ const ContestJudgeAssignTable = () => {
       ),
       children: (
         <CategoryAssign
-          judgesAssignInfo={judgesAssignInfo}
+          judgesAssignInfo={judgesAssignInfoEnriched}
           judgesPoolArray={judgesPoolArray}
-          setJudgesAssignInfo={setJudgesAssignInfo}
+          setJudgesAssignInfo={setJudgesAssignInfoFromChild}
           categoriesArray={categoriesArray}
           gradesArray={gradesArray}
           currentContest={currentContest}
@@ -197,9 +225,9 @@ const ContestJudgeAssignTable = () => {
       ),
       children: (
         <GradeAssign
-          judgesAssignInfo={judgesAssignInfo}
+          judgesAssignInfo={judgesAssignInfoEnriched}
           judgesPoolArray={judgesPoolArray}
-          setJudgesAssignInfo={setJudgesAssignInfo}
+          setJudgesAssignInfo={setJudgesAssignInfoFromChild}
           categoriesArray={categoriesArray}
           gradesArray={gradesArray}
           currentContest={currentContest}
