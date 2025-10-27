@@ -1,13 +1,12 @@
-import React, { useContext, useEffect, useState } from "react";
+"use client";
+
+import { useContext, useEffect, useState, useRef } from "react";
 import { TbHeartRateMonitor } from "react-icons/tb";
-import { useLocation } from "react-router-dom";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   useFirestoreAddData,
   useFirestoreDeleteData,
-  useFirestoreGetDocument,
   useFirestoreQuery,
-  useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
@@ -23,6 +22,8 @@ const ContestRankingSummary = ({
 }) => {
   const [scoreData, setScoreData] = useState([]);
   const [summaryTable, setSummaryTable] = useState([]);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const modalContentRef = useRef(null);
 
   const { currentContest } = useContext(CurrentContestContext);
 
@@ -35,10 +36,10 @@ const ContestRankingSummary = ({
   const resultAdd = useFirestoreAddData("contest_results_list");
 
   const realtimeResultStateUpdate = useFirebaseRealtimeUpdateData();
+
   const generateUniqueRandomNumbers = (min, max, count) => {
     const numbers = Array.from({ length: max - min + 1 }, (_, i) => i + min);
 
-    // 무작위로 배열 섞기 (Fisher-Yates shuffle 알고리즘)
     for (let i = numbers.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
@@ -50,8 +51,8 @@ const ContestRankingSummary = ({
   const calculateTotalScore = (scores) => {
     const sortedScores = [...scores].sort((a, b) => a - b);
     if (sortedScores.length <= 2) return 0;
-    sortedScores.pop(); // Remove max
-    sortedScores.shift(); // Remove min
+    sortedScores.pop();
+    sortedScores.shift();
     return sortedScores.reduce((acc, curr) => acc + curr, 0);
   };
 
@@ -106,45 +107,41 @@ const ContestRankingSummary = ({
       );
     });
 
-    // Sorting
     groupedObj.sort((a, b) =>
       sortCriteria === "totalScore"
         ? a.totalScore - b.totalScore
         : a.playerIndex - b.playerIndex
     );
 
-    // Assign rankings
-    let rank = 0; // Start from rank 1
-    let prevScore = null; // To keep track of previous score
-    let sameRankCount = 0; // To keep track of how many players have the same rank
-    let isAlertSet = false; // Track if alert has been set for the group
+    let rank = 0;
+    let prevScore = null;
+    let sameRankCount = 0;
+    let isAlertSet = false;
 
     for (let i = 0; i < groupedObj.length; i++) {
-      groupedObj[i].isAlert = false; // Initially set isAlert to false for every player
+      groupedObj[i].isAlert = false;
 
       if (groupedObj[i].totalScore > 1000) {
-        groupedObj[i].playerRank = 1000; // Set rank to 1000 for players with totalScore > 1000
+        groupedObj[i].playerRank = 1000;
       } else {
         if (prevScore === null || groupedObj[i].totalScore !== prevScore) {
           if (sameRankCount >= 1) {
-            // Loop back and set isAlert for previous players with the same rank
             for (let j = 0; j <= sameRankCount; j++) {
               groupedObj[i - j - 1].isAlert = true;
             }
           }
-          rank += sameRankCount + 1; // Increment rank by the number of players with the same rank
-          sameRankCount = 0; // Reset the count
-          isAlertSet = false; // Reset alert flag for new score group
+          rank += sameRankCount + 1;
+          sameRankCount = 0;
+          isAlertSet = false;
         } else {
           sameRankCount++;
-          groupedObj[i].isAlert = true; // If current score is the same as previous, set isAlert to true for all
+          groupedObj[i].isAlert = true;
         }
         groupedObj[i].playerRank = rank;
         prevScore = groupedObj[i].totalScore;
       }
     }
 
-    // 마지막으로, 같은 순위의 선수들이 남아있다면 alert를 설정
     if (sameRankCount >= 1) {
       for (let j = 0; j <= sameRankCount; j++) {
         groupedObj[groupedObj.length - 1 - j].isAlert = true;
@@ -183,14 +180,10 @@ const ContestRankingSummary = ({
   };
 
   const handleSummaryTable = (dataArray, e, summaryIndex, playerIndex) => {
-    // if (!/^[0-9]+$/.test(e.target.value)) {
-    //   return;
-    // }
-
     const newDataArray = [...dataArray];
     const newRankInfo = {
       ...newDataArray[playerIndex],
-      playerRank: parseInt(e.target.value),
+      playerRank: Number.parseInt(e.target.value),
     };
     newDataArray.splice(playerIndex, 1, newRankInfo);
     const newSummaryTable = [...summaryTable];
@@ -231,26 +224,21 @@ const ContestRankingSummary = ({
   const handleRealtimeUpdate = async (contestId, gradeId) => {
     const collectionInfo = `currentStage/${contestId}`;
 
-    // currentResultSaved가 undefined이면 빈 배열로 초기화
     const newResultSaved = currentResultSaved ? [...currentResultSaved] : [];
 
-    // newResultSaved 배열에 gradeId가 있는지 확인
     const gradeExists = newResultSaved.includes(gradeId);
 
     if (!gradeExists) {
-      // gradeId가 없다면 추가
       newResultSaved.push(gradeId);
     }
 
-    // 업데이트 후 Firebase Realtime Database에 저장
     await realtimeResultStateUpdate.updateData(collectionInfo, {
-      resultSaved: newResultSaved, // resultSaved에 배열을 저장
+      resultSaved: newResultSaved,
     });
 
     console.log("Updated resultSaved array:", newResultSaved);
   };
 
-  // 만들다가 그만둔 이유는 굳이 여기서 한번에 처리하지 않고 본부석 화면에서 다음으로 넘길때 업데이트 해도 무방하다고 판단함
   const handleUpdateStageAssign = async (stageAssignId) => {
     if (!stageAssignId) {
       return;
@@ -296,7 +284,7 @@ const ContestRankingSummary = ({
   };
 
   const fetchScoreRank = async () => {
-    const condidtion = [
+    const condition = [
       where("contestId", "==", currentContest.contests.id),
       where("categoryId", "==", categoryId),
       where("gradeId", "==", gradeId),
@@ -307,7 +295,7 @@ const ContestRankingSummary = ({
       await scoreRankingQuery
         .getDocuments(
           currentContest.contestInfo.contestCollectionName,
-          condidtion
+          condition
         )
         .then((data) => {
           if (data.length > 0) {
@@ -318,6 +306,33 @@ const ContestRankingSummary = ({
       console.log(error);
     }
   };
+
+  const hasDuplicateRanks = (resultArray) => {
+    const ranks = resultArray
+      .filter((player) => player.totalScore < 1000)
+      .map((player) => player.playerRank);
+
+    const rankSet = new Set(ranks);
+    return ranks.length !== rankSet.size;
+  };
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (modalContentRef.current) {
+        const hasVerticalScrollbar =
+          modalContentRef.current.scrollHeight >
+          modalContentRef.current.clientHeight;
+        setIsOverflowing(hasVerticalScrollbar);
+      }
+    };
+
+    checkOverflow();
+    window.addEventListener("resize", checkOverflow);
+
+    return () => {
+      window.removeEventListener("resize", checkOverflow);
+    };
+  }, [summaryTable]);
 
   useEffect(() => {
     if (gradeId && currentContest?.contests?.id) {
@@ -333,107 +348,123 @@ const ContestRankingSummary = ({
   }, [scoreData]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-white p-3 gap-y-2 justify-start items-start">
+    <div
+      ref={modalContentRef}
+      className="flex flex-col w-full h-full max-h-screen bg-gradient-to-br from-slate-50 to-slate-100 overflow-y-auto"
+      style={{
+        scrollbarWidth: "thin",
+        scrollbarColor: "#3b82f6 #e2e8f0",
+      }}
+    >
       <ConfirmationModal
         isOpen={msgOpen}
         message={message}
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setClose(false)}
       />
-      <div className="flex w-full h-14">
-        <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-          <div className="flex w-1/2 justify-start">
-            <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-              <TbHeartRateMonitor />
-            </span>
-            <h1
-              className="font-sans text-lg font-semibold"
-              style={{ letterSpacing: "2px" }}
-            >
+
+      <div className="sticky top-0 z-10 bg-white shadow-md border-b border-slate-200 p-4">
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
+              <TbHeartRateMonitor className="text-xl" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
               랭킹형 순위표
             </h1>
           </div>
-          <div className="flex w-1/2 justify-end">
-            <button
-              className="w-20 h-10 rounded-lg bg-red-500 text-gray-100 flex justify-center items-center"
-              onClick={() => setClose()}
-            >
-              닫기
-            </button>
-          </div>
+          <button
+            className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold shadow-lg hover:shadow-xl hover:from-red-600 hover:to-red-700 transition-all duration-200 transform hover:scale-105 active:scale-95"
+            onClick={() => setClose()}
+          >
+            닫기
+          </button>
         </div>
       </div>
-      {summaryTable?.length > 0 &&
-        summaryTable.map((table, tIdx) => {
-          const { categoryTitle, gradeTitle, result } = table;
 
-          return (
-            <>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-10 bg-gray-100 justify-start items-center rounded-lg px-3">
-                  <div className="flex w-full h-full justify-start ml-5 items-center">
-                    {categoryTitle}({gradeTitle})
-                  </div>
+      <div className="flex-1 p-4 space-y-4">
+        {summaryTable?.length > 0 &&
+          summaryTable.map((table, tIdx) => {
+            const { categoryTitle, gradeTitle, result } = table;
+            const hasDuplicates = hasDuplicateRanks(result);
+            const duplicateRanks = result
+              .filter((player) => player.totalScore < 1000)
+              .map((player) => player.playerRank)
+              .filter((rank, index, self) => self.indexOf(rank) !== index);
+
+            return (
+              <div key={tIdx} className="space-y-4">
+                <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl shadow-md p-4">
+                  <h2 className="text-lg font-semibold text-white">
+                    {categoryTitle} ({gradeTitle})
+                  </h2>
                 </div>
-              </div>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-[400px] bg-gray-100 justify-start items-center rounded-lg p-3 overflow-y-auto">
-                  <div className="flex w-full h-full justify-center items-center bg-red-200">
-                    <div className="flex bg-white w-full h-auto p-2">
-                      <div className="flex w-full flex-col px-5 py-2 border">
-                        <div className="flex w-full border-b-2 border-b-gray-600">
-                          <div className="flex w-full justify-center items-center p-2">
-                            선수번호
-                          </div>
-                          <div className="flex w-full justify-center items-center p-2">
-                            순위
-                          </div>
-                          {result[0]?.score?.length > 0 &&
-                            result[0].score.map((score, sIdx) => {
-                              const { seatIndex } = score;
+
+                <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-full">
+                      <div className="flex bg-gradient-to-r from-slate-700 to-slate-800 text-white font-semibold sticky top-0 z-5">
+                        <div className="flex-1 min-w-[100px] p-4 flex items-center justify-center border-r border-slate-600">
+                          선수번호
+                        </div>
+                        <div className="flex-1 min-w-[100px] p-4 flex items-center justify-center border-r border-slate-600">
+                          순위
+                        </div>
+                        {result[0]?.score?.length > 0 &&
+                          result[0].score.map((score, sIdx) => {
+                            const { seatIndex } = score;
+                            return (
+                              <div
+                                className="flex-1 min-w-[100px] p-4 flex items-center justify-center border-r border-slate-600"
+                                key={seatIndex}
+                              >
+                                심사 {seatIndex}
+                              </div>
+                            );
+                          })}
+                        <div className="flex-1 min-w-[100px] p-4 flex items-center justify-center">
+                          기표합산
+                        </div>
+                      </div>
+
+                      <div
+                        className="max-h-[400px] overflow-y-auto"
+                        style={{
+                          scrollbarWidth: "thin",
+                          scrollbarColor: "#3b82f6 #e2e8f0",
+                        }}
+                      >
+                        {result?.length > 0 &&
+                          result
+                            .sort((a, b) => a.playerIndex - b.playerIndex)
+                            .map((player, pIdx) => {
+                              const {
+                                playerNumber,
+                                totalScore,
+                                playerRank,
+                                score,
+                                isAlert,
+                              } = player;
+                              if (totalScore >= 1000) {
+                                return null;
+                              }
+                              const isRankDuplicated =
+                                duplicateRanks.includes(playerRank);
+
                               return (
                                 <div
-                                  className="flex w-full justify-center items-center p-2"
-                                  key={seatIndex}
+                                  key={playerNumber}
+                                  className={
+                                    isAlert
+                                      ? "flex border-b border-slate-200 bg-gradient-to-r from-amber-50 to-amber-100 hover:from-amber-100 hover:to-amber-200 transition-colors"
+                                      : "flex border-b border-slate-200 hover:bg-slate-50 transition-colors"
+                                  }
                                 >
-                                  {seatIndex}
-                                </div>
-                              );
-                            })}
-                          <div className="flex w-full justify-center items-center p-2">
-                            기표합산
-                          </div>
-                        </div>
-
-                        {/* 선수 리스트 */}
-                        <div className="flex w-full flex-col h-[300px] overflow-y-auto">
-                          {result?.length > 0 &&
-                            result
-                              .sort((a, b) => a.playerIndex - b.playerIndex)
-                              .map((player, pIdx) => {
-                                const {
-                                  playerNumber,
-                                  totalScore,
-                                  playerRank,
-                                  score,
-                                  isAlert,
-                                } = player;
-                                if (totalScore >= 1000) {
-                                  return null;
-                                }
-                                return (
-                                  <div
-                                    key={playerNumber}
-                                    className={
-                                      isAlert
-                                        ? "flex w-full border-b border-b-gray-300 bg-blue-200 b"
-                                        : "flex w-full border-b border-b-gray-300"
-                                    }
-                                  >
-                                    <div className="flex w-full justify-center items-center p-2">
-                                      {playerNumber}
-                                    </div>
-                                    <div className="flex w-full justify-center items-center p-2 bg-transparent">
+                                  <div className="flex-1 min-w-[100px] p-4 flex items-center justify-center font-semibold text-slate-700">
+                                    {playerNumber}
+                                  </div>
+                                  <div className="flex-1 min-w-[100px] p-4 flex justify-center items-center">
+                                    <div className="relative">
                                       <input
                                         type="number"
                                         name="playerRank"
@@ -447,77 +478,113 @@ const ContestRankingSummary = ({
                                           )
                                         }
                                         className={
-                                          isAlert
-                                            ? "w-10 h-10 bg-transparent border border-blue-400 rounded-lg text-center outline-none"
-                                            : "w-10 h-10 bg-transparent text-center"
+                                          isRankDuplicated
+                                            ? "w-16 h-12 bg-white border-2 border-red-500 rounded-lg text-center outline-none focus:ring-2 focus:ring-red-500 font-semibold text-slate-800 shadow-md"
+                                            : isAlert
+                                            ? "w-16 h-12 bg-white border-2 border-amber-400 rounded-lg text-center outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-slate-800 shadow-sm"
+                                            : "w-16 h-12 bg-slate-50 border border-slate-300 rounded-lg text-center outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800"
                                         }
                                         value={playerRank}
                                       />
-                                    </div>
-                                    {score.map((score, sIdx) => {
-                                      const {
-                                        seatIndex,
-                                        playerScore,
-                                        isMin,
-                                        isMax,
-                                      } = score;
-                                      return (
-                                        <div
-                                          className="flex w-full justify-center items-center p-2"
-                                          key={seatIndex}
-                                        >
-                                          {isMin && (
-                                            <span className="w-auto h-auto p-3 px-5 rounded-lg bg-blue-400">
-                                              {playerScore >= 100
-                                                ? "제외"
-                                                : playerScore}
-                                            </span>
-                                          )}
-                                          {isMax && (
-                                            <span className="w-auto h-auto p-3 px-5 rounded-lg bg-red-500">
-                                              {playerScore >= 100
-                                                ? "제외"
-                                                : playerScore}
-                                            </span>
-                                          )}
-                                          {!isMax && !isMin && (
-                                            <span className="w-auto h-auto p-3 rounded-lg ">
-                                              {playerScore >= 100
-                                                ? "제외"
-                                                : playerScore}
-                                            </span>
-                                          )}
+                                      {isRankDuplicated && (
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md">
+                                          !
                                         </div>
-                                      );
-                                    })}
-                                    <div className="flex w-full justify-center items-center p-2">
-                                      {totalScore}
+                                      )}
                                     </div>
                                   </div>
-                                );
-                              })}
-                        </div>
+                                  {score.map((score, sIdx) => {
+                                    const {
+                                      seatIndex,
+                                      playerScore,
+                                      isMin,
+                                      isMax,
+                                    } = score;
+                                    return (
+                                      <div
+                                        className="flex-1 min-w-[100px] p-4 flex justify-center items-center"
+                                        key={seatIndex}
+                                      >
+                                        {isMin && (
+                                          <span className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-md">
+                                            {playerScore >= 100
+                                              ? "제외"
+                                              : playerScore}
+                                          </span>
+                                        )}
+                                        {isMax && (
+                                          <span className="px-4 py-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold shadow-md">
+                                            {playerScore >= 100
+                                              ? "제외"
+                                              : playerScore}
+                                          </span>
+                                        )}
+                                        {!isMax && !isMin && (
+                                          <span className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium">
+                                            {playerScore >= 100
+                                              ? "제외"
+                                              : playerScore}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="flex-1 min-w-[100px] p-4 flex items-center justify-center font-bold text-slate-800">
+                                    {totalScore}
+                                  </div>
+                                </div>
+                              );
+                            })}
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-20 bg-gray-100 justify-start items-center rounded-lg px-3">
-                  <div className="flex w-full h-full justify-end ml-5 items-center px-2">
+                <div className="flex flex-col gap-3 p-4 bg-white rounded-xl shadow-md border border-slate-200">
+                  {hasDuplicates && (
+                    <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border-2 border-red-300 rounded-lg">
+                      <span className="text-red-700  flex items-center">
+                        <div className="flex-shrink-0 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm mr-5">
+                          !
+                        </div>
+                        동점자가 있습니다. 순위를 수정한 후 확정해주세요.
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-3">
                     <button
-                      className="w-auto h-auto px-5 py-2 bg-blue-800 text-gray-100 rounded-lg"
-                      onClick={() => handleSaveResult(summaryTable)}
+                      className={
+                        hasDuplicates
+                          ? "px-8 py-3 rounded-lg bg-gray-400 text-gray-200 font-bold text-lg shadow-md cursor-not-allowed"
+                          : "px-8 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-105 active:scale-95"
+                      }
+                      onClick={() =>
+                        !hasDuplicates && handleSaveResult(summaryTable)
+                      }
+                      disabled={hasDuplicates}
                     >
-                      순위표확정
+                      순위표 확정
                     </button>
+                    {hasDuplicates && (
+                      <button
+                        className="px-8 py-3 rounded-lg bg-slate-400 text-white font-bold text-lg shadow-md hover:bg-slate-500 hover:shadow-lg transition-all duration-200 transform hover:scale-105 active:scale-95 opacity-70 hover:opacity-90"
+                        onClick={() => handleSaveResult(summaryTable)}
+                      >
+                        강제등록
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
-            </>
-          );
-        })}
+            );
+          })}
+      </div>
+
+      {isOverflowing && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-semibold animate-bounce">
+          ↓ 스크롤하여 더 보기 ↓
+        </div>
+      )}
     </div>
   );
 };

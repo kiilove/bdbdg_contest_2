@@ -9,11 +9,22 @@ import {
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Button, Card, Tag, Checkbox, Space } from "antd";
+import {
+  Button,
+  Card,
+  Tag,
+  Checkbox,
+  Space,
+  Modal,
+  InputNumber,
+  Tooltip,
+} from "antd";
 import {
   SaveOutlined,
   FileTextOutlined,
   CalendarOutlined,
+  EditOutlined,
+  NumberOutlined,
 } from "@ant-design/icons";
 
 const ContestPlayerWeighInTable = () => {
@@ -26,6 +37,15 @@ const ContestPlayerWeighInTable = () => {
   const [playersArray, setPlayersArray] = useState([]);
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
+
+  // ✅ 번호/인덱스 수정 모달 상태
+  const [numModalOpen, setNumModalOpen] = useState(false);
+  const [editTargetUid, setEditTargetUid] = useState(null);
+  const [editValues, setEditValues] = useState({
+    playerNumber: null,
+    playerIndex: null,
+    playerName: "",
+  });
 
   const { currentContest } = useContext(CurrentContestContext);
   const navigate = useNavigate();
@@ -87,20 +107,20 @@ const ContestPlayerWeighInTable = () => {
     const dummy = [];
     categorysArray
       .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
-      .map((category, cIdx) => {
+      .map((category) => {
         const matchedGrades = gradesArray.filter(
           (grade) => grade.refCategoryId === category.contestCategoryId
         );
         const matchedGradesLength = matchedGrades.length;
         matchedGrades
           .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
-          .map((grade, gIdx) => {
+          .map((grade) => {
             const matchedPlayerWithPlayerNumber = [];
             const matchedPlayers = playersArray.filter(
               (entry) => entry.contestGradeId === grade.contestGradeId
             );
 
-            matchedPlayers.map((player, pIdx) => {
+            matchedPlayers.map((player) => {
               const { playerNumber, playerIndex, playerNoShow } = player;
 
               const newPlayer = {
@@ -135,7 +155,7 @@ const ContestPlayerWeighInTable = () => {
     setMessage({ body: "저장중", isButton: false });
     setMsgOpen(true);
 
-    const finalPlayers = data.map((player, pIdx) => {
+    const finalPlayers = data.map((player) => {
       const {
         contestCategoryId,
         contestGradeId,
@@ -276,6 +296,42 @@ const ContestPlayerWeighInTable = () => {
     setIsLoading(false);
   };
 
+  // ✅ 번호/인덱스 수정 모달 열기
+  const openNumberModal = (player) => {
+    setEditTargetUid(player.playerUid);
+    setEditValues({
+      playerNumber: Number(player.playerNumber) || 0,
+      playerIndex:
+        Number(player.playerIndex) || Number(player.playerNumber) || 0,
+      playerName: player.playerName || "",
+    });
+    setNumModalOpen(true);
+  };
+
+  // ✅ 번호/인덱스 수정 적용
+  const applyNumberChange = () => {
+    const { playerNumber, playerIndex } = editValues;
+    if (playerNumber <= 0 || playerIndex <= 0) {
+      // 간단 검증
+      return;
+    }
+
+    const newPlayers = [...playersArray];
+    const idx = newPlayers.findIndex((p) => p.playerUid === editTargetUid);
+    if (idx !== -1) {
+      newPlayers[idx] = {
+        ...newPlayers[idx],
+        playerNumber: Number(playerNumber),
+        playerIndex: Number(playerIndex),
+      };
+      setPlayersArray(newPlayers);
+      // 리스트 재구성 (화면 반영)
+      initEntryList();
+    }
+    setNumModalOpen(false);
+    setEditTargetUid(null);
+  };
+
   useEffect(() => {
     fetchPool();
   }, [currentContest]);
@@ -303,6 +359,7 @@ const ContestPlayerWeighInTable = () => {
       playerNoShow,
       isGradeChanged,
       invoiceCreateAt,
+      playerIndex,
     } = player;
 
     return (
@@ -312,9 +369,18 @@ const ContestPlayerWeighInTable = () => {
             <Space>
               <span className="font-semibold text-base">순번: {pIdx + 1}</span>
             </Space>
-            <Tag color="gold" className="text-base font-semibold px-2 py-0.5">
-              {playerNumber}
-            </Tag>
+            <Space>
+              <Tag color="gold" className="text-base font-semibold px-2 py-0.5">
+                {playerNumber}
+              </Tag>
+              <Tooltip title="번호/인덱스 수정">
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openNumberModal(player)}
+                />
+              </Tooltip>
+            </Space>
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -325,6 +391,10 @@ const ContestPlayerWeighInTable = () => {
               >
                 {playerName}
               </span>
+              <Tag
+                icon={<NumberOutlined />}
+                className="ml-1"
+              >{`idx ${playerIndex}`}</Tag>
             </div>
             <div
               className={`text-gray-600 text-sm ${
@@ -392,6 +462,56 @@ const ContestPlayerWeighInTable = () => {
             onCancel={() => setMsgOpen(false)}
             message={message}
           />
+
+          {/* 번호/인덱스 수정 모달 */}
+          <Modal
+            open={numModalOpen}
+            title={
+              <div className="flex items-center gap-2">
+                <EditOutlined />
+                <span>선수 번호 / Index 수정</span>
+              </div>
+            }
+            onOk={applyNumberChange}
+            onCancel={() => {
+              setNumModalOpen(false);
+              setEditTargetUid(null);
+            }}
+            okText="적용"
+            cancelText="취소"
+            destroyOnClose
+          >
+            <div className="flex flex-col gap-4">
+              <div className="text-sm text-gray-600">
+                선수:{" "}
+                <span className="font-semibold">{editValues.playerName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="mr-4">선수번호 (playerNumber)</span>
+                <InputNumber
+                  min={1}
+                  value={editValues.playerNumber}
+                  onChange={(v) =>
+                    setEditValues((prev) => ({ ...prev, playerNumber: v }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="mr-4">표시순서 Index (playerIndex)</span>
+                <InputNumber
+                  min={1}
+                  value={editValues.playerIndex}
+                  onChange={(v) =>
+                    setEditValues((prev) => ({ ...prev, playerIndex: v }))
+                  }
+                />
+              </div>
+              <div className="text-xs text-gray-500">
+                * 기본값은 기존 선수의 번호/인덱스를 불러옵니다. 필요 시
+                수정하세요.
+              </div>
+            </div>
+          </Modal>
 
           <Card className="shadow-sm mb-2">
             <div className="flex items-center gap-3">
@@ -471,7 +591,7 @@ const ContestPlayerWeighInTable = () => {
                           <div className="flex w-full border-b-2 border-gray-200 h-12 items-center font-semibold bg-gray-50 px-4 rounded-t-lg">
                             <div className="flex w-1/12">순번</div>
                             <div className="flex w-2/12">선수번호</div>
-                            <div className="flex w-2/12">이름</div>
+                            <div className="flex w-[30%]">이름</div>
                             <div className="flex w-2/12">소속</div>
                             <div className="flex w-1/12">월체</div>
                             <div className="flex w-1/12">불참</div>
@@ -489,6 +609,7 @@ const ContestPlayerWeighInTable = () => {
                                 playerNoShow,
                                 isGradeChanged,
                                 invoiceCreateAt,
+                                playerIndex,
                               } = player;
 
                               return (
@@ -506,16 +627,23 @@ const ContestPlayerWeighInTable = () => {
                                   >
                                     {pIdx + 1}
                                   </div>
-                                  <div className="flex w-2/12">
+                                  <div className="flex w-2/12 items-center gap-2">
                                     <Tag
                                       color="gold"
                                       className="text-base font-semibold px-2 py-0.5"
                                     >
                                       {playerNumber}
                                     </Tag>
+                                    <Tooltip title="번호/인덱스 수정">
+                                      <Button
+                                        size="small"
+                                        icon={<EditOutlined />}
+                                        onClick={() => openNumberModal(player)}
+                                      />
+                                    </Tooltip>
                                   </div>
                                   <div
-                                    className={`flex w-2/12 ${
+                                    className={`flex w-[30%] items-center gap-2 ${
                                       playerNoShow
                                         ? "text-gray-300 line-through"
                                         : ""

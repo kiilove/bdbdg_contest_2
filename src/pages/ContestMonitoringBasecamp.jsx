@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useContext } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import _ from "lodash";
 import LoadingPage from "./LoadingPage";
 import {
@@ -38,9 +38,11 @@ import {
   PrinterOutlined,
   EyeOutlined,
   CloseCircleOutlined,
-  StopOutlined,
   FastForwardOutlined,
   RedoOutlined,
+  UnorderedListOutlined,
+  AppstoreOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import { where } from "firebase/firestore";
 
@@ -50,6 +52,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
   const { currentContest } = useContext(CurrentContestContext);
   const { isTabletOrMobile } = useDevice();
+
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
@@ -121,9 +124,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             .sort((a, b) => a.playerIndex - b.playerIndex)
             .filter((f) => f.playerNoShow === false)
         );
-        console.log(returnJudgesAssign?.judges);
         setJudgesArray(returnJudgesAssign?.judges || []);
-
         setIsLoading(false);
       }
     } catch (error) {
@@ -198,10 +199,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleForceScoreTableRefresh = (grades) => {
-    if (grades?.length <= 0) {
-      return;
-    }
-
+    if (grades?.length <= 0) return;
     fetchScoreTable(grades);
   };
 
@@ -231,9 +229,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       ).length;
       matchedPlayersCount = grades[0].playerCount;
     } else if (grades.length > 1) {
-      const madeTitle = grades.map((grade) => {
-        return grade.gradeTitle + " ";
-      });
+      const madeTitle = grades.map((grade) => grade.gradeTitle + " ");
       matchedJudgesCount = grades[0].categoryJudgeCount;
 
       matchedJudgeAssignCount = judgesArray.filter(
@@ -270,7 +266,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleUpdateCurrentStage = async (currentStageId) => {
-    // 현재 선택된 스테이지의 메타데이터를 stagesArray에서 가져온다.
     const {
       stageId,
       stageNumber,
@@ -281,22 +276,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       grades,
     } = stagesArray[currentStageId] || {};
 
-    // 단일/통합 그레이드 모두 대응: handleGradeInfo가 대표 gradeId/gradeTitle을 반환
     const { gradeTitle, gradeId } = handleGradeInfo(grades);
 
-    /**
-     * [중요]
-     * 훅(useFirebaseRealtimeUpdateData 등)을 직접 수정하지 않고
-     * 컴포넌트 내부에서만 사용 이유:
-     * - 이 컴포넌트를 제외한 다른 곳에서 해당 훅을 이미 다수 사용 중
-     * - 공통 훅에 기능을 추가하면 역호환 이슈 위험
-     * - 따라서 여기에서만 seatIndex + gradeId로 judgesArray를 조회해
-     *   judgeName, judgeUid를 주입한다.
-     */
-
-    // 좌석 수(categoryJudgeCount)만큼 초기 심판 상태를 만든 뒤,
-    // judgesArray에서 contestGradeId(= gradeId)와 seatIndex로 매칭하여
-    // judgeName, judgeUid를 함께 저장한다.
     const judgeInitState = Array.from(
       { length: categoryJudgeCount },
       (_, jIdx) => {
@@ -310,17 +291,15 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           isEnd: false,
           judgeName: assigned?.judgeName ?? null,
           judgeUid: assigned?.judgeUid ?? null,
-          onedayPassword: assigned?.onedayPassword ?? null, // ✅ 추가
+          onedayPassword: assigned?.onedayPassword ?? null,
         };
       }
     );
 
-    // 비교(컴페어) 영역 초기화
     await deleteCompare.deleteData(
       `currentStage/${currentContest.contests.id}/compares`
     );
 
-    // 실시간 DB에 기록할 새 현재 스테이지 상태
     const newCurrentStateInfo = {
       stageId,
       stageNumber,
@@ -352,16 +331,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       });
     } catch (error) {
       console.log(error);
-      // 필요 시 사용자 알림 모달/토스트 추가 가능
     }
   };
 
   const handleJudgeIsEndValidated = (judgesArray) => {
-    if (judgesArray?.length <= 0) {
-      return;
-    }
+    if (judgesArray?.length <= 0) return;
     handleScoreTableByJudge(currentStageInfo.grades);
-
     const validate = judgesArray.some((s) => s.isEnd === false);
     return validate;
   };
@@ -406,7 +381,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   }, [realtimeData, playersArray, currentStageInfo]);
 
-  const JudgeCardView = ({ judges, handleForceReStart, currentContest }) => {
+  const JudgeCardView = ({ judges }) => {
     return (
       <div className="space-y-3">
         {judges?.map((judge, index) => {
@@ -418,7 +393,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             judgeUid,
             onedayPassword,
           } = judge;
-          console.log(judge);
           let statusColor = "default";
           let statusText = "로그인대기";
 
@@ -533,13 +507,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     </div>
   );
 
-  const ScoreCardView = ({
-    players,
-    judges,
-    gradeId,
-    categoryTitle,
-    gradeTitle,
-  }) => (
+  const ScoreCardView = ({ players, judges }) => (
     <div className="space-y-3">
       {players?.map((player, pIdx) => {
         const playerNumber = player.playerNumber;
@@ -632,12 +600,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       align: "center",
       render: (_, record) => {
         const { isEnd, isLogined } = record;
-        if (isEnd && isLogined) {
-          return <Tag color="success">심사종료</Tag>;
-        }
-        if (!isEnd && isLogined) {
-          return <Tag color="processing">심사중</Tag>;
-        }
+        if (isEnd && isLogined) return <Tag color="success">심사종료</Tag>;
+        if (!isEnd && isLogined) return <Tag color="processing">심사중</Tag>;
         return <Tag color="default">로그인대기</Tag>;
       },
     },
@@ -717,6 +681,55 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       },
     },
   ];
+
+  /** -----------------------------
+   *  ✅ 섹션(=categorySection) 그룹핑 & 다가올 섹션 계산
+   *  ----------------------------- */
+  const sectionsWithOrder = useMemo(() => {
+    // 섹션별로 모으되, 섹션의 "첫 stageNumber"로 정렬 기준을 만든다
+    const map = new Map();
+    (stagesArray || [])
+      .slice()
+      .sort((a, b) => a.stageNumber - b.stageNumber)
+      .forEach((s) => {
+        const key = s?.categorySection || "미지정";
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(s);
+      });
+
+    const arr = Array.from(map.entries()).map(([section, items]) => {
+      const firstStageNumber = items[0]?.stageNumber ?? 999999;
+      return { section, items, firstStageNumber };
+    });
+
+    // 무조건 진행 순서(첫 무대 번호) 기준으로 정렬
+    return arr.sort((a, b) => a.firstStageNumber - b.firstStageNumber);
+  }, [stagesArray]);
+
+  const currentSectionKey = useMemo(() => {
+    if (!realtimeData?.stageId) return null;
+    const current = stagesArray.find((s) => s.stageId === realtimeData.stageId);
+    return current?.categorySection || "미지정";
+  }, [realtimeData?.stageId, stagesArray]);
+
+  const upcomingSectionKey = useMemo(() => {
+    if (!currentSectionKey) {
+      return sectionsWithOrder?.[0]?.section ?? null;
+    }
+    const idx = sectionsWithOrder.findIndex(
+      (s) => s.section === currentSectionKey
+    );
+    if (idx < 0) return sectionsWithOrder?.[0]?.section ?? null;
+    // 현재 섹션 다음 섹션
+    return sectionsWithOrder[idx + 1]?.section ?? null;
+  }, [currentSectionKey, sectionsWithOrder]);
+
+  const scrollToSectionTable = (section) => {
+    const el = document.querySelector(`[data-section-anchor="${section}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  /** ----------------------------- */
 
   return (
     <>
@@ -927,9 +940,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                         {currentStageInfo?.grades?.length > 0 &&
                           currentStageInfo.grades.map((grade, gIdx) => {
                             const {
-                              contestId,
                               categoryTitle,
-                              categoryId,
                               categoryJudgeType,
                               gradeTitle,
                               gradeId,
@@ -1004,14 +1015,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
                                   <Space wrap size="small">
                                     <Button
-                                      size="small"
                                       icon={<CloseCircleOutlined />}
                                       onClick={handleScreenEnd}
                                     >
                                       화면종료
                                     </Button>
                                     <Button
-                                      size="small"
                                       type="primary"
                                       icon={<EyeOutlined />}
                                       onClick={() =>
@@ -1024,7 +1033,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                       순위표공개
                                     </Button>
                                     <Button
-                                      size="small"
                                       icon={<PrinterOutlined />}
                                       onClick={() => {
                                         setSummaryProp(() => ({
@@ -1040,7 +1048,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     >
                                       집계출력
                                     </Button>
-                                    <Button
+                                    {/* <Button
                                       size="small"
                                       icon={<TrophyOutlined />}
                                       onClick={() => {
@@ -1056,7 +1064,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                       }}
                                     >
                                       상장출력
-                                    </Button>
+                                    </Button> */}
                                   </Space>
                                 </div>
 
@@ -1064,9 +1072,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                   <ScoreCardView
                                     players={filterdPlayers}
                                     judges={realtimeData?.judges}
-                                    gradeId={gradeId}
-                                    categoryTitle={categoryTitle}
-                                    gradeTitle={gradeTitle}
                                   />
                                 ) : (
                                   <div className="overflow-x-auto">
@@ -1087,11 +1092,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     </div>
                   ),
                 },
+
+                // ✅ 전체 무대목록 (아이콘 교체)
                 {
                   key: "1",
                   label: (
                     <span className="flex items-center gap-2">
-                      <StopOutlined />
+                      <UnorderedListOutlined />
                       전체 무대목록
                     </span>
                   ),
@@ -1121,6 +1128,167 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                         )}
                       </Card>
                     ) : null,
+                },
+
+                // ✅ 섹션별 한눈에 보기 (다가올 섹션 하이라이트)
+                {
+                  key: "2",
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <CalendarOutlined />
+                      섹션별 한눈에 보기
+                    </span>
+                  ),
+                  children:
+                    sectionsWithOrder.length > 0 ? (
+                      <div className="space-y-8">
+                        {/* 상단 요약 바: 가로 스크롤, 다가올 섹션 강조 */}
+                        <div className="overflow-x-auto pb-1">
+                          <div className="flex gap-3 min-w-max">
+                            {sectionsWithOrder.map(({ section, items }) => {
+                              const isCurrent = section === currentSectionKey;
+                              const isUpcoming = section === upcomingSectionKey;
+                              const totalStages = items.length;
+                              const firstNo = items[0]?.stageNumber ?? "-";
+                              const lastNo =
+                                items[items.length - 1]?.stageNumber ?? "-";
+                              return (
+                                <div
+                                  key={String(section)}
+                                  className={`p-4 rounded-xl shadow-sm border bg-white cursor-pointer select-none transition-all ${
+                                    isUpcoming
+                                      ? "border-blue-400 ring-2 ring-blue-200 animate-pulse"
+                                      : isCurrent
+                                      ? "border-green-400"
+                                      : "border-gray-200"
+                                  }`}
+                                  onClick={() => scrollToSectionTable(section)}
+                                  title={
+                                    isUpcoming
+                                      ? "다가올 섹션"
+                                      : isCurrent
+                                      ? "현재 섹션"
+                                      : "섹션 이동"
+                                  }
+                                >
+                                  <div className="text-sm text-gray-500">
+                                    섹션
+                                  </div>
+                                  <div className="text-lg font-bold">
+                                    {String(section)}
+                                  </div>
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    {firstNo} ~ {lastNo}번 무대
+                                  </div>
+                                  <div className="mt-1">
+                                    <Tag
+                                      color={isUpcoming ? "blue" : "default"}
+                                    >
+                                      {totalStages}개 무대
+                                    </Tag>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 섹션별 표 모음 (앵커) */}
+                        {sectionsWithOrder.map(({ section, items }) => (
+                          <Card
+                            key={String(section)}
+                            className="shadow-sm"
+                            title={
+                              <div className="flex items-center gap-2">
+                                <Text strong className="text-base">
+                                  섹션: {String(section)}
+                                </Text>
+                                <Tag>{items.length}개 무대</Tag>
+                                {section === currentSectionKey && (
+                                  <Tag color="success">현재 섹션</Tag>
+                                )}
+                                {section === upcomingSectionKey && (
+                                  <Tag color="blue">다가올 섹션</Tag>
+                                )}
+                              </div>
+                            }
+                            bodyStyle={{ scrollMarginTop: 80 }}
+                            data-section-anchor={section}
+                          >
+                            <div className="overflow-x-auto">
+                              <Table
+                                columns={stageColumns}
+                                dataSource={items.map((stage) => ({
+                                  ...stage,
+                                  key: stage.stageId,
+                                }))}
+                                pagination={false}
+                                size="small"
+                                scroll={{ x: "max-content" }}
+                              />
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <Card className="shadow-sm">
+                        <Text type="secondary">표시할 섹션이 없습니다.</Text>
+                      </Card>
+                    ),
+                },
+
+                // ✅ 섹션별 탭 보기
+                {
+                  key: "3",
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <AppstoreOutlined />
+                      섹션별 탭
+                    </span>
+                  ),
+                  children:
+                    sectionsWithOrder.length > 0 ? (
+                      <Card className="shadow-sm">
+                        <Tabs
+                          tabPosition="top"
+                          items={sectionsWithOrder.map(
+                            ({ section, items }) => ({
+                              key: String(section),
+                              label: (
+                                <span className="flex items-center gap-2">
+                                  {String(section)}
+                                  <Tag>{items.length}</Tag>
+                                  {section === currentSectionKey && (
+                                    <Tag color="success">현재</Tag>
+                                  )}
+                                  {section === upcomingSectionKey && (
+                                    <Tag color="blue">다가올</Tag>
+                                  )}
+                                </span>
+                              ),
+                              children: (
+                                <div className="overflow-x-auto">
+                                  <Table
+                                    columns={stageColumns}
+                                    dataSource={items.map((stage) => ({
+                                      ...stage,
+                                      key: stage.stageId,
+                                    }))}
+                                    pagination={false}
+                                    size="small"
+                                    scroll={{ x: "max-content" }}
+                                  />
+                                </div>
+                              ),
+                            })
+                          )}
+                        />
+                      </Card>
+                    ) : (
+                      <Card className="shadow-sm">
+                        <Text type="secondary">표시할 섹션이 없습니다.</Text>
+                      </Card>
+                    ),
                 },
               ]}
             />

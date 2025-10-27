@@ -237,7 +237,7 @@ const UnifiedPrint = () => {
                     if (player.playerNoShow) {
                       note = "불참";
                     } else if (player.isGradeChanged) {
-                      note = "월체";
+                      note = "월체 반영됨";
                     }
                   }
 
@@ -410,12 +410,24 @@ const UnifiedPrint = () => {
       );
 
       // Sort by playerIndex for measurement type
+      // result = result.map((category) => ({
+      //   ...category,
+      //   grades: category.grades.map((grade) => ({
+      //     ...grade,
+      //     players: grade.players.sort((a, b) => a.playerIndex - b.playerIndex), // Sort by playerIndex (index)
+      //   })),
+      // }));
+      // return result;
+      // 정렬 후, grade별로 순번(index) 1부터 다시 매겨주기(연번)
       result = result.map((category) => ({
         ...category,
-        grades: category.grades.map((grade) => ({
-          ...grade,
-          players: grade.players.sort((a, b) => a.playerIndex - b.playerIndex), // Sort by playerIndex (index)
-        })),
+        grades: category.grades.map((grade) => {
+          const sorted = [...grade.players].sort(
+            (a, b) => a.playerIndex - b.playerIndex
+          );
+          const renumbered = sorted.map((p, i) => ({ ...p, index: i + 1 }));
+          return { ...grade, players: renumbered };
+        }),
       }));
       return result;
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import {
   useFirebaseRealtimeGetDocument,
@@ -30,6 +30,7 @@ const CompareSetting = ({
   const [isLoading, setIsLoading] = useState(true);
   const [compareList, setCompareList] = useState({});
   const [compareArray, setCompareArray] = useState([]);
+  const [currentCompareArray, setCurrentCompareArray] = useState([]);
   const [isVotedPlayerLengthInput, setIsVotedPlayerLengthInput] =
     useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -55,6 +56,11 @@ const CompareSetting = ({
   const [topResult, setTopResult] = useState([]);
   const [votedValidate, setVotedValidate] = useState(true);
 
+  // ✅ 롤백용: 모달 오픈 시점의 compares 스냅샷 + 세션내 시작 여부
+  const initialComparesRef = useRef(null);
+  const snapshotTakenRef = useRef(false);
+  const [startedInThisSession, setStartedInThisSession] = useState(false);
+
   const updateRealtimeCompare = useFirebaseRealtimeUpdateData();
 
   const fetchCompare = useFirestoreGetDocument("contest_compares_list");
@@ -77,6 +83,7 @@ const CompareSetting = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  // ✅ 모달 로드시 Firestore 비교 이력 로드
   const fetchPool = async (gradeId, compareListId) => {
     if (gradeId === undefined || compareListId === undefined) {
       setMessage({
@@ -113,17 +120,48 @@ const CompareSetting = ({
         compareCancel: false,
         compareIng: false,
       });
+      // ✅ 이 모달 세션에서 시작함 표시
+      setStartedInThisSession(true);
     } catch (error) {
       console.error("Error starting compare mode:", error);
     }
   };
 
+  // 🔁 CompareSetting 내 handleCompareCancel — 현재 스테이지/체급의 마지막 compare만 제거
   const handleCompareCancel = async (contestId) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
-    const newCompareArray = [...compareArray];
-    newCompareArray.splice(compareArray.length - 1, 1);
+
+    const currentStageId = stageInfo?.stageId;
+    const currentCategoryId = stageInfo?.categoryId;
+    const currentGradeId = stageInfo?.grades?.[0]?.gradeId;
+
+    const all = Array.isArray(compareArray) ? compareArray : [];
+
+    const isCurrentGroup = (c) =>
+      c?.stageId === currentStageId &&
+      c?.categoryId === currentCategoryId &&
+      c?.gradeId === currentGradeId;
+
+    const currentGroup = all.filter(isCurrentGroup);
+    const others = all.filter((c) => !isCurrentGroup(c));
+
+    if (currentGroup.length === 0) {
+      setRefresh(true);
+      setClose(false);
+      return;
+    }
+
+    const maxIdx = Math.max(
+      ...currentGroup.map((c) => Number(c.compareIndex || 0))
+    );
+    const trimmedGroup = currentGroup.filter(
+      (c) => Number(c.compareIndex) !== maxIdx
+    );
+
+    const newCompares = [...others, ...trimmedGroup];
 
     try {
+      // 1) 실시간 DB 상태 리셋
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
         status: {
           compareStart: false,
@@ -132,7 +170,24 @@ const CompareSetting = ({
           compareIng: false,
         },
         confirmed: { count: 0, numbers: [] },
+        players: [],
+        playerLength: 0,
+        scoreMode: null,
+        judges: (realtimeData?.compares?.judges || []).map((j) => ({
+          ...j,
+          messageStatus: "확인전",
+        })),
       });
+
+      // 2) Firestore(compare 이력) 업데이트
+      await updateCompare.updateData(compareList.id, {
+        ...compareList,
+        compares: newCompares,
+      });
+
+      // 3) 로컬 상태 동기화
+      setCompareArray(newCompares);
+      setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
       setCompareStatus({
         compareStart: false,
@@ -141,16 +196,8 @@ const CompareSetting = ({
         compareIng: false,
       });
 
-      await updateCompare.updateData(compareList.id, {
-        ...compareList,
-        compares: [...newCompareArray],
-      });
-
-      setCompareList({
-        ...compareList,
-        compares: [...newCompareArray],
-      });
-      setCompareArray([...newCompareArray]);
+      // 취소는 ‘명시적 작업’이므로 롤백하지 않도록 세션 플래그 해제
+      setStartedInThisSession(false);
 
       setRefresh(true);
       setClose(false);
@@ -168,7 +215,7 @@ const CompareSetting = ({
       compareIng: false,
     };
 
-    const judgeMessageInfo = realtimeData?.judges.map((judge) => {
+    const judgeMessageInfo = (realtimeData?.judges || []).map((judge) => {
       const { seatIndex } = judge;
       return { seatIndex, messageStatus: "확인전" };
     });
@@ -194,7 +241,7 @@ const CompareSetting = ({
     return players
       .map((p) => Number(p.playerNumber))
       .filter((n) => Number.isFinite(n))
-      .sort((a, b) => a - b); // 번호 오름차순
+      .sort((a, b) => a - b);
   };
 
   const handleUpdateComparePlayers = async (
@@ -203,7 +250,6 @@ const CompareSetting = ({
     contestId,
     compareListId
   ) => {
-    // 확정 정보(이력용)
     const compareInfo = {
       contestId,
       stageId: stageInfo.stageId,
@@ -213,15 +259,14 @@ const CompareSetting = ({
       gradeTitle: stageInfo.grades[0].gradeTitle,
       compareIndex: propCompareIndex,
       comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
-      compareScoreMode: votedInfo.scoreMode, // "all" | "topOnly" | "topWithSub"
-      players: [...playerTopResult], // 확정된 선수 객체 리스트
-      votedResult: [...playerVoteResult], // 득표 상세 (옵션)
+      compareScoreMode: votedInfo.scoreMode,
+      players: [...playerTopResult],
+      votedResult: [...playerVoteResult],
     };
 
     try {
       const collectionInfoCompares = `currentStage/${contestId}/compares`;
 
-      // 진행 상태(확정 완료 후, 진행중으로 전환)
       const newStatus = {
         compareStart: false,
         compareEnd: false,
@@ -229,38 +274,34 @@ const CompareSetting = ({
         compareIng: true,
       };
 
-      // Firestore 이력 append
       const newCompares = [...compareArray, compareInfo];
 
-      // ✅ 확정된 "선수 번호만" 오름차순으로 추출
       const confirmedNumbers = (playerTopResult || [])
         .map((p) => Number(p.playerNumber))
         .filter((n) => Number.isFinite(n))
         .sort((a, b) => a - b);
 
-      // 1) Realtime DB 업데이트 (상태 + 확정 번호만 저장)
       await updateRealtimeCompare.updateData(collectionInfoCompares, {
         ...realtimeData?.compares,
         status: { ...newStatus },
-        // 호환성을 위해 기존 players 필드는 유지 (필요 없으면 제거 가능)
         players: [...playerTopResult],
         confirmed: {
           count: confirmedNumbers.length,
-          numbers: confirmedNumbers, // ← 번호만, 오름차순
+          numbers: confirmedNumbers,
         },
       });
 
-      // 2) Firestore(compare 이력) 업데이트
       await updateCompare.updateData(compareListId, {
         ...compareList,
         compares: [...newCompares],
       });
 
-      // 3) 로컬 상태 동기화
       setCompareArray(newCompares);
       setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
-      // 4) 상위 리프레시 및 모달 닫기
+      // ✅ 명단확정까지 완료했으므로 롤백 대상 아님
+      setStartedInThisSession(false);
+
       setRefresh(true);
       setClose(false);
     } catch (error) {
@@ -269,12 +310,10 @@ const CompareSetting = ({
   };
 
   const handleGetTopPlayers = (players, playerLength) => {
-    if (!players || players.length === 0) {
-      return [];
-    }
+    if (!players || players.length === 0) return [];
+    if (players.length !== playerLength) return []; // (네 로직 유지)
 
     const sortedPlayers = players.sort((a, b) => b.votedCount - a.votedCount);
-
     const topPlayers = sortedPlayers.slice(0, playerLength);
 
     const lastVotedCount = topPlayers[topPlayers.length - 1].votedCount;
@@ -289,7 +328,6 @@ const CompareSetting = ({
 
   const handleCountPlayerVotes = (data) => {
     const voteCounts = {};
-
     if (data?.length > 0) {
       data.forEach((entry) => {
         if (
@@ -311,11 +349,20 @@ const CompareSetting = ({
         }
       });
     }
-
-    const result = Object.values(voteCounts);
-    return result;
+    return Object.values(voteCounts);
   };
 
+  // ✅ 모달 초기에 compares 스냅샷 1회 저장
+  useEffect(() => {
+    if (!snapshotTakenRef.current && realtimeData?.compares) {
+      snapshotTakenRef.current = true;
+      initialComparesRef.current = JSON.parse(
+        JSON.stringify(realtimeData.compares)
+      );
+    }
+  }, [realtimeData?.compares]);
+
+  // ✅ Firestore 이력/필터
   useEffect(() => {
     if (
       stageInfo.grades[0].gradeId &&
@@ -336,7 +383,31 @@ const CompareSetting = ({
         voteRange: realtimeData.compares.voteRange,
       });
     }
+    if (compareArray?.length > 0) {
+      const filterCompares = compareArray.filter(
+        (f) =>
+          f.categoryId === realtimeData?.categoryId &&
+          f.gradeId === realtimeData?.gradeId
+      );
+      // (필요시 setCurrentCompareArray 여기서도 가능)
+    }
   }, [realtimeData?.compares]);
+
+  useEffect(() => {
+    if (compareArray?.length > 0) {
+      const filterCompares = compareArray.filter(
+        (f) =>
+          f.categoryId === realtimeData?.categoryId &&
+          f.gradeId === realtimeData?.gradeId
+      );
+      setCurrentCompareArray(filterCompares);
+    }
+  }, [
+    realtimeData?.stageId,
+    compareArray,
+    realtimeData?.categoryId,
+    realtimeData?.gradeId,
+  ]);
 
   useEffect(() => {
     if (realtimeData?.compares?.judges?.length > 0) {
@@ -360,6 +431,33 @@ const CompareSetting = ({
     votedResult.length > 0
       ? Math.max(...votedResult.map((v) => v.votedCount))
       : 0;
+
+  // ✅ 닫기 시 롤백 처리
+  const handleCloseWithRollback = async () => {
+    try {
+      // 이 모달 세션에서 ‘투표개시’를 눌렀고, 아직 확정(=compareIng) 전이라면 롤백
+      const status = realtimeData?.compares?.status || {};
+      const shouldRollback =
+        startedInThisSession &&
+        status.compareStart === true &&
+        status.compareIng !== true;
+
+      if (shouldRollback && initialComparesRef.current) {
+        const path = `currentStage/${currentContest?.contests?.id}/compares`;
+        await updateRealtimeCompare.updateData(
+          path,
+          // 초기 스냅샷 그대로 복원
+          JSON.parse(JSON.stringify(initialComparesRef.current))
+        );
+      }
+    } catch (e) {
+      console.warn("닫기 롤백 실패:", e?.message);
+      // 롤백 실패해도 모달은 닫는다(운영 편의)
+    } finally {
+      setRefresh(true);
+      setClose(false);
+    }
+  };
 
   return (
     <>
@@ -410,7 +508,7 @@ const CompareSetting = ({
                   </div>
                 </div>
                 <Space>
-                  <Button
+                  {/* <Button
                     danger
                     icon={<StopOutlined />}
                     onClick={() => {
@@ -424,13 +522,10 @@ const CompareSetting = ({
                     }}
                   >
                     비교심사취소
-                  </Button>
+                  </Button> */}
                   <Button
                     icon={<CloseOutlined />}
-                    onClick={() => {
-                      setRefresh(true);
-                      setClose(false);
-                    }}
+                    onClick={handleCloseWithRollback}
                   >
                     닫기
                   </Button>
@@ -475,8 +570,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 voteRange: "all",
                               }));
                             }}
@@ -491,8 +586,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 voteRange: "voted",
                               }));
                             }}
@@ -535,8 +630,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 playerLength: 3,
                               }));
                               setIsVotedPlayerLengthInput(false);
@@ -554,8 +649,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 playerLength: 5,
                               }));
                               setIsVotedPlayerLengthInput(false);
@@ -573,8 +668,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 playerLength: 7,
                               }));
                               setIsVotedPlayerLengthInput(false);
@@ -589,11 +684,9 @@ const CompareSetting = ({
                             isVotedPlayerLengthInput ? "primary" : "default"
                           }
                           onClick={() => {
-                            setIsVotedPlayerLengthInput(
-                              () => !isVotedPlayerLengthInput
-                            );
-                            setVotedInfo(() => ({
-                              ...votedInfo,
+                            setIsVotedPlayerLengthInput((prev) => !prev);
+                            setVotedInfo((prev) => ({
+                              ...prev,
                               playerLength: undefined,
                             }));
                           }}
@@ -607,8 +700,8 @@ const CompareSetting = ({
                             max={matchedOriginalPlayers?.length}
                             placeholder="인원수"
                             onChange={(value) => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 playerLength: Number.parseInt(value),
                               }));
                             }}
@@ -651,8 +744,8 @@ const CompareSetting = ({
                               : "default"
                           }
                           onClick={() => {
-                            setVotedInfo(() => ({
-                              ...votedInfo,
+                            setVotedInfo((prev) => ({
+                              ...prev,
                               scoreMode: "all",
                             }));
                           }}
@@ -668,8 +761,8 @@ const CompareSetting = ({
                                 : "default"
                             }
                             onClick={() => {
-                              setVotedInfo(() => ({
-                                ...votedInfo,
+                              setVotedInfo((prev) => ({
+                                ...prev,
                                 scoreMode: "topWithSub",
                               }));
                             }}
@@ -685,8 +778,8 @@ const CompareSetting = ({
                               : "default"
                           }
                           onClick={() => {
-                            setVotedInfo(() => ({
-                              ...votedInfo,
+                            setVotedInfo((prev) => ({
+                              ...prev,
                               scoreMode: "topOnly",
                             }));
                           }}
@@ -848,36 +941,36 @@ const CompareSetting = ({
                   )}
 
                   {/* 이전 차수 TOP N */}
-                  {compareArray?.length > 0 && (
+                  {currentCompareArray?.length > 0 && (
                     <div className="mt-6 p-4 bg-blue-50 rounded-lg">
                       <div className="text-base font-semibold mb-3 text-gray-700">
-                        {compareArray?.length}차 TOP{" "}
+                        {currentCompareArray?.length}차 TOP{" "}
                         {
-                          compareArray[compareArray?.length - 1]
+                          currentCompareArray[currentCompareArray?.length - 1]
                             ?.comparePlayerLength
                         }
                       </div>
                       <Space wrap>
-                        {compareArray[compareArray?.length - 1]?.players?.map(
-                          (top, tIdx) => (
-                            <Badge
-                              key={tIdx}
-                              count={top.playerNumber}
-                              overflowCount={9999}
-                              style={{
-                                backgroundColor: "#1890ff",
-                                fontSize: "16px",
-                                width: "auto",
-                                minWidth: "48px",
-                                height: "48px",
-                                padding: "0 12px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            />
-                          )
-                        )}
+                        {currentCompareArray[
+                          currentCompareArray?.length - 1
+                        ]?.players?.map((top, tIdx) => (
+                          <Badge
+                            key={tIdx}
+                            count={top.playerNumber}
+                            overflowCount={9999}
+                            style={{
+                              backgroundColor: "#1890ff",
+                              fontSize: "16px",
+                              width: "auto",
+                              minWidth: "48px",
+                              height: "48px",
+                              padding: "0 12px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          />
+                        ))}
                       </Space>
                     </div>
                   )}
@@ -938,7 +1031,7 @@ const CompareSetting = ({
                             <th className="border border-gray-300 p-3 text-left font-semibold">
                               심판번호
                             </th>
-                            {realtimeData?.judges.map((judge, pIdx) => (
+                            {(realtimeData?.judges || []).map((judge, pIdx) => (
                               <th
                                 key={pIdx}
                                 className="border border-gray-300 p-3 text-center font-semibold"
@@ -953,7 +1046,7 @@ const CompareSetting = ({
                             <td className="border border-gray-300 p-3 font-semibold bg-gray-50">
                               투표상황
                             </td>
-                            {realtimeData?.compares?.judges.map(
+                            {(realtimeData?.compares?.judges || []).map(
                               (judge, pIdx) => (
                                 <td
                                   key={pIdx}
@@ -981,24 +1074,26 @@ const CompareSetting = ({
                       size="middle"
                       className="w-full"
                     >
-                      {realtimeData?.compares?.judges.map((judge, pIdx) => (
-                        <Card key={pIdx} size="small">
-                          <div className="flex justify-between items-center">
-                            <span className="font-semibold">
-                              심판 {judge.seatIndex}
-                            </span>
-                            <Tag
-                              color={
-                                judge.messageStatus === "투표완료"
-                                  ? "success"
-                                  : "default"
-                              }
-                            >
-                              {judge.messageStatus}
-                            </Tag>
-                          </div>
-                        </Card>
-                      ))}
+                      {(realtimeData?.compares?.judges || []).map(
+                        (judge, pIdx) => (
+                          <Card key={pIdx} size="small">
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold">
+                                심판 {judge.seatIndex}
+                              </span>
+                              <Tag
+                                color={
+                                  judge.messageStatus === "투표완료"
+                                    ? "success"
+                                    : "default"
+                                }
+                              >
+                                {judge.messageStatus}
+                              </Tag>
+                            </div>
+                          </Card>
+                        )
+                      )}
                     </Space>
                   )}
 
@@ -1035,7 +1130,7 @@ const CompareSetting = ({
                         </Button>
                       )}
 
-                      {/* 서브 버튼: 직권확정 (항상 표시, 눈에 띄지 않게) */}
+                      {/* 서브 버튼: 직권확정 */}
                       <Button
                         type="link"
                         size="small"

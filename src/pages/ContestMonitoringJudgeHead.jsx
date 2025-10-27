@@ -145,43 +145,55 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       }
 
       if (returnCompareList) {
-        console.log(returnCompareList);
-        // 원본 compare 리스트 저장 (Firestore 데이터 그대로)
         setComparesList({ ...returnCompareList });
-
-        const currentContestId = currentContest?.contests?.id;
-        const currentStageId = realtimeData?.stageId;
-
-        // 현재 스테이지 정보 찾기
-        const currentStageFromAssign = (returnContestStage?.stages || []).find(
-          (stage) => stage.stageId === currentStageId
-        );
-
-        const currentCategoryId = currentStageFromAssign?.categoryId;
-        const currentGradeIds = (currentStageFromAssign?.grades || []).map(
-          (g) => g.gradeId
-        );
-
-        // ✅ 현재 스테이지 조건에 맞는 compare만 필터
-        const filtered = (returnCompareList?.compares || []).filter((c) => {
-          if (!currentContestId) return false;
-          if (c.contestId !== currentContestId) return false;
-          if (currentCategoryId && c.categoryId !== currentCategoryId)
-            return false;
-          if (
-            currentGradeIds.length > 0 &&
-            !currentGradeIds.includes(c.gradeId)
-          )
-            return false;
-          return true;
-        });
-
-        // ✅ 필터된 데이터만 화면 상태에 반영
-        setComparesArray(filtered);
-        setCurrentCompareInfo(
-          filtered.length > 0 ? { ...filtered[filtered.length - 1] } : {}
-        );
+        setComparesArray([...returnCompareList.compares]);
       }
+
+      if (returnCompareList?.compares?.length === 0) {
+        setCurrentCompareInfo({});
+      }
+
+      // if (returnCompareList) {
+      //   console.log(returnCompareList);
+      //   console.log("stage", currentStageId);
+      //   // 원본 compare 리스트 저장 (Firestore 데이터 그대로)
+      //   setComparesList({ ...returnCompareList });
+
+      //   const currentContestId = currentContest?.contests?.id;
+      //   const currentStageId = realtimeData?.stageId;
+      //   console.log(currentContestId);
+
+      //   // 현재 스테이지 정보 찾기
+      //   const currentStageFromAssign = (returnContestStage?.stages || []).find(
+      //     (stage) => stage.stageId === currentStageId
+      //   );
+
+      //   const currentCategoryId = currentStageFromAssign?.categoryId;
+      //   const currentGradeIds = (currentStageFromAssign?.grades || []).map(
+      //     (g) => g.gradeId
+      //   );
+
+      //   console.log(currentContestId);
+      //   // ✅ 현재 스테이지 조건에 맞는 compare만 필터
+      //   const filtered = (returnCompareList?.compares || []).filter((c) => {
+      //     if (!currentContestId) return false;
+      //     if (c.contestId !== currentContestId) return false;
+      //     if (currentCategoryId && c.categoryId !== currentCategoryId)
+      //       return false;
+      //     if (
+      //       currentGradeIds.length > 0 &&
+      //       !currentGradeIds.includes(c.gradeId)
+      //     )
+      //       return false;
+      //     return true;
+      //   });
+
+      //   // ✅ 필터된 데이터만 화면 상태에 반영
+      //   setComparesArray(filtered);
+      //   setCurrentCompareInfo(
+      //     filtered.length > 0 ? { ...filtered[filtered.length - 1] } : {}
+      //   );
+      // }
     } catch (error) {
       setMessage({
         body: "데이터를 로드하지 못했습니다.",
@@ -450,6 +462,19 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
+    if (comparesArray.length > 0) {
+      const filterCurrentStageCompareInfo = comparesArray.filter(
+        (f) =>
+          f.categoryId === realtimeData.categoryId &&
+          f.gradeId === realtimeData.gradeId
+      );
+      setCurrentCompareInfo({
+        ...filterCurrentStageCompareInfo[
+          filterCurrentStageCompareInfo?.length - 1
+        ],
+      });
+    }
+
     const all = comparesList?.compares || [];
     // ✅ 이번 스테이지의 compare만 표시. stageId가 없는 예전 이력은 제외.
     const filtered = all.filter((c) => c.stageId === currentStageId);
@@ -511,6 +536,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
     prevStageIdRef.current = currentStageId;
   }, [realtimeData?.stageId]);
+
+  useEffect(() => {
+    console.log("현재체급 비교심사정보", currentCompareInfo);
+  }, [currentCompareInfo]);
 
   return (
     <>
@@ -578,14 +607,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   {contestInfo.contestTitle}
                 </span>
               </Descriptions.Item>
-              <Descriptions.Item label="모니터링 상태">
-                {!isHolding && realtimeData?.stageId && (
-                  <Tag color="green">실시간 모니터링중</Tag>
-                )}
-                {isHolding && <Tag color="orange">모니터링 일시정지</Tag>}
-                {!realtimeData?.stageId && !isHolding && (
-                  <Tag color="default">대회시작전</Tag>
-                )}
+              <Descriptions.Item label="현재 진행중인 무대">
+                {realtimeData?.categoryTitle} / {realtimeData?.gradeTitle}
               </Descriptions.Item>
               {lastUpdated && (
                 <Descriptions.Item label="마지막 확인">
@@ -631,7 +654,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                         }))
                       }
                       className={isMobile ? "w-full" : ""}
-                      // ✅ 진행 중이면 시작 버튼 잠시 비활성화
                     >
                       {(comparesArray?.length ?? 0) + 1}차 비교심사 시작
                     </Button>
@@ -870,6 +892,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 ? "default"
                                 : "primary"
                             }
+                            size="large"
                             danger={(realtimeData?.resultSave || []).includes(
                               gradeId
                             )}

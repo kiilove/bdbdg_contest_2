@@ -33,6 +33,15 @@ const SectionAssign = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  /** 🔤 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
+  const sortJudgesByName = (arr = []) =>
+    [...arr].sort((a, b) =>
+      (a?.judgeName || "").localeCompare(b?.judgeName || "", "ko", {
+        sensitivity: "base",
+        numeric: true,
+      })
+    );
+
   /** 이미 배정된 심판 목록 */
   const getAssignedJudgesForSection = (sectionName) => {
     return (judgesAssignInfo.judges || [])
@@ -70,33 +79,25 @@ const SectionAssign = ({
       if (grade.contestGradeId == null) errorFields.push("contestGradeId");
       if (!grade.contestGradeTitle) errorFields.push("contestGradeTitle");
       if (grade.contestGradeIndex == null)
-        errorFields.push("contestGradeIndex"); // 0 허용
+        errorFields.push("contestGradeIndex");
       if (!selectedJudge || !selectedJudge.judgeUid)
         errorFields.push("judgeUid");
       if (!selectedJudge || !selectedJudge.judgeName)
         errorFields.push("judgeName");
-      if (
-        !currentContest ||
-        !currentContest.contests ||
-        currentContest.contests.id == null
-      )
-        errorFields.push("contestId");
-      if (seatNumber == null) errorFields.push("seatIndex"); // 0 허용
+      if (!currentContest?.contests?.id) errorFields.push("contestId");
+      if (seatNumber == null) errorFields.push("seatIndex");
 
       if (errorFields.length > 0) {
         setMessage({
           body: `배정할 수 없습니다. ${sectionName}의 ${seatNumber}번 좌석에 필수 정보가 누락되었습니다: ${errorFields.join(
             ", "
           )}`,
-          isButton: true,
-          confirmButtonText: "확인",
         });
         setMsgOpen(true);
         hasError = true;
-        return; // 현재 grade만 스킵
+        return;
       }
 
-      // ✅ 원본 키만 유지해서 push (categoryTitle은 부모에서 파생)
       updatedJudges.push({
         sectionName,
         seatIndex: seatNumber,
@@ -123,47 +124,59 @@ const SectionAssign = ({
     const selectedJudge = judgesPoolArray.find(
       (judge) => judge.judgeUid === judgeUid
     );
+    if (!selectedJudge) return;
 
-    if (selectedJudge) {
-      const updatedJudges = (judgesAssignInfo.judges || []).filter(
-        (assign) =>
-          !(
-            assign.seatIndex === seatIndex &&
-            (assign.sectionName === sectionName || !assign.sectionName)
-          )
-      );
+    // 현재 좌석에 기존 배정이 있었는지 확인 (최초 배정인지 판단)
+    const existingForSeat = (judgesAssignInfo.judges || []).filter(
+      (assign) =>
+        assign.sectionName === sectionName && assign.seatIndex === seatIndex
+    );
+    const isBatchReplace =
+      existingForSeat.length > 0 &&
+      existingForSeat.some((a) => a.judgeUid !== selectedJudge.judgeUid);
 
-      const sectionInfo = filteredBySection.find(
-        (section) => section.sectionName === sectionName
-      );
+    // 기존 해당 좌석 배정 제거
+    const updatedJudges = (judgesAssignInfo.judges || []).filter(
+      (assign) =>
+        !(
+          assign.seatIndex === seatIndex &&
+          (assign.sectionName === sectionName || !assign.sectionName)
+        )
+    );
 
-      if (sectionInfo) {
-        const { sectionGrades } = sectionInfo;
+    // 이 섹션의 모든 grade를 가져와서 일괄 배정
+    const sectionInfo = filteredBySection.find(
+      (section) => section.sectionName === sectionName
+    );
+    if (!sectionInfo) return;
 
-        if (
-          assignJudgeToGrades(
-            sectionGrades,
-            selectedJudge,
-            seatIndex,
-            sectionName,
-            updatedJudges,
-            generateUUID,
-            currentContest
-          )
-        ) {
-          setMessage({
-            body: `이 좌석에 새 심판을 배정하면, 이 섹션의 하위 카테고리에 설정된 심판들이 모두 이 심판으로 변경됩니다.`,
-            isButton: true,
-            confirmButtonText: "확인",
-          });
-          setMsgOpen(true);
-          // ✅ 부모가 원본을 들고 있으므로 그대로 넘겨 주면 부모에서 파생 붙임
-          setJudgesAssignInfo((prev) => ({
-            ...(prev || {}),
-            judges: updatedJudges,
-          }));
-        }
+    const { sectionGrades } = sectionInfo;
+
+    if (
+      assignJudgeToGrades(
+        sectionGrades,
+        selectedJudge,
+        seatIndex,
+        sectionName,
+        updatedJudges,
+        generateUUID,
+        currentContest
+      )
+    ) {
+      // ✅ 최초 배정(기존 없음)일 때는 모달을 띄우지 않음
+      if (isBatchReplace) {
+        setMessage({
+          body: "이 좌석을 새 심판으로 변경하면, 이 섹션의 하위 카테고리에 이미 배정된 동일 좌석 심판이 모두 함께 변경됩니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
       }
+
+      setJudgesAssignInfo((prev) => ({
+        ...(prev || {}),
+        judges: updatedJudges,
+      }));
     }
   };
 
@@ -273,6 +286,20 @@ const SectionAssign = ({
     console.log("filteredBySection", filteredBySection);
   }, [filteredBySection]);
 
+  /** 🔎 공통 Select props: 검색/자동완성 설정 */
+  const commonSelectProps = {
+    showSearch: true,
+    allowClear: true,
+    optionFilterProp: "data-search",
+    filterOption: (input, option) => {
+      const hay = (option?.props?.["data-search"] || "")
+        .toString()
+        .toLowerCase();
+      return hay.includes((input || "").toLowerCase());
+    },
+    placeholder: "심판 선택",
+  };
+
   return (
     <div className="flex w-full flex-col gap-4 p-4">
       {filteredBySection.map((section, sectionIdx) => {
@@ -358,6 +385,15 @@ const SectionAssign = ({
                   (j) => j.judgeUid === selectedJudge.judgeUid
                 );
 
+                // 🔤 섹션별 “선택 가능 목록”을 이름순 정렬해서 준비
+                const selectableSorted = sortJudgesByName(
+                  judgesPoolArray.filter(
+                    (judge) =>
+                      !assignedJudges.includes(judge.judgeUid) ||
+                      judge.judgeUid === selectedJudge.judgeUid
+                  )
+                );
+
                 if (isMobile) {
                   return (
                     <Card
@@ -397,7 +433,9 @@ const SectionAssign = ({
                           </div>
                         </div>
                       )}
+
                       <Select
+                        {...commonSelectProps}
                         className="w-full"
                         value={selectedJudge.judgeUid || "unselect"}
                         onChange={(newJudgeUid) => {
@@ -411,27 +449,26 @@ const SectionAssign = ({
                             );
                           }
                         }}
-                        placeholder="심판 선택"
                       >
-                        <Select.Option value="unselect">
+                        <Select.Option value="unselect" data-search="">
                           선택 안함
                         </Select.Option>
-                        {judgesPoolArray
-                          .filter(
-                            (judge) =>
-                              !assignedJudges.includes(judge.judgeUid) ||
-                              judge.judgeUid === selectedJudge.judgeUid
-                          )
-                          .map((judge) => (
+
+                        {selectableSorted.map((judge) => {
+                          const label = `${judge.isHead ? "위원장 / " : ""}${
+                            judge.judgeName
+                          } (${judge.judgePromoter} / ${judge.judgeTel})`;
+                          const searchBlob = `${judge.judgeName} ${judge.judgePromoter} ${judge.judgeTel}`;
+                          return (
                             <Select.Option
                               key={judge.judgeUid}
                               value={judge.judgeUid}
+                              data-search={searchBlob}
                             >
-                              {judge.isHead && "위원장 / "}
-                              {judge.judgeName} ({judge.judgePromoter} /{" "}
-                              {judge.judgeTel})
+                              {label}
                             </Select.Option>
-                          ))}
+                          );
+                        })}
                       </Select>
                     </Card>
                   );
@@ -456,8 +493,10 @@ const SectionAssign = ({
                         </Tag>
                       )}
                     </div>
+
                     <div className="flex-1">
                       <Select
+                        {...commonSelectProps}
                         className="w-full"
                         value={selectedJudge.judgeUid || "unselect"}
                         onChange={(newJudgeUid) => {
@@ -471,29 +510,26 @@ const SectionAssign = ({
                             );
                           }
                         }}
-                        placeholder="심판 선택"
                       >
-                        <Select.Option value="unselect">
+                        <Select.Option value="unselect" data-search="">
                           선택 안함
                         </Select.Option>
-                        {judgesPoolArray
-                          .filter(
-                            (judge) =>
-                              !getAssignedJudgesForSection(
-                                section.sectionName
-                              ).includes(judge.judgeUid) ||
-                              judge.judgeUid === selectedJudge.judgeUid
-                          )
-                          .map((judge) => (
+
+                        {selectableSorted.map((judge) => {
+                          const label = `${judge.isHead ? "위원장 / " : ""}${
+                            judge.judgeName
+                          } (${judge.judgePromoter} / ${judge.judgeTel})`;
+                          const searchBlob = `${judge.judgeName} ${judge.judgePromoter} ${judge.judgeTel}`;
+                          return (
                             <Select.Option
                               key={judge.judgeUid}
                               value={judge.judgeUid}
+                              data-search={searchBlob}
                             >
-                              {judge.isHead && "위원장 / "}
-                              {judge.judgeName} ({judge.judgePromoter} /{" "}
-                              {judge.judgeTel})
+                              {label}
                             </Select.Option>
-                          ))}
+                          );
+                        })}
                       </Select>
                     </div>
                   </div>

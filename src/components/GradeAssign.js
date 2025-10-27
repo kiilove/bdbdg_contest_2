@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, Select, Button, Space, Tag } from "antd";
+import { Card, Select, Button, Space, Tag, Tabs, Badge } from "antd";
 import {
   UserOutlined,
   PhoneOutlined,
@@ -10,12 +10,17 @@ import {
   ThunderboltOutlined,
   ClearOutlined,
   WarningOutlined,
+  AppstoreOutlined,
+  PartitionOutlined,
+  ApartmentOutlined,
 } from "@ant-design/icons";
 
 /**
  * GradeAssign
  * - 체급(grade) 단위로 심판을 배정/제거/랜덤배정
  * - 저장 시 '원본 필드'만 push (부모가 categoryTitle 등 파생 필드 붙임)
+ * - 섹션 탭 + 부모 카테고리 선택(필터)
+ * - 심판 선택: 이름순 정렬 + 검색 자동완성
  */
 const GradeAssign = ({
   judgesAssignInfo, // 표시용(파생 포함) - 수정은 원본만
@@ -30,12 +35,25 @@ const GradeAssign = ({
 }) => {
   const [isMobile, setIsMobile] = useState(false);
 
+  // 섹션 탭 / 카테고리 선택 상태
+  const [activeSection, setActiveSection] = useState("__ALL__"); // "__ALL__" = 전체, 나머지는 섹션명
+  const [selectedCategoryId, setSelectedCategoryId] = useState("__ALL_CAT__");
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  /** 🔤 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
+  const sortJudgesByName = (arr = []) =>
+    [...arr].sort((a, b) =>
+      (a?.judgeName || "").localeCompare(b?.judgeName || "", "ko", {
+        sensitivity: "base",
+        numeric: true,
+      })
+    );
 
   /** 카테고리 id → 카테고리 객체 맵 (좌석 수/섹션명/타이틀 접근용) */
   const categoryById = useMemo(() => {
@@ -239,9 +257,160 @@ const GradeAssign = ({
     }));
   };
 
+  /** 🔎 공통 Select props: 검색/자동완성 설정 */
+  const commonSelectProps = {
+    showSearch: true,
+    allowClear: true,
+    optionFilterProp: "data-search",
+    filterOption: (input, option) => {
+      const hay = (option?.props?.["data-search"] || "")
+        .toString()
+        .toLowerCase();
+      return hay.includes((input || "").toLowerCase());
+    },
+    placeholder: "심판 선택",
+  };
+
+  /** 🧭 섹션 탭 구성 */
+  const { sectionNames, sectionTabs } = useMemo(() => {
+    const namesSet = new Set(
+      (categoriesArray || []).map(
+        (c) => c?.contestCategorySection?.trim() || "미지정"
+      )
+    );
+    const names = Array.from(namesSet).sort((a, b) =>
+      a.localeCompare(b, "ko", { sensitivity: "base", numeric: true })
+    );
+    const items = [
+      {
+        key: "__ALL__",
+        label: (
+          <span className="flex items-center gap-2">
+            <AppstoreOutlined />
+            전체
+          </span>
+        ),
+      },
+      ...names.map((name) => ({
+        key: name,
+        label: (
+          <span className="flex items-center gap-2">
+            <PartitionOutlined />
+            {name}
+          </span>
+        ),
+      })),
+    ];
+    return { sectionNames: names, sectionTabs: items };
+  }, [categoriesArray]);
+
+  /** 현재 섹션에 속한 카테고리 목록 (카테고리 선택 박스용) */
+  const categoriesInActiveSection = useMemo(() => {
+    const list = (categoriesArray || []).filter((c) => {
+      const sec = c?.contestCategorySection?.trim() || "미지정";
+      return activeSection === "__ALL__" ? true : sec === activeSection;
+    });
+    // 표시 정렬
+    return [...list].sort(
+      (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+    );
+  }, [categoriesArray, activeSection]);
+
+  /** 섹션/카테고리 필터링된 그레이드 목록 */
+  const filteredGrades = useMemo(() => {
+    let list = gradesArray || [];
+    // 섹션 필터
+    if (activeSection !== "__ALL__") {
+      list = list.filter((g) => {
+        const cat = categoryById[g?.refCategoryId];
+        const sec = cat?.contestCategorySection?.trim() || "미지정";
+        return sec === activeSection;
+      });
+    }
+    // 카테고리 필터
+    if (selectedCategoryId !== "__ALL_CAT__") {
+      list = list.filter((g) => g?.refCategoryId === selectedCategoryId);
+    }
+    return list;
+  }, [gradesArray, activeSection, selectedCategoryId, categoryById]);
+
+  // 섹션 바뀌면 카테고리 선택 초기화
+  useEffect(() => {
+    setSelectedCategoryId("__ALL_CAT__");
+  }, [activeSection]);
+
   return (
     <div className="flex w-full flex-col gap-4 p-4">
-      {(gradesArray || []).map((grade, idx) => {
+      {/* 상단: 섹션 탭 */}
+      <Tabs
+        activeKey={activeSection}
+        onChange={setActiveSection}
+        items={sectionTabs.map((tab) => {
+          // 탭 우측 뱃지: 그 섹션에 속한 grade 수
+          const count =
+            tab.key === "__ALL__"
+              ? (gradesArray || []).length
+              : (gradesArray || []).filter((g) => {
+                  const cat = categoryById[g?.refCategoryId];
+                  const sec = cat?.contestCategorySection?.trim() || "미지정";
+                  return sec === tab.key;
+                }).length;
+
+          return {
+            ...tab,
+            label: (
+              <span className="flex items-center gap-2">
+                {tab.label}
+                <Badge
+                  count={count}
+                  overflowCount={999}
+                  style={{ backgroundColor: "#1677ff" }}
+                />
+              </span>
+            ),
+          };
+        })}
+      />
+
+      {/* 상단: 카테고리 선택 (현재 섹션 내) */}
+      <Card size="small" className="shadow-sm">
+        <div className="flex items-center gap-3">
+          <ApartmentOutlined />
+          <span className="text-sm text-gray-700">카테고리</span>
+          <div className="flex-1 max-w-md">
+            <Select
+              className="w-full"
+              value={selectedCategoryId}
+              onChange={setSelectedCategoryId}
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.children || "")
+                  .toString()
+                  .toLowerCase()
+                  .includes((input || "").toLowerCase())
+              }
+            >
+              <Select.Option value="__ALL_CAT__">전체</Select.Option>
+              {categoriesInActiveSection
+                .sort((a, b) => a.stageNumber - b.stageNumber)
+                .map((c) => (
+                  <Select.Option
+                    key={c.contestCategoryId}
+                    value={c.contestCategoryId}
+                  >
+                    {c.contestCategoryTitle ||
+                      c.contestCategoryName ||
+                      c.contestCategoryInfo?.name ||
+                      "이름 없는 카테고리"}
+                  </Select.Option>
+                ))}
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {(filteredGrades || []).map((grade, idx) => {
         const cat = categoryById[grade.refCategoryId] || {};
         const judgeCount = Number(cat.contestCategoryJudgeCount || 0);
 
@@ -266,7 +435,6 @@ const GradeAssign = ({
               <div className="flex items-center gap-2">
                 <TeamOutlined className="text-blue-600" />
                 <span className="text-lg font-semibold">
-                  {/* 상단에 카테고리명 / 체급명 함께 표기 (표시만) */}
                   {(cat.contestCategoryTitle ||
                     cat.contestCategoryName ||
                     cat.contestCategoryInfo?.name ||
@@ -274,6 +442,9 @@ const GradeAssign = ({
                     " - " +
                     (grade.contestGradeTitle || "(이름 없는 체급)")}
                 </span>
+                <Tag color="default">
+                  섹션: {cat.contestCategorySection?.trim() || "미지정"}
+                </Tag>
               </div>
             }
             extra={
@@ -323,6 +494,15 @@ const GradeAssign = ({
                   (j) => j.judgeUid === selectedJudge.judgeUid
                 );
 
+                // 🔤 이 체급에서 선택 가능한 후보 → 이름순 정렬
+                const selectableSorted = sortJudgesByName(
+                  judgesPoolArray.filter(
+                    (judge) =>
+                      !assignedJudges.includes(judge.judgeUid) ||
+                      judge.judgeUid === selectedJudge.judgeUid
+                  )
+                );
+
                 if (isMobile) {
                   return (
                     <Card
@@ -364,6 +544,7 @@ const GradeAssign = ({
                       )}
 
                       <Select
+                        {...commonSelectProps}
                         className="w-full"
                         value={selectedJudge.judgeUid || "unselect"}
                         onChange={(val) => {
@@ -373,27 +554,25 @@ const GradeAssign = ({
                             handleSelectJudge(grade, seatNumber, val);
                           }
                         }}
-                        placeholder="심판 선택"
                       >
-                        <Select.Option value="unselect">
+                        <Select.Option value="unselect" data-search="">
                           선택 안함
                         </Select.Option>
-                        {judgesPoolArray
-                          .filter(
-                            (judge) =>
-                              !assignedJudges.includes(judge.judgeUid) ||
-                              judge.judgeUid === selectedJudge.judgeUid
-                          )
-                          .map((judge) => (
+                        {selectableSorted.map((judge) => {
+                          const label = `${judge.isHead ? "위원장 / " : ""}${
+                            judge.judgeName
+                          } (${judge.judgePromoter} / ${judge.judgeTel})`;
+                          const searchBlob = `${judge.judgeName} ${judge.judgePromoter} ${judge.judgeTel}`;
+                          return (
                             <Select.Option
                               key={judge.judgeUid}
                               value={judge.judgeUid}
+                              data-search={searchBlob}
                             >
-                              {judge.isHead && "위원장 / "}
-                              {judge.judgeName} ({judge.judgePromoter} /{" "}
-                              {judge.judgeTel})
+                              {label}
                             </Select.Option>
-                          ))}
+                          );
+                        })}
                       </Select>
                     </Card>
                   );
@@ -421,6 +600,7 @@ const GradeAssign = ({
 
                     <div className="flex-1">
                       <Select
+                        {...commonSelectProps}
                         className="w-full"
                         value={selectedJudge.judgeUid || "unselect"}
                         onChange={(val) => {
@@ -430,29 +610,25 @@ const GradeAssign = ({
                             handleSelectJudge(grade, seatNumber, val);
                           }
                         }}
-                        placeholder="심판 선택"
                       >
-                        <Select.Option value="unselect">
+                        <Select.Option value="unselect" data-search="">
                           선택 안함
                         </Select.Option>
-                        {judgesPoolArray
-                          .filter(
-                            (judge) =>
-                              !getAssignedJudgesForGrade(
-                                grade.contestGradeId
-                              ).includes(judge.judgeUid) ||
-                              judge.judgeUid === selectedJudge.judgeUid
-                          )
-                          .map((judge) => (
+                        {selectableSorted.map((judge) => {
+                          const label = `${judge.isHead ? "위원장 / " : ""}${
+                            judge.judgeName
+                          } (${judge.judgePromoter} / ${judge.judgeTel})`;
+                          const searchBlob = `${judge.judgeName} ${judge.judgePromoter} ${judge.judgeTel}`;
+                          return (
                             <Select.Option
                               key={judge.judgeUid}
                               value={judge.judgeUid}
+                              data-search={searchBlob}
                             >
-                              {judge.isHead && "위원장 / "}
-                              {judge.judgeName} ({judge.judgePromoter} /{" "}
-                              {judge.judgeTel})
+                              {label}
                             </Select.Option>
-                          ))}
+                          );
+                        })}
                       </Select>
                     </div>
                   </div>
