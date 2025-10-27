@@ -339,6 +339,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           compareCancel: false,
           compareIng: false,
         },
+        confirmed: { count: 0, numbers: [] },
       },
       screen: { status: { playStart: false }, players: [] },
     };

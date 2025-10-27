@@ -40,6 +40,10 @@ const ContestMonitoringHost = ({ contestId }) => {
       : false
   );
 
+  // ✅ 사회자 비교심사 전용 상태
+  const [isCompareView, setIsCompareView] = useState(false);
+  const [compareNumbers, setCompareNumbers] = useState([]);
+
   const {
     data: realtimeData,
     loading: realtimeLoading,
@@ -76,6 +80,7 @@ const ContestMonitoringHost = ({ contestId }) => {
           )
         );
         setContestInfo(returnNotice);
+
         const players = returnPlayersFinal.players
           .sort((a, b) => a.playerIndex - b.playerIndex)
           .filter((f) => f.playerNoShow === false);
@@ -99,8 +104,6 @@ const ContestMonitoringHost = ({ contestId }) => {
               };
             })
           : [];
-
-        console.log(playerList);
 
         setCurrentPlayersArray(playerList);
       }
@@ -126,7 +129,6 @@ const ContestMonitoringHost = ({ contestId }) => {
         if (!data || data.length === 0) {
           setRankingData([]);
           message.error("순위결과가 없습니다.");
-          console.log("데이터가 없습니다.");
           return;
         }
 
@@ -145,7 +147,6 @@ const ContestMonitoringHost = ({ contestId }) => {
     try {
       await fetchResultAndScoreBoard(gradeId, gradeTitle);
       message.success("스크린 송출 완료");
-      console.log("스크린 송출 완료");
     } catch (error) {
       message.error("스크린 송출 중 에러 발생");
       console.log("스크린 송출 중 에러:", error);
@@ -167,7 +168,6 @@ const ContestMonitoringHost = ({ contestId }) => {
       const standingData = data[0].result.sort(
         (a, b) => a.playerRank - b.playerRank
       );
-      console.log(standingData);
 
       const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
       const newState = {
@@ -224,6 +224,13 @@ const ContestMonitoringHost = ({ contestId }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // ✅ 비교심사 확정 번호 동기화 (실시간 DB -> 로컬 상태)
+  useEffect(() => {
+    const nums = realtimeData?.compares?.confirmed?.numbers || [];
+    setCompareNumbers(Array.isArray(nums) ? nums : []);
+    if (!nums || nums.length === 0) setIsCompareView(false);
+  }, [realtimeData?.compares?.confirmed?.numbers]);
+
   if (isLoading || realtimeLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -242,64 +249,16 @@ const ContestMonitoringHost = ({ contestId }) => {
     );
   }
 
-  const rankingColumns = [
-    {
-      title: "순위",
-      dataIndex: "playerRank",
-      key: "playerRank",
-      width: 100,
-      align: "center",
-    },
-    {
-      title: "선수",
-      key: "player",
-      render: (_, record) => `${record.playerNumber}. ${record.playerName}`,
-      align: "center",
-    },
-    {
-      title: "소속",
-      dataIndex: "playerGym",
-      key: "playerGym",
-      align: "center",
-    },
-  ];
-
-  const playerColumns = [
-    {
-      title: "번호",
-      dataIndex: "playerNumber",
-      key: "playerNumber",
-      width: 100,
-      align: "center",
-    },
-    {
-      title: "이름",
-      dataIndex: "playerName",
-      key: "playerName",
-      width: 150,
-      align: "center",
-    },
-    {
-      title: "소속",
-      dataIndex: "playerGym",
-      key: "playerGym",
-      width: 200,
-      align: "center",
-    },
-    {
-      title: "출전동기",
-      dataIndex: "playerText",
-      key: "playerText",
-      align: "left",
-      render: (text) => (
-        <div className="whitespace-pre-wrap">{text || "-"}</div>
-      ),
-    },
-  ];
+  // ✅ 비교 상태 파생값
+  const compareStatus = realtimeData?.compares?.status || {};
+  const isCompareRunning =
+    !!compareStatus?.compareStart || !!compareStatus?.compareIng;
+  const isCompareConfirmed = (compareNumbers?.length || 0) > 0;
 
   return (
     <div className="w-full h-auto p-4 bg-gray-50">
       <div className={`flex ${isLandscape ? "flex-row" : "flex-col"} gap-4`}>
+        {/* 좌측 카드 */}
         <div className={isLandscape ? "flex-[1]" : "w-full"}>
           <Card
             title={
@@ -316,6 +275,38 @@ const ContestMonitoringHost = ({ contestId }) => {
                 {realtimeData?.categoryTitle || "정보 없음"}{" "}
                 {realtimeData?.gradeTitle || "정보 없음"}
               </span>
+            </div>
+
+            {/* 🔔 비교심사 상태 안내 & 버튼들 */}
+            <div className="mb-4">
+              {isCompareRunning && !isCompareConfirmed && (
+                <Button
+                  size="large"
+                  block
+                  disabled
+                  loading
+                  className="w-full h-24 text-2xl font-extrabold"
+                >
+                  비교심사 투표중...
+                </Button>
+              )}
+
+              {isCompareConfirmed && (
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<UnorderedListOutlined />}
+                  onClick={() => setIsCompareView((prev) => !prev)}
+                  className="w-full h-24 text-2xl font-extrabold animate-pulse shadow-xl"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #22c1c3 0%, #2e8bff 50%, #764ba2 100%)",
+                    borderColor: "transparent",
+                  }}
+                >
+                  {isCompareView ? "비교 명단 닫기" : "비교심사명단 확인"}
+                </Button>
+              )}
             </div>
 
             {currentPlayersArray.length > 0 ? (
@@ -414,12 +405,17 @@ const ContestMonitoringHost = ({ contestId }) => {
           </Card>
         </div>
 
+        {/* 우측 카드 */}
         <div className={isLandscape ? "flex-[4]" : "w-full"}>
           <Card
             title={
               <div className="flex items-center justify-between">
                 <span className="text-2xl font-bold">
-                  {isRankingView ? "순위" : "참가 선수 명단"}
+                  {isCompareView && compareNumbers.length > 0
+                    ? "비교심사 확정 명단"
+                    : isRankingView
+                    ? "순위"
+                    : "참가 선수 명단"}
                 </span>
                 {isRankingView && (
                   <Button
@@ -442,7 +438,22 @@ const ContestMonitoringHost = ({ contestId }) => {
                 isLandscape ? "overflow-y-auto max-h-[calc(100vh-200px)]" : ""
               }
             >
-              {isRankingView && rankingData ? (
+              {/* ✅ 비교심사 확정 명단(번호만) 최우선 노출 */}
+              {isCompareView && compareNumbers.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {compareNumbers.map((num) => (
+                    <div
+                      key={num}
+                      className="p-6 rounded-xl bg-white border-2 border-blue-300 text-center shadow-sm"
+                    >
+                      <div className="text-5xl font-extrabold text-blue-600">
+                        {num}
+                      </div>
+                      <div className="mt-2 text-gray-500">비교 확정</div>
+                    </div>
+                  ))}
+                </div>
+              ) : isRankingView && rankingData ? (
                 <div className="space-y-4">
                   {(isReversed ? [...rankingData].reverse() : rankingData)
                     .filter((player) => player.playerRank < 1000)
