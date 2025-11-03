@@ -61,6 +61,15 @@ const JudgeAssignmentPrint = () => {
   const [pageTitle, setPageTitle] = useState("심판 배정 안내");
 
   const printRef = useRef(null);
+  const [printTick, setPrintTick] = useState(0);
+
+  const onBeforeGetContent = () =>
+    new Promise((resolve) => {
+      // 리렌더 트리거
+      setPrintTick((t) => t + 1);
+      // DOM 업데이트 프레임을 보장
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    });
 
   useEffect(() => {
     const run = async () => {
@@ -91,6 +100,27 @@ const JudgeAssignmentPrint = () => {
     run();
   }, [currentContest]);
 
+  const num = (v, d = 0) => {
+    if (v == null) return d;
+    // 공백이나 문자열 섞여도 안전하게 숫자만 추출
+    const n = parseInt(
+      String(v)
+        .trim()
+        .replace(/[^\d.-]/g, ""),
+      10
+    );
+    return Number.isFinite(n) ? n : d;
+  };
+
+  const sectionOrder = (s) => {
+    if (!s) return 9999;
+    const m = String(s).match(/^(\d+)\s*부/); // "1부, 2부…" 같은 섹션
+    return m ? parseInt(m[1], 10) : 9999;
+  };
+
+  const catIdx = (cat) => num(cat?.contestCategoryIndex, 9999);
+  const gradeIdx = (grd) => num(grd?.contestGradeIndex, 9999);
+
   const categoryMap = useMemo(() => {
     const m = {};
     categories.forEach((c) => (m[c.contestCategoryId] = c));
@@ -109,6 +139,7 @@ const JudgeAssignmentPrint = () => {
     return m;
   }, [pools]);
 
+  // 사람 기준 그룹핑 + 내부 정렬
   // 사람 기준 그룹핑 + 내부 정렬
   const judgesByPerson = useMemo(() => {
     const byJudge = {};
@@ -133,21 +164,26 @@ const JudgeAssignmentPrint = () => {
       person.items.sort((a, b) => {
         const ca = categoryMap[a.categoryId] || {};
         const cb = categoryMap[b.categoryId] || {};
+
+        // 1) 섹션 오름차순 (예: "1부", "2부"...)
         const sa = sectionOrder(ca.contestCategorySection);
         const sb = sectionOrder(cb.contestCategorySection);
         if (sa !== sb) return sa - sb;
 
-        const ci = parseInt(ca.contestCategoryIndex ?? "9999", 10);
-        const cj = parseInt(cb.contestCategoryIndex ?? "9999", 10);
-        if (ci !== cj) return ci - cj;
+        // 2) 카테고리 인덱스 오름차순
+        const cai = catIdx(ca); // 내부에서 num() 사용
+        const cbi = catIdx(cb);
+        if (cai !== cbi) return cai - cbi;
 
+        // 3) 체급 인덱스 오름차순
         const ga = gradeMap[a.contestGradeId] || {};
         const gb = gradeMap[b.contestGradeId] || {};
-        const gi = parseInt(ga.contestGradeIndex ?? "9999", 10);
-        const gj = parseInt(gb.contestGradeIndex ?? "9999", 10);
-        if (gi !== gj) return gi - gj;
+        const gai = gradeIdx(ga); // 내부에서 num() 사용
+        const gbi = gradeIdx(gb);
+        if (gai !== gbi) return gai - gbi;
 
-        return byNum(a.seatIndex, b.seatIndex);
+        // 4) 좌석 오름차순
+        return num(a.seatIndex) - num(b.seatIndex);
       });
     });
 
@@ -201,6 +237,7 @@ const JudgeAssignmentPrint = () => {
     {
       title: "심판",
       dataIndex: "judgeName",
+      width: 120,
       sorter: (a, b) => byName(a, b),
       defaultSortOrder: "ascend",
       render: (_, rec) => (
@@ -220,40 +257,61 @@ const JudgeAssignmentPrint = () => {
       title: "배정 요약",
       dataIndex: "summary",
       render: (_, rec) => {
+        // 섹션 → (카테고리ID → { title, idx, seats:Set })
         const groups = {};
         rec.items.forEach((it) => {
           const cat = categoryMap[it.categoryId] || {};
           const sec = cat.contestCategorySection || "-";
+          const catId = it.categoryId;
           const catTitle = cat.contestCategoryTitle || "-";
+          const catIndex = num(cat.contestCategoryIndex, 9999); // 안전 숫자
+
           if (!groups[sec]) groups[sec] = {};
-          if (!groups[sec][catTitle]) groups[sec][catTitle] = new Set();
-          groups[sec][catTitle].add(it.seatIndex);
+          if (!groups[sec][catId]) {
+            groups[sec][catId] = {
+              title: catTitle,
+              idx: catIndex,
+              seats: new Set(),
+            };
+          }
+          groups[sec][catId].seats.add(num(it.seatIndex, 9999)); // 좌석도 숫자화
         });
+
+        // 섹션 키 정렬 ("1부"→"2부"…)
         const sectionKeys = Object.keys(groups).sort(
           (a, b) => sectionOrder(a) - sectionOrder(b)
         );
+
         return (
           <div className="flex flex-col gap-1">
-            {sectionKeys.map((sec) => (
-              <div key={sec} className="flex gap-8 flex-wrap">
-                <Tag color="blue" style={{ borderRadius: 999 }}>
-                  {sec}
-                </Tag>
-                {Object.keys(groups[sec]).map((c) => (
-                  <Tag
-                    key={c}
-                    style={{
-                      borderRadius: 999,
-                      background: "#f7f7fb",
-                      borderColor: "#e9e9f3",
-                    }}
-                  >
-                    {c} · 좌석{" "}
-                    {Array.from(groups[sec][c]).sort(byNum).join(",")}
+            {sectionKeys.map((sec) => {
+              // 섹션 내 카테고리를 contestCategoryIndex 기준으로 정렬
+              const cats = Object.values(groups[sec]).sort(
+                (a, b) => a.idx - b.idx
+              );
+
+              return (
+                <div key={sec} className="flex gap-8 flex-wrap">
+                  <Tag color="blue" style={{ borderRadius: 999 }}>
+                    {sec}
                   </Tag>
-                ))}
-              </div>
-            ))}
+
+                  {cats.map((c, i) => (
+                    <Tag
+                      key={`${sec}-${c.title}-${i}`}
+                      style={{
+                        borderRadius: 999,
+                        background: "#f7f7fb",
+                        borderColor: "#e9e9f3",
+                      }}
+                    >
+                      {c.title} · 좌석{" "}
+                      {Array.from(c.seats).sort(byNum).join(",")}
+                    </Tag>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         );
       },
@@ -329,7 +387,7 @@ const JudgeAssignmentPrint = () => {
         }
 
         /* 프린트 테이블 공통 */
-        table { border-collapse: collapse; width: 100%; font-size: 12.2px; line-height: 1.45; color: var(--ink); }
+        table { border-collapse: collapse; width: 100%; font-size: 15.5px; line-height: 1.45; color: var(--ink); }
         thead th { background: #f8fafc; font-weight: 700; border: 1px solid var(--line); padding: 8px 10px; }
         tbody td { border: 1px solid var(--line); padding: 7px 10px; }
         tbody tr:nth-child(odd) td { background: #fcfdff; }
@@ -413,6 +471,7 @@ const JudgeAssignmentPrint = () => {
                 )}
                 content={() => printRef.current}
                 pageStyle="@page { size: A4; margin: 12mm; }"
+                onBeforeGetContent={onBeforeGetContent}
               />
               <Button
                 icon={<ExportOutlined />}
@@ -451,57 +510,81 @@ const JudgeAssignmentPrint = () => {
         {selectedPersons.length === 0 ? (
           <div className="text-gray-500">선택된 심판이 없습니다.</div>
         ) : (
-          <div id="print-root" ref={printRef}>
+          <div id="print-root" ref={printRef} key={printTick}>
             <div className="p-2">
               {selectedPersons.map((person) => {
                 // 간단 모드 데이터 구성
+
                 const compactRows = [];
                 if (viewMode === "compact") {
-                  const bucket = {};
+                  // 섹션 + 카테고리ID 기준 버켓 (제목 X, ID O)
+                  const bucket = new Map();
                   person.items.forEach((it) => {
                     const cat = categoryMap[it.categoryId] || {};
                     const grd = gradeMap[it.contestGradeId] || {};
                     const sec = cat.contestCategorySection || "-";
-                    const key = `${sec}||${cat.contestCategoryTitle || "-"}`;
-                    if (!bucket[key]) {
-                      bucket[key] = {
-                        section: sec,
-                        categoryTitle: cat.contestCategoryTitle || "-",
-                        seatSet: new Set(),
-                        gradeSet: new Set(),
-                        seatByGrade: {},
-                      };
-                    }
-                    bucket[key].seatSet.add(it.seatIndex);
-                    const gTitle = grd.contestGradeTitle || "-";
-                    bucket[key].gradeSet.add(gTitle);
-                    bucket[key].seatByGrade[gTitle] = it.seatIndex;
-                  });
+                    const catId = it.categoryId;
+                    const key = `${sec}||${catId}`;
 
-                  Object.values(bucket).forEach((row) => {
-                    const seats = Array.from(row.seatSet).sort(byNum);
-                    const gradesList = Array.from(row.gradeSet).sort((a, b) =>
-                      a.localeCompare(b)
-                    );
-                    const sameSeat = seats.length === 1;
-                    compactRows.push({
-                      section: row.section,
-                      categoryTitle: row.categoryTitle,
-                      seats,
-                      grades: sameSeat
-                        ? []
-                        : gradesList.map(
-                            (g) => `${g} (좌석 ${row.seatByGrade[g]})`
-                          ),
+                    if (!bucket.has(key)) {
+                      bucket.set(key, {
+                        section: sec,
+                        categoryId: catId,
+                        categoryTitle: cat.contestCategoryTitle || "-",
+                        catIdx: gradeIdx
+                          ? num(cat.contestCategoryIndex, 9999)
+                          : 9999,
+                        seatSet: new Set(),
+                        gradesMap: new Map(), // gradeId -> { title, idx, seat }
+                      });
+                    }
+
+                    const row = bucket.get(key);
+                    row.seatSet.add(num(it.seatIndex));
+
+                    const gId = it.contestGradeId;
+                    const gTitle = grd.contestGradeTitle || "-";
+                    const gIdx = num(grd.contestGradeIndex, 9999);
+                    row.gradesMap.set(gId, {
+                      title: gTitle,
+                      idx: gIdx,
+                      seat: num(it.seatIndex),
                     });
                   });
 
+                  // 버켓을 배열로 변환 + 내부 정렬
+                  for (const row of bucket.values()) {
+                    const seats = Array.from(row.seatSet).sort((a, b) => a - b);
+
+                    const gradeEntries = Array.from(
+                      row.gradesMap.values()
+                    ).sort((a, b) => a.idx - b.idx || a.seat - b.seat);
+
+                    // 좌석이 하나뿐이면 '좌석 변경' 표시 생략
+                    const sameSeat = seats.length === 1;
+
+                    compactRows.push({
+                      section: row.section,
+                      categoryTitle: row.categoryTitle,
+                      catIdx: row.catIdx,
+                      seats,
+                      grades: sameSeat
+                        ? []
+                        : gradeEntries.map(
+                            (g) => `${g.title} (좌석 ${g.seat})`
+                          ),
+                    });
+                  }
+
+                  // 최종 정렬: 섹션 → 카테고리 인덱스 → 카테고리 제목
                   compactRows.sort(
                     (a, b) =>
                       sectionOrder(a.section) - sectionOrder(b.section) ||
-                      a.categoryTitle.localeCompare(b.categoryTitle)
+                      a.catIdx - b.catIdx ||
+                      a.categoryTitle.localeCompare(b.categoryTitle, "ko")
                   );
                 }
+                // ---- 교체 끝 ----
 
                 const contestTitle =
                   currentContest?.contestInfo?.contestTitle || "";
@@ -640,7 +723,7 @@ const JudgeAssignmentPrint = () => {
                         <thead>
                           <tr>
                             <th style={{ width: "16%" }}>섹션</th>
-                            <th>종목</th>
+                            <th style={{ widht: 200 }}>종목</th>
                             <th style={{ width: "28%" }}>체급</th>
                             <th style={{ width: 80, textAlign: "center" }}>
                               좌석
@@ -674,11 +757,11 @@ const JudgeAssignmentPrint = () => {
                         <thead>
                           <tr>
                             <th style={{ width: "16%" }}>섹션</th>
-                            <th>종목</th>
+                            <th style={{ widht: 200 }}>종목</th>
                             <th style={{ width: "22%", textAlign: "center" }}>
                               좌석
                             </th>
-                            <th style={{ width: "32%" }}>비고</th>
+                            <th style={{ width: 100 }}>비고</th>
                           </tr>
                         </thead>
                         <tbody>

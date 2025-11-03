@@ -13,7 +13,6 @@ import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
-import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { Modal } from "@mui/material";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
@@ -34,7 +33,6 @@ import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   ReloadOutlined,
-  TrophyOutlined,
   PrinterOutlined,
   EyeOutlined,
   CloseCircleOutlined,
@@ -49,7 +47,6 @@ import { where } from "firebase/firestore";
 const { Title, Text } = Typography;
 
 const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
-  const navigate = useNavigate();
   const { currentContest } = useContext(CurrentContestContext);
   const { isTabletOrMobile } = useDevice();
 
@@ -83,15 +80,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const fetchScoreCardQuery = useFirestoreQuery();
   const fetchResultQuery = useFirestoreQuery();
 
-  const {
-    data: realtimeData,
-    loading: realtimeLoading,
-    error: realtimeError,
-  } = useFirebaseRealtimeGetDocument(
-    currentContest?.contests?.id
-      ? `currentStage/${currentContest.contests.id}`
-      : null
-  );
+  const { data: realtimeData, loading: realtimeLoading } =
+    useFirebaseRealtimeGetDocument(
+      currentContest?.contests?.id
+        ? `currentStage/${currentContest.contests.id}`
+        : null
+    );
 
   const updateCurrentStage = useFirebaseRealtimeUpdateData();
   const deleteCompare = useFirebaseRealtimeDeleteData();
@@ -448,7 +442,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const StageCardView = ({ stages }) => (
     <div className="space-y-3">
-      {stages?.map((stage, index) => {
+      {stages?.map((stage) => {
         const {
           categoryTitle,
           grades,
@@ -461,6 +455,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         const judgesAssignCount =
           handleGradeInfo(grades).matchedJudgeAssignCount;
         const isCurrentStage = realtimeData?.stageId === stageId;
+        const globalIndex = stagesArray.findIndex((s) => s.stageId === stageId);
 
         return (
           <Card key={stageId} size="small" className="shadow-sm">
@@ -494,7 +489,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                   icon={
                     isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />
                   }
-                  onClick={() => handleUpdateCurrentStage(index)}
+                  onClick={() =>
+                    globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
+                  }
                   size="small"
                 >
                   {isCurrentStage ? "재시작" : "시작"}
@@ -563,64 +560,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     </div>
   );
 
-  const judgeColumns = [
-    {
-      title: "심판석",
-      dataIndex: "seatIndex",
-      key: "seatIndex",
-      align: "center",
-      width: isTabletOrMobile ? 80 : 100,
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: "심판정보",
-      dataIndex: "judgeInfo",
-      key: "judgeInfo",
-      align: "center",
-      render: (_, record) => {
-        if (record?.judgeName) {
-          return (
-            <div className="flex flex-col items-center">
-              <Text strong>{record.judgeName}</Text>
-              {record?.judgeUid && (
-                <Text type="secondary" className="text-xs">
-                  {record.judgeUid} / {record.onedayPassword}
-                </Text>
-              )}
-            </div>
-          );
-        }
-        return <Text type="secondary">정보 없음</Text>;
-      },
-    },
-    {
-      title: "상태",
-      dataIndex: "status",
-      key: "status",
-      align: "center",
-      render: (_, record) => {
-        const { isEnd, isLogined } = record;
-        if (isEnd && isLogined) return <Tag color="success">심사종료</Tag>;
-        if (!isEnd && isLogined) return <Tag color="processing">심사중</Tag>;
-        return <Tag color="default">로그인대기</Tag>;
-      },
-    },
-    {
-      title: "관리",
-      key: "action",
-      align: "center",
-      render: (_, record, index) => (
-        <Button
-          size="small"
-          icon={<RedoOutlined />}
-          onClick={() => handleForceReStart(index, currentContest.contests.id)}
-        >
-          강제 재시작
-        </Button>
-      ),
-    },
-  ];
-
   const stageColumns = [
     {
       title: "순서",
@@ -667,13 +606,18 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       key: "action",
       align: "center",
       width: isTabletOrMobile ? 120 : 150,
-      render: (_, record, index) => {
+      render: (_, record) => {
         const isCurrentStage = realtimeData?.stageId === record.stageId;
+        const globalIndex = stagesArray.findIndex(
+          (s) => s.stageId === record.stageId
+        );
         return (
           <Button
             type={isCurrentStage ? "default" : "primary"}
             icon={isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />}
-            onClick={() => handleUpdateCurrentStage(index)}
+            onClick={() =>
+              globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
+            }
           >
             {isCurrentStage ? "재시작" : "시작"}
           </Button>
@@ -686,7 +630,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
    *  ✅ 섹션(=categorySection) 그룹핑 & 다가올 섹션 계산
    *  ----------------------------- */
   const sectionsWithOrder = useMemo(() => {
-    // 섹션별로 모으되, 섹션의 "첫 stageNumber"로 정렬 기준을 만든다
     const map = new Map();
     (stagesArray || [])
       .slice()
@@ -702,7 +645,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       return { section, items, firstStageNumber };
     });
 
-    // 무조건 진행 순서(첫 무대 번호) 기준으로 정렬
     return arr.sort((a, b) => a.firstStageNumber - b.firstStageNumber);
   }, [stagesArray]);
 
@@ -720,7 +662,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       (s) => s.section === currentSectionKey
     );
     if (idx < 0) return sectionsWithOrder?.[0]?.section ?? null;
-    // 현재 섹션 다음 섹션
+    if (idx === sectionsWithOrder.length - 1) return null;
     return sectionsWithOrder[idx + 1]?.section ?? null;
   }, [currentSectionKey, sectionsWithOrder]);
 
@@ -728,8 +670,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     const el = document.querySelector(`[data-section-anchor="${section}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  /** ----------------------------- */
 
   return (
     <>
@@ -839,13 +779,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             <Tabs
               activeKey={currentSubTab}
               onChange={setCurrentSubTab}
+              size={isTabletOrMobile ? "small" : "large"}
+              tabBarStyle={{
+                marginBottom: isTabletOrMobile ? "12px" : "16px",
+              }}
               items={[
                 {
                   key: "0",
                   label: (
-                    <span className="flex items-center gap-2">
-                      <PlayCircleOutlined />
-                      현재 무대상황
+                    <span className="flex items-center gap-1.5 px-1 md:px-2">
+                      <PlayCircleOutlined className="text-base md:text-lg" />
+                      <span className="text-xs md:text-sm font-medium">
+                        현재 무대상황
+                      </span>
                     </span>
                   ),
                   children: realtimeData && (
@@ -897,7 +843,86 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                           ) : (
                             <div className="overflow-x-auto">
                               <Table
-                                columns={judgeColumns}
+                                columns={[
+                                  {
+                                    title: "심판석",
+                                    dataIndex: "seatIndex",
+                                    key: "seatIndex",
+                                    align: "center",
+                                    width: isTabletOrMobile ? 80 : 100,
+                                    render: (text) => (
+                                      <Text strong>{text}</Text>
+                                    ),
+                                  },
+                                  {
+                                    title: "심판정보",
+                                    dataIndex: "judgeInfo",
+                                    key: "judgeInfo",
+                                    align: "center",
+                                    render: (_, record) => {
+                                      if (record?.judgeName) {
+                                        return (
+                                          <div className="flex flex-col items-center">
+                                            <Text strong>
+                                              {record.judgeName}
+                                            </Text>
+                                            {record?.judgeUid && (
+                                              <Text
+                                                type="secondary"
+                                                className="text-xs"
+                                              >
+                                                {record.judgeUid} /{" "}
+                                                {record.onedayPassword}
+                                              </Text>
+                                            )}
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <Text type="secondary">정보 없음</Text>
+                                      );
+                                    },
+                                  },
+                                  {
+                                    title: "상태",
+                                    dataIndex: "status",
+                                    key: "status",
+                                    align: "center",
+                                    render: (_, record) => {
+                                      const { isEnd, isLogined } = record;
+                                      if (isEnd && isLogined)
+                                        return (
+                                          <Tag color="success">심사종료</Tag>
+                                        );
+                                      if (!isEnd && isLogined)
+                                        return (
+                                          <Tag color="processing">심사중</Tag>
+                                        );
+                                      return (
+                                        <Tag color="default">로그인대기</Tag>
+                                      );
+                                    },
+                                  },
+                                  {
+                                    title: "관리",
+                                    key: "action",
+                                    align: "center",
+                                    render: (_, record, index) => (
+                                      <Button
+                                        size="small"
+                                        icon={<RedoOutlined />}
+                                        onClick={() =>
+                                          handleForceReStart(
+                                            index,
+                                            currentContest.contests.id
+                                          )
+                                        }
+                                      >
+                                        강제 재시작
+                                      </Button>
+                                    ),
+                                  },
+                                ]}
                                 dataSource={realtimeData?.judges?.map(
                                   (judge, idx) => ({
                                     ...judge,
@@ -1035,36 +1060,22 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     <Button
                                       icon={<PrinterOutlined />}
                                       onClick={() => {
-                                        setSummaryProp(() => ({
-                                          contestId: currentContest.contests.id,
-                                          gradeId,
-                                          categoryTitle,
-                                          gradeTitle,
-                                          categoryJudgeType:
-                                            currentStageInfo.categoryJudgeType,
-                                        }));
+                                        setSummaryProp(() => {
+                                          return {
+                                            contestId:
+                                              currentContest.contests.id,
+                                            gradeId,
+                                            categoryTitle,
+                                            gradeTitle,
+                                            categoryJudgeType:
+                                              currentStageInfo.categoryJudgeType,
+                                          };
+                                        });
                                         setSummaryPrintPreviewOpen(true);
                                       }}
                                     >
                                       집계출력
                                     </Button>
-                                    {/* <Button
-                                      size="small"
-                                      icon={<TrophyOutlined />}
-                                      onClick={() => {
-                                        setAwardProp(() => ({
-                                          contestId: currentContest.contests.id,
-                                          gradeId,
-                                          categoryTitle,
-                                          gradeTitle,
-                                          categoryJudgeType:
-                                            currentStageInfo.categoryJudgeType,
-                                        }));
-                                        setAwardPrintPreviewOpen(true);
-                                      }}
-                                    >
-                                      상장출력
-                                    </Button> */}
                                   </Space>
                                 </div>
 
@@ -1093,13 +1104,15 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                   ),
                 },
 
-                // ✅ 전체 무대목록 (아이콘 교체)
+                // ✅ 전체 무대목록
                 {
                   key: "1",
                   label: (
-                    <span className="flex items-center gap-2">
-                      <UnorderedListOutlined />
-                      전체 무대목록
+                    <span className="flex items-center gap-1.5 px-1 md:px-2">
+                      <UnorderedListOutlined className="text-base md:text-lg" />
+                      <span className="text-xs md:text-sm font-medium">
+                        전체 무대목록
+                      </span>
                     </span>
                   ),
                   children:
@@ -1130,105 +1143,155 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     ) : null,
                 },
 
-                // ✅ 섹션별 한눈에 보기 (다가올 섹션 하이라이트)
+                // ✅ 섹션별 한눈에 보기
                 {
                   key: "2",
                   label: (
-                    <span className="flex items-center gap-2">
-                      <CalendarOutlined />
-                      섹션별 한눈에 보기
+                    <span className="flex items-center gap-1.5 px-1 md:px-2">
+                      <CalendarOutlined className="text-base md:text-lg" />
+                      <span className="text-xs md:text-sm font-medium">
+                        섹션별 한눈에
+                      </span>
                     </span>
                   ),
                   children:
                     sectionsWithOrder.length > 0 ? (
-                      <div className="space-y-8">
-                        {/* 상단 요약 바: 가로 스크롤, 다가올 섹션 강조 */}
-                        <div className="overflow-x-auto pb-1">
-                          <div className="flex gap-3 min-w-max">
-                            {sectionsWithOrder.map(({ section, items }) => {
-                              const isCurrent = section === currentSectionKey;
-                              const isUpcoming = section === upcomingSectionKey;
-                              const totalStages = items.length;
-                              const firstNo = items[0]?.stageNumber ?? "-";
-                              const lastNo =
-                                items[items.length - 1]?.stageNumber ?? "-";
-                              return (
-                                <div
-                                  key={String(section)}
-                                  className={`p-4 rounded-xl shadow-sm border bg-white cursor-pointer select-none transition-all ${
-                                    isUpcoming
-                                      ? "border-blue-400 ring-2 ring-blue-200 animate-pulse"
-                                      : isCurrent
-                                      ? "border-green-400"
-                                      : "border-gray-200"
-                                  }`}
-                                  onClick={() => scrollToSectionTable(section)}
-                                  title={
-                                    isUpcoming
-                                      ? "다가올 섹션"
-                                      : isCurrent
-                                      ? "현재 섹션"
-                                      : "섹션 이동"
-                                  }
-                                >
-                                  <div className="text-sm text-gray-500">
-                                    섹션
+                      <div className="space-y-6">
+                        <div className="overflow-x-auto pb-2">
+                          <div className="flex gap-2 md:gap-3 min-w-max">
+                            {sectionsWithOrder.map(
+                              ({ section, items }, idx) => {
+                                const isCurrent = section === currentSectionKey;
+                                const isUpcoming =
+                                  section === upcomingSectionKey;
+                                const isLast =
+                                  idx === sectionsWithOrder.length - 1;
+                                const totalStages = items.length;
+                                const firstNo = items[0]?.stageNumber ?? "-";
+                                const lastNo =
+                                  items[items.length - 1]?.stageNumber ?? "-";
+
+                                return (
+                                  <div
+                                    key={String(section)}
+                                    className={`p-3 md:p-4 rounded-lg shadow-sm border bg-white cursor-pointer select-none transition-all hover:shadow-md min-w-[140px] md:min-w-[160px] ${
+                                      isUpcoming
+                                        ? "border-blue-400 ring-2 ring-blue-200 bg-blue-50"
+                                        : isCurrent
+                                        ? "border-green-500 ring-2 ring-green-200 bg-green-50"
+                                        : isLast && isCurrent
+                                        ? "border-purple-400 ring-2 ring-purple-200 bg-purple-50"
+                                        : "border-gray-200 hover:border-gray-300"
+                                    }`}
+                                    onClick={() =>
+                                      scrollToSectionTable(section)
+                                    }
+                                    title={
+                                      isUpcoming
+                                        ? "다가올 섹션"
+                                        : isCurrent
+                                        ? isLast
+                                          ? "현재 섹션 (마지막)"
+                                          : "현재 섹션"
+                                        : "섹션 이동"
+                                    }
+                                  >
+                                    <div className="text-xs md:text-sm text-gray-500 mb-1">
+                                      섹션
+                                    </div>
+                                    <div className="text-base md:text-lg font-bold mb-2 truncate">
+                                      {String(section)}
+                                    </div>
+                                    <div className="text-xs text-gray-600 mb-2">
+                                      {firstNo} ~ {lastNo}번
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      <Tag
+                                        color={
+                                          isUpcoming
+                                            ? "blue"
+                                            : isCurrent
+                                            ? "green"
+                                            : "default"
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {totalStages}개
+                                      </Tag>
+                                      {isCurrent && (
+                                        <Tag
+                                          color="success"
+                                          className="text-xs"
+                                        >
+                                          현재
+                                        </Tag>
+                                      )}
+                                      {isUpcoming && (
+                                        <Tag
+                                          color="processing"
+                                          className="text-xs"
+                                        >
+                                          다음
+                                        </Tag>
+                                      )}
+                                      {isLast && isCurrent && !isUpcoming && (
+                                        <Tag color="purple" className="text-xs">
+                                          마지막
+                                        </Tag>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-lg font-bold">
-                                    {String(section)}
-                                  </div>
-                                  <div className="mt-2 text-xs text-gray-500">
-                                    {firstNo} ~ {lastNo}번 무대
-                                  </div>
-                                  <div className="mt-1">
-                                    <Tag
-                                      color={isUpcoming ? "blue" : "default"}
-                                    >
-                                      {totalStages}개 무대
-                                    </Tag>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              }
+                            )}
                           </div>
                         </div>
 
-                        {/* 섹션별 표 모음 (앵커) */}
-                        {sectionsWithOrder.map(({ section, items }) => (
-                          <Card
-                            key={String(section)}
-                            className="shadow-sm"
-                            title={
-                              <div className="flex items-center gap-2">
-                                <Text strong className="text-base">
-                                  섹션: {String(section)}
-                                </Text>
-                                <Tag>{items.length}개 무대</Tag>
-                                {section === currentSectionKey && (
-                                  <Tag color="success">현재 섹션</Tag>
-                                )}
-                                {section === upcomingSectionKey && (
-                                  <Tag color="blue">다가올 섹션</Tag>
-                                )}
+                        {/* 섹션별 표 모음 */}
+                        {sectionsWithOrder.map(({ section, items }, idx) => {
+                          const isCurrent = section === currentSectionKey;
+                          const isUpcoming = section === upcomingSectionKey;
+                          const isLast = idx === sectionsWithOrder.length - 1;
+
+                          return (
+                            <Card
+                              key={String(section)}
+                              className="shadow-sm"
+                              title={
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Text strong className="text-base">
+                                    섹션: {String(section)}
+                                  </Text>
+                                  <Tag>{items.length}개 무대</Tag>
+                                  {isCurrent && (
+                                    <Tag color="success">현재 섹션</Tag>
+                                  )}
+                                  {isUpcoming && (
+                                    <Tag color="blue">다가올 섹션</Tag>
+                                  )}
+                                  {isLast && isCurrent && !isUpcoming && (
+                                    <Tag color="purple">마지막 섹션</Tag>
+                                  )}
+                                </div>
+                              }
+                              bodyStyle={{ scrollMarginTop: 80 }}
+                              data-section-anchor={section}
+                            >
+                              <div className="overflow-x-auto">
+                                <Table
+                                  columns={stageColumns}
+                                  dataSource={items.map((stage) => ({
+                                    ...stage,
+                                    key: stage.stageId,
+                                  }))}
+                                  pagination={false}
+                                  size="small"
+                                  scroll={{ x: "max-content" }}
+                                />
                               </div>
-                            }
-                            bodyStyle={{ scrollMarginTop: 80 }}
-                            data-section-anchor={section}
-                          >
-                            <div className="overflow-x-auto">
-                              <Table
-                                columns={stageColumns}
-                                dataSource={items.map((stage) => ({
-                                  ...stage,
-                                  key: stage.stageId,
-                                }))}
-                                pagination={false}
-                                size="small"
-                                scroll={{ x: "max-content" }}
-                              />
-                            </div>
-                          </Card>
-                        ))}
+                            </Card>
+                          );
+                        })}
                       </div>
                     ) : (
                       <Card className="shadow-sm">
@@ -1237,13 +1300,15 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     ),
                 },
 
-                // ✅ 섹션별 탭 보기
+                // ✅ 섹션별 탭
                 {
                   key: "3",
                   label: (
-                    <span className="flex items-center gap-2">
-                      <AppstoreOutlined />
-                      섹션별 탭
+                    <span className="flex items-center gap-1.5 px-1 md:px-2">
+                      <AppstoreOutlined className="text-base md:text-lg" />
+                      <span className="text-xs md:text-sm font-medium">
+                        섹션별 탭
+                      </span>
                     </span>
                   ),
                   children:
@@ -1251,36 +1316,57 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       <Card className="shadow-sm">
                         <Tabs
                           tabPosition="top"
+                          size={isTabletOrMobile ? "small" : "middle"}
                           items={sectionsWithOrder.map(
-                            ({ section, items }) => ({
-                              key: String(section),
-                              label: (
-                                <span className="flex items-center gap-2">
-                                  {String(section)}
-                                  <Tag>{items.length}</Tag>
-                                  {section === currentSectionKey && (
-                                    <Tag color="success">현재</Tag>
-                                  )}
-                                  {section === upcomingSectionKey && (
-                                    <Tag color="blue">다가올</Tag>
-                                  )}
-                                </span>
-                              ),
-                              children: (
-                                <div className="overflow-x-auto">
-                                  <Table
-                                    columns={stageColumns}
-                                    dataSource={items.map((stage) => ({
-                                      ...stage,
-                                      key: stage.stageId,
-                                    }))}
-                                    pagination={false}
-                                    size="small"
-                                    scroll={{ x: "max-content" }}
-                                  />
-                                </div>
-                              ),
-                            })
+                            ({ section, items }, idx) => {
+                              const isCurrent = section === currentSectionKey;
+                              const isUpcoming = section === upcomingSectionKey;
+                              const isLast =
+                                idx === sectionsWithOrder.length - 1;
+
+                              return {
+                                key: String(section),
+                                label: (
+                                  <span className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium">
+                                      {String(section)}
+                                    </span>
+                                    <Tag className="text-xs">
+                                      {items.length}
+                                    </Tag>
+                                    {isCurrent && (
+                                      <Tag color="success" className="text-xs">
+                                        현재
+                                      </Tag>
+                                    )}
+                                    {isUpcoming && (
+                                      <Tag color="blue" className="text-xs">
+                                        다음
+                                      </Tag>
+                                    )}
+                                    {isLast && isCurrent && !isUpcoming && (
+                                      <Tag color="purple" className="text-xs">
+                                        마지막
+                                      </Tag>
+                                    )}
+                                  </span>
+                                ),
+                                children: (
+                                  <div className="overflow-x-auto">
+                                    <Table
+                                      columns={stageColumns}
+                                      dataSource={items.map((stage) => ({
+                                        ...stage,
+                                        key: stage.stageId,
+                                      }))}
+                                      pagination={false}
+                                      size="small"
+                                      scroll={{ x: "max-content" }}
+                                    />
+                                  </div>
+                                ),
+                              };
+                            }
                           )}
                         />
                       </Card>
