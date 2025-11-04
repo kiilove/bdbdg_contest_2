@@ -22,8 +22,6 @@ import {
   DeleteOutlined,
   CheckSquareOutlined,
   ClearOutlined,
-  ReloadOutlined,
-  FolderOpenOutlined,
 } from "@ant-design/icons";
 
 const ContestPlayerOrderTable = () => {
@@ -35,9 +33,11 @@ const ContestPlayerOrderTable = () => {
 
   const [matchedArray, setMatchedArray] = useState([]);
   const [categorysArray, setCategorysArray] = useState([]);
+  const [playersArray, setPlayersArray] = useState([]);
+  const [playersAssign, setPlayersAssign] = useState({});
+  const [playersFinal, setPlayersFinal] = useState({});
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
-  const [playersAssign, setPlayersAssign] = useState({}); // assign만 관리
   const [startPlayerNumber, setStartPlayerNumber] = useState(1);
 
   // ✅ 개별 항목 선택 상태 (행 단위: mIdx:pIdx:playerUid)
@@ -52,7 +52,11 @@ const ContestPlayerOrderTable = () => {
   const fetchPlayersAssignDocument = useFirestoreGetDocument(
     "contest_players_assign"
   );
+  const fetchPlayersFinalDocument = useFirestoreGetDocument(
+    "contest_players_final"
+  );
   const updatePlayersAssign = useFirestoreUpdateData("contest_players_assign");
+  const updatePlayersFinal = useFirestoreUpdateData("contest_players_final");
   const fetchEntry = useFirestoreQuery();
 
   useEffect(() => {
@@ -62,62 +66,53 @@ const ContestPlayerOrderTable = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // 공통 재배정 유틸: 전체 일련번호/표시순서를 startBase+1부터 부여
-  const renumberAll = (arr, startBase) => {
-    const allPlayers = arr.flatMap((m) => m.matchedPlayers || []);
-    allPlayers.forEach((p, i) => {
-      const num = i + startBase + 1;
-      p.playerNumber = num;
-      p.playerIndex = num;
-    });
-    return arr;
-  };
-
   const fetchPool = async () => {
     if (!currentContest?.contests) return;
+
     setIsLoading(true);
 
     try {
       if (currentContest.contests.startPlayerNumber) {
-        // 내부 계산 편의를 위해 -1 보정
         setStartPlayerNumber(currentContest.contests.startPlayerNumber - 1);
       }
 
-      // 카테고리
       if (currentContest.contests.contestCategorysListId) {
         const returnCategorys = await fetchCategoryDocument.getDocument(
           currentContest.contests.contestCategorysListId
         );
         if (returnCategorys?.categorys?.length > 0) {
           setCategorysArray([
-            ...returnCategorys.categorys
-              .slice()
-              .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex),
+            ...returnCategorys.categorys.sort(
+              (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+            ),
           ]);
         } else {
           setCategorysArray([]);
         }
       }
 
-      // 그레이드
       const returnGrades = await fetchGradeDocument.getDocument(
         currentContest.contests.contestGradesListId
       );
       setGradesArray([...(returnGrades?.grades || [])]);
 
-      // 엔트리
       const condition = [where("contestId", "==", currentContest.contests.id)];
       const returnEntrys = await fetchEntry.getDocuments(
         "contest_entrys_list",
         condition
       );
-      setEntrysArray([...(returnEntrys || [])]);
 
-      // assign (저장본)
       const returnPlayersAssign = await fetchPlayersAssignDocument.getDocument(
         currentContest.contests.contestPlayersAssignId
       );
+      const returnPlayersFinal = await fetchPlayersFinalDocument.getDocument(
+        currentContest.contests.contestPlayersFinalId
+      );
+
+      setEntrysArray([...(returnEntrys || [])]);
       setPlayersAssign({ ...(returnPlayersAssign || {}) });
+      setPlayersArray([...(returnPlayersAssign?.players || [])]);
+      setPlayersFinal({ ...(returnPlayersFinal || {}) });
     } catch (e) {
       console.error(e);
     } finally {
@@ -125,103 +120,57 @@ const ContestPlayerOrderTable = () => {
     }
   };
 
-  // 엔트리 기준 초기 구성
-  const initEntryList = () => {
+  const initEntryList = async () => {
+    // 엔트리 기준으로 플레이어 번호 할당해 초기 matchedArray 구성
     const dummy = [];
     let playerNumber = startPlayerNumber;
 
-    const categories = [...categorysArray].sort(
-      (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+    const condition = [where("contestId", "==", currentContest.contests.id)];
+    const data = await fetchEntry.getDocuments(
+      "contest_entrys_list",
+      condition
     );
+    setEntrysArray(() => [...data]);
 
-    categories.forEach((category) => {
-      const matchedGrades = [...gradesArray]
-        .filter((grade) => grade.refCategoryId === category.contestCategoryId)
-        .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex);
-
-      const matchedGradesLength = matchedGrades.length;
-
-      matchedGrades.forEach((grade) => {
-        const matchedPlayers = entrysArray.filter(
-          (entry) => entry.contestGradeId === grade.contestGradeId
+    categorysArray
+      .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+      .forEach((category) => {
+        const matchedGrades = gradesArray.filter(
+          (grade) => grade.refCategoryId === category.contestCategoryId
         );
+        const matchedGradesLength = matchedGrades.length;
 
-        const withNumbers = matchedPlayers.map((player) => {
-          playerNumber++;
-          return {
-            ...player,
-            playerNumber: playerNumber,
-            playerNoShow: false,
-            playerIndex: playerNumber,
-          };
-        });
+        matchedGrades
+          .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
+          .forEach((grade) => {
+            const matchedPlayerWithPlayerNumber = [];
+            const matchedPlayers = data.filter(
+              (entry) => entry.contestGradeId === grade.contestGradeId
+            );
 
-        const matchedInfo = {
-          ...category,
-          ...grade,
-          matchedPlayers: withNumbers,
-          matchedGradesLength,
-        };
-        dummy.push(matchedInfo);
+            matchedPlayers.forEach((player) => {
+              playerNumber++;
+              const newPlayer = {
+                ...player,
+                playerNumber: playerNumber,
+                playerNoShow: false,
+                playerIndex: playerNumber,
+              };
+              matchedPlayerWithPlayerNumber.push({ ...newPlayer });
+            });
+
+            const matchedInfo = {
+              ...category,
+              ...grade,
+              matchedPlayers: matchedPlayerWithPlayerNumber,
+              matchedGradesLength,
+            };
+            dummy.push({ ...matchedInfo });
+          });
       });
-    });
 
-    setMatchedArray(renumberAll(dummy, startPlayerNumber));
-    setSelectedEntries(new Set());
+    setMatchedArray([...dummy]);
   };
-
-  // assign 저장본으로 화면 재구성 (있을 때만)
-  const rebuildFromAssign = () => {
-    const grouped = {};
-    const assigned = playersAssign?.players || [];
-    assigned.forEach((p) => {
-      const key = `${p.contestCategoryId}__${p.contestGradeId}`;
-      if (!grouped[key]) {
-        const cat =
-          categorysArray.find(
-            (c) => c.contestCategoryId === p.contestCategoryId
-          ) || {};
-        const grd =
-          gradesArray.find((g) => g.contestGradeId === p.contestGradeId) || {};
-        grouped[key] = {
-          ...cat,
-          ...grd,
-          matchedPlayers: [],
-          matchedGradesLength: 1,
-        };
-      }
-      grouped[key].matchedPlayers.push({ ...p });
-    });
-
-    const rebuilt = Object.values(grouped);
-    setMatchedArray(renumberAll(rebuilt, startPlayerNumber));
-    setSelectedEntries(new Set());
-  };
-
-  // 초기 데이터 로드
-  useEffect(() => {
-    fetchPool();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentContest]);
-
-  // 카테고리/그레이드/엔트리/assign이 준비되면 화면 데이터 구성
-  useEffect(() => {
-    if (!categorysArray.length) return;
-
-    // assign 저장본이 있으면 우선 사용, 없으면 엔트리로 초기화
-    if (playersAssign?.players?.length > 0) {
-      rebuildFromAssign();
-    } else {
-      initEntryList();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    categorysArray,
-    gradesArray,
-    entrysArray,
-    playersAssign,
-    startPlayerNumber,
-  ]);
 
   // ✅ 중복 계산 (그룹: contestGradeId__playerUid, 항목: entryKey = mIdx:pIdx:playerUid)
   const duplicatesMap = useMemo(() => {
@@ -300,17 +249,25 @@ const ContestPlayerOrderTable = () => {
       });
     });
 
-    setMatchedArray(renumberAll(newMatched, startPlayerNumber));
+    // 전체 재번호
+    const allPlayers = newMatched.flatMap((mm) => mm.matchedPlayers || []);
+    allPlayers.forEach((player, idx) => {
+      player.playerNumber = idx + startPlayerNumber + 1;
+      player.playerIndex = idx + startPlayerNumber + 1;
+    });
+
+    setMatchedArray(newMatched);
     setSelectedEntries(new Set());
   };
 
-  // 저장은 assign만
-  const handleUpdatePlayersAssign = async (assignId) => {
+  const handleUpdatePlayersAssign = async (assignId, finalId) => {
     const allPlayers = matchedArray.flatMap((m) => m.matchedPlayers || []);
     const newPlayersAssign = { ...playersAssign, players: [...allPlayers] };
+    const newPlayersFinal = { ...playersFinal, players: [...allPlayers] };
 
     try {
       await updatePlayersAssign.updateData(assignId, newPlayersAssign);
+      await updatePlayersFinal.updateData(finalId, newPlayersFinal);
       const hasDup = Object.keys(duplicatesMap).length > 0;
       setMessage({
         body: hasDup
@@ -331,36 +288,79 @@ const ContestPlayerOrderTable = () => {
     }
   };
 
-  // DnD: 숫자 index 사용, parent는 droppableId로 구분
   const onDragPlayerEnd = (result) => {
     const { source, destination } = result;
     if (!destination) return;
 
-    const fromGradeId = source.droppableId.replace("players_", "");
-    const toGradeId = destination.droppableId.replace("players_", "");
+    const newMatchedArray = [...matchedArray];
 
-    const newMatchedArray = matchedArray.map((m) => ({
-      ...m,
-      matchedPlayers: [...(m.matchedPlayers || [])],
-    }));
+    // 원 코드 패턴 유지: index에 parentIndex/childIndex 포함
+    const draggedPlayer =
+      newMatchedArray[source.index.parentIndex].matchedPlayers[
+        source.index.childIndex
+      ];
 
-    const fromIdx = newMatchedArray.findIndex(
-      (m) => m.contestGradeId === fromGradeId
-    );
-    const toIdx = newMatchedArray.findIndex(
-      (m) => m.contestGradeId === toGradeId
-    );
-    if (fromIdx < 0 || toIdx < 0) return;
-
-    const [dragged] = newMatchedArray[fromIdx].matchedPlayers.splice(
-      source.index,
+    newMatchedArray[source.index.parentIndex].matchedPlayers.splice(
+      source.index.childIndex,
       1
     );
-    newMatchedArray[toIdx].matchedPlayers.splice(destination.index, 0, dragged);
 
-    setMatchedArray(renumberAll(newMatchedArray, startPlayerNumber));
+    newMatchedArray[destination.index.parentIndex].matchedPlayers.splice(
+      destination.index.childIndex,
+      0,
+      draggedPlayer
+    );
+
+    // 전체 재번호
+    const allPlayers = newMatchedArray.flatMap((m) => m.matchedPlayers);
+    allPlayers.forEach((player, index) => {
+      player.playerNumber = index + startPlayerNumber + 1;
+      player.playerIndex = index + startPlayerNumber + 1;
+    });
+
+    setMatchedArray(newMatchedArray);
+
+    // ✅ 인덱스가 바뀌므로 선택 초기화
     setSelectedEntries(new Set());
   };
+
+  useEffect(() => {
+    fetchPool();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentContest]);
+
+  useEffect(() => {
+    if (categorysArray.length > 0 && (playersArray?.length || 0) === 0) {
+      initEntryList();
+    } else if ((playersArray?.length || 0) > 0) {
+      // playersAssign 기반으로 matchedArray 재구성
+      const grouped = {};
+      playersArray.forEach((p) => {
+        const key = `${p.contestCategoryId}__${p.contestGradeId}`;
+        if (!grouped[key]) {
+          const cat = categorysArray.find(
+            (c) => c.contestCategoryId === p.contestCategoryId
+          );
+          const grd = gradesArray.find(
+            (g) => g.contestGradeId === p.contestGradeId
+          );
+          grouped[key] = {
+            ...(cat || {}),
+            ...(grd || {}),
+            matchedPlayers: [],
+            matchedGradesLength: 0,
+          };
+        }
+        grouped[key].matchedPlayers.push({ ...p });
+      });
+      const rebuilt = Object.values(grouped).map((g) => ({
+        ...g,
+        matchedGradesLength: 1,
+      }));
+      setMatchedArray(rebuilt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categorysArray, gradesArray, entrysArray, playersArray]);
 
   const PlayerCardView = ({
     player,
@@ -368,6 +368,7 @@ const ContestPlayerOrderTable = () => {
     provided,
     snapshot,
     isDuplicate,
+    dupGroupKey,
     entryKey,
   }) => {
     const { playerName, playerGym, playerNumber, createBy, invoiceCreateAt } =
@@ -456,6 +457,7 @@ const ContestPlayerOrderTable = () => {
     const selectAll = () => {
       const all = new Set();
       dupEntries.forEach(([, info]) => {
+        // 전체 선택(필요 시 info.entries.slice(1)로 "첫 1개 유지" 제안 가능)
         info.entries.forEach((e) => all.add(e.entryKey));
       });
       setSelectedEntries(all);
@@ -574,22 +576,13 @@ const ContestPlayerOrderTable = () => {
 
           <div className="flex w-full justify-end mb-2 gap-x-4">
             <Button
-              danger
+              type="primary"
               size="large"
-              icon={<ReloadOutlined />}
+              icon={<SaveOutlined />}
               className="w-full"
               onClick={() => initEntryList()}
             >
-              초기화(재계산)
-            </Button>
-            <Button
-              color="cyan"
-              size="large"
-              icon={<FolderOpenOutlined />}
-              className="w-full"
-              onClick={() => rebuildFromAssign()}
-            >
-              기존명단불러오기(최종 저장본)
+              초기화
             </Button>
             <Button
               type="primary"
@@ -598,17 +591,18 @@ const ContestPlayerOrderTable = () => {
               className="w-full"
               onClick={() =>
                 handleUpdatePlayersAssign(
-                  currentContest.contests.contestPlayersAssignId
+                  currentContest.contests.contestPlayersAssignId,
+                  currentContest.contests.contestPlayersFinalId
                 )
               }
             >
-              계측명단 저장(덮어씌우기)
+              계측명단 저장
             </Button>
           </div>
 
           <div className="flex flex-col gap-4">
             {matchedArray.length > 0 &&
-              [...matchedArray]
+              matchedArray
                 .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
                 .map((matched, mIdx) => {
                   const {
@@ -650,8 +644,7 @@ const ContestPlayerOrderTable = () => {
                                     <div className="flex w-3/12">소속</div>
                                     <div className="flex w-3/12">신청일</div>
                                   </div>
-
-                                  {[...matchedPlayers]
+                                  {matchedPlayers
                                     .sort(
                                       (a, b) => a.playerIndex - b.playerIndex
                                     )
@@ -674,8 +667,11 @@ const ContestPlayerOrderTable = () => {
 
                                       return (
                                         <Draggable
-                                          draggableId={`${contestGradeId}::${playerUid}`}
-                                          index={pIdx} // 숫자만
+                                          draggableId={playerUid}
+                                          index={{
+                                            parentIndex: mIdx,
+                                            childIndex: pIdx,
+                                          }} // 라이브러리 스펙과 다르지만 기존 패턴 유지
                                           key={`${playerUid}_${mIdx}_${pIdx}`}
                                         >
                                           {(provided, snapshot) => (
@@ -775,7 +771,7 @@ const ContestPlayerOrderTable = () => {
                               {/* 모바일 카드 */}
                               {isMobile && (
                                 <div className="flex flex-col w-full gap-2">
-                                  {[...matchedPlayers]
+                                  {matchedPlayers
                                     .sort(
                                       (a, b) => a.playerIndex - b.playerIndex
                                     )
@@ -787,8 +783,11 @@ const ContestPlayerOrderTable = () => {
 
                                       return (
                                         <Draggable
-                                          draggableId={`${contestGradeId}::${player.playerUid}`}
-                                          index={pIdx}
+                                          draggableId={player.playerUid}
+                                          index={{
+                                            parentIndex: mIdx,
+                                            childIndex: pIdx,
+                                          }}
                                           key={`${player.playerUid}_${mIdx}_${pIdx}`}
                                         >
                                           {(provided, snapshot) => (
@@ -798,6 +797,7 @@ const ContestPlayerOrderTable = () => {
                                               provided={provided}
                                               snapshot={snapshot}
                                               isDuplicate={isDuplicate}
+                                              dupGroupKey={dupGroupKey}
                                               entryKey={entryKey}
                                             />
                                           )}
