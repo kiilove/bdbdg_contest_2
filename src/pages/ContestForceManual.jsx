@@ -1,18 +1,17 @@
-import React, { useRef, useState } from "react";
+"use client";
+
+import { useRef, useState } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useContext } from "react";
 import { useEffect } from "react";
 import {
   useFirestoreAddData,
-  useFirestoreDeleteData,
   useFirestoreGetDocument,
-  useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { BsCheckAll } from "react-icons/bs";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { generateToday, generateUUID } from "../functions/functions";
-import { where } from "firebase/firestore";
+import { generateUUID } from "../functions/functions";
 
 const ContestForceManual = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -114,8 +113,8 @@ const ContestForceManual = () => {
       const categoryPriceType = 0;
 
       // invoiceInfo?.joins가 undefined일 경우 빈 배열로 초기화
-      let dummy = [...(invoiceInfo?.joins || [])];
-      let newInvoiceInfo = { ...invoiceInfo };
+      const dummy = [...(invoiceInfo?.joins || [])];
+      const newInvoiceInfo = { ...invoiceInfo };
 
       const findCategory = dummy.some(
         (category) => category.contestCategoryId === id
@@ -194,7 +193,7 @@ const ContestForceManual = () => {
       const newData = { ...propData };
       delete newData.joins;
 
-      const startNumber = parseInt(propData.playerNumber) || 0;
+      const startNumber = Number.parseInt(propData.playerNumber) || 0;
       const newFinal = playerFinalInfo?.players || [];
 
       propData.joins.forEach((join, idx) => {
@@ -247,7 +246,7 @@ const ContestForceManual = () => {
   return (
     <>
       {currentContest?.contests?.id ? (
-        <div className="flex w-full flex-col gap-y-2 h-auto pt-4 pb-10 lg:pt-0 lg:pb-0 overflow-y-auto">
+        <div className="flex w-full flex-col gap-y-4 h-auto pt-4 pb-10 lg:pt-0 lg:pb-0 overflow-y-auto">
           <ConfirmationModal
             isOpen={addMsgOpen}
             onConfirm={() => {
@@ -265,78 +264,78 @@ const ContestForceManual = () => {
             onCancel={() => setErrorMsgOpen(false)}
             message={message}
           />
-          <div className="flex w-full h-14">
-            <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-              <div className="flex w-5/6">
-                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                  <BsCheckAll />
+          <div className="flex w-full h-auto">
+            <div className="flex w-full bg-gradient-to-r from-blue-50 to-cyan-50 justify-start items-center rounded-xl px-4 py-3 shadow-sm">
+              <div className="flex w-full items-center gap-3">
+                <span className="font-sans text-lg font-semibold w-7 h-7 flex justify-center items-center rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md">
+                  <BsCheckAll className="w-5 h-5" />
                 </span>
                 <h1
-                  className="font-sans text-lg font-semibold"
-                  style={{ letterSpacing: "2px" }}
+                  className="font-sans text-lg lg:text-xl font-bold text-gray-800"
+                  style={{ letterSpacing: "1px" }}
                 >
                   최종명단 강제등록
                 </h1>
               </div>
             </div>
           </div>
-          <div className="flex bg-gradient-to-r from-blue-200 to-cyan-200 p-3 rounded-lg">
-            <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center gay-y-2 flex-col p-2 gap-y-2">
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+          <div className="flex bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 p-4 rounded-xl shadow-sm">
+            <div className="flex w-full bg-white h-auto rounded-xl justify-start items-start lg:items-center flex-col p-4 lg:p-6 gap-y-4 shadow-inner">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     선수번호
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="text"
                       value={invoiceInfo.playerNumber}
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerNumber = ref)}
                       name="playerNumber"
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     이름
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="text"
                       value={invoiceInfo.playerName}
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerName = ref)}
                       name="playerName"
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     연락처
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="text"
                       name="playerTel"
@@ -344,22 +343,22 @@ const ContestForceManual = () => {
                       value={invoiceInfo.playerTel}
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerTel = ref)}
-                      className="h-8 lg:h-12 outline-none  text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     생년월일
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="text"
                       name="playerBirth"
@@ -367,22 +366,22 @@ const ContestForceManual = () => {
                       value={invoiceInfo.playerBirth}
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerBirth = ref)}
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     소속
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="text"
                       name="playerGym"
@@ -390,30 +389,27 @@ const ContestForceManual = () => {
                       placeholder="소속없거나 모르면 무소속"
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerGym = ref)}
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
                     />
                   </div>
                 </div>
               </div>
-
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     성별
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg">
-                  <div className="flex w-full justify-start items-center h-8 lg:h-12 bg-white rounded-lg">
+                <div className="h-12 w-3/4 rounded-lg bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <select
                       name="playerGender"
                       onChange={(e) => handleInputValues(e)}
-                      //value={invoiceInfo.playerGender}
-
                       ref={(ref) => (invoiceInfoRef.current.playerGender = ref)}
-                      className="w-full h-full pl-2 text-sm lg:text-base bg-transparent rounded-lg"
+                      className="w-full h-full pl-4 pr-2 text-sm lg:text-base bg-transparent rounded-lg outline-none cursor-pointer"
                     >
                       <option
                         selected={invoiceInfo.playerGender === "m"}
@@ -431,17 +427,17 @@ const ContestForceManual = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-center">
+                <div className="flex w-1/4 justify-end mr-4">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     이메일
                   </h3>
                 </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
+                <div className="h-12 w-3/4 rounded-lg px-4 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
+                  <div className="flex w-full h-full justify-start items-center">
                     <input
                       type="email"
                       name="playerEmail"
@@ -449,70 +445,44 @@ const ContestForceManual = () => {
                       placeholder="abc@abc.com형식으로 입력"
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerEmail = ref)}
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
+                      className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
                     />
                   </div>
                 </div>
               </div>
-              {/* <div className="flex w-full justify-start items-center ">
-                <div className="flex w-1/4 justify-end mr-2">
+              <div className="flex w-full justify-start items-start h-auto">
+                <div className="flex w-1/4 justify-end mr-4 pt-3">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
-                  >
-                    참가비용
-                  </h3>
-                </div>
-                <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-                  <div className="flex w-full justify-start items-center">
-                    <input
-                      type="text"
-                      name="contestPriceSum"
-                      value={invoiceInfo.contestPriceSum?.toLocaleString()}
-                      placeholder="참가비 수동으로 계산입력 ','는 제외"
-                      onChange={(e) => handleInputValues(e)}
-                      ref={(ref) =>
-                        (invoiceInfoRef.current.contestPriceSum = ref)
-                      }
-                      className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                    />
-                  </div>
-                </div>
-              </div> */}
-
-              <div className="flex w-full justify-start items-center h-auto ">
-                <div className="flex w-1/4 justify-end mr-2 h-14 items-start">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     출전동기
                   </h3>
                 </div>
-                <div className="h-auto w-3/4 rounded-lg px-3 bg-white pt-1">
+                <div className="h-auto w-3/4 rounded-lg px-4 py-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all duration-200">
                   <div className="flex w-full justify-start items-center">
                     <textarea
                       name="playerText"
                       value={invoiceInfo.playerText}
                       onChange={(e) => handleInputValues(e)}
                       ref={(ref) => (invoiceInfoRef.current.playerText = ref)}
-                      className="h-16 outline-none w-full text-sm lg:text-base"
+                      className="h-20 outline-none w-full text-sm lg:text-base bg-transparent resize-none"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex w-full justify-start items-center h-auto ">
-                <div className="flex w-1/4 justify-end mr-2 h-full items-start">
+              <div className="flex w-full justify-start items-start h-auto">
+                <div className="flex w-1/4 justify-end mr-4 pt-3">
                   <h3
-                    className="font-sans font-semibold text-sm lg:text-base"
-                    style={{ letterSpacing: "2px" }}
+                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
+                    style={{ letterSpacing: "1px" }}
                   >
                     참가신청종목
                   </h3>
                 </div>
-                <div className="h-auto w-3/4 rounded-lg px-3 bg-white pt-1 overflow-y-auto">
+                <div className="h-auto w-3/4 rounded-lg px-4 py-3 bg-gray-50 border border-gray-200 overflow-y-auto max-h-96">
                   <div className="flex w-full justify-start items-center">
-                    <div className="flex flex-col w-full h-auto gap-y-1">
+                    <div className="flex flex-col w-full h-auto gap-y-2">
                       {categorysArray?.length > 0 &&
                         categorysArray.map((category, cIdx) => {
                           const {
@@ -533,23 +503,42 @@ const ContestForceManual = () => {
 
                           return (
                             <div
+                              key={cIdx}
                               className={`${
                                 invoiceInfo?.joins?.some(
                                   (join) =>
                                     join.contestCategoryId === categoryId
                                 )
-                                  ? "flex w-full  border  bg-blue-300 rounded-lg"
-                                  : "flex w-full  border rounded-lg "
+                                  ? "flex w-full border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg shadow-md"
+                                  : "flex w-full border border-gray-200 bg-white rounded-lg hover:border-gray-300 transition-all duration-200"
                               }`}
                             >
-                              <div className="flex w-1/2 p-2">
-                                <span className="text-sm">{categoryTitle}</span>
+                              <div className="flex w-1/2 p-3">
+                                <span
+                                  className={`text-sm lg:text-base font-medium ${
+                                    invoiceInfo?.joins?.some(
+                                      (join) =>
+                                        join.contestCategoryId === categoryId
+                                    )
+                                      ? "text-blue-700"
+                                      : "text-gray-700"
+                                  }`}
+                                >
+                                  {categoryTitle}
+                                </span>
                               </div>
-                              <div className="flex p-2">
+                              <div className="flex w-1/2 p-3 justify-end">
                                 <select
                                   id={categoryId}
                                   name={categoryTitle}
-                                  className="text-sm bg-transparent"
+                                  className={`text-sm lg:text-base bg-transparent outline-none cursor-pointer font-medium ${
+                                    invoiceInfo?.joins?.some(
+                                      (join) =>
+                                        join.contestCategoryId === categoryId
+                                    )
+                                      ? "text-blue-700"
+                                      : "text-gray-600"
+                                  }`}
                                   onChange={(e) => handleJoins(e)}
                                 >
                                   <option>체급선택</option>
@@ -563,7 +552,8 @@ const ContestForceManual = () => {
 
                                       return (
                                         <option
-                                          className="text-sm"
+                                          key={mIdx}
+                                          className="text-sm lg:text-base"
                                           id={gradeId}
                                           selected={invoiceInfo?.joins?.some(
                                             (i) => i.contestGradeId === gradeId
@@ -593,7 +583,7 @@ const ContestForceManual = () => {
           </div>
           <div className="flex w-full gap-x-2 h-auto">
             <button
-              className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
+              className="w-full h-14 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold text-base lg:text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
               onClick={() => handleAddInvoice(invoiceInfo)}
             >
               저장

@@ -1,6 +1,4 @@
-"use client";
-
-import { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { BiCategory } from "react-icons/bi";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { v4 as uuidv4 } from "uuid";
@@ -29,7 +27,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   const { currentContest } = useContext(CurrentContestContext);
   const [categoryInfo, setCategoryInfo] = useState({
     ...initCategoryInfo,
-    contestCategoryIndex: Number.parseInt(propState.count) + 1,
+    contestCategoryIndex: parseInt(propState.count) + 1,
   });
   const [categorysList, setCategorysList] = useState({});
   const [categorysArray, setCategorysArray] = useState([]);
@@ -87,6 +85,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
     console.log("Adding grades to Grand Prix:", objGrade, arrNewGrade);
 
     if (objGrade && arrNewGrade?.length > 0) {
+      // Mapping over the new grades to prepare them for addition
       const newGrades = arrNewGrade.map((grandPrix, gIdx) => {
         const {
           contestCategoryTitle: contestGradeTitle,
@@ -98,6 +97,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         const isCompared = false;
         const contestGradeId = generateUUID();
 
+        // New grade structure for the Grand Prix
         const newGradeInfo = {
           contestGradeId,
           contestGradeIndex,
@@ -107,6 +107,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
           originalRefCategoryId,
         };
 
+        // Log the new grade for debugging
         console.log("New Grade Info:", newGradeInfo);
 
         return newGradeInfo;
@@ -115,11 +116,13 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
       console.log("Mapped new grades:", newGrades);
 
       if (newGrades?.length > 0) {
+        // Append the new grades to the existing grades in objGrade
         objGrade.grades = [...objGrade.grades, ...newGrades];
 
         try {
           console.log("Updated objGrade with new grades:", objGrade);
 
+          // Update Firestore with the modified objGrade
           await contestGradeUpdate.updateData(
             currentContest.contests.contestGradesListId,
             {
@@ -127,7 +130,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
             }
           );
 
-          setGradesList((prev) => ({ ...prev }));
+          setGradesList((prev) => ({ ...prev })); // Ensure UI is updated
           console.log("Grade addition completed:", objGrade);
         } catch (error) {
           console.log("Error updating grades:", error);
@@ -201,8 +204,8 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         ...initCategoryInfo,
         contestCategoryIsOverall: true,
         contestCategoryIndex:
-          Number.parseInt(updatedCategoryInfo.contestCategoryIndex) + 1,
-        contestCategoryJudgeCount: Number.parseInt(
+          parseInt(updatedCategoryInfo.contestCategoryIndex) + 1,
+        contestCategoryJudgeCount: parseInt(
           updatedCategoryInfo.contestCategoryJudgeCount
         ),
       });
@@ -238,7 +241,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         name === "contestCategoryIsOverall"
           ? e.target.checked
           : name === "contestCategoryIndex"
-          ? Number.parseInt(value)
+          ? parseInt(value)
           : value,
     });
   };
@@ -279,215 +282,276 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         </div>
       </div>
       <div className="flex bg-gradient-to-r from-blue-200 to-cyan-200 p-3 rounded-lg">
-        <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center flex-col p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center">
+        <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center gay-y-2 flex-col p-2 gap-y-2">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 개최순서
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white flex items-center">
-              <input
-                type="text"
-                value={categoryInfo.contestCategoryIndex}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  const parsedValue = Number.parseInt(value, 10);
-                  if (!isNaN(parsedValue)) {
-                    handleInputValues({
-                      target: {
-                        name: "contestCategoryIndex",
-                        value: parsedValue,
-                      },
-                    });
-                  } else {
-                    handleInputValues({
-                      target: {
-                        name: "contestCategoryIndex",
-                        value: "",
-                      },
-                    });
+            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
+              <div className="flex w-full justify-start items-center">
+                <input
+                  type="text"
+                  value={categoryInfo.contestCategoryIndex}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const parsedValue = parseInt(value, 10); // Convert to a number
+                    if (!isNaN(parsedValue)) {
+                      handleInputValues({
+                        target: {
+                          name: "contestCategoryIndex",
+                          value: parsedValue,
+                        },
+                      });
+                    } else {
+                      handleInputValues({
+                        target: {
+                          name: "contestCategoryIndex",
+                          value: "",
+                        },
+                      });
+                    }
+                  }}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryIndex = ref)
                   }
-                }}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategoryIndex = ref)
-                }
-                name="contestCategoryIndex"
-                className="w-full h-full outline-none bg-transparent"
-                placeholder="개최순서(숫자)"
-              />
+                  name="contestCategoryIndex"
+                  className="h-12 outline-none"
+                  placeholder="개최순서(숫자)"
+                />
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 구분
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white flex items-center">
-              <input
-                type="text"
-                name="contestCategorySection"
-                value={categoryInfo.contestCategorySection}
-                onChange={(e) => handleInputValues(e)}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategorySection = ref)
-                }
-                className="w-full h-full outline-none bg-transparent"
-                placeholder="예)1부, 2부, 그랑프리"
-              />
+            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
+              <div className="flex w-full justify-start items-center">
+                <input
+                  type="text"
+                  name="contestCategorySection"
+                  value={categoryInfo.contestCategorySection}
+                  onChange={(e) => handleInputValues(e)}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategorySection = ref)
+                  }
+                  className="h-12 outline-none"
+                  placeholder="예)1부, 2부, 그랑프리"
+                />
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 종목대분류
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white flex items-center">
-              <input
-                type="text"
-                name="contestCategoryType"
-                placeholder="예)피지크, 보디빌딩"
-                value={categoryInfo.contestCategoryType}
-                onChange={(e) => handleInputValues(e)}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategoryType = ref)
-                }
-                className="w-full h-full outline-none bg-transparent"
-              />
+            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
+              <div className="flex w-full justify-start items-center">
+                <input
+                  type="text"
+                  name="contestCategoryType"
+                  placeholder="예)피지크, 보디빌딩"
+                  value={categoryInfo.contestCategoryType}
+                  onChange={(e) => handleInputValues(e)}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryType = ref)
+                  }
+                  className="h-12 outline-none"
+                />
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 종목명
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white flex items-center">
-              <input
-                type="text"
-                name="contestCategoryTitle"
-                value={categoryInfo.contestCategoryTitle}
-                onChange={(e) => handleInputValues(e)}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategoryTitle = ref)
-                }
-                className="w-full h-full outline-none bg-transparent"
-              />
+            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
+              <div className="flex w-full justify-start items-center">
+                <input
+                  type="text"
+                  name="contestCategoryTitle"
+                  value={categoryInfo.contestCategoryTitle}
+                  onChange={(e) => handleInputValues(e)}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryTitle = ref)
+                  }
+                  className="h-12 outline-none"
+                />
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          {/* <div className="flex w-full justify-start items-center hidden">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
+                style={{ letterSpacing: "2px" }}
+              >
+                참가가능성별
+              </h3>
+            </div>
+            <div className="h-12 w-3/4 rounded-lg hidden">
+              <div className="flex w-full justify-start items-center h-12">
+                <select
+                  name="contestCategoryGender"
+                  onChange={(e) => handleInputValues(e)}
+                  value={categoryInfo.contestCategoryGender}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryGender = ref)
+                  }
+                  className="w-full h-full pl-2"
+                >
+                  <option>남</option>
+                  <option>여</option>
+                  <option>무관</option>
+                </select>
+              </div>
+            </div>
+          </div> */}
+          {/* <div className="flex w-full justify-start items-center ">
+            <div className="flex w-1/4 justify-end mr-2">
+              <h3
+                className="font-sans font-semibold"
+                style={{ letterSpacing: "2px" }}
+              >
+                참가비종류
+              </h3>
+            </div>
+            <div className="h-12 w-3/4 rounded-lg ">
+              <div className="flex w-full justify-start items-center h-12">
+                <select
+                  name="contestCategoryPriceType"
+                  onChange={(e) => handleInputValues(e)}
+                  value={categoryInfo.contestCategoryPriceType}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryPriceType = ref)
+                  }
+                  className="w-full h-full pl-2"
+                >
+                  <option>기본참가비</option>
+                  <option>타입1</option>
+                  <option>타입2</option>
+                </select>
+              </div>
+            </div>
+          </div> */}
+          <div className="flex w-full justify-start items-center ">
+            <div className="flex w-1/4 justify-end mr-2">
+              <h3
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 심사종류
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg bg-white flex items-center">
-              <select
-                name="contestCategoryJudgeType"
-                onChange={(e) => handleInputValues(e)}
-                value={categoryInfo.contestCategoryJudgeType}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategoryJudgeType = ref)
-                }
-                className="w-full h-full pl-3 outline-none bg-transparent"
-              >
-                <option value="ranking">랭킹형</option>
-                <option value="point">점수형</option>
-              </select>
+            <div className="h-12 w-3/4 rounded-lg ">
+              <div className="flex w-full justify-start items-center h-12">
+                <select
+                  name="contestCategoryJudgeType"
+                  onChange={(e) => handleInputValues(e)}
+                  value={categoryInfo.contestCategoryJudgeType}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryJudgeType = ref)
+                  }
+                  className="w-full h-full pl-2"
+                >
+                  <option value="ranking">랭킹형</option>
+                  <option value="point">점수형</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 심판수
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white flex items-center">
-              <input
-                type="text"
-                name="contestCategoryJudgeCount"
-                value={categoryInfo.contestCategoryJudgeCount}
-                onChange={(e) => handleInputValues(e)}
-                ref={(ref) =>
-                  (categoryInfoRef.current.contestCategoryJudgeCount = ref)
-                }
-                className="w-full h-full outline-none bg-transparent"
-              />
+            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
+              <div className="flex w-full justify-start items-center">
+                <input
+                  type="text"
+                  name="contestCategoryJudgeCount"
+                  value={categoryInfo.contestCategoryJudgeCount}
+                  onChange={(e) => handleInputValues(e)}
+                  ref={(ref) =>
+                    (categoryInfoRef.current.contestCategoryJudgeCount = ref)
+                  }
+                  className="h-12 outline-none"
+                />
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center">
+          <div className="flex w-full justify-start items-center ">
             <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 그랑프리종목
               </h3>
             </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg flex items-center">
-              <button
-                onClick={() => handleInitGrandPrixFromCategoriesToGrades()}
-                className="h-full px-4 bg-blue-300 hover:bg-blue-400 rounded-lg font-semibold text-sm transition-colors"
-              >
-                그랑프리 종목 불러오기
-              </button>
+            <div className="h-12 w-3/4 rounded-lg ">
+              <div className="flex w-full justify-start items-center h-12">
+                <button
+                  onClick={() => handleInitGrandPrixFromCategoriesToGrades()}
+                >
+                  그랑프리 종목 불러오기
+                </button>
+              </div>
             </div>
           </div>
-          <div className="flex w-full justify-start items-start">
-            <div className="flex w-1/4 justify-end mr-2 pt-2">
+          <div className="flex w-full justify-start items-center ">
+            <div className="flex w-1/4 justify-end mr-2">
               <h3
-                className="font-sans font-semibold text-sm lg:text-base"
+                className="font-sans font-semibold"
                 style={{ letterSpacing: "2px" }}
               >
                 체급목록
               </h3>
             </div>
-            <div className="w-3/4 rounded-lg flex justify-start items-start flex-col gap-2">
-              <button
-                onClick={() => handleUpdateGrandPrixGrades()}
-                className="h-8 lg:h-10 px-4 bg-blue-300 hover:bg-blue-400 rounded-lg font-semibold text-sm transition-colors"
-              >
-                그랑프리 체급으로 저장
-              </button>
-              <div className="flex w-full justify-start items-center flex-wrap gap-2">
+            <div className="h-auto w-3/4 rounded-lg flex justify-start items-center flex-col">
+              <div className="flex w-full justify-start items-center h-auto gap-1">
+                <button onClick={() => handleUpdateGrandPrixGrades()}>
+                  그랑프리 체급으로 저장
+                </button>
+              </div>
+              <div className="flex w-full justify-start items-center h-auto gap-1">
                 {grandPrixArray?.length > 0 &&
                   grandPrixArray.map((grand, gIdx) => {
                     const { contestCategoryTitle: categoryTitle } = grand;
                     return (
-                      <div
-                        key={gIdx}
-                        className="flex px-3 h-8 bg-blue-300 rounded-lg justify-center items-center gap-2"
-                      >
-                        <span className="text-sm font-medium">
-                          {categoryTitle}
-                        </span>
+                      <div className="flex px-2 h-8 bg-blue-200 justify-center items-center">
+                        <span>{categoryTitle}</span>
                         <button
-                          className="bg-white hover:bg-red-400 hover:text-white h-5 w-5 flex justify-center items-center rounded text-xs font-bold transition-colors"
+                          className="bg-blue-400 h-5 w-5 flex justify-center items-center"
                           onClick={() => {
                             handleRemoveGrades(gIdx, grandPrixArray);
                           }}
                         >
-                          ×
+                          X
                         </button>
                       </div>
                     );
@@ -499,13 +563,13 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
       </div>
       <div className="flex w-full gap-x-2 h-auto">
         <button
-          className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 hover:from-blue-300 hover:to-cyan-300 rounded-lg font-semibold transition-colors"
+          className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
           onClick={() => handleUpdateCategorys()}
         >
           저장
         </button>
         <button
-          className="w-full h-12 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 rounded-lg font-semibold transition-colors"
+          className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-300 rounded-lg"
           onClick={() => setClose()}
         >
           닫기
