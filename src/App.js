@@ -47,6 +47,7 @@ import ScoreResultManager from "./pages/ScoreResultManager";
 import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
 import ContestResultManager from "./pages/ContestResultManager";
 import JudgeAssignmentPrint from "./pages/JudgeAssignmentPrint";
+import JudgeSeatMatrixPrint from "./pages/JudgeSeatMatrixPrint";
 
 function App() {
   return (
@@ -146,8 +147,12 @@ function App() {
               element={<ManagementHome children={<PrintSummary />} />}
             />
             <Route
-              path="/judgeassignmenpPrint"
+              path="/judgeassignmentPrint"
               element={<ManagementHome children={<JudgeAssignmentPrint />} />}
+            />{" "}
+            <Route
+              path="/judgeseatmatrixprint"
+              element={<ManagementHome children={<JudgeSeatMatrixPrint />} />}
             />
             <Route
               path="/measureprint"
