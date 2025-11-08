@@ -311,11 +311,8 @@ const CompareSetting = ({
   };
 
   const handleGetTopPlayers = (players, playerLength) => {
-    console.log(players, playerLength);
-    // if (!players || players.length === 0) return [];
-    // if (players.length !== playerLength) return []; // (네 로직 유지)
-    const validPlayers = players.filter((p) => p?.votedCount !== undefined);
-    if (validPlayers.length === 0) return [];
+    if (!players || players.length === 0) return [];
+    if (players.length !== playerLength) return []; // (네 로직 유지)
 
     const sortedPlayers = players.sort((a, b) => b.votedCount - a.votedCount);
     const topPlayers = sortedPlayers.slice(0, playerLength);
@@ -356,50 +353,34 @@ const CompareSetting = ({
     return Object.values(voteCounts);
   };
 
-  const emptyTopTest = () => {
-    setTopResult([]);
-  };
   const handleManualRecalculate = async () => {
     const playerLength = Number(realtimeData?.compares?.playerLength || 0);
 
     if (!playerLength || votedResult.length === 0) {
-      window.postMessage({
-        type: "TOAST",
-        message: "재계산할 수 있는 데이터가 없습니다.",
-      });
+      alert("재계산할 수 있는 데이터가 없습니다.");
       return;
     }
 
     const newTop = handleGetTopPlayers(votedResult, playerLength);
-    console.log(newTop);
     setTopResult(newTop);
 
+    // ✅ 강제 렌더링 (realtimeDB compares.confirmed 업데이트)
     const confirmedNumbers = newTop
       .map((p) => Number(p.playerNumber))
-      .filter((n) => Number.isFinite(n))
       .sort((a, b) => a - b);
 
-    // ✅ Realtime DB에 TOP N까지 저장해서 UI가 최신 데이터로 렌더링되도록
     await updateRealtimeCompare.updateData(
-      `currentStage/${currentContest.contests.id}/compares`,
+      `currentStage/${currentContest?.contests?.id}/compares`,
       {
         ...realtimeData?.compares,
-        players: [...newTop], // ⬅⬅ 여기 추가!!!
         confirmed: {
           count: confirmedNumbers.length,
           numbers: confirmedNumbers,
         },
-        status: {
-          ...realtimeData?.compares?.status,
-          compareStart: true, // 계속 투표중임을 명확하게 표시
-        },
       }
     );
 
-    window.postMessage({
-      type: "TOAST",
-      message: "TOP 인원을 다시 계산했습니다 ✅",
-    });
+    alert("TOP 인원을 다시 계산했습니다 ✅");
   };
 
   // ✅ 모달 초기에 compares 스냅샷 1회 저장
@@ -485,39 +466,27 @@ const CompareSetting = ({
   // ✅ 닫기 시 롤백 처리
   const handleCloseWithRollback = async () => {
     try {
-      const path = `currentStage/${currentContest?.contests?.id}/compares`;
-      const compares = realtimeData?.compares ?? {};
-      const { compareIndex = 0, status = {} } = compares;
-
+      // 이 모달 세션에서 ‘투표개시’를 눌렀고, 아직 확정(=compareIng) 전이라면 롤백
+      const status = realtimeData?.compares?.status || {};
       const shouldRollback =
         startedInThisSession &&
         status.compareStart === true &&
         status.compareIng !== true;
 
-      if (shouldRollback) {
-        if (compareIndex > 1 && initialComparesRef.current) {
-          // ✅ 2차 이상 → 스냅샷으로 롤백
-          await updateRealtimeCompare.updateData(
-            path,
-            JSON.parse(JSON.stringify(initialComparesRef.current))
-          );
-        } else {
-          // ✅ compareIndex === 1 → 완전 초기화 (compareIndex 포함 모든 데이터 삭제)
-          await updateRealtimeCompare.setData(path, {
-            status: {
-              compareStart: false,
-              compareIng: false,
-              compareEnd: false,
-              compareCancel: false,
-            },
-          });
-        }
+      if (shouldRollback && initialComparesRef.current) {
+        const path = `currentStage/${currentContest?.contests?.id}/compares`;
+        await updateRealtimeCompare.updateData(
+          path,
+          // 초기 스냅샷 그대로 복원
+          JSON.parse(JSON.stringify(initialComparesRef.current))
+        );
       }
     } catch (e) {
       console.warn("닫기 롤백 실패:", e?.message);
+      // 롤백 실패해도 모달은 닫는다(운영 편의)
     } finally {
-      setRefresh(true); // UI 리프레시
-      setClose(false); // 모달 닫기
+      setRefresh(true);
+      setClose(false);
     }
   };
 
@@ -586,11 +555,10 @@ const CompareSetting = ({
                     비교심사취소
                   </Button> */}
                   <Button
-                    danger
                     icon={<CloseOutlined />}
                     onClick={handleCloseWithRollback}
                   >
-                    취소(오류시 재비교심사설정)
+                    닫기
                   </Button>
                 </Space>
               </div>
@@ -1040,23 +1008,16 @@ const CompareSetting = ({
 
                   {/* 현재 TOP N */}
                   <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-base font-semibold text-gray-700">
-                        현재 TOP {realtimeData?.compares?.playerLength}
-                      </span>
-                      <Space>
-                        <Button
-                          type="default"
-                          onClick={handleManualRecalculate}
-                        >
-                          재계산
-                        </Button>
-                        {/* <Button type="default" onClick={emptyTopTest}>
-                          다차 비교심사 임시버튼(최초 1회만 눌러야합니다.)
-                        </Button> */}
-                      </Space>
+                    <div className="text-base font-semibold mb-3 text-gray-700">
+                      현재 TOP {realtimeData?.compares?.playerLength}
+                      <Button
+                        type="default"
+                        onClick={handleManualRecalculate}
+                        className="w-full md:w-auto min-w-[200px]"
+                      >
+                        강제 재계산
+                      </Button>
                     </div>
-
                     <Space wrap>
                       {topResult?.length > 0 &&
                         topResult?.map((top, tIdx) => (

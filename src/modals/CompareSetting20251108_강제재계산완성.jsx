@@ -356,9 +356,6 @@ const CompareSetting = ({
     return Object.values(voteCounts);
   };
 
-  const emptyTopTest = () => {
-    setTopResult([]);
-  };
   const handleManualRecalculate = async () => {
     const playerLength = Number(realtimeData?.compares?.playerLength || 0);
 
@@ -485,39 +482,27 @@ const CompareSetting = ({
   // ✅ 닫기 시 롤백 처리
   const handleCloseWithRollback = async () => {
     try {
-      const path = `currentStage/${currentContest?.contests?.id}/compares`;
-      const compares = realtimeData?.compares ?? {};
-      const { compareIndex = 0, status = {} } = compares;
-
+      // 이 모달 세션에서 ‘투표개시’를 눌렀고, 아직 확정(=compareIng) 전이라면 롤백
+      const status = realtimeData?.compares?.status || {};
       const shouldRollback =
         startedInThisSession &&
         status.compareStart === true &&
         status.compareIng !== true;
 
-      if (shouldRollback) {
-        if (compareIndex > 1 && initialComparesRef.current) {
-          // ✅ 2차 이상 → 스냅샷으로 롤백
-          await updateRealtimeCompare.updateData(
-            path,
-            JSON.parse(JSON.stringify(initialComparesRef.current))
-          );
-        } else {
-          // ✅ compareIndex === 1 → 완전 초기화 (compareIndex 포함 모든 데이터 삭제)
-          await updateRealtimeCompare.setData(path, {
-            status: {
-              compareStart: false,
-              compareIng: false,
-              compareEnd: false,
-              compareCancel: false,
-            },
-          });
-        }
+      if (shouldRollback && initialComparesRef.current) {
+        const path = `currentStage/${currentContest?.contests?.id}/compares`;
+        await updateRealtimeCompare.updateData(
+          path,
+          // 초기 스냅샷 그대로 복원
+          JSON.parse(JSON.stringify(initialComparesRef.current))
+        );
       }
     } catch (e) {
       console.warn("닫기 롤백 실패:", e?.message);
+      // 롤백 실패해도 모달은 닫는다(운영 편의)
     } finally {
-      setRefresh(true); // UI 리프레시
-      setClose(false); // 모달 닫기
+      setRefresh(true);
+      setClose(false);
     }
   };
 
@@ -586,11 +571,10 @@ const CompareSetting = ({
                     비교심사취소
                   </Button> */}
                   <Button
-                    danger
                     icon={<CloseOutlined />}
                     onClick={handleCloseWithRollback}
                   >
-                    취소(오류시 재비교심사설정)
+                    닫기
                   </Button>
                 </Space>
               </div>
@@ -1044,17 +1028,9 @@ const CompareSetting = ({
                       <span className="text-base font-semibold text-gray-700">
                         현재 TOP {realtimeData?.compares?.playerLength}
                       </span>
-                      <Space>
-                        <Button
-                          type="default"
-                          onClick={handleManualRecalculate}
-                        >
-                          재계산
-                        </Button>
-                        {/* <Button type="default" onClick={emptyTopTest}>
-                          다차 비교심사 임시버튼(최초 1회만 눌러야합니다.)
-                        </Button> */}
-                      </Space>
+                      <Button type="default" onClick={handleManualRecalculate}>
+                        강제 재계산
+                      </Button>
                     </div>
 
                     <Space wrap>
