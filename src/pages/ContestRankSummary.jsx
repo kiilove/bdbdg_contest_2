@@ -26,30 +26,36 @@ const ContestRankSummary = () => {
     return numbers.slice(0, count);
   };
 
-  const calculateTotalScore = (scores) => {
-    const sortedScores = [...scores].sort((a, b) => a - b);
-    if (sortedScores.length <= 2) return 0;
-    sortedScores.pop(); // Remove max
-    sortedScores.shift(); // Remove min
-    return sortedScores.reduce((acc, curr) => acc + curr, 0);
-  };
-
-  const assignMinMaxFlags = (group) => {
-    const maxScore = Math.max(...group.score.map((s) => s.playerScore));
-    const minScore = Math.min(...group.score.map((s) => s.playerScore));
+  const assignMinMaxAndCalculateTotal = (group) => {
+    const N = group.score.length;
+    // 제외 개수: 5심제=0개, 7심제=1개, 9심제=2개 (최종 5명 점수 사용)
+    const trimCount = Math.floor(Math.max(0, N - 5) / 2);
 
     group.score.forEach((s) => {
       s.isMin = false;
       s.isMax = false;
     });
 
-    if (maxScore === minScore) {
-      group.score[0].isMin = true;
-      group.score[1].isMax = true;
-    } else {
-      group.score.find((s) => s.playerScore === maxScore).isMax = true;
-      group.score.find((s) => s.playerScore === minScore).isMin = true;
+    if (trimCount > 0) {
+      const sorted = [...group.score].sort(
+        (a, b) => a.playerScore - b.playerScore
+      );
+
+      // 가장 좋은 등수/최저점(가장 작은 숫자) trimCount개 제외 -> isMin = true
+      for (let i = 0; i < trimCount; i++) {
+        sorted[i].isMin = true;
+      }
+
+      // 가장 안 좋은 등수/최고점(가장 큰 숫자) trimCount개 제외 -> isMax = true
+      for (let i = N - trimCount; i < N; i++) {
+        sorted[i].isMax = true;
+      }
     }
+
+    // 제외되지 않은 유효 5개 점수만 합산
+    group.totalScore = group.score
+      .filter((s) => !s.isMin && !s.isMax)
+      .reduce((acc, curr) => acc + curr.playerScore, 0);
   };
 
   const groupedByPlayerNumber = (arr, sortCriteria = "playerIndex") => {
@@ -79,10 +85,7 @@ const ContestRankSummary = () => {
     }, []);
 
     groupedObj.forEach((group) => {
-      assignMinMaxFlags(group);
-      group.totalScore = calculateTotalScore(
-        group.score.map((s) => s.playerScore)
-      );
+      assignMinMaxAndCalculateTotal(group);
     });
 
     // Sorting

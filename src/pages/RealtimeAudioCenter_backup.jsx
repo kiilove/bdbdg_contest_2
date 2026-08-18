@@ -17,12 +17,10 @@ import {
   Row,
   Col,
   message,
-  Switch,
 } from "antd";
 import { where, collection, getDocs } from "firebase/firestore";
-import { db, database } from "../firebase";
-import { UpOutlined, DownOutlined, CloudSyncOutlined } from "@ant-design/icons";
-import { ref, set } from "firebase/database";
+import { db } from "../firebase";
+import { UpOutlined, DownOutlined } from "@ant-design/icons";
 
 const { Title } = Typography;
 const { Sider, Content } = Layout;
@@ -60,10 +58,6 @@ export default function RealtimeAudioCenter() {
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState(null);
 
-  // ✅ Remote Sync 상태
-  const [isRemoteSync, setIsRemoteSync] = useState(true);
-  const [lastProcessedSelectedAt, setLastProcessedSelectedAt] = useState(0);
-
   const audioRef = useRef(null);
   const rafRef = useRef(null);
 
@@ -82,81 +76,6 @@ export default function RealtimeAudioCenter() {
 
   const categoryId = realtimeData?.categoryId;
   const categoryTitle = realtimeData?.categoryTitle;
-
-  // ✅ nowPlaying 구독 (VibeFlow Remote 명세)
-  const { data: nowPlaying } = useFirebaseRealtimeGetDocument("nowPlaying");
-
-  useEffect(() => {
-    if (!nowPlaying || !audioRef.current || !isRemoteSync) return;
-
-    const { downloadURL, status, selectedAt } = nowPlaying;
-    if (!downloadURL && status !== "stop") return;
-
-    // 이미 처리한 타임스탬프이고 상태도 같은 경우 무시
-    if (selectedAt === lastProcessedSelectedAt) {
-      if (status === "play" && audioRef.current.paused) {
-        audioRef.current.play().catch(() => {});
-        setIsPlaying(true);
-      } else if (status === "pause" && !audioRef.current.paused) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      } else if (status === "stop") {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        setIsPlaying(false);
-      }
-      return;
-    }
-
-    // 새로운 곡이거나 강제 재시작 타임스탬프인 경우
-    setLastProcessedSelectedAt(selectedAt);
-
-    if (status === "play") {
-      const playableURL = downloadURL;
-      if (!playableURL) return;
-
-      stopTracking();
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.src = playableURL;
-      audioRef.current.volume = volume;
-
-      audioRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          startTracking();
-        })
-        .catch(() =>
-          message.warning("원격 재생이 차단되었습니다. 수동으로 재생을 눌러주세요.")
-        );
-    } else if (status === "stop") {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      setIsPlaying(false);
-      stopTracking();
-    } else if (status === "pause") {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      stopTracking();
-    }
-  }, [nowPlaying, isRemoteSync]);
-
-  // ✅ Remote Control 업데이트 함수
-  const updateRemoteControl = (track, status) => {
-    if (!isRemoteSync) return;
-    const timestamp = Date.now();
-    setLastProcessedSelectedAt(timestamp);
-
-    const data = {
-      fileName: track.name || track.fileName || "Unknown",
-      filePath: track.path || track.filePath || "",
-      downloadURL: track.url || track.path || track.downloadURL || track.fileUrl || "",
-      selectedAt: timestamp,
-      status: status,
-    };
-    set(ref(database, "nowPlaying"), data);
-  };
 
   // =============================
   // Firestore 데이터 로드
@@ -301,7 +220,6 @@ export default function RealtimeAudioCenter() {
     setAudioPlaylist([track]);
     setCurrentTrackIndex(0);
     playTrack(track);
-    updateRemoteControl(track, "play");
   };
 
   const handleAddAllToPlaylistAndPlay = (list, type) => {
@@ -310,7 +228,6 @@ export default function RealtimeAudioCenter() {
     setAudioPlaylist(list);
     setCurrentTrackIndex(0);
     playTrack(list[0]);
-    updateRemoteControl(list[0], "play");
   };
 
   const handleNextTrack = () => {
@@ -320,7 +237,6 @@ export default function RealtimeAudioCenter() {
     if (nextIndex < audioPlaylist.length) {
       setCurrentTrackIndex(nextIndex);
       playTrack(audioPlaylist[nextIndex]);
-      updateRemoteControl(audioPlaylist[nextIndex], "play");
     } else {
       setIsPlaying(false);
       stopTracking();
@@ -334,16 +250,10 @@ export default function RealtimeAudioCenter() {
       audioRef.current.pause();
       setIsPlaying(false);
       stopTracking();
-      if (isRemoteSync && nowPlaying) {
-        set(ref(database, "nowPlaying/status"), "pause");
-      }
     } else {
       audioRef.current.play().then(() => {
         setIsPlaying(true);
         startTracking();
-        if (isRemoteSync && nowPlaying) {
-          set(ref(database, "nowPlaying/status"), "play");
-        }
       });
     }
   };
@@ -408,16 +318,6 @@ export default function RealtimeAudioCenter() {
         <Title level={4} style={{ color: "#fff", marginBottom: 16 }}>
           🎧 Audio Player
         </Title>
-
-        {/* ✅ Remote Sync Toggle */}
-        <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color: "#fff" }}><CloudSyncOutlined /> Remote Sync</span>
-          <Switch 
-            checked={isRemoteSync} 
-            onChange={(val) => setIsRemoteSync(val)} 
-            size="small"
-          />
-        </div>
 
         {/* ✅ Volume Control */}
         <div style={{ marginBottom: 20 }}>
