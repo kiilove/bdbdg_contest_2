@@ -234,13 +234,20 @@ export const MenuArray = [
       },
       {
         id: 5,
-        title: "스크린",
+        title: "실시간 무대 전광판",
         icon: <PiProjectorScreenChartThin />,
-        link: "/screenlobby",
-        requiredGroup: ["admin"],
+        link: "/stage-live",
+        requiredGroup: ["admin", "orgManager"],
       },
       {
         id: 6,
+        title: "스폰서 & 광고 관리",
+        icon: <FaClipboardList />,
+        link: "/sponsors",
+        requiredGroup: ["admin", "orgManager"],
+      },
+      {
+        id: 7,
         title: "음원 모니터링",
         icon: <GiMagicLamp />,
         link: "/realtimeaudiocenter",

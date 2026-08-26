@@ -10,6 +10,7 @@ import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
 import { MdOutlineScale } from "react-icons/md";
 import { HiUserGroup } from "react-icons/hi";
+import { FaChartPie, FaPrint } from "react-icons/fa";
 import PrintTable from "./PrintTable";
 import {
   useFirestoreGetDocument,
@@ -17,18 +18,18 @@ import {
 } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
-import { useMediaQuery } from "react-responsive";
-import { useParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
 
 const UnifiedPrint = () => {
   const { isTabletOrMobile } = useDevice();
-  const { printType } = useParams();
+  const { printType = "measurement" } = useParams();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [currentSection, setCurrentSection] = useState("all");
   const [currentCategoryId, setCurrentCategoryId] = useState("all");
-  const [currentGradeId, setCurrentGradeId] = useState("");
+  const [currentGradeId, setCurrentGradeId] = useState("all");
   const printRef = useRef();
   const [documentTitle, setDocumentTitle] = useState("");
   const { currentContest } = useContext(CurrentContestContext);
@@ -44,23 +45,94 @@ const UnifiedPrint = () => {
   const [playersArray, setPlayersArray] = useState([]);
   const [resultArray, setResultArray] = useState([]);
 
-  useEffect(() => {
-    if (currentContest?.contests?.id) {
-      fetchPool(
-        currentContest.contests.contestCategorysListId,
-        currentContest.contests.contestGradesListId
-      );
-    }
-  }, [currentContest, currentSection, printType]);
+  // 서브 출력 메뉴 탭 목록
+  const printTabs = [
+    { type: "measurement", label: "계측 명단 출력", path: "/print/measurement", icon: <MdOutlineScale /> },
+    { type: "final", label: "출전 명단 출력", path: "/print/final", icon: <HiUserGroup /> },
+    { type: "ranking", label: "순위표 출력", path: "/print/ranking", icon: <FaChartPie /> },
+    { type: "gymgroup", label: "클럽별 집계 출력", path: "/printgymgroup", isExternal: true },
+    { type: "judgeassign", label: "심판별 배정 출력", path: "/judgeassignmentPrint", isExternal: true },
+    { type: "judgematrix", label: "심판배정 매트릭스", path: "/judgeseatmatrixprint", isExternal: true },
+    { type: "summary", label: "집계표 출력", path: "/printsummary", isExternal: true },
+  ];
+
+  const handleSearch = useCallback(
+    async (categoryId, gradeId, section = currentSection) => {
+      const contestId = currentContest?.contests?.id;
+      if (!contestId) return;
+
+      const conditions = [where("contestId", "==", contestId)];
+
+      if (categoryId && categoryId !== "all") {
+        conditions.push(where("categoryId", "==", categoryId));
+        if (gradeId && gradeId !== "all") {
+          conditions.push(where("gradeId", "==", gradeId));
+        }
+      }
+
+      setIsLoading(true);
+      try {
+        const resultsData = await fetchResults.getDocuments(
+          "contest_results_list",
+          conditions
+        );
+
+        let enhancedResults = (resultsData || []).map((result) => {
+          const category = categoriesArray.find(
+            (cat) => cat.contestCategoryId === result.categoryId
+          );
+          const grade = gradesArray.find(
+            (grd) => grd.contestGradeId === result.gradeId
+          );
+
+          return {
+            ...result,
+            contestCategorySection: category?.contestCategorySection || "",
+            contestCategoryIndex: category?.contestCategoryIndex || 0,
+            contestGradeIndex: grade?.contestGradeIndex || 0,
+          };
+        });
+
+        // 섹션 필터링
+        if (section && section !== "all") {
+          enhancedResults = enhancedResults.filter(
+            (r) => r.contestCategorySection === section
+          );
+        }
+
+        const finalSortedResults = enhancedResults.sort((a, b) => {
+          if (a.contestCategorySection !== b.contestCategorySection) {
+            return (a.contestCategorySection || "").localeCompare(
+              b.contestCategorySection || ""
+            );
+          }
+          if (a.contestCategoryIndex !== b.contestCategoryIndex) {
+            return a.contestCategoryIndex - b.contestCategoryIndex;
+          }
+          return a.contestGradeIndex - b.contestGradeIndex;
+        });
+
+        setResultArray(finalSortedResults || []);
+      } catch (error) {
+        console.error("순위표 조회 오류:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentContest, categoriesArray, gradesArray, currentSection]
+  );
 
   const fetchPool = async (categoryId, gradeId) => {
+    setIsLoading(true);
     try {
       const [categories, grades] = await Promise.all([
         fetchCategories.getDocument(categoryId),
         fetchGrades.getDocument(gradeId),
       ]);
-      setCategoriesArray(categories?.categorys || []);
-      setGradesArray(grades?.grades || []);
+      const loadedCats = categories?.categorys || [];
+      const loadedGrades = grades?.grades || [];
+      setCategoriesArray(loadedCats);
+      setGradesArray(loadedGrades);
 
       if (printType === "measurement") {
         const playerData = await fetchPlayersAssign.getDocument(
@@ -72,124 +144,31 @@ const UnifiedPrint = () => {
           currentContest.contests.contestPlayersFinalId
         );
         setPlayersArray(playerData?.players || []);
-      } else {
-        // ranking이나 다른 타입일 경우 playersArray 초기화
+      } else if (printType === "ranking") {
         setPlayersArray([]);
       }
     } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleSearch = async (categoryId, gradeId) => {
-    try {
-      const contestId = currentContest?.contests?.id;
-      if (!contestId) {
-        console.error("Contest ID가 유효하지 않습니다.");
-        return;
-      }
-
-      const conditions = [where("contestId", "==", contestId)];
-
-      if (categoryId === "all") {
-        if (currentSection !== "all") {
-          conditions.push(
-            where("contestCategorySection", "==", currentSection)
-          );
-        }
-      } else {
-        conditions.push(where("categoryId", "==", categoryId));
-        if (gradeId && gradeId !== "all") {
-          conditions.push(where("gradeId", "==", gradeId));
-        }
-      }
-
-      setIsLoading(true);
-
-      const resultsData = await fetchResults.getDocuments(
-        "contest_results_list",
-        conditions
-      );
-
-      const enhancedResults = resultsData.map((result) => {
-        const category = categoriesArray.find(
-          (cat) => cat.contestCategoryId === result.categoryId
-        );
-        const grade = gradesArray.find(
-          (grd) => grd.contestGradeId === result.gradeId
-        );
-
-        return {
-          ...result,
-          contestCategorySection: category?.contestCategorySection || "",
-          contestCategoryIndex: category?.contestCategoryIndex || 0,
-          contestGradeIndex: grade?.contestGradeIndex || 0,
-        };
-      });
-
-      const finalSortedResults = enhancedResults.sort((a, b) => {
-        if (a.contestCategorySection !== b.contestCategorySection) {
-          return a.contestCategorySection.localeCompare(
-            b.contestCategorySection
-          );
-        }
-        if (a.contestCategoryIndex !== b.contestCategoryIndex) {
-          return a.contestCategoryIndex - b.contestCategoryIndex;
-        }
-        return a.contestGradeIndex - b.contestGradeIndex;
-      });
-
-      setResultArray(finalSortedResults || []);
-    } catch (error) {
-      console.error(error);
+      console.error("출력 기초 데이터 로드 오류:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const groupAndCountPlayersByGymAndRank = (data) => {
-    // players를 flat하게 변환하고 각 player에 카테고리와 등급 정보를 추가
-    const playersFlat = data.flatMap((category) =>
-      category.grades.flatMap((grade) =>
-        grade.players.map((player) => ({
-          ...player,
-          contestCategoryTitle: category.contestCategoryTitle,
-          contestGradeTitle: grade.contestGradeTitle,
-        }))
-      )
-    );
+  useEffect(() => {
+    if (currentContest?.contests?.id) {
+      fetchPool(
+        currentContest.contests.contestCategorysListId,
+        currentContest.contests.contestGradesListId
+      );
+    }
+  }, [currentContest, printType]);
 
-    // 전체 데이터에서 최대 순위를 동적으로 결정
-    const maxRank = Math.max(...playersFlat.map((player) => player.playerRank));
-
-    // playerGym으로 그룹화 후 rankTitle별로 선수 집계 및 정보 추가
-    const result = playersFlat.reduce((acc, player) => {
-      const { playerGym, playerRank } = player;
-
-      // 각 Gym을 위한 객체 초기화
-      if (!acc[playerGym]) acc[playerGym] = {};
-
-      // 모든 rankTitle을 0으로 초기화 (1부터 maxRank까지)
-      for (let rank = 1; rank <= maxRank; rank++) {
-        const rankTitle = `rankTitle:${rank}`;
-        if (!acc[playerGym][rankTitle]) {
-          acc[playerGym][rankTitle] = {
-            count: 0,
-            players: [],
-          };
-        }
-      }
-
-      // 실제 선수의 순위 데이터를 추가
-      const rankTitle = `rankTitle:${playerRank}`;
-      acc[playerGym][rankTitle].players.push(player);
-      acc[playerGym][rankTitle].count += 1;
-
-      return acc;
-    }, {});
-
-    return result;
-  };
+  // ranking 타입일 때 자동 검색 실행
+  useEffect(() => {
+    if (printType === "ranking" && currentContest?.contests?.id && categoriesArray.length > 0) {
+      handleSearch(currentCategoryId, currentGradeId, currentSection);
+    }
+  }, [printType, currentContest, categoriesArray, currentSection]);
 
   const formatResultArray = (data) => {
     return data.map((item) => ({
@@ -197,7 +176,7 @@ const UnifiedPrint = () => {
       grades: [
         {
           contestGradeTitle: item.gradeTitle,
-          players: item.result
+          players: (item.result || [])
             .filter((f) => f.playerRank < 1000)
             .sort((a, b) => a.playerRank - b.playerRank)
             .map((player) => ({
@@ -211,6 +190,7 @@ const UnifiedPrint = () => {
       ],
     }));
   };
+
   const processCategoriesGradesPlayers = useCallback(
     (filteredCategories, gradesArray, playersArray) => {
       return filteredCategories
@@ -266,58 +246,18 @@ const UnifiedPrint = () => {
         })
         .filter((category) => category.grades.length > 0);
     },
-    [printType] // Ensure that printType is included in dependencies
+    [printType]
   );
 
-  // const processCategoriesGradesPlayers = useCallback(
-  //   (filteredCategories, gradesArray, playersArray) => {
-  //     return filteredCategories
-  //       .map((category) => {
-  //         const grades = gradesArray
-  //           .filter(
-  //             (grade) => grade.refCategoryId === category.contestCategoryId
-  //           )
-  //           .map((grade) => {
-  //             const players = playersArray
-  //               .filter(
-  //                 (player) => player.contestGradeId === grade.contestGradeId
-  //               )
-  //               .map((player, index) => ({
-  //                 index: index + 1,
-  //                 playerNumber: player.playerNumber,
-  //                 playerIndex: player.playerIndex,
-  //                 playerName: player.playerName,
-  //                 heightWeight: player.heightWeight || "",
-  //                 playerGym: player.playerGym || "",
-  //                 note: player.note || "",
-  //               }));
-
-  //             return {
-  //               contestGradeTitle: grade.contestGradeTitle,
-  //               players,
-  //             };
-  //           })
-  //           .filter((grade) => grade.players.length > 0);
-
-  //         return {
-  //           contestCategoryTitle: category.contestCategoryTitle,
-  //           grades,
-  //         };
-  //       })
-  //       .filter((category) => category.grades.length > 0);
-  //   },
-  //   []
-  // );
-
   useEffect(() => {
-    const contestTitle = currentContest?.contestInfo?.contestTitle;
+    const contestTitle = currentContest?.contestInfo?.contestTitle || currentContest?.contests?.contestTitle || "";
     const section = currentSection === "all" ? "전체" : currentSection;
     const titles = {
       measurement: "계측명단",
       final: "출전명단",
       ranking: "순위표",
     };
-    setDocumentTitle(`${contestTitle} ${titles[printType]} ${section}`);
+    setDocumentTitle(`${contestTitle} ${titles[printType] || "출력문서"} (${section})`);
   }, [currentContest, currentSection, printType]);
 
   const columns = useMemo(() => {
@@ -343,12 +283,13 @@ const UnifiedPrint = () => {
       ];
     } else if (printType === "ranking") {
       return [
-        { label: "순위", key: "playerRank" },
-        { label: "선수", mergeKeys: ["playerNumber", "playerName"], width: 30 },
+        { label: "순위", key: "playerRank", width: 15 },
+        { label: "선수", mergeKeys: ["playerNumber", "playerName"], width: 35 },
         { label: "소속", key: "playerGym", width: 30 },
-        { label: "비고", key: "note", width: 30 },
+        { label: "비고", key: "note", width: 20 },
       ];
     }
+    return [];
   }, [printType]);
 
   const availableCategories = useMemo(() => {
@@ -367,35 +308,29 @@ const UnifiedPrint = () => {
 
       if (!isCategoryMatch) return false;
 
+      if (printType === "ranking") return true;
+
       const hasPlayers = playersArray.some(
         (player) => player.contestGradeId === grade.contestGradeId
       );
 
       return hasPlayers;
     });
-  }, [gradesArray, currentCategoryId, playersArray]);
+  }, [gradesArray, currentCategoryId, playersArray, printType]);
 
   useEffect(() => {
     setCurrentCategoryId("all");
-    setCurrentGradeId("");
+    setCurrentGradeId("all");
   }, [currentSection]);
 
   useEffect(() => {
-    setCurrentGradeId("");
+    setCurrentGradeId("all");
   }, [currentCategoryId]);
 
   const filteredPlayerList = useMemo(() => {
     if (printType === "ranking") {
-      // Format the resultArray using formatResultArray function
-      const formattedResults = formatResultArray(resultArray);
-
-      console.log(
-        "클럽그룹화",
-        groupAndCountPlayersByGymAndRank(formattedResults)
-      );
-      return formattedResults;
+      return formatResultArray(resultArray);
     } else {
-      // For other print types, use the new function
       const filteredCategories = categoriesArray.filter((category) => {
         return (
           currentSection === "all" ||
@@ -409,16 +344,6 @@ const UnifiedPrint = () => {
         playersArray
       );
 
-      // Sort by playerIndex for measurement type
-      // result = result.map((category) => ({
-      //   ...category,
-      //   grades: category.grades.map((grade) => ({
-      //     ...grade,
-      //     players: grade.players.sort((a, b) => a.playerIndex - b.playerIndex), // Sort by playerIndex (index)
-      //   })),
-      // }));
-      // return result;
-      // 정렬 후, grade별로 순번(index) 1부터 다시 매겨주기(연번)
       result = result.map((category) => ({
         ...category,
         grades: category.grades.map((grade) => {
@@ -441,69 +366,119 @@ const UnifiedPrint = () => {
     processCategoriesGradesPlayers,
   ]);
 
+  // 섹션 목록
+  const sectionList = useMemo(() => {
+    const rawSections = categoriesArray
+      .filter((cat) =>
+        printType === "measurement"
+          ? cat.contestCategorySection !== "그랑프리"
+          : true
+      )
+      .map((cat) => cat.contestCategorySection)
+      .filter(Boolean);
+    return ["all", ...new Set(rawSections)];
+  }, [categoriesArray, printType]);
+
   return (
-    <div
-      className={`flex flex-col w-full h-full ${
-        isTabletOrMobile ? "bg-gray-100 p-2" : "bg-gray-50 p-4"
-      }`}
-    >
+    <div className="flex flex-col w-full h-full min-h-screen bg-slate-100 p-3 sm:p-5">
+      {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
+      <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-200 mb-4">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {printTabs.map((tab) => {
+            const isActive =
+              !tab.isExternal && printType === tab.type;
+
+            return (
+              <Link
+                key={tab.type}
+                to={tab.path}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold no-underline whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  isActive
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                {tab.icon && <span>{tab.icon}</span>}
+                <span>{tab.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
       {isLoading ? (
         <LoadingPage />
       ) : (
-        <>
-          <div
-            className={`flex w-full h-14 mb-4 ${
-              isTabletOrMobile ? "bg-gray-200" : "bg-gray-100"
-            } justify-start items-center rounded-lg px-3`}
-          >
-            <span
-              className={`font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl ${
-                isTabletOrMobile ? "bg-blue-300" : "bg-blue-400"
-              } text-white mr-3`}
-            >
-              {printType === "measurement" ? (
-                <MdOutlineScale />
-              ) : (
-                <HiUserGroup />
+        <div className="space-y-4">
+          {/* 2. 문서 타이틀 바 및 컨트롤 패널 */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
+                {printType === "measurement" ? (
+                  <MdOutlineScale />
+                ) : printType === "final" ? (
+                  <HiUserGroup />
+                ) : (
+                  <FaChartPie />
+                )}
+              </div>
+              <div>
+                <h1 className="text-lg font-black text-slate-800 m-0">
+                  {documentTitle}
+                </h1>
+                <p className="text-xs text-slate-500 m-0">
+                  A4 용지 규격 인쇄 양식 | 미리보기 및 출력
+                </p>
+              </div>
+            </div>
+
+            {/* 인쇄 버튼 */}
+            <ReactToPrint
+              trigger={() => (
+                <button className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0">
+                  <FaPrint />
+                  <span>인쇄하기 (Print)</span>
+                </button>
               )}
-            </span>
-            <h1 className="font-sans text-lg font-semibold">{documentTitle}</h1>
+              content={() => printRef.current}
+            />
           </div>
 
-          <div className="flex fw w-full mb-4 gap-2">
-            {[
-              "all",
-              ...new Set(
-                categoriesArray
-                  .filter((cat) =>
-                    printType === "measurement"
-                      ? cat.contestCategorySection !== "그랑프리"
-                      : true
-                  )
-                  .map((cat) => cat.contestCategorySection)
-              ),
-            ].map((section, idx) => (
+          {/* 3. 섹션 & 종목/체급 필터 바 */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-bold text-slate-500 mr-1">부/종목 구분:</span>
+            {sectionList.map((section, idx) => (
               <button
                 key={idx}
-                className={`px-4 py-2 rounded-lg border ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   currentSection === section
-                    ? "bg-blue-500 text-white"
-                    : "bg-white text-gray-700"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
-                onClick={() => setCurrentSection(section)}
+                onClick={() => {
+                  setCurrentSection(section);
+                  if (printType === "ranking") {
+                    handleSearch("all", "all", section);
+                  }
+                }}
               >
-                {section === "all" ? "전체" : section}
+                {section === "all" ? "전체 보기" : section}
               </button>
             ))}
 
+            {/* 순위표 검색 필터 */}
             {printType === "ranking" && (
-              <>
+              <div className="flex items-center gap-2 ml-auto">
                 <select
                   value={currentCategoryId}
-                  onChange={(e) => setCurrentCategoryId(e.target.value)}
-                  className="border rounded-lg p-2"
+                  onChange={(e) => {
+                    const catId = e.target.value;
+                    setCurrentCategoryId(catId);
+                    handleSearch(catId, "all", currentSection);
+                  }}
+                  className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium bg-white"
                 >
-                  <option value="all">종목 선택</option>
+                  <option value="all">전체 종목</option>
                   {availableCategories.map((category) => (
                     <option
                       key={category.contestCategoryId}
@@ -516,14 +491,15 @@ const UnifiedPrint = () => {
 
                 <select
                   value={currentGradeId}
-                  onChange={(e) => setCurrentGradeId(e.target.value)}
-                  className={`border rounded-lg p-2 ${
-                    currentCategoryId === "all"
-                      ? "bg-gray-200 cursor-not-allowed"
-                      : ""
-                  }`}
+                  onChange={(e) => {
+                    const grdId = e.target.value;
+                    setCurrentGradeId(grdId);
+                    handleSearch(currentCategoryId, grdId, currentSection);
+                  }}
+                  disabled={currentCategoryId === "all"}
+                  className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium bg-white disabled:bg-slate-100"
                 >
-                  <option value="all">체급 선택</option>
+                  <option value="all">전체 체급</option>
                   {availableGrades.map((grade) => (
                     <option
                       key={grade.contestGradeId}
@@ -536,36 +512,30 @@ const UnifiedPrint = () => {
 
                 <button
                   onClick={() =>
-                    handleSearch(currentCategoryId, currentGradeId)
+                    handleSearch(currentCategoryId, currentGradeId, currentSection)
                   }
-                  className="bg-blue-500 text-white rounded-lg px-4 py-2"
+                  className="bg-slate-800 text-white rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-slate-900 transition-colors"
                 >
-                  검색
+                  새로고침
                 </button>
-              </>
+              </div>
             )}
-
-            <ReactToPrint
-              trigger={() => (
-                <button className="bg-blue-800 text-white rounded-lg px-4 py-2">
-                  출력
-                </button>
-              )}
-              content={() => printRef.current}
-            />
           </div>
 
-          <div className="flex w-full h-full bg-white overflow-y-auto p-4">
+          {/* 4. 인쇄 출력 대상 종이 뷰어 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto p-4 sm:p-8">
             <div
               ref={printRef}
-              className={`w-full h-full flex justify-center items-start bg-white ${
-                isTabletOrMobile ? "p-2" : "p-4"
-              }`}
+              className="w-full max-w-4xl mx-auto bg-white min-h-[500px]"
             >
               {printType === "ranking" && resultArray.length === 0 ? (
-                <p className="text-center text-gray-500">
-                  <Empty description="데이터가 없습니다." />
-                </p>
+                <div className="py-20 text-center">
+                  <Empty description="확정된 순위표 데이터가 없습니다. 심판위원장 순위 확정 후 출력 가능합니다." />
+                </div>
+              ) : filteredPlayerList.length === 0 ? (
+                <div className="py-20 text-center">
+                  <Empty description="출력할 선수 데이터가 없습니다." />
+                </div>
               ) : (
                 <PrintTable
                   documentTitle={documentTitle}
@@ -576,7 +546,7 @@ const UnifiedPrint = () => {
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

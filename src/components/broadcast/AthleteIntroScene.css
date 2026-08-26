@@ -1,0 +1,189 @@
+/* AthleteIntroScene.css - Hollywood & Pro Sports Broadcast Motion FX */
+
+/* 1. 배경 사진 1 켄 번스 슬로우 줌인/패닝 */
+@keyframes kenBurnsBg {
+  0% {
+    transform: scale(1.05) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.15) translate(-15px, -8px);
+  }
+  100% {
+    transform: scale(1.05) translate(0, 0);
+  }
+}
+
+.animate-ken-burns {
+  animation: kenBurnsBg 20s ease-in-out infinite alternate;
+}
+
+/* 2. 테마별 초강력 크롬 글린트 라이트 스윕 */
+@keyframes hyperSheen {
+  0% {
+    background-position: -300% 0;
+  }
+  100% {
+    background-position: 300% 0;
+  }
+}
+
+/* ① 골드 */
+.hyper-gold-text {
+  background: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #fef08a 18%,
+    #ffffff 32%,
+    #fbbf24 50%,
+    #f59e0b 68%,
+    #ffffff 82%,
+    #fef08a 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hyperSheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ② 일렉트릭 블루 */
+.hyper-cyan-text {
+  background: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #a5f3fc 18%,
+    #ffffff 32%,
+    #22d3ee 50%,
+    #0284c7 68%,
+    #ffffff 82%,
+    #67e8f9 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hyperSheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ③ 크림슨 레드 */
+.hyper-crimson-text {
+  background: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #fecdd3 18%,
+    #ffffff 32%,
+    #f43f5e 50%,
+    #be123c 68%,
+    #ffffff 82%,
+    #fda4af 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hyperSheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ④ 에메랄드 그린 */
+.hyper-emerald-text {
+  background: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #a7f3d0 18%,
+    #ffffff 32%,
+    #34d399 50%,
+    #047857 68%,
+    #ffffff 82%,
+    #6ee7b7 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hyperSheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ⑤ 로얄 바이올렛 */
+.hyper-purple-text {
+  background: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #e9d5ff 18%,
+    #ffffff 32%,
+    #c084fc 50%,
+    #7e22ce 68%,
+    #ffffff 82%,
+    #d8b4fe 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hyperSheen 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* 3. 번호 파편 네온 글로우 */
+.neon-number-glow {
+  text-shadow: 0 0 25px currentColor,
+               0 0 50px currentColor,
+               0 0 75px currentColor;
+}
+
+/* 4. 전면 사진 2 초정밀 다중 페더링 마스크 */
+.hero-photo-flawless-mask {
+  mask-image: radial-gradient(
+    ellipse 58% 72% at 50% 48%,
+    black 20%,
+    rgba(0, 0, 0, 0.95) 40%,
+    rgba(0, 0, 0, 0.6) 60%,
+    rgba(0, 0, 0, 0.2) 75%,
+    transparent 88%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 58% 72% at 50% 48%,
+    black 20%,
+    rgba(0, 0, 0, 0.95) 40%,
+    rgba(0, 0, 0, 0.6) 60%,
+    rgba(0, 0, 0, 0.2) 75%,
+    transparent 88%
+  );
+}
+
+/* 5. 배경 사진 1 마스크 */
+.bg-photo-mask {
+  mask-image: radial-gradient(
+    ellipse 85% 90% at 35% 50%,
+    black 20%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.2) 75%,
+    transparent 95%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 85% 90% at 35% 50%,
+    black 20%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.2) 75%,
+    transparent 95%
+  );
+}
+
+/* 6. 끊김 없는 무한 스폰서 롤링 마키 티커 (Twin-Track Seamless Infinite Loop) */
+@keyframes marqueeScrollTwin {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+.marquee-container {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  width: 100%;
+}
+
+.marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2rem;
+  min-width: 100%;
+  animation: marqueeScrollTwin 30s linear infinite;
+}

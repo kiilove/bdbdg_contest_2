@@ -17,6 +17,7 @@ import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { Modal } from "@mui/material";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
 import ContestAwardCreator from "./ContestAwardCreator";
+import StageBroadcastController from "../components/broadcast/StageBroadcastController";
 import { useDevice } from "../contexts/DeviceContext";
 import {
   Card,
@@ -774,6 +775,18 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               </div>
             </div>
           </Card>
+
+          {/* 📺 실시간 무대 전광판 송출 콘솔 (Live Stage Broadcast Controller) */}
+          <StageBroadcastController
+            currentStage={currentStageInfo}
+            currentPlayers={
+              currentStageInfo?.grades
+                ? playersArray.filter((p) =>
+                    currentStageInfo.grades.some((g) => g.gradeId === p.contestGradeId)
+                  )
+                : []
+            }
+          />
 
           <Card className="shadow-md">
             <Tabs

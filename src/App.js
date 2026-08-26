@@ -39,15 +39,18 @@ import UnifiedPrint from "./printForms/UnifiedPrint";
 import { DeviceProvider } from "./contexts/DeviceContext";
 import Logout from "./pages/Logout";
 import GymGroupPrint from "./printForms/GymGroupPrint";
+import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 import ContestMusicSetting from "./pages/ContestMusicSetting";
 import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
 import AssociationManagers from "./pages/AssociationManagers";
-import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 import ScoreResultManager from "./pages/ScoreResultManager";
 import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
 import ContestResultManager from "./pages/ContestResultManager";
 import JudgeAssignmentPrint from "./pages/JudgeAssignmentPrint";
 import JudgeSeatMatrixPrint from "./pages/JudgeSeatMatrixPrint";
+import StageLiveDisplay from "./pages/broadcast/StageLiveDisplay";
+import ContestSponsorManager from "./pages/broadcast/ContestSponsorManager";
+import ContestMonitoringMC from "./pages/ContestMonitoringMC";
 
 function App() {
   return (
@@ -139,7 +142,15 @@ function App() {
               element={<ManagementHome children={<UnifiedPrint />} />}
             />
             <Route
+              path="/print-management"
+              element={<ManagementHome children={<UnifiedPrint />} />}
+            />
+            <Route
               path="/printgymgroup"
+              element={<ManagementHome children={<GymGroupPrint />} />}
+            />
+            <Route
+              path="/print/gymgroup"
               element={<ManagementHome children={<GymGroupPrint />} />}
             />
             <Route
@@ -147,11 +158,23 @@ function App() {
               element={<ManagementHome children={<PrintSummary />} />}
             />
             <Route
+              path="/print/summary"
+              element={<ManagementHome children={<PrintSummary />} />}
+            />
+            <Route
               path="/judgeassignmentPrint"
               element={<ManagementHome children={<JudgeAssignmentPrint />} />}
-            />{" "}
+            />
+            <Route
+              path="/print/judgeassignment"
+              element={<ManagementHome children={<JudgeAssignmentPrint />} />}
+            />
             <Route
               path="/judgeseatmatrixprint"
+              element={<ManagementHome children={<JudgeSeatMatrixPrint />} />}
+            />
+            <Route
+              path="/print/judgeseatmatrix"
               element={<ManagementHome children={<JudgeSeatMatrixPrint />} />}
             />
             <Route
@@ -198,6 +221,19 @@ function App() {
             <Route
               path="/association-managers"
               element={<ManagementHome children={<AssociationManagers />} />}
+            />
+            <Route path="/stage-live" element={<StageLiveDisplay />} />
+            <Route path="/broadcast" element={<StageLiveDisplay />} />
+            <Route path="/mc" element={<ContestMonitoringMC />} />
+            <Route path="/stage-mc" element={<ContestMonitoringMC />} />
+            <Route path="/mc-stage" element={<ContestMonitoringMC />} />
+            <Route
+              path="/sponsors"
+              element={<ManagementHome children={<ContestSponsorManager />} />}
+            />
+            <Route
+              path="/sponsor-management"
+              element={<ManagementHome children={<ContestSponsorManager />} />}
             />
           </Routes>
         </BrowserRouter>

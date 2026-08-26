@@ -13,7 +13,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { TbWorldWww } from "react-icons/tb";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Button, Card, Space, Tag, Checkbox, Alert, Divider } from "antd";
+import { Button, Card, Space, Tag, Checkbox, Alert, Divider, Popconfirm } from "antd";
 import {
   SaveOutlined,
   DragOutlined,
@@ -24,6 +24,7 @@ import {
   ClearOutlined,
   ReloadOutlined,
   FolderOpenOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 
 const ContestPlayerOrderTable = () => {
@@ -53,6 +54,7 @@ const ContestPlayerOrderTable = () => {
     "contest_players_assign"
   );
   const updatePlayersAssign = useFirestoreUpdateData("contest_players_assign");
+  const updatePlayersFinal = useFirestoreUpdateData("contest_players_final");
   const fetchEntry = useFirestoreQuery();
 
   useEffect(() => {
@@ -302,6 +304,58 @@ const ContestPlayerOrderTable = () => {
 
     setMatchedArray(renumberAll(newMatched, startPlayerNumber));
     setSelectedEntries(new Set());
+  };
+
+  // 🧹 assign & final 명단 완전 초기화(클리어) 핸들러
+  const handleClearAssignAndFinal = async () => {
+    const contestId = currentContest?.contests?.id;
+    const assignId = currentContest?.contests?.contestPlayersAssignId;
+    const finalId = currentContest?.contests?.contestPlayersFinalId;
+
+    if (!contestId || !assignId) {
+      alert("대회 정보 또는 배정 문서 ID를 확인할 수 없습니다.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      // 1. assign 문서 비우기
+      await updatePlayersAssign.updateData(assignId, {
+        contestId,
+        players: [],
+        updatedAt: Date.now(),
+      });
+
+      // 2. final 문서 비우기 (있을 경우)
+      if (finalId) {
+        await updatePlayersFinal.updateData(finalId, {
+          contestId,
+          players: [],
+          updatedAt: Date.now(),
+        });
+      }
+
+      setPlayersAssign({ contestId, players: [] });
+      setMatchedArray([]);
+      setSelectedEntries(new Set());
+
+      setMessage({
+        body: "현재 대회의 배정 명단(Assign) 및 최종 명단(Final)이 깨끗하게 초기화(클리어)되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } catch (error) {
+      console.error("초기화 실패:", error);
+      setMessage({
+        body: "초기화 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // 저장은 assign만
@@ -572,38 +626,61 @@ const ContestPlayerOrderTable = () => {
           {/* ✅ 상단 중복 요약 */}
           <DuplicateSummary />
 
-          <div className="flex w-full justify-end mb-2 gap-x-4">
-            <Button
-              danger
-              size="large"
-              icon={<ReloadOutlined />}
-              className="w-full"
-              onClick={() => initEntryList()}
-            >
-              초기화(재계산)
-            </Button>
-            <Button
-              color="cyan"
-              size="large"
-              icon={<FolderOpenOutlined />}
-              className="w-full"
-              onClick={() => rebuildFromAssign()}
-            >
-              기존명단불러오기(최종 저장본)
-            </Button>
-            <Button
-              type="primary"
-              size="large"
-              icon={<SaveOutlined />}
-              className="w-full"
-              onClick={() =>
-                handleUpdatePlayersAssign(
-                  currentContest.contests.contestPlayersAssignId
-                )
-              }
-            >
-              계측명단 저장(덮어씌우기)
-            </Button>
+          <div className="flex flex-col sm:flex-row w-full justify-between items-center mb-2 gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Popconfirm
+                title="배정 및 최종 명단 완전 초기화"
+                description="현재 대회의 contest_players_assign 및 contest_players_final 문서를 모두 빈 상태로 클리어합니다. 정말 진행하시겠습니까?"
+                onConfirm={handleClearAssignAndFinal}
+                okText="완전 초기화 실행"
+                cancelText="취소"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  danger
+                  type="dashed"
+                  size="large"
+                  icon={<DeleteOutlined />}
+                  className="font-bold border-red-400 bg-red-50 text-red-700 hover:bg-red-100"
+                >
+                  명단 완전 클리어(비우기)
+                </Button>
+              </Popconfirm>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                type="default"
+                size="large"
+                icon={<ReloadOutlined />}
+                className="w-full sm:w-auto font-bold"
+                onClick={() => initEntryList()}
+              >
+                신청서 기준 번호 재계산
+              </Button>
+              <Button
+                color="cyan"
+                size="large"
+                icon={<FolderOpenOutlined />}
+                className="w-full sm:w-auto font-bold"
+                onClick={() => rebuildFromAssign()}
+              >
+                저장본 불러오기
+              </Button>
+              <Button
+                type="primary"
+                size="large"
+                icon={<SaveOutlined />}
+                className="w-full sm:w-auto font-black bg-blue-600 hover:bg-blue-500"
+                onClick={() =>
+                  handleUpdatePlayersAssign(
+                    currentContest.contests.contestPlayersAssignId
+                  )
+                }
+              >
+                계측명단 저장(덮어씌우기)
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useMemo } from "react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
@@ -28,6 +28,9 @@ import {
 } from "@ant-design/icons";
 
 const ContestMonitoringHost = ({ contestId }) => {
+  const { currentContest } = useContext(CurrentContestContext);
+  const effectiveContestId = contestId || currentContest?.contests?.id || "";
+
   const [stagesArray, setStagesArray] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
@@ -36,7 +39,6 @@ const ContestMonitoringHost = ({ contestId }) => {
   const [calledPlayers, setCalledPlayers] = useState({}); // 호명 완료 체크 상태
   const [calledCompareNums, setCalledCompareNums] = useState({}); // 비교심사 호명 체크
 
-  const { currentContest } = useContext(CurrentContestContext);
   const fetchResultQuery = useFirestoreQuery();
   const [rankingData, setRankingData] = useState(null);
   const [isRankingView, setIsRankingView] = useState(false);
@@ -60,10 +62,40 @@ const ContestMonitoringHost = ({ contestId }) => {
     loading: realtimeLoading,
     error: realtimeError,
   } = useFirebaseRealtimeGetDocument(
-    contestId ? `currentStage/${contestId}` : null
+    effectiveContestId ? `currentStage/${effectiveContestId}` : null
   );
 
   const updateCurrentStage = useFirebaseRealtimeUpdateData();
+
+  // 📡 실시간 전광판 송출 상태 구독 및 제어 (최상단 호출)
+  const { data: broadcastData } = useFirebaseRealtimeGetDocument(
+    effectiveContestId ? `currentBroadcast/${effectiveContestId}` : null
+  );
+  const updateBroadcast = useFirebaseRealtimeUpdateData();
+
+  // 📸 전체 선수 풀에서 playerUid 기준 사진 맵 구축 (최상단 호출로 React Rules of Hooks 준수)
+  const uidPhotoMap = useMemo(() => {
+    const map = new Map();
+    (currentPlayersArray || []).forEach((g) => {
+      (g.players || []).forEach((p) => {
+        if (p?.playerUid) {
+          const list = [
+            ...(Array.isArray(p.photos) ? p.photos : []),
+            ...(Array.isArray(p.playerPhotos) ? p.playerPhotos : []),
+            ...(Array.isArray(p.gallery) ? p.gallery : []),
+            p.profileImageUrl,
+            p.playerPhoto,
+            p.photoUrl,
+          ].filter((u) => typeof u === "string" && u.trim().length > 5);
+          if (list.length > 0) {
+            const existing = map.get(p.playerUid) || [];
+            map.set(p.playerUid, Array.from(new Set([...existing, ...list])));
+          }
+        }
+      });
+    });
+    return map;
+  }, [currentPlayersArray]);
 
   const fetchNotice = useFirestoreGetDocument("contest_notice");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
@@ -331,6 +363,84 @@ const ContestMonitoringHost = ({ contestId }) => {
     },
   }[fontScale];
 
+  const currentBroadcastMode = broadcastData?.mode || "STANDBY";
+
+  // 📡 전광판 방송 모드 즉시 스위칭 핸들러
+  const handleSwitchBroadcastMode = async (mode, extraData = {}) => {
+    if (!effectiveContestId) {
+      message.error("대회 정보를 불러올 수 없습니다.");
+      return;
+    }
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${effectiveContestId}`, {
+        mode,
+        updatedAt: Date.now(),
+        ...extraData,
+      });
+
+      const modeNames = {
+        STANDBY: "🏠 대기 및 종목안내",
+        ATHLETE_INTRO: "📢 선수 단독 소개",
+        COMPARISON_CALLOUT: "⚔️ 비교심사 호명",
+        POSEDOWN: "🔥 60초 포즈다운 배틀",
+        COMMERCIAL: "📊 점수 집계중 (광고)",
+        RANKING: "🏆 1~3위 순위 발표",
+        CHAMPION_SHOWCASE: "👑 1위 챔피언 세레모니",
+      };
+
+      message.success(`전광판 송출 전환: [${modeNames[mode] || mode}]`);
+    } catch (error) {
+      console.error("방송 모드 전환 실패:", error);
+      message.error("전광판 송출 전환 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 👤 특정 선수 단독 소개 송출 (playerUid 기반으로 사진을 확실하게 물고 전광판 송출)
+  const handleIntroPlayerToScreen = (player) => {
+    const uidPhotos = (player.playerUid && uidPhotoMap.get(player.playerUid)) || [];
+    const directPhotos = [
+      ...(Array.isArray(player.photos) ? player.photos : []),
+      ...(Array.isArray(player.playerPhotos) ? player.playerPhotos : []),
+      player.profileImageUrl,
+      player.playerPhoto,
+      player.photoUrl,
+    ].filter((u) => typeof u === "string" && u.trim().length > 5);
+
+    const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
+    const primary = allPhotos[0] || player.profileImageUrl || player.playerPhoto || "";
+
+    const playerObj = {
+      playerUid: player.playerUid || "",
+      playerNumber: player.playerNumber || "100",
+      playerName: player.playerName || "",
+      playerGym: player.playerGym || "",
+      profileImageUrl: primary,
+      photoUrl: primary,
+      playerMotivation: player.playerMotivation || player.playerText || "",
+      photos: allPhotos,
+    };
+
+    handleSwitchBroadcastMode("ATHLETE_INTRO", {
+      activePlayer: playerObj,
+      player: playerObj,
+    });
+  };
+
+  const getBroadcastBadge = (mode) => {
+    const config = {
+      STANDBY: { label: "대기 / 종목안내", color: "bg-blue-600" },
+      ATHLETE_INTRO: { label: "선수 단독 소개 중", color: "bg-cyan-600" },
+      COMPARISON_CALLOUT: { label: "비교심사 호명 중", color: "bg-purple-600" },
+      POSEDOWN: { label: "🔥 포즈다운 배틀 중", color: "bg-red-600 animate-pulse" },
+      COMMERCIAL: { label: "📊 점수 집계중 (광고)", color: "bg-indigo-600" },
+      RANKING: { label: "🏆 순위 발표 중", color: "bg-amber-600" },
+      CHAMPION_SHOWCASE: { label: "👑 1위 챔피언 세레모니", color: "bg-yellow-500 text-slate-950 font-black animate-bounce" },
+    };
+    return config[mode] || { label: mode, color: "bg-slate-700" };
+  };
+
+  const broadcastBadge = getBroadcastBadge(currentBroadcastMode);
+
   return (
     <div className="w-full min-h-screen bg-slate-900 text-slate-100 flex flex-col select-none">
       {/* 👑 사회자 상단 글로벌 헤더 바 */}
@@ -342,7 +452,7 @@ const ContestMonitoringHost = ({ contestId }) => {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-300 border border-indigo-700">
-                사회자 모니터
+                사회자 모니터 & 방송 제어
               </span>
               <h1 className="text-base sm:text-lg font-black text-white m-0 tracking-tight">
                 {currentContest?.contests?.contestTitle || "보디빌딩 대회"}
@@ -351,8 +461,15 @@ const ContestMonitoringHost = ({ contestId }) => {
           </div>
         </div>
 
-        {/* 상단 컨트롤 (글자 크기, 전체화면) */}
+        {/* 📡 전광판 현재 송출 상태 뱃지 & 상단 컨트롤 */}
         <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 bg-black/80 px-3 py-1 rounded-xl border border-slate-700">
+            <span className="text-[10px] text-slate-400 font-bold uppercase">전광판:</span>
+            <span className={`text-xs px-2 py-0.5 rounded-lg text-white font-bold ${broadcastBadge.color}`}>
+              {broadcastBadge.label}
+            </span>
+          </div>
+
           <button
             onClick={cycleFontSize}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm cursor-pointer transition-all"
@@ -371,6 +488,103 @@ const ContestMonitoringHost = ({ contestId }) => {
           </button>
         </div>
       </header>
+
+      {/* 🚀 [사회자 태블릿 전광판 원터치 방송 제어 대형 퀵 바] */}
+      <div className="bg-slate-950 border-b border-slate-800 p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 shadow-xl">
+        {/* ① 대기화면 */}
+        <button
+          onClick={() => handleSwitchBroadcastMode("STANDBY")}
+          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
+            currentBroadcastMode === "STANDBY"
+              ? "bg-blue-600 text-white border-2 border-white"
+              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+          }`}
+        >
+          <span>🏠 대기 화면</span>
+        </button>
+
+        {/* ② 🔥 포즈다운 60초 */}
+        <button
+          onClick={() => handleSwitchBroadcastMode("POSEDOWN")}
+          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
+            currentBroadcastMode === "POSEDOWN"
+              ? "bg-gradient-to-r from-red-600 to-orange-500 text-white border-2 border-white ring-4 ring-orange-500/30"
+              : "bg-gradient-to-r from-red-950 to-orange-950 hover:from-red-900 text-orange-200 border border-orange-700/60"
+          }`}
+        >
+          <span>🔥 포즈다운 (60s)</span>
+        </button>
+
+        {/* ③ 📊 점수 집계중 (광고) */}
+        <button
+          onClick={() => handleSwitchBroadcastMode("COMMERCIAL")}
+          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
+            currentBroadcastMode === "COMMERCIAL"
+              ? "bg-indigo-600 text-white border-2 border-white ring-4 ring-indigo-500/30"
+              : "bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/60"
+          }`}
+        >
+          <span>📊 점수 집계중</span>
+        </button>
+
+        {/* ④ 🏆 1~3위 순위 발표 */}
+        <button
+          onClick={() => handleSwitchBroadcastMode("RANKING")}
+          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
+            currentBroadcastMode === "RANKING"
+              ? "bg-amber-500 text-slate-950 border-2 border-white font-black"
+              : "bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60"
+          }`}
+        >
+          <span>🏆 순위 발표</span>
+        </button>
+
+        {/* ⑤ 👑 1위 챔피언 세레모니 */}
+        <button
+          onClick={() => {
+            const ranked1st =
+              rankingData && rankingData.length > 0
+                ? rankingData.find((p) => (p.playerRank || p.rank) === 1) || rankingData[0]
+                : currentPlayersArray[0]?.players?.[0];
+
+            const rawTop = ranked1st || {
+              playerNumber: "100",
+              playerName: "1위 챔피언",
+              playerGym: "Get_in",
+            };
+
+            const uidPhotos = (rawTop.playerUid && uidPhotoMap.get(rawTop.playerUid)) || [];
+            const directPhotos = [
+              ...(Array.isArray(rawTop.photos) ? rawTop.photos : []),
+              ...(Array.isArray(rawTop.playerPhotos) ? rawTop.playerPhotos : []),
+              rawTop.profileImageUrl,
+              rawTop.playerPhoto,
+              rawTop.photoUrl,
+            ].filter((u) => typeof u === "string" && u.trim().length > 5);
+
+            const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
+            const primary = allPhotos[0] || rawTop.profileImageUrl || rawTop.playerPhoto || "";
+
+            const topPlayerObj = {
+              ...rawTop,
+              profileImageUrl: primary,
+              photoUrl: primary,
+              photos: allPhotos,
+            };
+
+            handleSwitchBroadcastMode("CHAMPION_SHOWCASE", {
+              topPlayer: topPlayerObj,
+            });
+          }}
+          className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
+            currentBroadcastMode === "CHAMPION_SHOWCASE"
+              ? "bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 border-2 border-white ring-4 ring-yellow-400/40 font-black"
+              : "bg-gradient-to-r from-amber-900 to-yellow-900 hover:from-amber-800 text-amber-200 border border-amber-500/60"
+          }`}
+        >
+          <span>👑 1위 송출</span>
+        </button>
+      </div>
 
       {/* 메인 바디 영역 (좌우/상하 반응형) */}
       <div className={`flex-1 flex ${isLandscape ? "flex-row" : "flex-col"} p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden`}>
@@ -527,8 +741,8 @@ const ContestMonitoringHost = ({ contestId }) => {
 
             {/* 일반 선수 호명 시 도움말 */}
             {!isRankingView && !isCompareView && (
-              <div className="text-xs text-slate-400 font-medium">
-                * 카드를 탭하면 <strong className="text-emerald-400">호명 완료(✓)</strong> 체크됩니다.
+              <div className="text-xs text-slate-300 font-bold bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700">
+                💡 <span className="text-amber-300">선수 이름/카드</span>를 터치하면 <strong className="text-emerald-400">전광판에 즉시 소개</strong>됩니다!
               </div>
             )}
           </div>
@@ -652,13 +866,16 @@ const ContestMonitoringHost = ({ contestId }) => {
                         return (
                           <div
                             key={player.playerUid}
-                            onClick={() => togglePlayerCalled(player.playerUid)}
-                            className={`p-4 sm:p-5 rounded-2xl cursor-pointer transition-all border-2 ${
+                            onClick={() => {
+                              togglePlayerCalled(player.playerUid);
+                              handleIntroPlayerToScreen(player);
+                            }}
+                            className={`p-4 sm:p-5 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.99] ${
                               isCalled
-                                ? "bg-slate-900/80 border-emerald-600/80 shadow-md"
+                                ? "bg-slate-900/90 border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
                                 : isSelected
                                 ? "bg-slate-800 border-indigo-500 shadow-xl"
-                                : "bg-slate-900 border-slate-800 hover:border-slate-700 hover:shadow-lg"
+                                : "bg-slate-900 border-slate-800 hover:border-amber-400/60 hover:shadow-xl"
                             }`}
                           >
                             <div className="flex items-start gap-4 sm:gap-6">
@@ -674,7 +891,7 @@ const ContestMonitoringHost = ({ contestId }) => {
                                   {player.playerNumber}
                                 </span>
                                 <span className="text-[11px] font-bold mt-1 text-slate-400">
-                                  {isCalled ? "호명완료 ✓" : "선수번호"}
+                                  {isCalled ? "소개중 ✓" : "선수번호"}
                                 </span>
                               </div>
 
@@ -682,7 +899,7 @@ const ContestMonitoringHost = ({ contestId }) => {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                   <div className="flex items-baseline gap-3">
-                                    <span className={`font-black ${isCalled ? "text-emerald-200 line-through" : "text-white"} ${textClasses.playerName}`}>
+                                    <span className={`font-black text-white hover:text-amber-300 transition-colors ${textClasses.playerName}`}>
                                       {player.playerName}
                                     </span>
                                     <span className={`font-bold text-slate-400 ${textClasses.playerGym}`}>
@@ -690,11 +907,17 @@ const ContestMonitoringHost = ({ contestId }) => {
                                     </span>
                                   </div>
 
-                                  {isCalled && (
-                                    <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-950/90 px-2.5 py-1 rounded-full border border-emerald-700">
-                                      <CheckCircleFilled /> 호명됨
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {isCalled ? (
+                                      <span className="flex items-center gap-1 text-xs font-black text-emerald-300 bg-emerald-950/90 px-3 py-1 rounded-full border border-emerald-600 shadow-sm">
+                                        <CheckCircleFilled className="text-emerald-400" /> 전광판 소개됨
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs font-bold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
+                                        터치하여 전광판 소개
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* 출전 동기 / 소개 멘트 박스 */}

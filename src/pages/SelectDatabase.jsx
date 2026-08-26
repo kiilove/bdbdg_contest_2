@@ -8,6 +8,7 @@ import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
+import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
@@ -29,6 +30,7 @@ const SelectDatabase = () => {
   );
   const fetchQuery = useFirestoreQuery();
   const fetchDocument = useFirestoreGetDocument("contest_notice");
+  const updateGlobalSetting = useFirebaseRealtimeUpdateData();
 
   // 대회 목록 가져오기 함수
   const fetchList = async (userData) => {
@@ -97,6 +99,18 @@ const SelectDatabase = () => {
 
           // sessionStorage에 저장하여 리프레시 시에도 유지되도록 설정
           sessionStorage.setItem("currentContest", JSON.stringify(contestData));
+
+          // 📡 전광판(스크린) 화면들이 자동으로 바라보도록 Realtime DB 전역 활성 대회 동기화!
+          try {
+            await updateGlobalSetting.updateData("systemSettings/activeContest", {
+              contestId: returnContest[0].id,
+              contestNoticeId: contestNoticeId,
+              contestTitle: returnNotice.contestTitle || "",
+              updatedAt: Date.now(),
+            });
+          } catch (syncErr) {
+            console.warn("전광판 전역 동기화 실패:", syncErr);
+          }
         }
       } catch (error) {
         console.error("선택된 대회 정보를 가져오는 중 오류 발생:", error);

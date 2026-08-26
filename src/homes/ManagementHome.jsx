@@ -156,9 +156,14 @@ const ManagementHome = ({ children }) => {
                 >
                   메뉴
                 </Button>
-                <Title level={4} style={{ margin: 0, color: "#fff" }}>
-                  대회 관리 시스템
-                </Title>
+                <div className="flex items-center gap-2">
+                  <Title level={4} style={{ margin: 0, color: "#fff" }}>
+                    대회 관리 시스템
+                  </Title>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-900 shadow-sm animate-pulse">
+                    BETA
+                  </span>
+                </div>
               </div>
               <Drawer
                 title={
@@ -207,17 +212,20 @@ const ManagementHome = ({ children }) => {
                 padding: "0 16px",
               }}
             >
-              <Title
-                level={3}
-                style={{
-                  margin: 0,
-                  color: "#fff",
-                  flexShrink: 0,
-                  marginRight: "20px",
-                }}
-              >
-                대회 관리 시스템
-              </Title>
+              <div className="flex items-center gap-2 mr-5 shrink-0">
+                <Title
+                  level={3}
+                  style={{
+                    margin: 0,
+                    color: "#fff",
+                  }}
+                >
+                  대회 관리 시스템
+                </Title>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 shadow-md animate-pulse tracking-wide">
+                  BETA
+                </span>
+              </div>
               <Menu
                 mode="horizontal"
                 items={filteredMenuItems}

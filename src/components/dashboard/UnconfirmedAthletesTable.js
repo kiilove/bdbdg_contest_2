@@ -1,263 +1,188 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Table, Card, Checkbox, Tag, Space, Typography } from "antd";
+import React, { useState } from "react";
+import { Table, Checkbox, Tag, Input, Empty } from "antd";
 import {
   PhoneOutlined,
   UserOutlined,
-  MoneyCollectOutlined,
+  SearchOutlined,
+  ExclamationCircleOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 
-const { Text } = Typography;
+const UnconfirmedAthletesTable = ({ data = [], onPriceCheckUpdate }) => {
+  const [searchQuery, setSearchQuery] = useState("");
 
-const UnconfirmedAthletesTable = ({ data, onPriceCheckUpdate }) => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  const filteredData = data.filter((item) => {
+    const name = item.playerName || "";
+    const tel = item.playerTel || "";
+    const gym = item.playerGym || "";
+    const joins = (item.joins || []).map((j) => `${j.contestCategoryTitle} ${j.contestGradeTitle}`).join(" ");
+    const q = searchQuery.toLowerCase();
+    return (
+      name.toLowerCase().includes(q) ||
+      tel.includes(q) ||
+      gym.toLowerCase().includes(q) ||
+      joins.toLowerCase().includes(q)
+    );
+  });
 
   const columns = [
     {
-      title: "입금",
+      title: "등록 승인",
       dataIndex: "isPriceCheck",
       key: "isPriceCheck",
-      width: 80,
-      fixed: "left",
+      width: 100,
+      align: "center",
       render: (val, record) => (
-        <Checkbox
-          checked={record.isPriceCheck}
-          onChange={(e) =>
-            onPriceCheckUpdate(record.id, record.playerUid, e.target.checked)
-          }
-          disabled={record.isCanceled}
-        />
+        <div className="flex flex-col items-center justify-center">
+          <Checkbox
+            checked={record.isPriceCheck}
+            onChange={(e) =>
+              onPriceCheckUpdate(record.id, record.playerUid, e.target.checked)
+            }
+            disabled={record.isCanceled}
+            className="scale-125"
+          />
+          <span className="text-[10px] text-slate-400 mt-1">클릭 승인</span>
+        </div>
       ),
     },
     {
-      title: "선수 정보",
+      title: "선수 성명 / 소속",
       key: "playerInfo",
-      render: (text, record) => (
-        <Space direction="vertical" size="small">
+      width: 180,
+      render: (_, record) => (
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
             <UserOutlined className="text-blue-500" />
-            <Text
-              strong
-              className={
+            <span
+              className={`font-black text-sm ${
                 record.isCanceled
-                  ? "line-through text-gray-500"
-                  : "text-gray-800"
-              }
+                  ? "line-through text-slate-400"
+                  : "text-slate-900"
+              }`}
             >
               {record.playerName}
-            </Text>
+            </span>
+            {record.isCanceled && (
+              <Tag color="red" className="text-[10px] px-1.5 py-0">
+                취소
+              </Tag>
+            )}
           </div>
-          {record.playerTel && (
-            <div className="flex items-center gap-2">
-              <PhoneOutlined className="text-green-500" />
-              <a
-                href={`tel:${record.playerTel}`}
-                className="text-blue-600 hover:text-blue-800 transition-colors"
-              >
-                {record.playerTel}
-              </a>
-            </div>
-          )}
-        </Space>
+          <div className="text-xs text-slate-500 font-medium pl-5">
+            소속: {record.playerGym || "무소속 / 개인"}
+          </div>
+        </div>
       ),
     },
     {
-      title: "출전 종목",
+      title: "연락처",
+      dataIndex: "playerTel",
+      key: "playerTel",
+      width: 150,
+      render: (tel) => (
+        tel ? (
+          <a
+            href={`tel:${tel}`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200 no-underline hover:bg-emerald-100 transition-colors"
+          >
+            <PhoneOutlined />
+            <span>{tel}</span>
+          </a>
+        ) : (
+          <span className="text-xs text-slate-400">연락처 없음</span>
+        )
+      ),
+    },
+    {
+      title: "신청 종목 및 체급",
       dataIndex: "joins",
       key: "joins",
       render: (joins) => (
-        <Space direction="vertical" size="small">
+        <div className="flex flex-wrap gap-1.5">
           {joins?.map((j, i) => (
-            <Tag key={i} color="blue" className="mb-1">
-              {j.contestCategoryTitle} ({j.contestGradeTitle})
-            </Tag>
+            <span
+              key={i}
+              className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200"
+            >
+              {j.contestCategoryTitle}
+              <span className="text-slate-500 font-normal ml-1">
+                ({j.contestGradeTitle})
+              </span>
+            </span>
           ))}
-        </Space>
+        </div>
       ),
     },
     {
-      title: "참가비",
-      dataIndex: "contestPriceSum",
-      key: "contestPriceSum",
-      width: 120,
-      render: (price) => (
-        <div className="flex items-center gap-2">
-          <Text strong className="text-orange-600">
-            {price ? `₩${price.toLocaleString()}` : "-"}
-          </Text>
-        </div>
+      title: "신청 일시",
+      dataIndex: "invoiceCreateAt",
+      key: "invoiceCreateAt",
+      width: 140,
+      render: (date) => (
+        <span className="text-xs text-slate-500 font-medium">
+          {date ? date.substring(0, 16).replace("T", " ") : "-"}
+        </span>
       ),
     },
   ];
 
-  const renderMobileCards = () => {
-    return (
-      <Space direction="vertical" size="middle" className="w-full">
-        {data?.map((record) => (
-          <Card
-            key={record.id}
-            className={`shadow-sm border border-gray-200 rounded-lg ${
-              record.isCanceled ? "opacity-60 bg-gray-50" : ""
-            }`}
-            bodyStyle={{ padding: "16px" }}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={record.isPriceCheck}
-                  onChange={(e) =>
-                    onPriceCheckUpdate(
-                      record.id,
-                      record.playerUid,
-                      e.target.checked
-                    )
-                  }
-                  disabled={record.isCanceled}
-                />
-                <Text className="text-sm text-gray-600">입금 확인</Text>
-              </div>
-              {record.isCanceled && (
-                <Tag color="red" className="m-0">
-                  취소
-                </Tag>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <UserOutlined className="text-blue-500" />
-                <Text
-                  strong
-                  className={
-                    record.isCanceled
-                      ? "line-through text-gray-500"
-                      : "text-gray-800 text-base"
-                  }
-                >
-                  {record.playerName}
-                </Text>
-              </div>
-
-              {record.playerTel && (
-                <div className="flex items-center gap-2">
-                  <PhoneOutlined className="text-green-500" />
-                  <a
-                    href={`tel:${record.playerTel}`}
-                    className="text-blue-600 hover:text-blue-800 transition-colors"
-                  >
-                    {record.playerTel}
-                  </a>
-                </div>
-              )}
-
-              <div className="pt-2 border-t border-gray-100">
-                <Text className="text-sm text-gray-600 block mb-2">
-                  출전 종목
-                </Text>
-                <Space direction="vertical" size="small" className="w-full">
-                  {record.joins?.map((j, i) => (
-                    <Tag key={i} color="blue" className="mb-1">
-                      {j.contestCategoryTitle} ({j.contestGradeTitle})
-                    </Tag>
-                  ))}
-                </Space>
-              </div>
-
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <Text className="text-sm text-gray-600">참가비</Text>
-                <div className="flex items-center gap-2">
-                  <Text strong className="text-orange-600 text-base">
-                    {record.contestPriceSum
-                      ? `₩${record.contestPriceSum.toLocaleString()}`
-                      : "-"}
-                  </Text>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </Space>
-    );
-  };
-
   return (
-    <div className="w-full">
-      <Card
-        title={
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
-            <Text className="text-lg font-semibold text-gray-800">
-              확정되지 않은 선수 목록
-            </Text>
-            <Tag color="orange" className="ml-2">
-              입금 대기
-            </Tag>
+    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+      {/* 헤더 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+            <ExclamationCircleOutlined className="text-lg" />
           </div>
-        }
-        className="mb-4 shadow-sm border border-gray-200 rounded-lg overflow-hidden"
-        bodyStyle={{ padding: isMobile ? "16px" : "24px" }}
-        headStyle={{
-          background: "#fafafa",
-          color: "#374151",
-          border: "none",
-          padding: isMobile ? "12px 16px" : "16px 24px",
-        }}
-      >
-        {isMobile ? (
-          renderMobileCards()
-        ) : (
-          <div className="overflow-x-auto">
-            <Table
-              rowKey="id"
-              dataSource={data}
-              columns={columns}
-              pagination={false}
-              scroll={{ x: 800 }}
-              className="custom-table"
-              rowClassName={(record) =>
-                record.isCanceled
-                  ? "bg-gray-50 opacity-60"
-                  : "hover:bg-blue-50 transition-colors duration-200"
-              }
-            />
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-black text-slate-800 m-0">
+                미등록 (미확정) 선수 명단
+              </h3>
+              <Tag color="orange" className="font-extrabold text-xs rounded-full">
+                {data.length}명 대기 중
+              </Tag>
+            </div>
+            <p className="text-xs text-slate-500 m-0">
+              참가 신청서를 접수하였으나 아직 출전 확정 승인이 완료되지 않은 선수들입니다.
+            </p>
           </div>
-        )}
-      </Card>
+        </div>
 
-      <style jsx>{`
-        .custom-table .ant-table-thead > tr > th {
-          background: #fafafa;
-          border-bottom: 1px solid #e5e7eb;
-          font-weight: 500;
-          color: #6b7280;
-          padding: 12px 16px;
-          font-size: 14px;
-        }
+        {/* 검색 인풋 */}
+        <div className="w-full sm:w-72">
+          <Input
+            placeholder="선수명, 연락처, 소속, 종목 검색..."
+            prefix={<SearchOutlined className="text-slate-400" />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            allowClear
+            size="small"
+            className="rounded-lg"
+          />
+        </div>
+      </div>
 
-        .custom-table .ant-table-tbody > tr > td {
-          border-bottom: 1px solid #f3f4f6;
-          padding: 16px;
-        }
-
-        .custom-table .ant-table-tbody > tr:last-child > td {
-          border-bottom: none;
-        }
-
-        .custom-table .ant-table {
-          border-radius: 8px;
-          overflow: hidden;
-        }
-      `}</style>
+      {/* 테이블 */}
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <Table
+          dataSource={filteredData}
+          columns={columns}
+          rowKey="id"
+          pagination={{ pageSize: 8, showSizeChanger: false }}
+          size="middle"
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="모든 신청 선수의 등록 확정 처리가 완료되었습니다! 🎉"
+              />
+            ),
+          }}
+        />
+      </div>
     </div>
   );
 };
