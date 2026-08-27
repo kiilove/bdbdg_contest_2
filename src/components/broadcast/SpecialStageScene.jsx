@@ -14,6 +14,7 @@ import {
 import demoBodybuilderImg from "../../assets/img/demo_bodybuilder.jpg";
 import demoBodybuilderBg from "../../assets/img/demo_bodybuilder_bg.jpg";
 import defaultAwardVideo from "../../assets/mov/award2.mp4";
+import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
 
@@ -31,13 +32,9 @@ const SpecialStageScene = ({
   const title = specialData?.title || "🏆 그랑프리 (OVERALL) 결정전";
   const subTitle = specialData?.subTitle || "대회 최고 영예의 통합 챔피언 공식 발표";
   const displayType = specialData?.displayType || "GRAND_PRIX"; // "GRAND_PRIX" | "SPECIAL_AWARD" | "SCORE_BOARD"
-  const players = specialData?.players || [
-    { playerRank: 1, playerNumber: "100", playerName: "김재준", playerGym: "Get_in", score: 98.5, note: "통합 대상 (그랑프리)" },
-    { playerRank: 2, playerNumber: "104", playerName: "이정우", playerGym: "몬스터짐", score: 96.2, note: "준우승" },
-    { playerRank: 3, playerNumber: "108", playerName: "박성민", playerGym: "골드피트니스", score: 94.8, note: "3위" },
-  ];
+  const players = specialData?.players || [];
 
-  const top1 = players.find((p) => (p.playerRank || 0) === 1) || players[0] || {};
+  const top1 = players.find((p) => (p.playerRank || 0) === 1) || players[0] || null;
   const restPlayers = players.filter((p) => p !== top1);
 
   // 🎬 GSAP 엔트런스 애니메이션
@@ -63,18 +60,12 @@ const SpecialStageScene = ({
       className="relative w-screen h-screen bg-black text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none animate-fade-in"
     >
       {/* 🎬 배경 MP4 비디오 레이어 */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <video
-          key={videoSrc}
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full h-full object-cover opacity-45 filter contrast-125"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-950/80" />
-      </div>
+      <SmoothBackgroundVideo
+        src={videoSrc}
+        fallbackSrc={defaultAwardVideo}
+        overlayGradient="from-slate-950/95 via-slate-950/70 to-slate-950/80"
+        gradientDirection="bg-gradient-to-t"
+      />
 
       {/* 🌟 앰비언트 테마 글로우 */}
       <div

@@ -42,6 +42,7 @@ import GymGroupPrint from "./printForms/GymGroupPrint";
 import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
 import ContestMusicSetting from "./pages/ContestMusicSetting";
 import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
+import VibeFlowAudioCenter from "./pages/broadcast/VibeFlowAudioCenter";
 import AssociationManagers from "./pages/AssociationManagers";
 import ScoreResultManager from "./pages/ScoreResultManager";
 import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
@@ -82,6 +83,14 @@ function App() {
             <Route
               path="/realtimeaudiocenter"
               element={<ManagementHome children={<RealtimeAudioCenter />} />}
+            />
+            <Route
+              path="/vibeflowaudiocenter"
+              element={<ManagementHome children={<VibeFlowAudioCenter />} />}
+            />
+            <Route
+              path="/vibeflow-audio"
+              element={<VibeFlowAudioCenter />}
             />
             <Route
               path="/contestinvoicetable"

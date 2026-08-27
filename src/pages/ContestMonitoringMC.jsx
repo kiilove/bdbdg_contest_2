@@ -186,6 +186,10 @@ const ContestMonitoringMC = () => {
   // 👤 특정 선수 단독 소개 송출 (playerUid 기반 사진 및 photos 배열 완벽 송출)
   const handleIntroPlayer = (player) => {
     const rawPhotos = [
+      player.stagePhoto1,
+      player.stagePhotoUrl1,
+      player.stagePhoto2,
+      player.stagePhotoUrl2,
       ...(Array.isArray(player.photos) ? player.photos : []),
       ...(Array.isArray(player.playerPhotos) ? player.playerPhotos : []),
       player.profileImageUrl,
@@ -193,13 +197,25 @@ const ContestMonitoringMC = () => {
       player.photoUrl,
     ].filter((u) => typeof u === "string" && u.trim().length > 5);
 
-    const primary = rawPhotos[0] || player.profileImageUrl || player.playerPhoto || player.photoUrl || "";
+    let stage1 = player.stagePhoto1 || player.stagePhotoUrl1 || "";
+    let stage2 = player.stagePhoto2 || player.stagePhotoUrl2 || player.backgroundPhotoUrl || "";
+
+    if (!stage1 && rawPhotos.length > 0) stage1 = rawPhotos[0];
+    if (!stage2 && rawPhotos.length > 1) stage2 = rawPhotos[1];
+
+    const primary = stage1 || rawPhotos[0] || player.profileImageUrl || player.playerPhoto || player.photoUrl || "";
 
     const playerObj = {
       playerUid: player.playerUid || "",
       playerNumber: player.playerNumber || "100",
       playerName: player.playerName || "",
       playerGym: player.playerGym || "",
+      heightWeight: player.heightWeight || "",
+      stagePhoto1: stage1,
+      stagePhoto2: stage2,
+      stagePhotoUrl1: stage1,
+      stagePhotoUrl2: stage2,
+      backgroundPhotoUrl: stage2,
       profileImageUrl: primary,
       photoUrl: primary,
       playerMotivation: player.playerMotivation || player.playerText || "",
@@ -275,6 +291,7 @@ const ContestMonitoringMC = () => {
       POSEDOWN: { label: "🔥 포즈다운 배틀 중", color: "volcano" },
       COMMERCIAL: { label: "📊 점수 집계중 (광고)", color: "orange" },
       RANKING: { label: "🏆 순위 발표 중", color: "gold" },
+      AWARD_CEREMONY: { label: "🏅 공식 시상식 (포디움)", color: "gold" },
       CHAMPION_SHOWCASE: { label: "👑 1위 챔피언 세레모니", color: "magenta" },
     };
     return config[mode] || { label: mode, color: "default" };
@@ -336,7 +353,7 @@ const ContestMonitoringMC = () => {
       {/* ========================================================================================= */}
       {/* 🚀 2. [원터치 대형 방송 제어 퀵 바 (56px+ 터치 친화 버튼)] */}
       {/* ========================================================================================= */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         
         {/* ① 대기화면 */}
         <button
@@ -361,7 +378,7 @@ const ContestMonitoringMC = () => {
           }`}
         >
           <FireOutlined className="text-2xl text-amber-400 animate-bounce" />
-          <span>🔥 포즈다운 (60s)</span>
+          <span>🔥 포즈다운</span>
         </button>
 
         {/* ③ 📊 점수 집계중 (광고) */}
@@ -374,7 +391,7 @@ const ContestMonitoringMC = () => {
           }`}
         >
           <NotificationOutlined className="text-xl text-indigo-400" />
-          <span>📊 점수 집계중</span>
+          <span>📊 집계중</span>
         </button>
 
         {/* ④ 🏆 1~3위 순위 발표 */}
@@ -387,13 +404,26 @@ const ContestMonitoringMC = () => {
           }`}
         >
           <TrophyOutlined className="text-xl text-amber-400" />
-          <span>🏆 순위 발표</span>
+          <span>🏆 순위발표</span>
         </button>
 
-        {/* ⑤ 👑 1위 챔피언 세레모니 */}
+        {/* ⑤ 🏅 공식 시상식 (포디움 단상) */}
+        <button
+          onClick={() => handleSwitchMode("AWARD_CEREMONY")}
+          className={`flex items-center justify-center gap-2.5 h-16 rounded-2xl font-black text-base transition-all shadow-lg active:scale-95 ${
+            currentMode === "AWARD_CEREMONY"
+              ? "bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 border-2 border-white ring-4 ring-yellow-400/40"
+              : "bg-gradient-to-r from-amber-950 to-yellow-950 hover:from-amber-900 text-amber-300 border border-amber-600/50"
+          }`}
+        >
+          <TrophyOutlined className="text-xl text-amber-300 animate-bounce" />
+          <span>🏅 시상식</span>
+        </button>
+
+        {/* ⑥ 👑 1위 챔피언 세레모니 */}
         <button
           onClick={() => handleShowcaseChampion()}
-          className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2.5 h-16 rounded-2xl font-black text-base transition-all shadow-lg active:scale-95 ${
+          className={`flex items-center justify-center gap-2.5 h-16 rounded-2xl font-black text-base transition-all shadow-lg active:scale-95 ${
             currentMode === "CHAMPION_SHOWCASE"
               ? "bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 border-2 border-white ring-4 ring-yellow-400/40"
               : "bg-gradient-to-r from-amber-900/80 to-yellow-900/80 hover:from-amber-800 text-amber-200 border border-amber-500/60"

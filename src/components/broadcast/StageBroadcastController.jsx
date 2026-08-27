@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useRef } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import {
   useFirebaseRealtimeGetDocument,
@@ -12,6 +12,7 @@ import {
   useFirestoreAddData,
 } from "../../hooks/useFirestores";
 import { where } from "firebase/firestore";
+import { extractPlayerPhotos, isNonPlayerUrl } from "../../pages/ContestPlayerWeighInTable";
 import {
   Card,
   Tag,
@@ -44,6 +45,8 @@ import {
   EditOutlined,
   ThunderboltOutlined,
   FireOutlined,
+  SoundOutlined,
+  AudioMutedOutlined,
 } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 
@@ -120,6 +123,60 @@ const StageBroadcastController = ({
   const currentTheme = broadcastData?.colorTheme || "GOLD";
   const currentSpecialId = broadcastData?.specialScreenData?.id || null;
 
+  const [invoicePhotoMap, setInvoicePhotoMap] = useState(new Map());
+
+  // 📥 invoices_pool 원본 참가신청서 사진 직접 로드 (선수 명단 사진 누락 100% 방지)
+  useEffect(() => {
+    if (!contestId) return;
+    const loadInvoicePhotos = async () => {
+      try {
+        const invoices = await fetchResultQuery.getDocuments("invoices_pool", [
+          where("contestId", "==", contestId),
+        ]);
+        const map = new Map();
+        (invoices || []).forEach((inv) => {
+          const photos = extractPlayerPhotos(inv);
+          if (photos.length > 0) {
+            if (inv.playerUid) map.set(inv.playerUid, photos);
+            if (inv.playerName) {
+              const trimmed = inv.playerName.trim();
+              if (!map.has(trimmed)) map.set(trimmed, photos);
+              const telPart = (inv.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
+              if (telPart) map.set(`${trimmed}_${telPart}`, photos);
+            }
+          }
+        });
+        setInvoicePhotoMap(map);
+      } catch (err) {
+        console.warn("전광판 제어기: 신청서 사진 로드 실패:", err);
+      }
+    };
+    loadInvoicePhotos();
+  }, [contestId]);
+
+  const getPlayerResolvedPhotos = (player) => {
+    if (!player) return [];
+    const directPhotos = extractPlayerPhotos(player);
+    const invoicePhotos = [
+      ...(player.playerUid && invoicePhotoMap.has(player.playerUid)
+        ? invoicePhotoMap.get(player.playerUid)
+        : []),
+      ...(player.playerName && invoicePhotoMap.has(player.playerName.trim())
+        ? invoicePhotoMap.get(player.playerName.trim())
+        : []),
+    ];
+
+    const all = [
+      (!isNonPlayerUrl(player.stagePhotoUrl) && player.stagePhotoUrl) || "",
+      ...directPhotos,
+      ...invoicePhotos,
+    ]
+      .filter((u) => typeof u === "string" && u.trim().length > 5)
+      .filter((u) => !isNonPlayerUrl(u));
+
+    return Array.from(new Set(all));
+  };
+
   // 1. 특수화면 목록 DB 로드
   const fetchSpecialScreens = async () => {
     if (!contestId) return;
@@ -193,6 +250,69 @@ const StageBroadcastController = ({
     }
   };
 
+  // 🔊 전광판 사운드 ON/OFF 토글 핸들러
+  const isAudioEnabled = Boolean(broadcastData?.isAudioEnabled);
+  const handleToggleAudio = async () => {
+    if (!contestId) return;
+    try {
+      const nextState = !isAudioEnabled;
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+        isAudioEnabled: nextState,
+        updatedAt: Date.now(),
+      });
+      message.success(nextState ? "전광판 사운드: [ON - 음향 출력]" : "전광판 사운드: [OFF - 음소거]");
+    } catch (error) {
+      console.error("사운드 변경 오류:", error);
+    }
+  };
+
+  // 🔄 종목이나 체급(무대) 변경 시 무조건 전광판 화면을 [대기 및 종목/체급 안내(STANDBY)]로 즉시 강제 전환!
+  const lastBroadcastStageKeyRef = useRef("");
+
+  useEffect(() => {
+    if (!contestId || !currentStage) return;
+    const cat = currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "";
+    const grd = currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
+    const gradeId = currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "";
+    const stageNum = currentStage?.stageNumber || currentStage?.stageIndex || currentStage?.stageId || "";
+    if (!cat && !grd) return;
+
+    const currentKey = `${currentStage?.stageId || ""}_${gradeId}_${stageNum}_${cat}_${grd}`;
+    if (!lastBroadcastStageKeyRef.current) {
+      lastBroadcastStageKeyRef.current = currentKey;
+      return;
+    }
+    if (currentKey === lastBroadcastStageKeyRef.current) return;
+    lastBroadcastStageKeyRef.current = currentKey;
+
+    // 🎯 종목이나 체급이 바뀌면 무조건 전광판을 [대기 및 종목/체급 안내 씬(STANDBY)]으로 즉각 강제 전환!
+    updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      mode: "STANDBY",
+      contestTitle: realContestTitle,
+      stageInfo: {
+        categoryTitle: cat,
+        gradeTitle: grd,
+        gradeId: gradeId,
+        stageNumber: stageNum,
+        playerCount: currentPlayers?.length || 0,
+      },
+      activePlayer: null,
+      specialScreenData: null,
+      calloutData: null,
+      updatedAt: Date.now(),
+    }).catch((err) => {
+      console.error("무대 변경 실시간 브로드캐스트 동기화 오류:", err);
+    });
+  }, [
+    currentStage?.stageId,
+    currentStage?.gradeId,
+    currentStage?.categoryTitle,
+    currentStage?.gradeTitle,
+    currentStage?.stageNumber,
+    currentPlayers?.length,
+    contestId
+  ]);
+
   // 1. 대기 및 현재 종목 안내 송출
   const handleSetStandby = async () => {
     if (!contestId) return;
@@ -218,10 +338,31 @@ const StageBroadcastController = ({
     }
   };
 
-  // 2. 실시간 선수 전체 화면 스포트라이트 송출
+  // 2. 실시간 선수 전체 화면 스포트라이트 송출 (계측에서 지정한 무대용 사진 stagePhotoUrl 100% 우선 송출)
   const handleIntroPlayer = async (player) => {
     if (!contestId || !player) return;
     try {
+      const resolvedPhotos = getPlayerResolvedPhotos(player);
+      let stage1 =
+        (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) ||
+        (!isNonPlayerUrl(player.stagePhotoUrl1) && player.stagePhotoUrl1) ||
+        "";
+      let stage2 =
+        (!isNonPlayerUrl(player.stagePhoto2) && player.stagePhoto2) ||
+        (!isNonPlayerUrl(player.stagePhotoUrl2) && player.stagePhotoUrl2) ||
+        "";
+
+      if (!stage1 && resolvedPhotos.length > 0) stage1 = resolvedPhotos[0];
+      if (!stage2 && resolvedPhotos.length > 1) stage2 = resolvedPhotos[1];
+
+      const designatedStagePhoto =
+        stage1 ||
+        stage2 ||
+        (!isNonPlayerUrl(player.stagePhotoUrl) && player.stagePhotoUrl) ||
+        (!isNonPlayerUrl(player.profileImageUrl) && player.profileImageUrl) ||
+        resolvedPhotos[0] ||
+        "";
+
       await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
         mode: "ATHLETE_INTRO",
         contestTitle: realContestTitle,
@@ -230,7 +371,14 @@ const StageBroadcastController = ({
           playerName: player.playerName,
           playerGym: player.playerGym || "",
           heightWeight: player.heightWeight || "",
-          profileImageUrl: player.profileImageUrl || player.photoUrl || "",
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          backgroundPhotoUrl: stage2 || player.backgroundPhotoUrl || "",
+          stagePhotoUrl: designatedStagePhoto,
+          profileImageUrl: designatedStagePhoto,
+          photos: resolvedPhotos,
           categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
           gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
         },
@@ -396,6 +544,37 @@ const StageBroadcastController = ({
     }
   };
 
+  // 6-1. 🏅 공식 시상식 (1위·2위·3위 포디움 단상 + TOP 5 리스트) 송출
+  const handleSendAwardCeremony = async () => {
+    if (!contestId) return;
+
+    let finalRanks = rankingResults || [];
+    if (finalRanks.length === 0) {
+      finalRanks = await fetchCurrentGradeRankings();
+    }
+
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+        mode: "AWARD_CEREMONY",
+        contestTitle: realContestTitle,
+        stageInfo: {
+          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
+          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+        },
+        rankingData: finalRanks,
+        activePlayer: null,
+        specialScreenData: null,
+        calloutData: null,
+        updatedAt: Date.now(),
+      });
+      message.success("전광판: [🏅 공식 시상식 (포디움 단상)] 화면 송출 시작!");
+    } catch (error) {
+      console.error("공식 시상식 송출 오류:", error);
+    }
+  };
+
   // 7. 👑 1위 우승자 단독 전체화면 송출
   const handleShowChampion = async () => {
     if (!contestId) return;
@@ -546,6 +725,11 @@ const StageBroadcastController = ({
                 🏆 순위 발표 (1~3위 사진)
               </Tag>
             )}
+            {currentMode === "AWARD_CEREMONY" && (
+              <Tag color="gold" className="font-black text-xs mr-0 animate-pulse">
+                🏅 공식 시상식 (포디움 단상) 송출 중
+              </Tag>
+            )}
             {currentMode === "CHAMPION_SHOWCASE" && (
               <Tag color="purple" className="font-black text-xs mr-0 animate-pulse">
                 👑 1위 챔피언 단독 송출 중
@@ -572,35 +756,63 @@ const StageBroadcastController = ({
     >
       <div className="space-y-3 py-1">
         
-        {/* 테마 색상 5종 선택 바 */}
-        <div className="bg-slate-950/70 px-3.5 py-2 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
-            <BgColorsOutlined className="text-amber-400 text-sm" />
-            <span>화면 색상 테마:</span>
-          </span>
+        {/* 테마 색상 5종 선택 및 전광판 음향(사운드) 제어 바 */}
+        <div className="bg-slate-950/70 px-3.5 py-2 rounded-xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* 테마 색상 선택 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+              <BgColorsOutlined className="text-amber-400 text-sm" />
+              <span>화면 색상 테마:</span>
+            </span>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {Object.values(THEME_CONFIGS).map((t) => {
-              const isSelected = currentTheme === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => handleSelectTheme(t.key)}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 ${
-                    isSelected
-                      ? "bg-slate-800 text-white border-white shadow-md scale-105"
-                      : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className={isSelected ? t.primary : ""}>{t.name}</span>
-                </button>
-              );
-            })}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {Object.values(THEME_CONFIGS).map((t) => {
+                const isSelected = currentTheme === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => handleSelectTheme(t.key)}
+                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 ${
+                      isSelected
+                        ? "bg-slate-800 text-white border-white shadow-md scale-105"
+                        : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
+                    }`}
+                  >
+                    <span className={isSelected ? t.primary : ""}>{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 🔊 전광판 사운드 ON/OFF 원클릭 제어 버튼 */}
+          <div className="flex items-center gap-2 lg:pl-3 lg:border-l lg:border-slate-800 shrink-0">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1 shrink-0">
+              {isAudioEnabled ? (
+                <SoundOutlined className="text-cyan-400 animate-pulse" />
+              ) : (
+                <AudioMutedOutlined className="text-slate-400" />
+              )}
+              <span>전광판 사운드:</span>
+            </span>
+            <Button
+              size="small"
+              type={isAudioEnabled ? "primary" : "default"}
+              onClick={handleToggleAudio}
+              className={`font-black text-xs rounded-lg transition-all ${
+                isAudioEnabled
+                  ? "bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)] animate-pulse"
+                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+              }`}
+              icon={isAudioEnabled ? <SoundOutlined /> : <AudioMutedOutlined />}
+            >
+              {isAudioEnabled ? "사운드 출력 중 (ON)" : "음소거 (OFF)"}
+            </Button>
           </div>
         </div>
 
-        {/* 1. 7대 주요 송출 원클릭 액션 버튼 바 */}
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
+        {/* 1. 8대 주요 송출 원클릭 액션 버튼 바 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           {/* ① 종목 안내 / 대기 화면 */}
           <button
             onClick={handleSetStandby}
@@ -663,7 +875,20 @@ const StageBroadcastController = ({
             }`}
           >
             <TrophyOutlined className="text-lg" />
-            <span>순위 발표 (1~3위 사진)</span>
+            <span>순위 발표 (채점표)</span>
+          </button>
+
+          {/* ⑤-1 🏅 공식 시상식 (포디움 단상) 송출 */}
+          <button
+            onClick={handleSendAwardCeremony}
+            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              currentMode === "AWARD_CEREMONY"
+                ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/50 scale-105"
+                : "bg-gradient-to-r from-amber-950/80 to-yellow-950/80 hover:from-amber-900 hover:to-yellow-900 text-amber-300 border-amber-500/60"
+            }`}
+          >
+            <TrophyOutlined className="text-lg text-amber-300 animate-bounce" />
+            <span>🏅 공식 시상식 (포디움)</span>
           </button>
 
           {/* ⑥ 👑 1위 챔피언 단독 송출 */}
@@ -676,7 +901,7 @@ const StageBroadcastController = ({
             }`}
           >
             <CrownOutlined className="text-lg text-amber-400" />
-            <span>1위 챔피언 단독 송출</span>
+            <span>1위 챔피언 단독</span>
           </button>
 
           {/* ⑦ 다음 종목 대기 복귀 */}
@@ -685,7 +910,7 @@ const StageBroadcastController = ({
             className="p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
           >
             <ForwardOutlined className="text-lg" />
-            <span>다음 종목 대기 복귀</span>
+            <span>다음 종목 대기</span>
           </button>
         </div>
 
@@ -767,6 +992,9 @@ const StageBroadcastController = ({
                     currentMode === "ATHLETE_INTRO" &&
                     activePlayer?.playerNumber === player.playerNumber;
 
+                  const photos = getPlayerResolvedPhotos(player);
+                  const hasPhoto = photos.length > 0;
+
                   return (
                     <button
                       key={player.playerUid || player.playerNumber}
@@ -777,6 +1005,13 @@ const StageBroadcastController = ({
                           : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
                       }`}
                     >
+                      {hasPhoto && (
+                        <img
+                          src={photos[0]}
+                          alt={player.playerName}
+                          className="w-5 h-5 rounded-full object-cover border border-amber-400"
+                        />
+                      )}
                       <span className="font-mono text-amber-400 bg-slate-950 px-1.5 py-0.5 rounded font-black">
                         {player.playerNumber}번
                       </span>

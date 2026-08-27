@@ -13,6 +13,7 @@ import StandbyStageScene from "../../components/broadcast/StandbyStageScene";
 import CommercialScene from "../../components/broadcast/CommercialScene";
 import AthleteIntroScene from "../../components/broadcast/AthleteIntroScene";
 import RankingCeremonyScene from "../../components/broadcast/RankingCeremonyScene";
+import AwardCeremonyScene from "../../components/broadcast/AwardCeremonyScene";
 import ChampionShowcaseScene from "../../components/broadcast/ChampionShowcaseScene";
 import SpecialStageScene from "../../components/broadcast/SpecialStageScene";
 import ComparisonCalloutScene from "../../components/broadcast/ComparisonCalloutScene";
@@ -25,8 +26,17 @@ import {
   ReloadOutlined,
   SearchOutlined,
   CloseOutlined,
+  CloudDownloadOutlined,
+  SoundOutlined,
+  AudioMutedOutlined,
 } from "@ant-design/icons";
 import { Modal, Input, message, Tag } from "antd";
+import PreDownloadModal from "../../components/broadcast/PreDownloadModal";
+import SmoothBackgroundVideo from "../../components/broadcast/SmoothBackgroundVideo";
+import defaultStandbyVideo from "../../assets/mov/ybbf_mp4.mp4";
+import defaultIntroVideo from "../../assets/mov/introduce.mp4";
+import defaultCalloutVideo from "../../assets/mov/countdown_low.mp4";
+import defaultAwardVideo from "../../assets/mov/award2.mp4";
 
 const StageLiveDisplay = () => {
   const location = useLocation();
@@ -69,6 +79,8 @@ const StageLiveDisplay = () => {
 
   // 🗄️ 데이터베이스(대회) 선택 모달 상태
   const [isDbModalOpen, setIsDbModalOpen] = useState(false);
+  // ⚡ 비디오 사전 다운로드 모달 상태
+  const [isPreDownloadOpen, setIsPreDownloadOpen] = useState(false);
   const [contestList, setContestList] = useState([]);
   const [isContestLoading, setIsContestLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -80,8 +92,12 @@ const StageLiveDisplay = () => {
   const [sponsors, setSponsors] = useState([]);
   const [videoSettings, setVideoSettings] = useState({
     standbyVideoUrl: "",
-    rankingVideoUrl: "",
     introVideoUrl: "",
+    calloutVideoUrl: "",
+    posedownVideoUrl: "",
+    rankingVideoUrl: "",
+    championVideoUrl: "",
+    awardVideoUrl: "",
   });
 
   const sponsorQuery = useFirestoreQuery();
@@ -210,30 +226,47 @@ const StageLiveDisplay = () => {
     };
   }, []);
 
-  // 스폰서 및 배경 동영상 설정 불러오기
+  // 스폰서 및 배경 동영상 설정 불러오기 (7종 화면 독립 비디오 설정 완벽 로드)
   const fetchMediaSettings = async (cId) => {
     if (!cId) {
       setSponsors([]);
-      setVideoSettings({ standbyVideoUrl: "", rankingVideoUrl: "", introVideoUrl: "" });
+      setVideoSettings({
+        standbyVideoUrl: "",
+        introVideoUrl: "",
+        calloutVideoUrl: "",
+        posedownVideoUrl: "",
+        rankingVideoUrl: "",
+        championVideoUrl: "",
+        awardVideoUrl: "",
+      });
       return;
     }
     try {
       const condition = [where("contestId", "==", cId)];
       const data = await sponsorQuery.getDocuments("contest_sponsor_list", condition);
-      if (data && data.length > 0 && data[0]?.sponsors) {
-        setSponsors(data[0].sponsors || []);
-        setVideoSettings({
-          standbyVideoUrl: data[0]?.standbyVideoUrl || "",
-          rankingVideoUrl: data[0]?.rankingVideoUrl || "",
-          introVideoUrl: data[0]?.introVideoUrl || "",
-        });
+      if (data && data.length > 0) {
+        const item = data[0];
+        setSponsors(Array.isArray(item.sponsors) ? item.sponsors : []);
+        const vs = {
+          standbyVideoUrl: item?.standbyVideoUrl || "",
+          introVideoUrl: item?.introVideoUrl || "",
+          calloutVideoUrl: item?.calloutVideoUrl || "",
+          posedownVideoUrl: item?.posedownVideoUrl || "",
+          rankingVideoUrl: item?.rankingVideoUrl || "",
+          championVideoUrl: item?.championVideoUrl || "",
+          awardVideoUrl: item?.awardVideoUrl || "",
+        };
+        setVideoSettings(vs);
       } else {
-        // 🌟 9회 대회처럼 광고를 세팅하지 않은 대회는 이전 대회 광고를 완전히 비움!
         setSponsors([]);
         setVideoSettings({
           standbyVideoUrl: "",
-          rankingVideoUrl: "",
           introVideoUrl: "",
+          calloutVideoUrl: "",
+          posedownVideoUrl: "",
+          rankingVideoUrl: "",
+          championVideoUrl: "",
+          awardVideoUrl: "",
         });
       }
     } catch (error) {
@@ -259,7 +292,39 @@ const StageLiveDisplay = () => {
     }
   };
 
-  // 키보드 이벤트 리스너 (F: 전체화면, D: DB 선택 모달)
+  // 🔊 사운드(오디오) ON/OFF 상태 (DB 동기화 및 로컬 상태 지원)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem("screen_audio_enabled");
+      return saved === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  // Firebase Realtime DB 사운드 설정 실시간 동기화
+  useEffect(() => {
+    if (broadcastData?.isAudioEnabled !== undefined) {
+      setIsAudioEnabled(Boolean(broadcastData.isAudioEnabled));
+    }
+  }, [broadcastData?.isAudioEnabled]);
+
+  const toggleAudio = async () => {
+    const nextState = !isAudioEnabled;
+    setIsAudioEnabled(nextState);
+    try {
+      localStorage.setItem("screen_audio_enabled", String(nextState));
+      if (contestId) {
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+          isAudioEnabled: nextState,
+          updatedAt: Date.now(),
+        });
+      }
+      message.success(nextState ? "전광판 사운드 [ON - 음향 출력]" : "전광판 사운드 [OFF - 음소거]");
+    } catch {}
+  };
+
+  // 키보드 이벤트 리스너 (F: 전체화면, D: DB 선택 모달, P: 프리 다운로드 모달, M: 사운드 토글)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "f" || e.key === "F") {
@@ -268,10 +333,16 @@ const StageLiveDisplay = () => {
       if (e.key === "d" || e.key === "D") {
         setIsDbModalOpen((prev) => !prev);
       }
+      if (e.key === "p" || e.key === "P") {
+        setIsPreDownloadOpen((prev) => !prev);
+      }
+      if (e.key === "m" || e.key === "M") {
+        toggleAudio();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isAudioEnabled, contestId]);
 
   // 🌟 현재 송출 모드 결정
   let currentMode = broadcastData?.mode || "STANDBY";
@@ -280,12 +351,37 @@ const StageLiveDisplay = () => {
     currentMode = "RANKING";
   }
 
-  // 1. 스테이지 정보
-  const stageInfo = broadcastData?.stageInfo || {
-    categoryTitle: legacyStageData?.categoryTitle || legacyStageData?.screen?.gradeTitle || "",
-    gradeTitle: legacyStageData?.gradeTitle || "",
-    gradeId: legacyStageData?.gradeId || "",
-    stageNumber: legacyStageData?.stageId || "",
+  // 1. 스테이지 정보 (본부석 currentStage 및 방송 제어기 실시간 동기화)
+  const activeCategory =
+    legacyStageData?.categoryTitle ||
+    broadcastData?.stageInfo?.categoryTitle ||
+    legacyStageData?.screen?.gradeTitle ||
+    "";
+  const activeGrade =
+    legacyStageData?.gradeTitle ||
+    broadcastData?.stageInfo?.gradeTitle ||
+    "";
+  const activeGradeId =
+    legacyStageData?.gradeId ||
+    broadcastData?.stageInfo?.gradeId ||
+    "";
+  const activeStageNumber =
+    legacyStageData?.stageNumber ||
+    legacyStageData?.stageId ||
+    broadcastData?.stageInfo?.stageNumber ||
+    "";
+  const activePlayerCount =
+    legacyStageData?.players?.length ||
+    legacyStageData?.playerCount ||
+    broadcastData?.stageInfo?.playerCount ||
+    0;
+
+  const stageInfo = {
+    categoryTitle: activeCategory,
+    gradeTitle: activeGrade,
+    gradeId: activeGradeId,
+    stageNumber: activeStageNumber,
+    playerCount: activePlayerCount,
   };
 
   // 2. 실시간 선수 소개 정보
@@ -336,20 +432,132 @@ const StageLiveDisplay = () => {
     (c.contestTitle || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // 🎬 [Global Root Layer 0: 씬별 배경 비디오 소스 결정 (씬 내부 GSAP과 100% 완전 분리)]
+  const activeBackgroundVideo = React.useMemo(() => {
+    switch (currentMode) {
+      case "STANDBY":
+        return {
+          src: videoSettings.standbyVideoUrl,
+          fallback: defaultStandbyVideo,
+          overlay: "from-black/75 via-transparent to-black/65",
+          direction: "bg-gradient-to-t",
+        };
+      case "ATHLETE_INTRO":
+        return {
+          src: videoSettings.introVideoUrl,
+          fallback: defaultIntroVideo,
+          overlay: "from-black/85 via-black/45 to-transparent",
+          direction: "bg-gradient-to-r",
+        };
+      case "COMPARISON_CALLOUT":
+        return {
+          src: videoSettings.calloutVideoUrl,
+          fallback: defaultCalloutVideo,
+          overlay: "from-black/80 via-transparent to-black/65",
+          direction: "bg-gradient-to-t",
+        };
+      case "POSEDOWN":
+        return {
+          src: videoSettings.posedownVideoUrl,
+          fallback: defaultIntroVideo,
+          overlay: "from-black/80 via-black/40 to-black/65",
+          direction: "bg-gradient-to-r",
+        };
+      case "RANKING":
+        return {
+          src: videoSettings.rankingVideoUrl,
+          fallback: defaultAwardVideo,
+          overlay: "from-black/80 via-transparent to-black/65",
+          direction: "bg-gradient-to-t",
+        };
+      case "CHAMPION_SHOWCASE":
+        return {
+          src: videoSettings.championVideoUrl || videoSettings.rankingVideoUrl,
+          fallback: defaultAwardVideo,
+          overlay: "from-black/80 via-black/40 to-black/60",
+          direction: "bg-gradient-to-r",
+        };
+      case "AWARD_CEREMONY":
+        return {
+          src: videoSettings.awardVideoUrl || videoSettings.rankingVideoUrl,
+          fallback: defaultAwardVideo,
+          overlay: "from-black/85 via-black/40 to-black/90",
+          direction: "bg-gradient-to-t",
+        };
+      case "COMMERCIAL":
+        return {
+          src: videoSettings.standbyVideoUrl,
+          fallback: defaultStandbyVideo,
+          overlay: "from-black/75 via-transparent to-black/65",
+          direction: "bg-gradient-to-t",
+        };
+      default:
+        return {
+          src: videoSettings.standbyVideoUrl,
+          fallback: defaultStandbyVideo,
+          overlay: "from-black/75 via-transparent to-black/65",
+          direction: "bg-gradient-to-t",
+        };
+    }
+  }, [currentMode, videoSettings]);
+
   return (
     <div
       className={`relative w-screen h-screen overflow-hidden bg-black select-none ${
         !isCursorVisible ? "cursor-none" : ""
       }`}
     >
+      {/* 🎬 [Global Root Layer 0: 최상위 하드웨어 가속 배경 비디오 - GSAP 타임라인과 완벽 분리] */}
+      <SmoothBackgroundVideo
+        src={activeBackgroundVideo.src}
+        fallbackSrc={activeBackgroundVideo.fallback}
+        overlayGradient={activeBackgroundVideo.overlay}
+        gradientDirection={activeBackgroundVideo.direction}
+        isMuted={currentMode === "COMMERCIAL" ? true : !isAudioEnabled}
+      />
+
       {/* ========================================================================================= */}
-      {/* 🌟 전체화면 & 데이터베이스(DB) 변경 컨트롤 버튼 바 (마우스 호버 시 1.5초 표시) */}
+      {/* 🌟 전체화면 & 사운드 & 데이터베이스(DB) 변경 컨트롤 버튼 바 (마우스 호버 시 1.5초 표시) */}
       {/* ========================================================================================= */}
       <div
         className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 transition-all duration-300 ${
           isCursorVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       >
+        {/* 🔊 사운드(오디오) ON/OFF 토글 버튼 (단축키 M) */}
+        <button
+          onClick={toggleAudio}
+          title={isAudioEnabled ? "사운드 음소거 (단축키 M)" : "사운드 재생 켜기 (단축키 M)"}
+          className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-full ${
+            isAudioEnabled
+              ? "bg-cyan-950/85 hover:bg-cyan-900 text-cyan-300 border-cyan-400/60 shadow-[0_4px_20px_rgba(6,182,212,0.4)] animate-pulse"
+              : "bg-black/75 hover:bg-slate-900 text-slate-400 border-white/20"
+          } border backdrop-blur-xl transition-all cursor-pointer text-xs font-bold font-mono`}
+        >
+          {isAudioEnabled ? (
+            <SoundOutlined className="text-cyan-400 text-sm" />
+          ) : (
+            <AudioMutedOutlined className="text-slate-400 text-sm" />
+          )}
+          <span>{isAudioEnabled ? "사운드 ON" : "사운드 OFF"}</span>
+          <span className={`px-1.5 py-0.5 rounded ${isAudioEnabled ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40" : "bg-white/10 text-slate-400 border border-white/20"} text-[10px]`}>
+            M
+          </span>
+        </button>
+
+        {/* ⚡ 영상 사전 다운로드 버튼 */}
+        <button
+          onClick={() => setIsPreDownloadOpen(true)}
+          title="무대 영상 사전 다운로드 매니저 (단축키 P)"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-black/75 hover:bg-slate-900 text-emerald-300 hover:text-emerald-200 border border-emerald-500/50 backdrop-blur-xl shadow-[0_4px_20px_rgba(16,185,129,0.3)] transition-all cursor-pointer text-xs font-bold font-mono"
+        >
+          <CloudDownloadOutlined className="text-emerald-400 text-sm animate-pulse" />
+          <span>사전 다운로드</span>
+          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] text-emerald-300 border border-emerald-500/40">
+            P
+          </span>
+        </button>
+
         {/* 🗄️ 데이터베이스(대회) 변경 버튼 */}
         <button
           onClick={() => setIsDbModalOpen(true)}
@@ -359,7 +567,7 @@ const StageLiveDisplay = () => {
           <DatabaseOutlined className="text-amber-400 text-sm" />
           <span className="max-w-[160px] truncate">{contestTitle || "DB 선택"}</span>
           <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-[10px] text-amber-300 border border-amber-500/40">
-            변경
+            D
           </span>
         </button>
 
@@ -404,8 +612,17 @@ const StageLiveDisplay = () => {
         <ComparisonCalloutScene
           contestTitle={contestTitle}
           stageInfo={stageInfo}
-          calloutData={broadcastData?.calloutData}
-          backgroundVideoUrl={videoSettings.rankingVideoUrl}
+          calloutData={
+            broadcastData?.calloutData ||
+            (legacyStageData?.compares
+              ? {
+                  roundTitle: legacyStageData?.compares?.roundTitle || "공식 비교심사 (CALLOUT)",
+                  currentPose: legacyStageData?.compares?.currentPose || "호명된 선수들은 무대 중앙으로 나와 라인업 해주시기 바랍니다.",
+                  players: legacyStageData?.compares?.players || [],
+                }
+              : null)
+          }
+          backgroundVideoUrl={videoSettings.calloutVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
         />
       )}
@@ -417,7 +634,7 @@ const StageLiveDisplay = () => {
           stageInfo={stageInfo}
           currentPlayers={stageInfo?.players || legacyStageData?.screen?.players || []}
           sponsors={sponsors}
-          backgroundVideoUrl={videoSettings.introVideoUrl || videoSettings.standbyVideoUrl}
+          backgroundVideoUrl={videoSettings.posedownVideoUrl}
           colorTheme={broadcastData?.colorTheme || "RED"}
         />
       )}
@@ -428,6 +645,7 @@ const StageLiveDisplay = () => {
           contestTitle={contestTitle}
           stageInfo={stageInfo}
           sponsors={sponsors}
+          isAudioEnabled={isAudioEnabled}
         />
       )}
 
@@ -435,9 +653,9 @@ const StageLiveDisplay = () => {
       {currentMode === "RANKING" && (
         <RankingCeremonyScene
           contestTitle={contestTitle}
-          categoryTitle={stageInfo.categoryTitle || "공식 시상식"}
-          gradeTitle={stageInfo.gradeTitle || ""}
-          gradeId={stageInfo.gradeId || legacyStageData?.gradeId || ""}
+          categoryTitle={stageInfo?.categoryTitle || "공식 시상식"}
+          gradeTitle={stageInfo?.gradeTitle || ""}
+          gradeId={stageInfo?.gradeId || legacyStageData?.gradeId || ""}
           rankingData={rankingData}
           backgroundVideoUrl={videoSettings.rankingVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
@@ -451,7 +669,7 @@ const StageLiveDisplay = () => {
           contestTitle={contestTitle}
           stageInfo={stageInfo}
           topPlayer={broadcastData?.topPlayer || top1Player}
-          backgroundVideoUrl={videoSettings.rankingVideoUrl}
+          backgroundVideoUrl={videoSettings.championVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           onBackToRanking={handleBackToRanking}
           onFinishCeremony={handleFinishCeremony}
@@ -464,9 +682,23 @@ const StageLiveDisplay = () => {
           contestTitle={contestTitle}
           stageInfo={stageInfo}
           specialData={broadcastData?.specialScreenData}
-          backgroundVideoUrl={videoSettings.rankingVideoUrl}
+          backgroundVideoUrl={videoSettings.standbyVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           onFinish={handleFinishCeremony}
+        />
+      )}
+
+      {/* ⑧ 🏅 공식 시상식 씬 (1위 2위 3위 포디움 단상 + TOP 5 리스트) */}
+      {currentMode === "AWARD_CEREMONY" && (
+        <AwardCeremonyScene
+          contestTitle={contestTitle}
+          categoryTitle={stageInfo?.categoryTitle || "공식 시상식"}
+          gradeTitle={stageInfo?.gradeTitle || ""}
+          gradeId={stageInfo?.gradeId || legacyStageData?.gradeId || ""}
+          rankingData={rankingData}
+          backgroundVideoUrl={videoSettings.awardVideoUrl}
+          colorTheme={broadcastData?.colorTheme || "GOLD"}
+          onFinishCeremony={handleFinishCeremony}
         />
       )}
 
@@ -597,14 +829,73 @@ const StageLiveDisplay = () => {
           </div>
 
           <div className="text-[11px] text-slate-500 text-center pt-2">
-            💡 단축키: <span className="text-slate-300 font-mono">D</span> (DB 선택창), <span className="text-slate-300 font-mono">F</span> (전체화면)
+            💡 단축키: <span className="text-slate-300 font-mono">D</span> (DB 선택창), <span className="text-slate-300 font-mono">P</span> (사전 다운로드), <span className="text-slate-300 font-mono">F</span> (전체화면)
           </div>
 
         </div>
       </Modal>
 
+      {/* ⚡ [초호화 전광판 7종 무대 비디오 + 스폰서 광고 사전 다운로드 매니저 모달] */}
+      <PreDownloadModal
+        open={isPreDownloadOpen}
+        onClose={() => setIsPreDownloadOpen(false)}
+        videoSettings={videoSettings}
+        sponsors={sponsors}
+      />
+
     </div>
   );
 };
 
-export default StageLiveDisplay;
+class StageDisplayErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("[StageLiveDisplay Error Boundary]:", error, errorInfo);
+  }
+
+  handleReload = () => {
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-8 text-center select-none">
+          <div className="max-w-md space-y-4 bg-slate-900/90 p-8 rounded-3xl border border-amber-500/30 shadow-2xl">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-3xl">
+              <DatabaseOutlined />
+            </div>
+            <h2 className="text-2xl font-black text-white m-0">무대 송출 화면 새로고침</h2>
+            <p className="text-sm text-slate-400 break-keep">
+              실시간 화면을 준비 중입니다. 아래 버튼을 누르면 즉시 복구됩니다.
+            </p>
+            <button
+              onClick={this.handleReload}
+              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-base shadow-xl hover:opacity-90 transition-all cursor-pointer border-none"
+            >
+              화면 즉시 복구하기
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SafeStageLiveDisplay = () => (
+  <StageDisplayErrorBoundary>
+    <StageLiveDisplay />
+  </StageDisplayErrorBoundary>
+);
+
+export default SafeStageLiveDisplay;

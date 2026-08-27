@@ -2,9 +2,12 @@ import React, { useContext, useEffect, useState } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { debounce } from "lodash";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
+import { useFirestoreQuery } from "../hooks/useFirestores";
+import { where } from "firebase/firestore";
 import ReactPlayer from "react-player";
 import AwardVideo from "../assets/mov/award.mp4";
 import AwardVideo2 from "../assets/mov/award2.mp4";
+
 const ranks = [
   "1.김진배 / 제이앤코어",
   "3.오종일 / 고궁비빔피트니스클럽",
@@ -13,8 +16,30 @@ const ranks = [
   "Charlie Lee",
 ];
 const ScreenScoreIntro = ({ categoryTitle, gradeTitle, rankOrder = [] }) => {
+  const { currentContest } = useContext(CurrentContestContext);
+  const contestId = currentContest?.contests?.id || currentContest?.id || "";
+  const [uploadedVideo, setUploadedVideo] = useState("");
+  const sponsorQuery = useFirestoreQuery();
+
   const [scene, setScene] = useState(1); // 현재 씬 (1, 2, 3)
   const [displayedRank, setDisplayedRank] = useState(rankOrder.length); // 5위부터 시작
+
+  useEffect(() => {
+    if (!contestId) return;
+    const fetchSponsorVideo = async () => {
+      try {
+        const condition = [where("contestId", "==", contestId)];
+        const data = await sponsorQuery.getDocuments("contest_sponsor_list", condition);
+        if (data && data.length > 0) {
+          const vUrl = data[0].rankingVideoUrl || data[0].awardVideoUrl || "";
+          if (vUrl) setUploadedVideo(vUrl);
+        }
+      } catch (err) {
+        console.warn("ScreenScoreIntro: 비디오 조회 실패", err);
+      }
+    };
+    fetchSponsorVideo();
+  }, [contestId]);
 
   useEffect(() => {
     if (scene === 1) {
@@ -44,7 +69,7 @@ const ScreenScoreIntro = ({ categoryTitle, gradeTitle, rankOrder = [] }) => {
     <div className="overflow-hidden overflow-y-hidden h-screen w-full">
       <div className="absolute top-0 left-0 w-full h-full">
         <ReactPlayer
-          url={AwardVideo2}
+          url={uploadedVideo || AwardVideo2}
           width="100%"
           height="100%"
           playing

@@ -46,6 +46,9 @@
     "yup": "^1.1.1"
   },
   "scripts": {
+    "dev": "vite",
+    "build:vite": "vite build",
+    "preview": "vite preview",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
@@ -70,7 +73,9 @@
     ]
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
     "sass": "^1.93.2",
-    "tailwindcss": "^3.3.2"
+    "tailwindcss": "^3.3.2",
+    "vite": "^5.4.14"
   }
 }

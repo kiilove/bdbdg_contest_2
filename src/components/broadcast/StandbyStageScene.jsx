@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { TrophyOutlined, ClockCircleOutlined, UserOutlined, FireOutlined } from "@ant-design/icons";
+import React from "react";
+import { UserOutlined, FireOutlined } from "@ant-design/icons";
 import defaultStandbyVideo from "../../assets/mov/ybbf_mp4.mp4";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
+
+import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 
 // 기본 협찬사 데모 목록
 const DEFAULT_SPONSORS = [
@@ -23,21 +25,7 @@ const StandbyStageScene = ({
   backgroundVideoUrl,
   colorTheme = "GOLD",
 }) => {
-  const [time, setTime] = useState(new Date());
-
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
-
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formattedTime = time.toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
 
   const isStageActive = stageInfo && (stageInfo.categoryTitle || stageInfo.gradeTitle);
   const videoSrc = backgroundVideoUrl || defaultStandbyVideo;
@@ -47,100 +35,93 @@ const StandbyStageScene = ({
   const singleTrackList = rawList.length >= 6 ? rawList : [...rawList, ...rawList, ...rawList];
 
   return (
-    <div className="relative w-screen h-screen bg-slate-950 text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none animate-fade-in">
-      
-      {/* ======================= [ Layer 1: 바닥 배경 MP4 비디오 ] ======================= */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <video
-          key={videoSrc}
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full h-full object-cover opacity-45 filter contrast-125 brightness-90"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-950/80" />
-      </div>
-
-      {/* ======================= [ Layer 2: 앰비언트 테마 글로우 ] ======================= */}
-      <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full blur-[180px] pointer-events-none z-1"
-        style={{ backgroundColor: theme.glowRgba }}
-      />
-
-      {/* ======================= [ Layer 3: 상단 대회 헤더 & 실시간 시계 ] ======================= */}
-      <div className="relative z-20 flex items-center justify-between border-b border-white/15 pb-4">
-        <div className="flex items-center gap-4">
-          <div
-            className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${theme.textGradient} flex items-center justify-center text-slate-950 shadow-xl font-black text-2xl`}
+    <div className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none">
+      {/* ======================= [ Layer 3: 상단 대회 헤더 ] ======================= */}
+      <div className="relative z-20 flex items-center justify-between gap-4 border-b border-white/15 pb-3 sm:pb-4">
+        <div className="min-w-0 flex-1">
+          <div className={`text-[10px] sm:text-xs font-black tracking-widest ${theme.primary} uppercase flex items-center gap-1.5 mb-0.5`}>
+            <FireOutlined className="animate-pulse" />
+            <span>OFFICIAL STAGE BROADCAST</span>
+          </div>
+          <h1
+            className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-white m-0 tracking-tight break-keep leading-tight"
+            style={{
+              textShadow:
+                "0 2px 14px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.85), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000",
+            }}
           >
-            <TrophyOutlined />
-          </div>
-          <div>
-            <div className={`text-xs font-black tracking-widest ${theme.primary} uppercase flex items-center gap-1.5`}>
-              <FireOutlined className="animate-pulse" />
-              <span>OFFICIAL STAGE BROADCAST</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white m-0 tracking-tight drop-shadow-md">
-              {contestTitle}
-            </h1>
-          </div>
-        </div>
-
-        {/* 현재 시각 디지털 시계 */}
-        <div className="flex items-center gap-3 bg-black/70 backdrop-blur-2xl px-6 py-2.5 rounded-2xl border border-white/15 shadow-2xl">
-          <ClockCircleOutlined className={`${theme.primary} text-2xl`} />
-          <span className="text-2xl lg:text-3xl font-black font-mono tracking-wider text-slate-100">
-            {formattedTime}
-          </span>
+            {contestTitle}
+          </h1>
         </div>
       </div>
 
       {/* ======================= [ Layer 4: 중앙 무대 경기 안내 ] ======================= */}
-      <div className="relative z-10 my-auto text-center flex flex-col items-center justify-center py-4">
+      <div className="relative z-10 my-auto text-center flex flex-col items-center justify-center py-2 sm:py-4 px-2">
         {isStageActive ? (
           /* 🏁 종목 진행 중 화면 */
-          <div className="space-y-6 max-w-5xl animate-fade-in">
-            <div className={`inline-flex items-center gap-3 px-6 py-2 rounded-full ${theme.badgeBg} border backdrop-blur-2xl font-black text-sm lg:text-base tracking-widest uppercase shadow-2xl`}>
-              <span className="w-3 h-3 rounded-full bg-white animate-ping" />
+          <div className="space-y-4 sm:space-y-6 max-w-5xl animate-fade-in w-full px-4 py-6 rounded-3xl bg-black/25 backdrop-blur-[2px]">
+            <div className={`inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full ${theme.badgeBg} border bg-black/85 font-black text-xs sm:text-sm lg:text-base tracking-widest uppercase shadow-2xl`}>
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
               <span>NOW ON STAGE • 무대 심사진행</span>
             </div>
 
-            <div className="space-y-3">
-              <h2 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white tracking-tight drop-shadow-[0_10px_40px_rgba(0,0,0,0.9)]">
+            <div className="space-y-2 sm:space-y-3">
+              <h2
+                className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight break-keep leading-tight m-0"
+                style={{
+                  textShadow:
+                    "0 0 24px rgba(0,0,0,0.95), 0 4px 12px rgba(0,0,0,1), 0 12px 36px rgba(0,0,0,0.9), -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 4px 0 #000",
+                }}
+              >
                 {stageInfo.categoryTitle}
               </h2>
-              <div className={`text-4xl sm:text-6xl lg:text-7xl font-black ${theme.primary} tracking-wide drop-shadow-[0_5px_30px_rgba(0,0,0,0.8)]`}>
-                {stageInfo.gradeTitle}
-              </div>
+              {stageInfo.gradeTitle && (
+                <div
+                  className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black ${theme.primary} tracking-wide break-keep leading-tight`}
+                  style={{
+                    textShadow:
+                      "0 0 24px rgba(0,0,0,0.95), 0 4px 12px rgba(0,0,0,1), 0 10px 30px rgba(0,0,0,0.9), -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 0 #000",
+                  }}
+                >
+                  {stageInfo.gradeTitle}
+                </div>
+              )}
             </div>
 
             {/* 출전 선수 수 뱃지 */}
-            {stageInfo.playerCount && (
-              <div className="flex items-center justify-center pt-2">
-                <div className="flex items-center gap-3 bg-black/70 backdrop-blur-2xl px-6 py-2.5 rounded-2xl border border-white/15 shadow-2xl">
-                  <UserOutlined className={`${theme.primary} text-lg`} />
-                  <span className="text-xs text-slate-300 font-bold uppercase">출전 선수</span>
-                  <span className="text-xl font-black text-white font-mono">{stageInfo.playerCount}명</span>
+            {Boolean(stageInfo.playerCount) && (
+              <div className="flex items-center justify-center pt-1">
+                <div className="flex items-center gap-2.5 sm:gap-3 bg-black/90 px-4 sm:px-6 py-1.5 sm:py-2.5 rounded-2xl border border-white/20 shadow-2xl">
+                  <UserOutlined className={`${theme.primary} text-base sm:text-lg`} />
+                  <span className="text-[11px] sm:text-xs text-slate-300 font-bold uppercase">출전 선수</span>
+                  <span className="text-base sm:text-xl font-black text-white font-mono">{stageInfo.playerCount}명</span>
                 </div>
               </div>
             )}
           </div>
         ) : (
           /* ⏳ 경기 준비 및 대기 화면 */
-          <div className="space-y-6 max-w-4xl animate-fade-in">
-            <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full ${theme.badgeBg} border font-black text-sm tracking-widest uppercase backdrop-blur-2xl`}>
+          <div className="space-y-4 sm:space-y-6 max-w-4xl animate-fade-in w-full px-4 py-6 rounded-3xl bg-black/25 backdrop-blur-[2px]">
+            <div className={`inline-flex items-center gap-2 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full ${theme.badgeBg} border font-black text-xs sm:text-sm tracking-widest uppercase bg-black/85 shadow-2xl`}>
               Standby & Preparation
             </div>
-            <h2 className="text-6xl lg:text-8xl font-black text-white tracking-tight leading-tight drop-shadow-[0_10px_40px_rgba(0,0,0,0.9)]">
+            <h2
+              className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-tight break-keep"
+              style={{
+                textShadow:
+                  "0 0 24px rgba(0,0,0,0.95), 0 4px 12px rgba(0,0,0,1), 0 12px 36px rgba(0,0,0,0.9), -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000",
+              }}
+            >
               잠시 후 다음 경기가
               <br />
               <span className={`text-transparent bg-clip-text bg-gradient-to-r ${theme.textGradient}`}>
                 시작됩니다
               </span>
             </h2>
-            <p className="text-xl text-slate-300 font-medium max-w-2xl mx-auto drop-shadow-md">
+            <p
+              className="text-base sm:text-xl text-slate-200 font-bold max-w-2xl mx-auto break-keep"
+              style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.8)" }}
+            >
               출전 선수 여러분께서는 무대 대기실에서 준비하여 주시기 바랍니다.
             </p>
           </div>
@@ -159,8 +140,8 @@ const StandbyStageScene = ({
           <span className="text-slate-300 font-bold">{contestTitle || "대회"} 공식 협찬사</span>
         </div>
 
-        {/* 🌟 2개 트랙 완벽 Seamless 무한 롤링 컨테이너 */}
-        <div className="marquee-container bg-black/60 backdrop-blur-2xl rounded-2xl border border-white/15 py-3.5 relative overflow-hidden">
+        {/* 🌟 2개 트랙 완벽 Seamless 무한 롤링 컨테이너 (4K GPU 가속) */}
+        <div className="marquee-container bg-black/85 rounded-2xl border border-white/15 py-3.5 relative overflow-hidden">
           
           {/* 좌우 부드러운 페이드아웃 그라디언트 마스크 */}
           <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />

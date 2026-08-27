@@ -407,13 +407,26 @@ const ContestMonitoringHost = ({ contestId }) => {
     ].filter((u) => typeof u === "string" && u.trim().length > 5);
 
     const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
-    const primary = allPhotos[0] || player.profileImageUrl || player.playerPhoto || "";
+    
+    let stage1 = player.stagePhoto1 || player.stagePhotoUrl1 || "";
+    let stage2 = player.stagePhoto2 || player.stagePhotoUrl2 || player.backgroundPhotoUrl || "";
+
+    if (!stage1 && allPhotos.length > 0) stage1 = allPhotos[0];
+    if (!stage2 && allPhotos.length > 1) stage2 = allPhotos[1];
+
+    const primary = stage1 || allPhotos[0] || player.profileImageUrl || player.playerPhoto || "";
 
     const playerObj = {
       playerUid: player.playerUid || "",
       playerNumber: player.playerNumber || "100",
       playerName: player.playerName || "",
       playerGym: player.playerGym || "",
+      heightWeight: player.heightWeight || "",
+      stagePhoto1: stage1,
+      stagePhoto2: stage2,
+      stagePhotoUrl1: stage1,
+      stagePhotoUrl2: stage2,
+      backgroundPhotoUrl: stage2,
       profileImageUrl: primary,
       photoUrl: primary,
       playerMotivation: player.playerMotivation || player.playerText || "",

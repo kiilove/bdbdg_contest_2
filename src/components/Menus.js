@@ -248,10 +248,17 @@ export const MenuArray = [
       },
       {
         id: 7,
-        title: "음원 모니터링",
+        title: "기존 음원 모니터링",
         icon: <GiMagicLamp />,
         link: "/realtimeaudiocenter",
         requiredGroup: ["admin"],
+      },
+      {
+        id: 8,
+        title: "🎵 바이브플로우 음원센터",
+        icon: <GiMagicLamp />,
+        link: "/vibeflowaudiocenter",
+        requiredGroup: ["admin", "orgManager"],
       },
     ],
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import _ from "lodash";
 import LoadingPage from "./LoadingPage";
 import {
@@ -29,6 +29,7 @@ import {
   Typography,
   Spin,
   Divider,
+  message as antMessage,
 } from "antd";
 import {
   PlayCircleOutlined,
@@ -46,6 +47,50 @@ import {
 import { where } from "firebase/firestore";
 
 const { Title, Text } = Typography;
+
+// 🛡️ 본부석 실시간 렌더링 에러 바운더리 (에러 발생 시 즉시 화면에 상세 디버그 표시)
+class BasecampErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("[BasecampErrorBoundary Captured Error]:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 m-4 bg-red-50 border-2 border-red-300 rounded-2xl shadow-xl">
+          <h2 className="text-xl font-black text-red-600 mb-2">⚠️ 본부석 화면 렌더링 오류 감지</h2>
+          <p className="text-sm text-red-700 font-bold mb-3">
+            화면 구성 요소를 렌더링하는 중 예외가 발생했습니다. 아래 디버그 정보를 확인해 주세요.
+          </p>
+          <div className="text-xs font-mono text-red-950 bg-white p-4 rounded-xl border border-red-200 overflow-auto max-h-72 mb-4 whitespace-pre-wrap select-all">
+            {this.state.error?.toString()}
+            {"\n\n[Component Stack]:\n"}
+            {this.state.errorInfo?.componentStack || "No stack trace available"}
+          </div>
+          <Button
+            type="primary"
+            danger
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              this.setState({ hasError: false, error: null, errorInfo: null });
+              window.location.reload();
+            }}
+          >
+            본부석 화면 새로고침
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -97,38 +142,57 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     playerFinalId,
     judgeAssignId
   ) => {
-    try {
-      const returnNotice = await fetchNotice.getDocument(noticeId);
-      const returnContestStage = await fetchStages.getDocument(stageAssignId);
-      const returnPlayersFinal = await fetchFinalPlayers.getDocument(
-        playerFinalId
-      );
-      const returnJudgesAssign = await fetchJudgesAssign.getDocument(
-        judgeAssignId
-      );
+    console.log("[ContestMonitoringBasecamp] 📡 fetchPool 시작:", {
+      noticeId,
+      stageAssignId,
+      playerFinalId,
+      judgeAssignId,
+    });
 
-      if (returnNotice && returnContestStage && returnJudgesAssign) {
+    try {
+      const returnNotice = noticeId ? await fetchNotice.getDocument(noticeId) : null;
+      const returnContestStage = stageAssignId ? await fetchStages.getDocument(stageAssignId) : null;
+      const returnPlayersFinal = playerFinalId ? await fetchFinalPlayers.getDocument(playerFinalId) : null;
+      const returnJudgesAssign = judgeAssignId ? await fetchJudgesAssign.getDocument(judgeAssignId) : null;
+
+      console.log("[ContestMonitoringBasecamp] 📦 Firestore 데이터 수신 성공:", {
+        noticeTitle: returnNotice?.contestTitle,
+        stagesCount: returnContestStage?.stages?.length || 0,
+        playersCount: returnPlayersFinal?.players?.length || 0,
+        judgesCount: returnJudgesAssign?.judges?.length || 0,
+      });
+
+      if (returnNotice) {
+        setContestInfo({ ...returnNotice });
+      }
+      if (returnContestStage?.stages) {
         setStagesArray(
-          returnContestStage.stages.sort(
-            (a, b) => a.stageNumber - b.stageNumber
+          (returnContestStage.stages || []).sort(
+            (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
           )
         );
-        setContestInfo({ ...returnNotice });
+      }
+      if (returnPlayersFinal?.players) {
         setPlayersArray(
-          returnPlayersFinal.players
-            .sort((a, b) => a.playerIndex - b.playerIndex)
+          (returnPlayersFinal.players || [])
+            .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
             .filter((f) => f.playerNoShow === false)
         );
-        setJudgesArray(returnJudgesAssign?.judges || []);
-        setIsLoading(false);
+      }
+      if (returnJudgesAssign?.judges) {
+        setJudgesArray(returnJudgesAssign.judges || []);
       }
     } catch (error) {
+      console.error("[ContestMonitoringBasecamp] ❌ fetchPool 예외 발생:", error);
       setMessage({
         body: "데이터를 로드하지 못했습니다.",
         body4: error.message,
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -211,29 +275,38 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     let matchedPlayersCount = 0;
     let matchedJudgeAssignCount = 0;
 
-    if (grades?.length === 0) {
-      gradeTitle = "오류발생";
-      gradeId = "";
+    if (!grades || !Array.isArray(grades) || grades.length === 0) {
+      return {
+        gradeTitle: "오류발생",
+        gradeId: "",
+        matchedJudgesCount: 0,
+        matchedPlayersCount: 0,
+        matchedJudgeAssignCount: 0,
+      };
     }
-    if (grades.length === 1) {
-      gradeTitle = grades[0].gradeTitle;
-      gradeId = grades[0].gradeId;
-      matchedJudgesCount = grades[0].categoryJudgeCount;
-      matchedJudgeAssignCount = judgesArray.filter(
-        (f) => f.contestGradeId === gradeId
-      ).length;
-      matchedPlayersCount = grades[0].playerCount;
-    } else if (grades.length > 1) {
-      const madeTitle = grades.map((grade) => grade.gradeTitle + " ");
-      matchedJudgesCount = grades[0].categoryJudgeCount;
 
-      matchedJudgeAssignCount = judgesArray.filter(
-        (f) => f.contestGradeId === grades[0].gradeId
+    if (grades.length === 1) {
+      gradeTitle = grades[0]?.gradeTitle || "";
+      gradeId = grades[0]?.gradeId || "";
+      matchedJudgesCount = Number(grades[0]?.categoryJudgeCount) || 0;
+      matchedJudgeAssignCount = (judgesArray || []).filter(
+        (f) => f?.contestGradeId === gradeId || f?.gradeId === gradeId
+      ).length;
+      matchedPlayersCount = Number(grades[0]?.playerCount) || 0;
+    } else if (grades.length > 1) {
+      const madeTitle = grades.map((grade) => (grade?.gradeTitle || "") + " ").join("");
+      matchedJudgesCount = Number(grades[0]?.categoryJudgeCount) || 0;
+
+      matchedJudgeAssignCount = (judgesArray || []).filter(
+        (f) =>
+          f?.contestGradeId === grades[0]?.gradeId ||
+          f?.gradeId === grades[0]?.gradeId
       ).length;
       grades.forEach((grade) => {
-        matchedPlayersCount += Number.parseInt(grade.playerCount);
+        matchedPlayersCount +=
+          Number.parseInt(grade?.playerCount || 0, 10) || 0;
       });
-      gradeId = grades[0].gradeId;
+      gradeId = grades[0]?.gradeId || "";
       gradeTitle = madeTitle + "통합";
     }
 
@@ -261,6 +334,21 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleUpdateCurrentStage = async (currentStageId) => {
+    if (!stagesArray || stagesArray.length === 0) {
+      antMessage.warning(
+        "무대 설정(타임테이블) 데이터가 없습니다. [무대설정(4단계)] 메뉴에서 먼저 무대를 저장해 주세요."
+      );
+      return;
+    }
+
+    const targetStage = stagesArray[currentStageId];
+    if (!targetStage) {
+      antMessage.error(
+        `해당 순번(${currentStageId + 1}번)의 무대 정보를 찾을 수 없습니다.`
+      );
+      return;
+    }
+
     const {
       stageId,
       stageNumber,
@@ -269,16 +357,20 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       categoryId,
       categoryTitle,
       grades,
-    } = stagesArray[currentStageId] || {};
+    } = targetStage;
 
     const { gradeTitle, gradeId } = handleGradeInfo(grades);
 
+    const targetJudgeCount = Number(categoryJudgeCount) || 5;
+
     const judgeInitState = Array.from(
-      { length: categoryJudgeCount },
+      { length: targetJudgeCount },
       (_, jIdx) => {
         const seat = jIdx + 1;
         const assigned = (judgesArray || []).find(
-          (j) => j?.contestGradeId === gradeId && Number(j?.seatIndex) === seat
+          (j) =>
+            (j?.contestGradeId === gradeId || j?.gradeId === gradeId) &&
+            Number(j?.seatIndex) === seat
         );
         return {
           seatIndex: seat,
@@ -291,21 +383,33 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       }
     );
 
-    await deleteCompare.deleteData(
-      `currentStage/${currentContest.contests.id}/compares`
-    );
+    const contestId = currentContest?.contests?.id || currentContest?.id;
+    if (!contestId) {
+      antMessage.error(
+        "대회 정보(contestId)를 찾을 수 없습니다. 대회를 다시 선택해 주세요."
+      );
+      return;
+    }
+
+    try {
+      await deleteCompare.deleteData(
+        `currentStage/${contestId}/compares`
+      );
+    } catch (e) {
+      console.warn("compares 삭제 에러:", e);
+    }
 
     const newCurrentStateInfo = {
-      stageId,
-      stageNumber,
-      categoryId,
-      categoryTitle,
-      categoryJudgeType,
-      gradeId,
-      gradeTitle,
-      stageJudgeCount: categoryJudgeCount,
+      stageId: stageId || "",
+      stageNumber: stageNumber || currentStageId + 1,
+      categoryId: categoryId || "",
+      categoryTitle: categoryTitle || "",
+      categoryJudgeType: categoryJudgeType || "point",
+      gradeId: gradeId || "",
+      gradeTitle: gradeTitle || "",
+      stageJudgeCount: targetJudgeCount,
       judges: judgeInitState,
-      resultSaved: [],
+      resultSaved: false,
       compares: {
         status: {
           compareStart: false,
@@ -313,19 +417,48 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           compareCancel: false,
           compareIng: false,
         },
-        confirmed: { count: 0, numbers: [] },
+        confirmed: { count: 0 },
       },
-      screen: { status: { playStart: false }, players: [] },
+      screen: { status: { playStart: false } },
     };
 
-    const collectionInfo = `currentStage/${currentContest.contests.id}`;
+    const collectionInfo = `currentStage/${contestId}`;
 
     try {
-      await updateCurrentStage.updateData(collectionInfo, {
+      const res = await updateCurrentStage.updateData(collectionInfo, {
         ...newCurrentStateInfo,
       });
+
+      // 🎯 종목/체급 변경 시 전광판 스크린 화면을 무조건 [대기 및 종목/체급 안내(STANDBY)]로 즉각 강제 전환!
+      await updateCurrentStage.updateData(`currentBroadcast/${contestId}`, {
+        mode: "STANDBY",
+        contestTitle: currentContest?.contestInfo?.contestTitle || currentContest?.contests?.contestTitle || "",
+        stageInfo: {
+          categoryTitle: categoryTitle || "",
+          gradeTitle: gradeTitle || "",
+          gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
+          stageNumber: newCurrentStateInfo.stageNumber || "",
+          playerCount: targetStage?.players?.length || 0,
+        },
+        activePlayer: null,
+        specialScreenData: null,
+        calloutData: null,
+        updatedAt: Date.now(),
+      }).catch(() => {});
+
+      if (res) {
+        setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+        antMessage.success(
+          `대회가 시작되었습니다. (${newCurrentStateInfo.stageNumber}번: ${categoryTitle} - ${gradeTitle})`
+        );
+      } else {
+        antMessage.error(
+          "실시간 데이터 업데이트에 실패했습니다. Firebase 권한 또는 연결 상태를 확인해 주세요."
+        );
+      }
     } catch (error) {
-      console.log(error);
+      console.error("handleUpdateCurrentStage error:", error);
+      antMessage.error("대회 시작 중 오류가 발생했습니다: " + error.message);
     }
   };
 
@@ -337,18 +470,34 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   useEffect(() => {
-    if (
-      currentContest?.contests?.contestNoticeId &&
-      currentContest?.contests?.contestStagesAssignId &&
-      currentContest?.contests?.contestPlayersFinalId &&
-      currentContest?.contests?.contestJudgesAssignId
-    ) {
-      fetchPool(
-        currentContest.contests.contestNoticeId,
-        currentContest.contests.contestStagesAssignId,
-        currentContest?.contests?.contestPlayersFinalId,
-        currentContest?.contests?.contestJudgesAssignId
-      );
+    const noticeId =
+      currentContest?.contests?.contestNoticeId ||
+      currentContest?.contestInfo?.contestNoticeId ||
+      currentContest?.contestNoticeId;
+    const stageAssignId =
+      currentContest?.contests?.contestStagesAssignId ||
+      currentContest?.contestStagesAssignId;
+    const playerFinalId =
+      currentContest?.contests?.contestPlayersFinalId ||
+      currentContest?.contestPlayersFinalId;
+    const judgeAssignId =
+      currentContest?.contests?.contestJudgesAssignId ||
+      currentContest?.contestJudgesAssignId;
+
+    console.log("[ContestMonitoringBasecamp] 🔄 useEffect [currentContest] 트리거:", {
+      currentContest,
+      noticeId,
+      stageAssignId,
+      playerFinalId,
+      judgeAssignId,
+    });
+
+    if (noticeId || stageAssignId || playerFinalId) {
+      setIsLoading(true);
+      fetchPool(noticeId, stageAssignId, playerFinalId, judgeAssignId);
+    } else if (currentContest) {
+      console.warn("[ContestMonitoringBasecamp] ⚠️ 유효한 무대/선수 ID를 찾을 수 없어 로딩을 종료합니다:", currentContest);
+      setIsLoading(false);
     }
   }, [currentContest]);
 
@@ -673,7 +822,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   return (
-    <>
+    <BasecampErrorBoundary>
       {isLoading || realtimeLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
@@ -1394,7 +1543,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           </Card>
         </div>
       )}
-    </>
+    </BasecampErrorBoundary>
   );
 };
 

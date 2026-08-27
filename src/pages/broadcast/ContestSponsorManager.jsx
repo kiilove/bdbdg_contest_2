@@ -50,7 +50,9 @@ import {
   FireOutlined,
   InfoCircleOutlined,
   ReloadOutlined,
+  CloudDownloadOutlined,
 } from "@ant-design/icons";
+import PreDownloadModal from "../../components/broadcast/PreDownloadModal";
 import {
   calculateAdImpressionStats,
   resetAdImpressionCounts,
@@ -67,13 +69,18 @@ const ContestSponsorManager = () => {
   const [sponsors, setSponsors] = useState([]);
   const [videoSettings, setVideoSettings] = useState({
     standbyVideoUrl: "",
-    rankingVideoUrl: "",
     introVideoUrl: "",
+    calloutVideoUrl: "",
+    posedownVideoUrl: "",
+    rankingVideoUrl: "",
+    championVideoUrl: "",
+    awardVideoUrl: "",
   });
   const [docId, setDocId] = useState(null);
 
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPreDownloadOpen, setIsPreDownloadOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [form] = Form.useForm();
   const [selectedMediaType, setSelectedMediaType] = useState("IMAGE");
@@ -103,8 +110,12 @@ const ContestSponsorManager = () => {
         setSponsors(data[0].sponsors || []);
         setVideoSettings({
           standbyVideoUrl: data[0].standbyVideoUrl || "",
-          rankingVideoUrl: data[0].rankingVideoUrl || "",
           introVideoUrl: data[0].introVideoUrl || "",
+          calloutVideoUrl: data[0].calloutVideoUrl || "",
+          posedownVideoUrl: data[0].posedownVideoUrl || "",
+          rankingVideoUrl: data[0].rankingVideoUrl || "",
+          championVideoUrl: data[0].championVideoUrl || "",
+          awardVideoUrl: data[0].awardVideoUrl || "",
         });
       } else {
         setDocId(null);
@@ -624,66 +635,173 @@ const ContestSponsorManager = () => {
 
       {/* 2. 배경 비디오 설정 탭 */}
       {activeTab === "videos" && (
-        <Card className="shadow-sm rounded-2xl border-slate-200" title={<span className="font-black text-slate-800">무대 전광판 배경 비디오 (MP4) 설정</span>}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card
+          className="shadow-sm rounded-2xl border-slate-200"
+          title={<span className="font-black text-slate-800">무대 전광판 화면별 배경 비디오 (MP4) 7종 독립 설정</span>}
+          extra={
+            <Button
+              type="primary"
+              icon={<CloudDownloadOutlined />}
+              onClick={() => setIsPreDownloadOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 font-black rounded-xl shadow-md border-none"
+            >
+              ⚡ 무대 영상 사전 다운로드 (Pre-Download) 매니저
+            </Button>
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             
             {/* ① 대기 화면 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2">
-                <Tag color="blue" className="font-bold">대기 화면</Tag>
-                <span className="font-black text-sm text-slate-800">대기 및 종목 안내 비디오</span>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="blue" className="font-bold">1. 대기 화면</Tag>
+                  <span className="font-black text-sm text-slate-800">대기 및 종목 안내</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "standbyVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-blue-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">대기 화면 비디오 업로드</p>
+                </Upload.Dragger>
               </div>
-              <Upload.Dragger
-                accept="video/mp4,video/*"
-                showUploadList={false}
-                beforeUpload={(file) => handleVideoFileUpload(file, "standbyVideoUrl")}
-                disabled={isUploading}
-              >
-                <p className="ant-upload-drag-icon"><InboxOutlined className="text-blue-500" /></p>
-                <p className="ant-upload-text text-xs font-bold">대기 화면 비디오 업로드</p>
-              </Upload.Dragger>
               {videoSettings.standbyVideoUrl && (
-                <video src={videoSettings.standbyVideoUrl} controls className="w-full h-32 object-cover rounded-xl mt-2" />
+                <video src={videoSettings.standbyVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
               )}
             </div>
 
             {/* ② 선수 소개 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2">
-                <Tag color="cyan" className="font-bold">선수 소개</Tag>
-                <span className="font-black text-sm text-slate-800">선수 입장 스포트라이트 비디오</span>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="cyan" className="font-bold">2. 선수 소개</Tag>
+                  <span className="font-black text-sm text-slate-800">선수 입장 스포트라이트</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "introVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-cyan-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">선수 소개 비디오 업로드</p>
+                </Upload.Dragger>
               </div>
-              <Upload.Dragger
-                accept="video/mp4,video/*"
-                showUploadList={false}
-                beforeUpload={(file) => handleVideoFileUpload(file, "introVideoUrl")}
-                disabled={isUploading}
-              >
-                <p className="ant-upload-drag-icon"><InboxOutlined className="text-cyan-500" /></p>
-                <p className="ant-upload-text text-xs font-bold">선수 소개 비디오 업로드</p>
-              </Upload.Dragger>
               {videoSettings.introVideoUrl && (
-                <video src={videoSettings.introVideoUrl} controls className="w-full h-32 object-cover rounded-xl mt-2" />
+                <video src={videoSettings.introVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
               )}
             </div>
 
-            {/* ③ 순위 발표 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2">
-                <Tag color="gold" className="font-bold">순위 발표</Tag>
-                <span className="font-black text-sm text-slate-800">순위 발표 & 챔피언 세레모니 비디오</span>
+            {/* ③ 비교심사 호명 배경 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="orange" className="font-bold">3. 비교심사</Tag>
+                  <span className="font-black text-sm text-slate-800">비교심사 호명</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "calloutVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-orange-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">비교심사 비디오 업로드</p>
+                </Upload.Dragger>
               </div>
-              <Upload.Dragger
-                accept="video/mp4,video/*"
-                showUploadList={false}
-                beforeUpload={(file) => handleVideoFileUpload(file, "rankingVideoUrl")}
-                disabled={isUploading}
-              >
-                <p className="ant-upload-drag-icon"><InboxOutlined className="text-amber-500" /></p>
-                <p className="ant-upload-text text-xs font-bold">순위 발표 비디오 업로드</p>
-              </Upload.Dragger>
+              {videoSettings.calloutVideoUrl && (
+                <video src={videoSettings.calloutVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
+              )}
+            </div>
+
+            {/* ④ 포즈다운 배틀 배경 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="red" className="font-bold">4. 포즈다운</Tag>
+                  <span className="font-black text-sm text-slate-800">60초 포즈다운 배틀</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "posedownVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-red-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">포즈다운 비디오 업로드</p>
+                </Upload.Dragger>
+              </div>
+              {videoSettings.posedownVideoUrl && (
+                <video src={videoSettings.posedownVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
+              )}
+            </div>
+
+            {/* ⑤ 순위 발표 배경 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="gold" className="font-bold">5. 순위 발표</Tag>
+                  <span className="font-black text-sm text-slate-800">실시간 순위 발표 (2열 리스트)</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "rankingVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-amber-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">순위 발표 비디오 업로드</p>
+                </Upload.Dragger>
+              </div>
               {videoSettings.rankingVideoUrl && (
-                <video src={videoSettings.rankingVideoUrl} controls className="w-full h-32 object-cover rounded-xl mt-2" />
+                <video src={videoSettings.rankingVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
+              )}
+            </div>
+
+            {/* ⑥ 👑 1위 챔피언 단독 세레모니 배경 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="volcano" className="font-bold">6. 챔피언 세레모니</Tag>
+                  <span className="font-black text-sm text-slate-800">👑 1위 챔피언 단독 쇼케이스</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "championVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-orange-600" /></p>
+                  <p className="ant-upload-text text-xs font-bold">챔피언 세레모니 비디오 업로드</p>
+                </Upload.Dragger>
+              </div>
+              {videoSettings.championVideoUrl && (
+                <video src={videoSettings.championVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
+              )}
+            </div>
+
+            {/* ⑦ 공식 시상식 배경 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag color="purple" className="font-bold">7. 공식 시상식</Tag>
+                  <span className="font-black text-sm text-slate-800">🏅 시상식 & 포디움 단상</span>
+                </div>
+                <Upload.Dragger
+                  accept="video/mp4,video/*"
+                  showUploadList={false}
+                  beforeUpload={(file) => handleVideoFileUpload(file, "awardVideoUrl")}
+                  disabled={isUploading}
+                >
+                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-purple-500" /></p>
+                  <p className="ant-upload-text text-xs font-bold">시상식 비디오 업로드</p>
+                </Upload.Dragger>
+              </div>
+              {videoSettings.awardVideoUrl && (
+                <video src={videoSettings.awardVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
               )}
             </div>
 
@@ -847,6 +965,14 @@ const ContestSponsorManager = () => {
           </div>
         </Form>
       </Modal>
+
+      {/* ⚡ 무대 비디오 및 스폰서 광고 사전 다운로드 매니저 모달 */}
+      <PreDownloadModal
+        open={isPreDownloadOpen}
+        onClose={() => setIsPreDownloadOpen(false)}
+        videoSettings={videoSettings}
+        sponsors={sponsors}
+      />
     </div>
   );
 };

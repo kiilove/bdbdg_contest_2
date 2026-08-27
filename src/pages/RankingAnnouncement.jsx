@@ -8,6 +8,8 @@ import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
+import { useFirestoreQuery } from "../hooks/useFirestores";
+import { where } from "firebase/firestore";
 
 const RankingAnnouncement = () => {
   const [showFinalRank, setShowFinalRank] = useState(false); // 전체 순위표를 보여줄 상태 변수
@@ -16,10 +18,13 @@ const RankingAnnouncement = () => {
   const rankRefs = useRef([]); // 순위 요소들에 대한 참조 배열
   const finalRankingRef = useRef(null); // final-ranking 요소에 대한 참조
   const [playerShuffledIndexes, setPlayerShuffledIndexes] = useState({}); // 선수별로 섞인 randomIndex를 저장할 객체
+  const [uploadedRankingVideo, setUploadedRankingVideo] = useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
   const [contestId, setContestId] = useState("");
+
+  const sponsorQuery = useFirestoreQuery();
 
   const {
     data: realtimeData,
@@ -44,11 +49,26 @@ const RankingAnnouncement = () => {
   const scoreFinalDelay = Number(localStorage.getItem("scoreFinalDelay")) || 5;
   const playersToShow = Number(localStorage.getItem("playersToShow")) || 5;
 
-  // Contest ID 설정
+  // Contest ID 설정 & 스폰서 비디오 로드
   useEffect(() => {
     if (location?.state?.contestId) {
-      setContestId(location.state.contestId);
-      console.log(`Contest ID 설정됨: ${location.state.contestId}`);
+      const cId = location.state.contestId;
+      setContestId(cId);
+      console.log(`Contest ID 설정됨: ${cId}`);
+
+      const loadUploadedVideo = async () => {
+        try {
+          const condition = [where("contestId", "==", cId)];
+          const data = await sponsorQuery.getDocuments("contest_sponsor_list", condition);
+          if (data && data.length > 0) {
+            const vUrl = data[0].rankingVideoUrl || data[0].awardVideoUrl || "";
+            if (vUrl) setUploadedRankingVideo(vUrl);
+          }
+        } catch (err) {
+          console.warn("스폰서 영상 로드 실패:", err);
+        }
+      };
+      loadUploadedVideo();
     }
   }, [location]);
 
@@ -377,7 +397,7 @@ const RankingAnnouncement = () => {
   return (
     <div className="ranking-container">
       <ReactPlayer
-        url={AwardVideo}
+        url={uploadedRankingVideo || AwardVideo}
         width="100%"
         height="auto"
         playing

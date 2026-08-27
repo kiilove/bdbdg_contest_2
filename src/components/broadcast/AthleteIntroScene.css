@@ -1,21 +1,66 @@
-/* AthleteIntroScene.css - Hollywood & Pro Sports Broadcast Motion FX */
+/* 1. 사진 고정 및 안정적인 렌더링 스타일 */
+.animate-ken-burns {
+  /* 줌인/줌아웃 완전 비활성화 - 고정 */
+  transform: none !important;
+}
 
-/* 1. 배경 사진 1 켄 번스 슬로우 줌인/패닝 */
-@keyframes kenBurnsBg {
+.animate-wave-bg {
+  /* 줌인/줌아웃 완전 비활성화 - 고정 */
+  transform: none !important;
+}
+
+.animate-hero-wave {
+  /* 줌인/줌아웃 완전 비활성화 - 고정 */
+  transform: none !important;
+}
+
+/* 1-4. 헐리우드급 아나모픽 호라이즌 라이트 스트릭 (Anamorphic Lens Flare Streak) */
+@keyframes anamorphicFlareGlow {
   0% {
-    transform: scale(1.05) translate(0, 0);
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scaleX(0.7) scaleY(0.9);
   }
   50% {
-    transform: scale(1.15) translate(-15px, -8px);
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scaleX(1.15) scaleY(1.3);
   }
   100% {
-    transform: scale(1.05) translate(0, 0);
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scaleX(0.7) scaleY(0.9);
   }
 }
 
-.animate-ken-burns {
-  animation: kenBurnsBg 20s ease-in-out infinite alternate;
+.animate-anamorphic-flare {
+  animation: anamorphicFlareGlow 5.5s ease-in-out infinite;
 }
+
+/* 1-5. 챔피언 카드 대각선 크롬 라이트 스윕 (Card Light Sheen) */
+@keyframes cardSheenSweep {
+  0% {
+    transform: translate3d(-180%, -180%, 0) rotate(35deg);
+  }
+  40% {
+    transform: translate3d(220%, 220%, 0) rotate(35deg);
+  }
+  100% {
+    transform: translate3d(220%, 220%, 0) rotate(35deg);
+  }
+}
+
+.animate-card-sheen {
+  animation: cardSheenSweep 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* 1-6. 실시간 오디오/스테이지 이퀄라이저 펄스 바 */
+@keyframes eqBarPulse {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+.eq-bar-1 { animation: eqBarPulse 0.8s ease-in-out infinite 0.1s; }
+.eq-bar-2 { animation: eqBarPulse 0.6s ease-in-out infinite 0.3s; }
+.eq-bar-3 { animation: eqBarPulse 0.9s ease-in-out infinite 0.2s; }
+.eq-bar-4 { animation: eqBarPulse 0.7s ease-in-out infinite 0.4s; }
 
 /* 2. 테마별 초강력 크롬 글린트 라이트 스윕 */
 @keyframes hyperSheen {
@@ -124,27 +169,61 @@
                0 0 75px currentColor;
 }
 
-/* 4. 전면 사진 2 초정밀 다중 페더링 마스크 */
-.hero-photo-flawless-mask {
+/* 4. 전면 1번 사진: 3:4 비율 전용 초정밀 소프트 페더링 블렌딩 마스크 (얼굴 보호 Top 중심) */
+.hero-photo-34-mask {
   mask-image: radial-gradient(
-    ellipse 58% 72% at 50% 48%,
-    black 20%,
-    rgba(0, 0, 0, 0.95) 40%,
-    rgba(0, 0, 0, 0.6) 60%,
-    rgba(0, 0, 0, 0.2) 75%,
-    transparent 88%
+    ellipse 82% 86% at 50% 42%,
+    #000000 45%,
+    rgba(0, 0, 0, 0.92) 65%,
+    rgba(0, 0, 0, 0.5) 80%,
+    rgba(0, 0, 0, 0.15) 92%,
+    transparent 100%
   );
   -webkit-mask-image: radial-gradient(
-    ellipse 58% 72% at 50% 48%,
-    black 20%,
-    rgba(0, 0, 0, 0.95) 40%,
-    rgba(0, 0, 0, 0.6) 60%,
-    rgba(0, 0, 0, 0.2) 75%,
-    transparent 88%
+    ellipse 82% 86% at 50% 42%,
+    #000000 45%,
+    rgba(0, 0, 0, 0.92) 65%,
+    rgba(0, 0, 0, 0.5) 80%,
+    rgba(0, 0, 0, 0.15) 92%,
+    transparent 100%
   );
 }
 
-/* 5. 배경 사진 1 마스크 */
+.hero-photo-flawless-mask {
+  mask-image: radial-gradient(
+    ellipse 92% 95% at 50% 50%,
+    black 65%,
+    rgba(0, 0, 0, 0.85) 80%,
+    rgba(0, 0, 0, 0.35) 92%,
+    transparent 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 92% 95% at 50% 50%,
+    black 65%,
+    rgba(0, 0, 0, 0.85) 80%,
+    rgba(0, 0, 0, 0.35) 92%,
+    transparent 100%
+  );
+}
+
+/* 5. 2번 와이드 배경 사진: 비디오와 자연스럽게 스며드는 시네마틱 블렌딩 마스크 */
+.bg-photo-cinematic-blend {
+  mask-image: radial-gradient(
+    ellipse 85% 90% at 55% 50%,
+    rgba(0, 0, 0, 0.95) 25%,
+    rgba(0, 0, 0, 0.75) 55%,
+    rgba(0, 0, 0, 0.35) 80%,
+    transparent 98%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 85% 90% at 55% 50%,
+    rgba(0, 0, 0, 0.95) 25%,
+    rgba(0, 0, 0, 0.75) 55%,
+    rgba(0, 0, 0, 0.35) 80%,
+    transparent 98%
+  );
+}
+
 .bg-photo-mask {
   mask-image: radial-gradient(
     ellipse 85% 90% at 35% 50%,
@@ -185,5 +264,10 @@
   align-items: center;
   gap: 2rem;
   min-width: 100%;
-  animation: marqueeScrollTwin 30s linear infinite;
+  animation: marqueeScrollTwin 75s linear infinite;
+  will-change: transform;
+}
+
+.marquee-container:hover .marquee-track {
+  animation-play-state: paused;
 }

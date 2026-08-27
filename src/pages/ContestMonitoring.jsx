@@ -63,68 +63,67 @@ const ContestMonitoring = () => {
     },
   ];
 
+  // ⏳ 대회 정보가 완전히 불러와질 때까지 대기
+  const isContestLoaded = Boolean(currentContest?.contests?.id || currentContest?.id);
+
+  if (isLoading || !isContestLoaded) {
+    return <LoadingPage />;
+  }
+
   return (
-    <>
-      {isLoading && <LoadingPage />}
-      {!isLoading && (
-        <div className="flex flex-col w-full h-full bg-white rounded-lg p-0 gap-y-2">
-          <div className="flex w-full h-full ">
-            <div className="flex w-full justify-start items-center">
-              <div className="flex w-full h-full justify-start categoryIdart p-0 flex-col bg-gray-100 rounded-lg">
-                <div className="flex w-full">
-                  {tabArray.map((tab, tIdx) => {
-                    if (!tab.visible) {
-                      return null;
-                    } else {
-                      if (params.target === "all") {
-                        return (
-                          <>
-                            <button
-                              className={`${
-                                currentTab === tab.id
-                                  ? " flex w-auto h-10 bg-white px-4"
-                                  : " flex w-auto h-10 bg-gray-100 px-4"
-                              }  h-14 rounded-t-lg justify-center items-center`}
-                              onClick={() => setCurrentTab(tIdx)}
-                            >
-                              <span>{tab.title}</span>
-                            </button>
-                          </>
-                        );
-                      }
-                    }
-                  })}
-                </div>
-                {params.target === "all" && currentTab === 0 && (
-                  <ContestMonitoringBasecamp
-                    isHolding={isHolding}
-                    setIsHolding={setIsHolding}
-                  />
-                )}
-                {params.target === "main" && currentTab === 0 && (
-                  <ContestMonitoringBasecamp
-                    isHolding={isHolding}
-                    setIsHolding={setIsHolding}
-                  />
-                )}
-                {currentTab === 1 && (
-                  <ContestMonitoringJudgeHead
-                    isHolding={isHolding}
-                    setIsHolding={setIsHolding}
-                  />
-                )}
-                {currentTab === 2 && (
-                  <ContestMonitoringHost
-                    contestId={currentContest?.contests.id}
-                  />
-                )}
-                {currentTab === 3 && <StandingTableType1 />}
-              </div>
+    <div className="flex flex-col w-full h-full bg-white rounded-lg p-0 gap-y-2">
+      <div className="flex w-full h-full">
+        <div className="flex w-full justify-start items-center">
+          <div className="flex w-full h-full justify-start p-0 flex-col bg-gray-100 rounded-lg">
+            <div className="flex w-full">
+              {tabArray.map((tab, tIdx) => {
+                if (!tab.visible) return null;
+                if (params.target === "all") {
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`${
+                        currentTab === tab.id
+                          ? "flex w-auto h-10 bg-white px-4"
+                          : "flex w-auto h-10 bg-gray-100 px-4"
+                      } h-14 rounded-t-lg justify-center items-center`}
+                      onClick={() => setCurrentTab(tIdx)}
+                    >
+                      <span>{tab.title}</span>
+                    </button>
+                  );
+                }
+                return null;
+              })}
             </div>
+            {params.target === "all" && currentTab === 0 && (
+              <ContestMonitoringBasecamp
+                isHolding={isHolding}
+                setIsHolding={setIsHolding}
+              />
+            )}
+            {params.target === "main" && currentTab === 0 && (
+              <ContestMonitoringBasecamp
+                isHolding={isHolding}
+                setIsHolding={setIsHolding}
+              />
+            )}
+            {currentTab === 1 && (
+              <ContestMonitoringJudgeHead
+                isHolding={isHolding}
+                setIsHolding={setIsHolding}
+              />
+            )}
+            {currentTab === 2 && (
+              <ContestMonitoringHost
+                contestId={currentContest?.contests?.id || currentContest?.id || ""}
+              />
+            )}
+            {currentTab === 3 && <StandingTableType1 />}
           </div>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 };
 
