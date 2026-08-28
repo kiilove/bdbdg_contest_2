@@ -2,11 +2,8 @@
 
 import React from "react";
 import { UserOutlined, FireOutlined } from "@ant-design/icons";
-import defaultStandbyVideo from "../../assets/mov/ybbf_mp4.mp4";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
-
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 
 // 기본 협찬사 데모 목록
 const DEFAULT_SPONSORS = [
@@ -28,7 +25,6 @@ const StandbyStageScene = ({
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
 
   const isStageActive = stageInfo && (stageInfo.categoryTitle || stageInfo.gradeTitle);
-  const videoSrc = backgroundVideoUrl || defaultStandbyVideo;
 
   // 스폰서 기본 목록 (최소 6개 이상이 되도록 반복 구성)
   const rawList = sponsors && sponsors.length > 0 ? sponsors : DEFAULT_SPONSORS;

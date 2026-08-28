@@ -13,8 +13,6 @@ import {
 } from "@ant-design/icons";
 import demoBodybuilderImg from "../../assets/img/demo_bodybuilder.jpg";
 import demoBodybuilderBg from "../../assets/img/demo_bodybuilder_bg.jpg";
-import defaultAwardVideo from "../../assets/mov/award2.mp4";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
 
@@ -27,7 +25,6 @@ const SpecialStageScene = ({
 }) => {
   const containerRef = useRef(null);
   const theme = THEME_CONFIGS[specialData?.colorTheme || colorTheme] || THEME_CONFIGS.GOLD;
-  const videoSrc = backgroundVideoUrl || defaultAwardVideo;
 
   const title = specialData?.title || "🏆 그랑프리 (OVERALL) 결정전";
   const subTitle = specialData?.subTitle || "대회 최고 영예의 통합 챔피언 공식 발표";
@@ -65,15 +62,10 @@ const SpecialStageScene = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen bg-black text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none animate-fade-in"
+      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none animate-fade-in"
     >
-      {/* 🎬 배경 MP4 비디오 레이어 */}
-      <SmoothBackgroundVideo
-        src={videoSrc}
-        fallbackSrc={defaultAwardVideo}
-        overlayGradient="from-slate-950/95 via-slate-950/70 to-slate-950/80"
-        gradientDirection="bg-gradient-to-t"
-      />
+      {/* 🎬 배경 다크 오버레이 (루트 페이지 배경 비디오 위에 어둡게 덮기) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-950/80 pointer-events-none z-0" />
 
       {/* 🌟 앰비언트 테마 글로우 */}
       <div

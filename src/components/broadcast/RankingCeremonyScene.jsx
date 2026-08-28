@@ -6,9 +6,8 @@ import { useFirestoreQuery } from "../../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { gsap } from "gsap";
 import { TrophyOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import defaultAwardVideo from "../../assets/mov/award2.mp4";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
+import { LaurelBranch } from "./LaurelWreathWings";
 import "./AthleteIntroScene.css";
 
 const getRankThemeStyle = (rank, themeKey = "GOLD") => {
@@ -17,7 +16,7 @@ const getRankThemeStyle = (rank, themeKey = "GOLD") => {
   switch (rank) {
     case 1:
       return {
-        bg: `bg-slate-950/98 ${theme.border} shadow-[0_20px_60px_rgba(0,0,0,0.95)]`,
+        bg: `bg-slate-950/65 backdrop-blur-2xl ${theme.border} shadow-[0_20px_60px_rgba(251,191,36,0.25)]`,
         badgeBg: `bg-gradient-to-br ${theme.textGradient} text-slate-950`,
         border: theme.border,
         textColor: theme.primary,
@@ -25,26 +24,26 @@ const getRankThemeStyle = (rank, themeKey = "GOLD") => {
       };
     case 2:
       return {
-        bg: "bg-slate-950/98 border-slate-300/80 shadow-[0_15px_40px_rgba(0,0,0,0.9)]",
+        bg: "bg-slate-950/65 backdrop-blur-2xl border-slate-300/60 shadow-[0_15px_40px_rgba(0,0,0,0.6)]",
         badgeBg: "bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950",
-        border: "border-slate-300/80",
+        border: "border-slate-300/60",
         textColor: "text-slate-200",
         titleBadge: "bg-slate-300/20 text-slate-200 border-slate-300/30",
       };
     case 3:
       return {
-        bg: "bg-slate-950/98 border-amber-600/80 shadow-[0_15px_40px_rgba(0,0,0,0.9)]",
-        badgeBg: "bg-gradient-to-br from-amber-600 to-amber-800 text-white",
-        border: "border-amber-600/80",
-        textColor: "text-amber-400",
-        titleBadge: "bg-amber-700/20 text-amber-300 border-amber-600/30",
+        bg: "bg-slate-950/65 backdrop-blur-2xl border-amber-600/60 shadow-[0_15px_40px_rgba(0,0,0,0.6)]",
+        badgeBg: "bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950",
+        border: "border-amber-600/60",
+        textColor: theme.primary,
+        titleBadge: "bg-amber-600/20 text-amber-300 border-amber-600/30",
       };
     default:
       return {
-        bg: "bg-slate-950/98 border-white/10 shadow-lg",
-        badgeBg: "bg-slate-800 text-slate-300",
-        border: "border-white/10",
-        textColor: "text-slate-200",
+        bg: "bg-slate-950/65 backdrop-blur-xl border-white/15 shadow-xl",
+        badgeBg: "bg-slate-800 text-slate-200",
+        border: "border-white/15",
+        textColor: "text-white",
         titleBadge: "bg-white/10 text-slate-300 border-white/10",
       };
   }
@@ -56,6 +55,7 @@ const RankingCeremonyScene = ({
   gradeTitle = "",
   gradeId = "",
   rankingData = [],
+  playerCount = 0,
   backgroundVideoUrl,
   colorTheme = "GOLD",
   onFinishCeremony,
@@ -71,7 +71,6 @@ const RankingCeremonyScene = ({
   const fetchResultQuery = useFirestoreQuery();
 
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
-  const videoSrc = backgroundVideoUrl || defaultAwardVideo;
 
   // 1. 순위 데이터 필터링
   const processRankingData = (rawList) => {
@@ -119,17 +118,21 @@ const RankingCeremonyScene = ({
       item.playerNumber !== top3?.playerNumber
   );
 
-  const displayTop1 = top1 || {
-    playerRank: 1,
+  // 📌 인원수(playerCount)를 기반으로 데이터 없는 슬롯도 "데이터 없음"으로 표시
+  const slotCount = Math.max(ranks.length, playerCount || 0, 1);
+  const makePlaceholder = (rank) => ({
+    playerRank: rank,
     playerNumber: "-",
     playerName: "데이터 없음",
     playerGym: "심사 결과 집계 대기",
-  };
-  const displayTop2 = top2 || null;
-  const displayTop3 = top3 || null;
+  });
+
+  const displayTop1 = top1 || makePlaceholder(1);
+  const displayTop2 = slotCount >= 2 ? (top2 || makePlaceholder(2)) : null;
+  const displayTop3 = slotCount >= 3 ? (top3 || makePlaceholder(3)) : null;
   const displayRestRanks = restRanks && restRanks.length > 0 ? restRanks : [];
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 실시간 조회
+  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 및 고유 출전 체급 실시간 조회
   const [realPlayersMap, setRealPlayersMap] = useState({});
 
   useEffect(() => {
@@ -153,6 +156,25 @@ const RankingCeremonyScene = ({
     };
     fetchRealPlayers();
   }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+
+  const matchedTop1 = realPlayersMap[String(displayTop1.playerNumber).trim()] || realPlayersMap[String(displayTop1.playerName).trim()];
+
+  // 🏷️ 순위표 체급 표기: 통합 단어 및 다중 체급 나열 제거 ➜ 단일 출전 체급명만 정확하게 표출
+  const getSingleGradeTitle = (rawGradeTitle, athlete) => {
+    if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
+    if (athlete?.gradeTitle) return athlete.gradeTitle;
+    if (!rawGradeTitle) return "";
+    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    // 만약 "-172cm -178cm +178cm" 또는 "-75kg -80kg" 처럼 여러 체급이 나열된 경우
+    const parts = cleaned.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      // 선수의 키/체중 또는 첫번째 체급으로 단일화
+      return parts[0];
+    }
+    return cleaned;
+  };
+
+  const cleanGradeTitle = getSingleGradeTitle(gradeTitle, matchedTop1 || displayTop1);
 
   const getPlayerPhoto = (player) => {
     if (!player) return "";
@@ -190,7 +212,7 @@ const RankingCeremonyScene = ({
     });
   }, [contestTitle, categoryTitle, gradeTitle, rankingData, ranks, displayTop1, displayTop2, displayTop3, displayRestRanks]);
 
-  // 🎬 GSAP 실제 시상식 순차 타격 애니메이션
+  // 🎬 GSAP 실제 시상식 순차 타격 애니메이션: 3위 발표 ➜ 긴장감 빌드업 후 2위 발표 ➜ 1위 즉시 연타 안착
   useEffect(() => {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
@@ -198,48 +220,48 @@ const RankingCeremonyScene = ({
       // [0.0s] 헤더 바 슬라이드
       tl.fromTo(".header-bar", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 0);
 
-      // [0.2s] 4위 이상 입상자 (있을 때만)
+      // [0.3s] 4위 이상 입상자 우측 리스트 슬라이드
       if (document.querySelectorAll(".rest-rank-item").length > 0) {
         tl.fromTo(".rest-rank-item", { opacity: 0, x: 40 }, {
           opacity: 1,
           x: 0,
-          duration: 0.45,
+          duration: 0.5,
           stagger: 0.1,
           ease: "power3.out",
-        }, 0.2);
+        }, 0.3);
       }
 
-      // [0.8s] 🥉 3위 카드 (있을 때만)
+      // [1.2s] 🥉 3위 카드 등장 (사회자: "3위 발표!")
       if (card3Ref.current) {
         tl.fromTo(card3Ref.current, { opacity: 0, x: -60, scale: 0.95 }, {
           opacity: 1,
           x: 0,
           scale: 1,
-          duration: 0.65,
-          ease: "back.out(1.8)",
-        }, 0.8);
+          duration: 0.7,
+          ease: "back.out(1.6)",
+        }, 1.2);
       }
 
-      // [1.4s] 🥈 2위 카드
+      // [4.5s] 🥈 2위 카드 긴장감 속 등장 (3위 발표 후 충분한 긴장감 ➜ 사회자: "준우승 2위 발표!")
       if (card2Ref.current) {
         tl.fromTo(card2Ref.current, { opacity: 0, x: -60, scale: 0.95 }, {
           opacity: 1,
           x: 0,
           scale: 1,
-          duration: 0.65,
-          ease: "back.out(1.8)",
-        }, 1.4);
+          duration: 0.7,
+          ease: "back.out(1.6)",
+        }, 4.5);
       }
 
-      // [2.0s] 🥇 대망의 1위 카드 웅장한 확대 안착
+      // [5.3s] 🥇 2위가 나오는 즉시 대망의 1위 우승 챔피언 카드 연속 임팩트 안착! (사회자: "그리고 1위 챔피언 우승!")
       if (card1Ref.current) {
         tl.fromTo(card1Ref.current, { opacity: 0, x: -80, scale: 0.9 }, {
           opacity: 1,
           x: 0,
           scale: 1,
-          duration: 0.8,
+          duration: 0.9,
           ease: "elastic.out(1, 0.6)",
-        }, 2.0);
+        }, 5.3);
       }
 
     }, containerRef);
@@ -261,7 +283,7 @@ const RankingCeremonyScene = ({
               <span>OFFICIAL RANKING CEREMONY • 공식 순위 발표</span>
             </div>
             <h1 className="text-base sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate">
-              {categoryTitle || "공식 종목"} {gradeTitle && <span className={`${theme.primary} ml-2 font-mono`}>{gradeTitle}</span>}
+              {categoryTitle || "공식 종목"} {cleanGradeTitle && <span className={`${theme.primary} ml-2 font-mono`}>{cleanGradeTitle}</span>}
             </h1>
           </div>
         </div>
@@ -284,176 +306,164 @@ const RankingCeremonyScene = ({
             {/* ===================== [ 좌측: 1위, 2위, 3위 포디움 ] ===================== */}
             <div className="col-span-6 lg:col-span-7 flex flex-col justify-between gap-2 sm:gap-3 h-full">
               
-              {/* 🥇 1위 카드 */}
+              {/* 🥇 1위 카드 (초투명 크리스탈 & 대형 황금 월계관) */}
               {displayTop1 && (
                 <div
                   ref={card1Ref}
-                  className={`relative flex-1 rounded-2xl sm:rounded-3xl px-3 sm:px-5 py-2 sm:py-3 border-2 ${
-                    style1.border
-                  } bg-slate-950 flex items-center justify-between shadow-[0_25px_60px_rgba(0,0,0,0.98)] overflow-hidden`}
+                  className={`relative flex-[1.3] rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border-2 border-amber-400/90 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_35px_rgba(251,191,36,0.2)] overflow-hidden`}
                 >
-                  <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/20 via-transparent to-black/80 pointer-events-none z-0" />
-                  <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-amber-400 via-yellow-300 to-amber-500 z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 via-yellow-500/5 to-transparent pointer-events-none z-0" />
+                  <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-400 via-yellow-300 to-amber-500 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-2.5 sm:gap-4 lg:gap-6 min-w-0 pl-1.5">
-                    <div className="relative shrink-0">
-                      <div className={`w-14 h-14 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border-2 ${style1.border} bg-black shadow-2xl flex items-center justify-center`}>
-                        {getPlayerPhoto(displayTop1) ? (
+                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                    {/* 선수 사진 (있을 때만 표시) */}
+                    {getPlayerPhoto(displayTop1) && (
+                      <div className="relative shrink-0">
+                        <div className={`w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-amber-400 bg-black/50 shadow-[0_0_20px_rgba(251,191,36,0.3)] flex items-center justify-center`}>
                           <img
                             src={getPlayerPhoto(displayTop1)}
                             alt={displayTop1.playerName}
                             className="w-full h-full object-cover object-top"
                           />
-                        ) : (
-                          <TrophyOutlined className="text-2xl sm:text-4xl text-amber-400" />
-                        )}
+                        </div>
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 px-1.5 sm:px-2.5 py-0.5 rounded-md sm:rounded-lg ${style1.badgeBg} font-black text-[10px] sm:text-xs shadow-lg`}>
-                        1위
-                      </div>
-                    </div>
+                    )}
 
-                    <div className="min-w-0 space-y-0.5 sm:space-y-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <span className={`px-1.5 sm:px-2.5 py-0.5 rounded-md bg-black border ${style1.border} font-mono font-black text-xs sm:text-sm lg:text-base ${style1.textColor}`}>
+                    <div className="min-w-0 space-y-2 flex-1">
+                      {/* [1. 순위] ➜ [2. 번호] */}
+                      <div className="flex items-center gap-3">
+                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                          1위
+                        </span>
+                        <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-400/90 font-mono font-black text-base sm:text-lg lg:text-xl text-amber-300 shadow-xl leading-none shrink-0`}>
                           NO.{displayTop1.playerNumber}
                         </span>
-                        <span className={`px-1.5 sm:px-2.5 py-0.5 rounded-full ${style1.titleBadge} font-black text-[9px] sm:text-[10px] lg:text-[11px]`}>
-                          1위 • 우승
-                        </span>
                       </div>
 
-                      <h2 className="text-lg sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate">
-                        {displayTop1.playerName}
-                      </h2>
+                      {/* [3. 이름] 성명 + 황금 월계관 날개 */}
+                      <div className="flex items-center gap-2 sm:gap-4 py-0.5 flex-nowrap">
+                        <LaurelBranch side="left" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
+                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-amber-300 m-0 tracking-tight leading-none break-keep truncate drop-shadow-[0_2px_15px_rgba(251,191,36,0.45)] whitespace-nowrap">
+                          {displayTop1.playerName}
+                        </h2>
+                        <LaurelBranch side="right" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
+                      </div>
 
-                      <div className="text-[11px] sm:text-xs lg:text-sm text-slate-200 font-bold break-keep truncate drop-shadow-md">
+                      {/* [4. 소속] */}
+                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop1.playerGym || "-"}
                       </div>
                     </div>
                   </div>
-
-                  <div className="relative z-10 text-right hidden xl:block shrink-0 pr-2">
-                    <span className={`text-base lg:text-lg font-black tracking-widest ${style1.textColor} uppercase font-mono block`}>
-                      1ST WINNER
-                    </span>
-                  </div>
                 </div>
               )}
 
-              {/* 🥈 2위 카드 */}
+              {/* 🥈 2위 카드 (초투명 크리스탈) */}
               {displayTop2 && (
                 <div
                   ref={card2Ref}
-                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-3 sm:px-5 py-2 sm:py-3 border border-slate-300/80 bg-slate-950 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
-                  <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-400/15 via-transparent to-black/80 pointer-events-none z-0" />
-                  <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-slate-200 to-slate-400 z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
+                  <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-slate-200 to-slate-400 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-2.5 sm:gap-4 lg:gap-6 min-w-0 pl-1">
-                    <div className="relative shrink-0">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-300/80 bg-black shadow-xl flex items-center justify-center">
-                        {getPlayerPhoto(displayTop2) ? (
+                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                    {getPlayerPhoto(displayTop2) && (
+                      <div className="relative shrink-0">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-300/80 bg-black/50 shadow-xl flex items-center justify-center">
                           <img
                             src={getPlayerPhoto(displayTop2)}
                             alt={displayTop2.playerName}
                             className="w-full h-full object-cover object-top"
                           />
-                        ) : (
-                          <TrophyOutlined className="text-xl sm:text-3xl text-slate-300" />
-                        )}
+                        </div>
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-md ${style2.badgeBg} font-black text-[9px] sm:text-[10px]`}>
-                        2위
-                      </div>
-                    </div>
+                    )}
 
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded bg-black border border-slate-400/50 font-mono font-black text-[11px] sm:text-xs lg:text-sm text-slate-200">
+                    <div className="min-w-0 space-y-2 flex-1">
+                      {/* [1. 순위] ➜ [2. 번호] */}
+                      <div className="flex items-center gap-3">
+                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                          2위
+                        </span>
+                        <span className="px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-slate-400/50 font-mono font-black text-base sm:text-lg lg:text-xl text-slate-200 shadow-xl leading-none shrink-0">
                           NO.{displayTop2.playerNumber}
                         </span>
-                        <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold">2위 • 준우승</span>
                       </div>
 
-                      <h3 className="text-base sm:text-xl lg:text-2xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate">
-                        {displayTop2.playerName}
-                      </h3>
+                      {/* [3. 이름] */}
+                      <div className="py-0.5">
+                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                          {displayTop2.playerName}
+                        </h2>
+                      </div>
                       
-                      <div className="text-[10px] sm:text-xs lg:text-sm text-slate-300 font-semibold break-keep truncate drop-shadow-md">
+                      {/* [4. 소속] */}
+                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop2.playerGym || "-"}
                       </div>
                     </div>
                   </div>
-
-                  <div className="relative z-10 text-right hidden xl:block shrink-0 pr-2">
-                    <span className="text-sm font-black text-slate-300 uppercase font-mono">2ND PLACE</span>
-                  </div>
                 </div>
               )}
 
-              {/* 🥉 3위 카드 */}
+              {/* 🥉 3위 카드 (초투명 크리스탈) */}
               {displayTop3 && (
                 <div
                   ref={card3Ref}
-                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-3 sm:px-5 py-2 sm:py-3 border border-amber-600/80 bg-slate-950 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
-                  <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/15 via-transparent to-black/80 pointer-events-none z-0" />
-                  <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-amber-600 to-amber-800 z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
+                  <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-600 to-amber-800 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-2.5 sm:gap-4 lg:gap-6 min-w-0 pl-1">
-                    <div className="relative shrink-0">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-2xl overflow-hidden border border-amber-600/80 bg-black shadow-xl flex items-center justify-center">
-                        {getPlayerPhoto(displayTop3) ? (
+                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                    {getPlayerPhoto(displayTop3) && (
+                      <div className="relative shrink-0">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-amber-600/80 bg-black/50 shadow-xl flex items-center justify-center">
                           <img
                             src={getPlayerPhoto(displayTop3)}
                             alt={displayTop3.playerName}
                             className="w-full h-full object-cover object-top"
                           />
-                        ) : (
-                          <TrophyOutlined className="text-xl sm:text-3xl text-amber-500" />
-                        )}
+                        </div>
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-md ${style3.badgeBg} font-black text-[9px] sm:text-[10px]`}>
-                        3위
-                      </div>
-                    </div>
+                    )}
 
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <span className={`px-1.5 sm:px-2 py-0.5 rounded bg-black border border-amber-600/50 font-mono font-black text-[11px] sm:text-xs lg:text-sm ${theme.primary}`}>
+                    <div className="min-w-0 space-y-2 flex-1">
+                      {/* [1. 순위] ➜ [2. 번호] */}
+                      <div className="flex items-center gap-3">
+                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                          3위
+                        </span>
+                        <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-600/50 font-mono font-black text-base sm:text-lg lg:text-xl ${theme.primary} shadow-xl leading-none shrink-0`}>
                           NO.{displayTop3.playerNumber}
                         </span>
-                        <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold">3위 • 입상</span>
                       </div>
 
-                      <h3 className="text-base sm:text-xl lg:text-2xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate">
-                        {displayTop3.playerName}
-                      </h3>
+                      {/* [3. 이름] */}
+                      <div className="py-0.5">
+                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                          {displayTop3.playerName}
+                        </h2>
+                      </div>
                       
-                      <div className="text-[10px] sm:text-xs lg:text-sm text-slate-300 font-semibold break-keep truncate drop-shadow-md">
+                      {/* [4. 소속] */}
+                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop3.playerGym || "-"}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="relative z-10 text-right hidden xl:block shrink-0 pr-2">
-                    <span className={`text-sm font-black ${theme.primary} uppercase font-mono`}>3RD PLACE</span>
                   </div>
                 </div>
               )}
 
             </div>
 
-            {/* ===================== [ 우측: 본선 입상자 (4위 ~ N위) ] ===================== */}
-            <div className="col-span-6 lg:col-span-5 flex flex-col h-full bg-slate-950/95 rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-white/15 overflow-hidden shadow-2xl">
+            {/* ===================== [ 우측: 4위 ~ N위 순위표 ] ===================== */}
+            <div className="col-span-6 lg:col-span-5 flex flex-col h-full bg-black/20 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-white/15 overflow-hidden shadow-2xl">
               <div className="flex items-center justify-between border-b border-white/10 pb-2 sm:pb-3 mb-2 shrink-0">
                 <span className="font-black text-xs sm:text-sm text-slate-200 tracking-wider flex items-center gap-1.5 sm:gap-2">
                   <span className={`w-2 h-2 rounded-full ${theme.primary} bg-current`} />
-                  <span>본선 입상자 (TOP 4 ~ {ranks.length})</span>
+                  <span>TOP 4 ~ {ranks.length}</span>
                 </span>
                 <span className="text-[10px] sm:text-xs text-slate-400 font-bold">
                   총 {ranks.length}명
@@ -474,24 +484,27 @@ const RankingCeremonyScene = ({
                       } border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-between shadow-md backdrop-blur-md transition-all`}
                     >
                       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        {/* 1. 순위 */}
                         <div className={`flex items-center justify-center ${
                           isDense ? "w-7 h-7 sm:w-8 sm:h-8 text-xs font-black" : "w-8 h-8 sm:w-10 sm:h-10 text-xs sm:text-sm font-black"
                         } rounded-lg sm:rounded-xl bg-slate-800 border border-slate-700 text-white shrink-0`}>
                           {rank}위
                         </div>
 
+                        {/* 2. 번호 */}
                         <div className={`${isDense ? "px-2 py-0.5" : "px-2.5 py-1"} rounded-md sm:rounded-lg bg-slate-950 border border-white/10 shrink-0`}>
                           <span className={`text-xs sm:text-sm font-mono font-black ${theme.primary}`}>
                             NO.{item.playerNumber}
                           </span>
                         </div>
 
+                        {/* 3. 이름 & 4. 소속 */}
                         <div className="min-w-0 space-y-0.5">
                           <div className={`${isDense ? "text-xs sm:text-sm lg:text-base" : "text-sm sm:text-base lg:text-lg"} font-black text-white leading-tight break-keep truncate`}>
                             {item.playerName}
                           </div>
                           {item.playerGym && (
-                            <div className="text-[10px] sm:text-xs text-slate-400 font-medium break-keep truncate max-w-[100px] sm:max-w-[160px]">
+                            <div className="text-xs sm:text-sm text-slate-300 font-semibold break-keep truncate max-w-[120px] sm:max-w-[180px]">
                               {item.playerGym}
                             </div>
                           )}
@@ -505,167 +518,158 @@ const RankingCeremonyScene = ({
 
           </div>
         ) : (
-          /* 2~3명 출전: 우측 더미 박스 없이 1위·2위(·3위)를 화면 중앙에 웅장하게 배치 */
+          /* 2~3명 출전: 우측 더미 박스 없이 1위(대형 부각) · 2위 · 3위를 화면 중앙에 웅장하게 배치 */
           <div className="w-full max-w-3xl lg:max-w-4xl mx-auto flex flex-col justify-center gap-3 sm:gap-4 h-full py-1">
             
-            {/* 🥇 1위 카드 */}
+            {/* 🥇 1위 카드 (압도적 대형 볼륨 & 초투명 크리스탈 & 황금 월계관) */}
             {displayTop1 && (
               <div
                 ref={card1Ref}
-                className={`relative flex-1 rounded-3xl p-4 sm:p-6 border-2 ${
-                  style1.border
-                } bg-slate-950 flex items-center justify-between shadow-[0_25px_60px_rgba(0,0,0,0.98)] overflow-hidden`}
+                className={`relative flex-[1.4] rounded-3xl p-5 sm:p-7 border-2 border-amber-400/90 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_40px_rgba(251,191,36,0.2)] overflow-hidden`}
               >
-                <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/20 via-transparent to-black/80 pointer-events-none z-0" />
-                <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-400 via-yellow-300 to-amber-500 z-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 via-yellow-500/5 to-transparent pointer-events-none z-0" />
+                <div className="absolute left-0 top-0 bottom-0 w-3.5 bg-gradient-to-b from-amber-400 via-yellow-300 to-amber-500 z-10" />
 
-                <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-2">
-                  <div className="relative shrink-0">
-                    <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 ${style1.border} bg-black shadow-2xl flex items-center justify-center`}>
-                      {getPlayerPhoto(displayTop1) ? (
+                <div className="relative z-10 flex items-center gap-4 sm:gap-7 min-w-0 pl-2 w-full">
+                  {/* 선수 사진 (있을 때만 표시) */}
+                  {getPlayerPhoto(displayTop1) && (
+                    <div className="relative shrink-0">
+                      <div className={`w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden border-2 border-amber-400 bg-black/50 shadow-[0_0_30px_rgba(251,191,36,0.35)] flex items-center justify-center`}>
                         <img
                           src={getPlayerPhoto(displayTop1)}
                           alt={displayTop1.playerName}
                           className="w-full h-full object-cover object-top"
                         />
-                      ) : (
-                        <TrophyOutlined className="text-3xl sm:text-4xl text-amber-400" />
-                      )}
+                      </div>
+                      <div className={`absolute -bottom-1 -right-1 px-3 py-0.5 rounded-lg bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl`}>
+                        1위
+                      </div>
                     </div>
-                    <div className={`absolute -bottom-1 -right-1 px-2.5 py-0.5 rounded-md ${style1.badgeBg} font-black text-xs sm:text-sm shadow-lg`}>
-                      1위
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded bg-black border ${style1.border} font-mono font-black text-sm ${style1.textColor}`}>
+                  <div className="min-w-0 space-y-2 flex-1">
+                    {/* [1. 순위] ➜ [2. 번호] */}
+                    <div className="flex items-center gap-3">
+                      <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        1위
+                      </span>
+                      <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-400/90 font-mono font-black text-base sm:text-lg lg:text-xl text-amber-300 shadow-xl leading-none shrink-0`}>
                         NO.{displayTop1.playerNumber}
                       </span>
-                      <span className={`px-2.5 py-0.5 rounded-full ${style1.titleBadge} font-black text-[10px] sm:text-xs`}>
-                        1위 • 우승
-                      </span>
                     </div>
 
-                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate drop-shadow-md">
-                      {displayTop1.playerName}
-                    </h2>
+                    {/* [3. 이름] 성명 + 황금 월계관 날개 */}
+                    <div className="flex items-center gap-3 sm:gap-5 py-1 flex-nowrap">
+                      <LaurelBranch side="left" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
+                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-amber-300 m-0 tracking-tight leading-none break-keep truncate drop-shadow-[0_4px_25px_rgba(251,191,36,0.45)] whitespace-nowrap">
+                        {displayTop1.playerName}
+                      </h2>
+                      <LaurelBranch side="right" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
+                    </div>
 
-                    <div className="text-sm text-slate-200 font-bold break-keep truncate drop-shadow">
+                    {/* [4. 소속] */}
+                    <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                       {displayTop1.playerGym || "-"}
                     </div>
                   </div>
                 </div>
-
-                <div className="relative z-10 text-right hidden md:block shrink-0 pr-4">
-                  <span className={`text-lg font-black tracking-widest ${style1.textColor} uppercase font-mono block`}>
-                    1ST WINNER
-                  </span>
-                </div>
               </div>
             )}
 
-            {/* 🥈 2위 카드 */}
+            {/* 🥈 2위 카드 (초투명 크리스탈) */}
             {displayTop2 && (
               <div
                 ref={card2Ref}
-                className="relative flex-1 rounded-3xl p-4 sm:p-6 border border-slate-300/80 bg-slate-950 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                className="relative flex-1 rounded-3xl p-5 sm:p-7 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
               >
-                <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-400/15 via-transparent to-black/80 pointer-events-none z-0" />
-                <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-slate-200 to-slate-400 z-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
+                <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-slate-200 to-slate-400 z-10" />
 
-                <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-2">
-                  <div className="relative shrink-0">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-300/80 bg-black shadow-xl flex items-center justify-center">
-                      {getPlayerPhoto(displayTop2) ? (
+                <div className="relative z-10 flex items-center gap-4 sm:gap-7 min-w-0 pl-2 w-full">
+                  {getPlayerPhoto(displayTop2) && (
+                    <div className="relative shrink-0">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-2xl overflow-hidden border border-slate-300/80 bg-black/50 shadow-xl flex items-center justify-center">
                         <img
                           src={getPlayerPhoto(displayTop2)}
                           alt={displayTop2.playerName}
                           className="w-full h-full object-cover object-top"
                         />
-                      ) : (
-                        <TrophyOutlined className="text-2xl sm:text-3xl text-slate-300" />
-                      )}
+                      </div>
                     </div>
-                    <div className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-md ${style2.badgeBg} font-black text-xs`}>
-                      2위
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-black border border-slate-400/50 font-mono font-black text-xs sm:text-sm text-slate-200">
+                  <div className="min-w-0 space-y-2 flex-1">
+                    {/* [1. 순위] ➜ [2. 번호] */}
+                    <div className="flex items-center gap-3">
+                      <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        2위
+                      </span>
+                      <span className="px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-slate-400/50 font-mono font-black text-base sm:text-lg lg:text-xl text-slate-200 shadow-xl leading-none shrink-0">
                         NO.{displayTop2.playerNumber}
                       </span>
-                      <span className="text-[10px] sm:text-xs text-slate-400 font-bold">2위 • 준우승</span>
                     </div>
 
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate drop-shadow-md">
-                      {displayTop2.playerName}
-                    </h3>
+                    {/* [3. 이름] */}
+                    <div className="py-1">
+                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                        {displayTop2.playerName}
+                      </h2>
+                    </div>
                     
-                    <div className="text-xs sm:text-sm text-slate-300 font-semibold break-keep truncate drop-shadow">
+                    {/* [4. 소속] */}
+                    <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                       {displayTop2.playerGym || "-"}
                     </div>
                   </div>
                 </div>
-
-                <div className="relative z-10 text-right hidden md:block shrink-0 pr-4">
-                  <span className="text-sm font-black text-slate-300 uppercase font-mono">2ND PLACE</span>
-                </div>
               </div>
             )}
 
-            {/* 🥉 3위 카드 (3명일 때만 노출) */}
+            {/* 🥉 3위 카드 (초투명 크리스탈) */}
             {displayTop3 && (
               <div
                 ref={card3Ref}
-                className="relative flex-1 rounded-3xl p-4 sm:p-6 border border-amber-600/80 bg-slate-950 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                className="relative flex-1 rounded-3xl p-5 sm:p-7 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
               >
-                <div className="absolute inset-0 bg-slate-950 pointer-events-none z-0" />
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/15 via-transparent to-black/80 pointer-events-none z-0" />
-                <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-amber-600 to-amber-800 z-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
+                <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-600 to-amber-800 z-10" />
 
-                <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-2">
-                  <div className="relative shrink-0">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-amber-600/80 bg-black shadow-xl flex items-center justify-center">
-                      {getPlayerPhoto(displayTop3) ? (
+                <div className="relative z-10 flex items-center gap-4 sm:gap-7 min-w-0 pl-2 w-full">
+                  {getPlayerPhoto(displayTop3) && (
+                    <div className="relative shrink-0">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-2xl overflow-hidden border border-amber-600/80 bg-black/50 shadow-xl flex items-center justify-center">
                         <img
                           src={getPlayerPhoto(displayTop3)}
                           alt={displayTop3.playerName}
                           className="w-full h-full object-cover object-top"
                         />
-                      ) : (
-                        <TrophyOutlined className="text-2xl sm:text-3xl text-amber-500" />
-                      )}
+                      </div>
                     </div>
-                    <div className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-md ${style3.badgeBg} font-black text-xs`}>
-                      3위
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded bg-black border border-amber-600/50 font-mono font-black text-xs sm:text-sm ${theme.primary}`}>
+                  <div className="min-w-0 space-y-2 flex-1">
+                    {/* [1. 순위] ➜ [2. 번호] */}
+                    <div className="flex items-center gap-3">
+                      <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        3위
+                      </span>
+                      <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-600/50 font-mono font-black text-base sm:text-lg lg:text-xl ${theme.primary} shadow-xl leading-none shrink-0`}>
                         NO.{displayTop3.playerNumber}
                       </span>
-                      <span className="text-[10px] sm:text-xs text-slate-400 font-bold">3위 • 입상</span>
                     </div>
 
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight break-keep truncate drop-shadow-md">
-                      {displayTop3.playerName}
-                    </h3>
+                    {/* [3. 이름] */}
+                    <div className="py-1">
+                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                        {displayTop3.playerName}
+                      </h2>
+                    </div>
                     
-                    <div className="text-xs sm:text-sm text-slate-300 font-semibold break-keep truncate drop-shadow">
+                    {/* [4. 소속] */}
+                    <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                       {displayTop3.playerGym || "-"}
                     </div>
                   </div>
-                </div>
-
-                <div className="relative z-10 text-right hidden md:block shrink-0 pr-4">
-                  <span className={`text-sm font-black ${theme.primary} uppercase font-mono`}>3RD PLACE</span>
                 </div>
               </div>
             )}

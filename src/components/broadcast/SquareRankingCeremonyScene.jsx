@@ -16,12 +16,11 @@ import {
   EnvironmentOutlined,
   ArrowRightOutlined,
 } from "@ant-design/icons";
-import defaultAwardVideo from "../../assets/mov/award2.mp4";
 import defaultBody1 from "../../assets/img/body1.png";
 import defaultBody2 from "../../assets/img/body2.png";
 import defaultDemoBodybuilder from "../../assets/img/demo_bodybuilder.jpg";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
+import { LaurelBranch } from "./LaurelWreathWings";
 import "./AthleteIntroScene.css";
 
 const SquareRankingCeremonyScene = ({
@@ -62,7 +61,6 @@ const SquareRankingCeremonyScene = ({
   const fetchResultQuery = useFirestoreQuery();
 
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
-  const videoSrc = backgroundVideoUrl || defaultAwardVideo;
 
   // 1. 순위 데이터 정렬 및 필터링
   const processRankingData = (rawList) => {
@@ -153,35 +151,29 @@ const SquareRankingCeremonyScene = ({
     realPlayersMap[String(displayTop1.playerName).trim()] ||
     {};
 
-  // 📸 [선수소개급 듀얼 실제 사진 구성]
-  // 1번 사진: 3:4 메인 전면 히어로 컷 (Hero Photo)
+  // 📸 [실제 무대 사진 stagePhoto1, stagePhoto2 전용 구성 (잡다한 프로필 사진 제외)]
+  // 1번 사진: stagePhoto1 전면 컷
   const heroPhoto =
     displayTop1.stagePhoto1 ||
     displayTop1.stagePhotoUrl1 ||
     displayTop1.stagePhotoUrl ||
-    displayTop1.profileImageUrl ||
-    displayTop1.photoUrl ||
     matchedReal.stagePhoto1 ||
     matchedReal.stagePhotoUrl1 ||
     matchedReal.stagePhotoUrl ||
-    matchedReal.profileImageUrl ||
-    matchedReal.photoUrl ||
     null;
 
-  // 2번 사진: 16:9 와이드 시네마틱 배경 융합 컷 (Background Photo)
+  // 2번 사진: stagePhoto2 와이드 컷
   const bgPhoto =
     displayTop1.stagePhoto2 ||
     displayTop1.stagePhotoUrl2 ||
-    displayTop1.backgroundPhotoUrl ||
     matchedReal.stagePhoto2 ||
     matchedReal.stagePhotoUrl2 ||
-    matchedReal.backgroundPhotoUrl ||
     heroPhoto;
 
   const numberChars =
     displayTop1.playerNumber && displayTop1.playerNumber !== "-"
-      ? (`#${displayTop1.playerNumber}`).split("")
-      : ["#", "-"];
+      ? (`NO.${displayTop1.playerNumber}`).split("")
+      : ["N", "O", ".", "-"];
   const nameChars = (displayTop1.playerName || "데이터 없음").split("");
 
   const top1Hw = displayTop1.heightWeight ? displayTop1.heightWeight.split("/").map((s) => s.trim()) : [];
@@ -205,7 +197,24 @@ const SquareRankingCeremonyScene = ({
     "";
   const heightValue = rawH ? (rawH.includes("cm") ? rawH : `${rawH}cm`) : "-";
   const weightValue = rawW ? (rawW.includes("kg") ? rawW : `${rawW}kg`) : "-";
-  const classDisplay = gradeTitle || categoryTitle || "공식 체급";
+  
+  // 🏷️ 순위표 체급 표기: 통합 단어 및 다중 체급 나열(-172cm -178cm 등) 제거 ➜ 단일 출전 체급명만 정확하게 표출
+  const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
+    if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
+    if (athlete?.gradeTitle) return athlete.gradeTitle;
+    if (matched?.contestGradeTitle) return matched.contestGradeTitle;
+    if (matched?.gradeTitle) return matched.gradeTitle;
+    if (!rawGradeTitle) return "";
+    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    const parts = cleaned.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      return parts[0];
+    }
+    return cleaned;
+  };
+
+  const cleanGradeTitle = getSingleGradeTitle(gradeTitle, displayTop1, matchedReal);
+  const classDisplay = cleanGradeTitle || categoryTitle || "공식 체급";
 
   // 🎬 Step 1: 전체 순위 발표 애니메이션 & 카운트다운 타이머
   useEffect(() => {
@@ -219,48 +228,48 @@ const SquareRankingCeremonyScene = ({
       }
 
       // [0.0s] 헤더 바
-      tl.fromTo(".header-bar", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0);
+      tl.fromTo(".header-bar", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 0);
 
-      // [0.1s] 4위 이상 입상자 카드 (있을 때만)
+      // [0.3s] 4위 이상 입상자 카드 우측 슬라이드
       if (document.querySelectorAll(".rest-rank-item").length > 0) {
         tl.fromTo(".rest-rank-item", { opacity: 0, x: 30 }, {
           opacity: 1,
           x: 0,
-          duration: 0.3,
-          stagger: 0.05,
+          duration: 0.5,
+          stagger: 0.1,
           ease: "power3.out",
-        }, 0.1);
+        }, 0.3);
       }
 
-      // [0.25s] 🥉 3위 카드 (있을 때만)
+      // [1.2s] 🥉 3위 카드
       if (card3Ref.current) {
         tl.fromTo(card3Ref.current, { opacity: 0, x: -40, scale: 0.95 }, {
           opacity: 1,
           x: 0,
           scale: 1,
-          duration: 0.4,
-          ease: "back.out(1.8)",
-        }, 0.25);
+          duration: 0.7,
+          ease: "back.out(1.6)",
+        }, 1.2);
       }
 
-      // [0.5s] 🥈 2위 카드 (있을 때만)
+      // [4.5s] 🥈 2위 카드 긴장감 속 등장
       if (card2Ref.current) {
         tl.fromTo(card2Ref.current, { opacity: 0, x: -40, scale: 0.95 }, {
           opacity: 1,
           x: 0,
           scale: 1,
-          duration: 0.4,
-          ease: "back.out(1.8)",
-        }, 0.5);
+          duration: 0.7,
+          ease: "back.out(1.6)",
+        }, 4.5);
       }
 
-      // [0.75s] 👑 1위 대상 발표 대기 뱃지 등장
+      // [5.3s] 👑 2위 직후 1위 대상 발표 대기 뱃지 즉시 등장
       tl.fromTo(".pending-champion-box", { opacity: 0, y: 20 }, {
         opacity: 1,
         y: 0,
-        duration: 0.4,
+        duration: 0.5,
         ease: "power2.out",
-      }, 0.75);
+      }, 5.3);
 
     }, containerRef);
 
@@ -332,16 +341,7 @@ const SquareRankingCeremonyScene = ({
         }, 0.20);
       }
 
-      // 🌿 [0.25s] 3D 황금 월계관 1위 공식 엠블럼 임팩트 등장
-      tl.to(".laurel-wreath-container", {
-        opacity: 1,
-        scale: 1,
-        y: 0,
-        duration: 0.6,
-        ease: "back.out(1.8)",
-      }, 0.25);
-
-      // 🎲 [0.35s] 배부번호 3D 스탬핑 쾅! (#15)
+      // 🎲 [0.30s] 배부번호 & 체급 바 3D 스탬핑 쾅!
       tl.to(numberBadgeRef.current, {
         opacity: 1,
         scale: 1,
@@ -498,16 +498,10 @@ const SquareRankingCeremonyScene = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen bg-black text-white flex flex-col justify-between overflow-hidden select-none"
+      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between overflow-hidden select-none"
     >
-      {/* 🎬 배경 비디오 */}
-      <SmoothBackgroundVideo
-        src={videoSrc}
-        fallbackSrc={defaultAwardVideo}
-        overlayGradient="from-black/85 via-black/50 to-black/90"
-        gradientDirection="bg-gradient-to-t"
-        isMuted={true}
-      />
+      {/* 🎬 배경 다크 오버레이 (무대 비디오가 시원하게 투과되도록 투명도 완화) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/50 pointer-events-none z-0" />
 
       {/* 🫧 캔버스 파티클 레이어 */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-10" />
@@ -532,7 +526,7 @@ const SquareRankingCeremonyScene = ({
           </div>
           <div className="h-4 w-[1px] bg-white/20" />
           <h1 className="text-base sm:text-xl font-black text-white m-0 tracking-tight leading-tight truncate">
-            {categoryTitle || "공식 종목"} {gradeTitle && <span className={`${theme.primary} ml-2 font-mono`}>{gradeTitle}</span>}
+            {categoryTitle || "공식 종목"} {cleanGradeTitle && <span className={`${theme.primary} ml-2 font-mono`}>{cleanGradeTitle}</span>}
           </h1>
         </div>
 
@@ -560,18 +554,18 @@ const SquareRankingCeremonyScene = ({
               {/* ◀️ [좌측 (50%)]: 2위 & 3위 대형 포디움 카드 + 1위 발표 카운트다운 */}
               <div className="col-span-6 flex flex-col justify-between gap-2.5 h-full">
                 
-                {/* 🥈 2위 포디움 카드 */}
+                {/* 🥈 2위 포디움 카드 (초투명 크리스탈) */}
                 {displayTop2 && (
                   <div
                     ref={card2Ref}
-                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-2 border-slate-300/80 bg-slate-950/95 flex items-center justify-between shadow-[0_15px_40px_rgba(0,0,0,0.95)] overflow-hidden"
+                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-400/15 via-transparent to-black/80 pointer-events-none z-0" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
                     <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-slate-200 via-slate-300 to-slate-400 z-10" />
 
                     <div className="relative z-10 flex items-center gap-3 sm:gap-4 min-w-0 pl-1.5">
                       <div className="relative shrink-0">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-slate-300 bg-black shadow-xl flex items-center justify-center">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-300 bg-black/50 shadow-xl flex items-center justify-center">
                           {displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl ? (
                             <img
                               src={displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl}
@@ -587,19 +581,21 @@ const SquareRankingCeremonyScene = ({
                         </div>
                       </div>
 
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-1.5 py-0.5 rounded bg-black border border-slate-400/50 font-mono font-black text-xs text-slate-200">
+                      <div className="min-w-0 space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-base sm:text-lg shadow-xl tracking-tight leading-none shrink-0">
+                            2위
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-slate-400/50 font-mono font-black text-xs sm:text-sm text-slate-200 leading-none shrink-0">
                             NO.{displayTop2.playerNumber}
                           </span>
-                          <span className="text-[10px] text-slate-300 font-bold">2위 • 준우승</span>
                         </div>
 
-                        <h2 className="text-lg sm:text-2xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
+                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                           {displayTop2.playerName}
                         </h2>
                         
-                        <div className="text-xs text-slate-300 font-semibold truncate drop-shadow">
+                        <div className="text-sm sm:text-base text-slate-200 font-bold truncate drop-shadow">
                           {displayTop2.playerGym || "-"}
                         </div>
                       </div>
@@ -607,46 +603,43 @@ const SquareRankingCeremonyScene = ({
                   </div>
                 )}
 
-                {/* 🥉 3위 포디움 카드 */}
+                {/* 🥉 3위 포디움 카드 (초투명 크리스탈) */}
                 {displayTop3 && (
                   <div
                     ref={card3Ref}
-                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-2 border-amber-600/80 bg-slate-950/95 flex items-center justify-between shadow-[0_15px_40px_rgba(0,0,0,0.95)] overflow-hidden"
+                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-600/15 via-transparent to-black/80 pointer-events-none z-0" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
                     <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 z-10" />
 
-                    <div className="relative z-10 flex items-center gap-3 sm:gap-4 min-w-0 pl-1.5">
-                      <div className="relative shrink-0">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-amber-600 bg-black shadow-xl flex items-center justify-center">
-                          {displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl ? (
+                    <div className="relative z-10 flex items-center gap-3 sm:gap-4 min-w-0 pl-1.5 w-full">
+                      {displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl ? (
+                        <div className="relative shrink-0">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-amber-600 bg-black/50 shadow-xl flex items-center justify-center">
                             <img
                               src={displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl}
                               alt={displayTop3.playerName}
                               className="w-full h-full object-cover object-top"
                             />
-                          ) : (
-                            <TrophyOutlined className="text-2xl text-amber-500" />
-                          )}
+                          </div>
                         </div>
-                        <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-600 to-amber-800 text-white font-black text-[10px] sm:text-xs shadow">
-                          3위
-                        </div>
-                      </div>
+                      ) : null}
 
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-1.5 py-0.5 rounded bg-black border border-amber-600/50 font-mono font-black text-xs text-amber-400">
+                      <div className="min-w-0 space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-base sm:text-lg shadow-xl tracking-tight leading-none shrink-0">
+                            3위
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-amber-600/50 font-mono font-black text-xs sm:text-sm text-amber-400 leading-none shrink-0">
                             NO.{displayTop3.playerNumber}
                           </span>
-                          <span className="text-[10px] text-amber-400/90 font-bold">3위 • 입상</span>
                         </div>
 
-                        <h2 className="text-lg sm:text-2xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
+                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                           {displayTop3.playerName}
                         </h2>
                         
-                        <div className="text-xs text-slate-300 font-semibold truncate drop-shadow">
+                        <div className="text-sm sm:text-base text-slate-200 font-bold truncate drop-shadow">
                           {displayTop3.playerGym || "-"}
                         </div>
                       </div>
@@ -670,35 +663,35 @@ const SquareRankingCeremonyScene = ({
 
               </div>
 
-              {/* ▶️ [우측 (50%)]: 4위 ~ N위 실제 입상자 카드 스택 */}
-              <div className="col-span-6 flex flex-col justify-between gap-1.5 sm:gap-2 h-full bg-black/60 rounded-3xl p-3 sm:p-3.5 border border-white/15 shadow-2xl backdrop-blur-md overflow-hidden">
-                <div className="flex items-center justify-between border-b border-white/10 pb-1.5 px-1">
+              {/* ▶️ [우측 (50%)]: 4위 ~ N위 실제 순위 카드 스택 */}
+              <div className="col-span-6 flex flex-col gap-2 h-full bg-black/20 rounded-3xl p-3.5 sm:p-4 border border-white/15 shadow-2xl backdrop-blur-md overflow-hidden">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1 shrink-0">
                   <span className="text-xs font-mono font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                     <StarFilled className="text-amber-400 text-[10px]" />
-                    <span>TOP 4 ~ {ranks.length} 입상자 순위</span>
+                    <span>TOP 4 ~ {ranks.length}</span>
                   </span>
                   <span className="text-[11px] text-slate-400 font-bold">공식 순위표</span>
                 </div>
 
-                <div className="flex-1 flex flex-col justify-between gap-1.5 overflow-hidden">
+                <div className="flex-1 flex flex-col justify-start gap-2 overflow-y-auto pr-0.5">
                   {displayRestRanks.map((player, idx) => (
                     <div
                       key={`sq-rank-${player.playerNumber}-${idx}`}
-                      className="rest-rank-item flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 shadow-md transition-all"
+                      className="rest-rank-item flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 shadow-md transition-all shrink-0"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-slate-800 border border-white/20 flex items-center justify-center font-mono font-black text-xs text-slate-300 shadow shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-slate-800 border border-white/20 flex items-center justify-center font-mono font-black text-xs text-slate-300 shadow shrink-0">
                           {player.playerRank}위
                         </span>
                         <span className="font-mono font-bold text-xs text-amber-400 shrink-0">
                           NO.{player.playerNumber}
                         </span>
-                        <span className="font-black text-sm text-white truncate max-w-[120px]">
+                        <span className="font-black text-sm text-white truncate max-w-[130px]">
                           {player.playerName}
                         </span>
                       </div>
 
-                      <span className="text-xs text-slate-400 font-semibold truncate max-w-[120px] text-right">
+                      <span className="text-xs text-slate-400 font-semibold truncate max-w-[130px] text-right">
                         {player.playerGym || "-"}
                       </span>
                     </div>
@@ -724,14 +717,14 @@ const SquareRankingCeremonyScene = ({
               {displayTop2 && (
                 <div
                   ref={card2Ref}
-                  className="relative rounded-3xl p-4 sm:p-6 border-2 border-slate-300/80 bg-slate-950/95 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                  className="relative rounded-3xl p-4 sm:p-6 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-400/15 via-transparent to-black/80 pointer-events-none z-0" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
                   <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-slate-200 via-slate-300 to-slate-400 z-10" />
 
                   <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-2">
                     <div className="relative shrink-0">
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-slate-300 bg-black shadow-xl flex items-center justify-center">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-slate-300 bg-black/50 shadow-xl flex items-center justify-center">
                         {displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl ? (
                           <img
                             src={displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl}
@@ -747,19 +740,21 @@ const SquareRankingCeremonyScene = ({
                       </div>
                     </div>
 
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded bg-black border border-slate-400/50 font-mono font-black text-sm text-slate-200">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-3">
+                        <span className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-lg sm:text-xl shadow-xl tracking-tight leading-none">
+                          2위
+                        </span>
+                        <span className="px-3 py-1.5 rounded-xl bg-black/80 border border-slate-400/50 font-mono font-black text-sm sm:text-base text-slate-200 leading-none">
                           NO.{displayTop2.playerNumber}
                         </span>
-                        <span className="text-xs text-slate-300 font-bold">2위 • 준우승</span>
                       </div>
 
                       <h2 className="text-2xl sm:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                         {displayTop2.playerName}
                       </h2>
                       
-                      <div className="text-sm text-slate-300 font-semibold truncate drop-shadow">
+                      <div className="text-base sm:text-xl lg:text-2xl text-slate-200 font-bold truncate drop-shadow-md">
                         {displayTop2.playerGym || "-"}
                       </div>
                     </div>
@@ -771,14 +766,14 @@ const SquareRankingCeremonyScene = ({
               {displayTop3 && (
                 <div
                   ref={card3Ref}
-                  className="relative rounded-3xl p-4 sm:p-6 border-2 border-amber-600/80 bg-slate-950/95 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden"
+                  className="relative rounded-3xl p-4 sm:p-6 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/15 via-transparent to-black/80 pointer-events-none z-0" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
                   <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 z-10" />
 
                   <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-2">
                     <div className="relative shrink-0">
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-amber-600 bg-black shadow-xl flex items-center justify-center">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-amber-600 bg-black/50 shadow-xl flex items-center justify-center">
                         {displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl ? (
                           <img
                             src={displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl}
@@ -789,24 +784,23 @@ const SquareRankingCeremonyScene = ({
                           <TrophyOutlined className="text-3xl text-amber-500" />
                         )}
                       </div>
-                      <div className="absolute -bottom-1 -right-1 px-2.5 py-0.5 rounded-md bg-gradient-to-r from-amber-600 to-amber-800 text-white font-black text-xs sm:text-sm shadow">
-                        3위
-                      </div>
                     </div>
 
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded bg-black border border-amber-600/50 font-mono font-black text-sm text-amber-400">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-3">
+                        <span className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-lg sm:text-xl shadow-xl tracking-tight leading-none">
+                          3위
+                        </span>
+                        <span className="px-3 py-1.5 rounded-xl bg-black/80 border border-amber-600/50 font-mono font-black text-sm sm:text-base text-amber-400 leading-none">
                           NO.{displayTop3.playerNumber}
                         </span>
-                        <span className="text-xs text-amber-400 font-bold">3위 • 입상</span>
                       </div>
 
                       <h2 className="text-2xl sm:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                         {displayTop3.playerName}
                       </h2>
                       
-                      <div className="text-sm text-slate-300 font-semibold truncate drop-shadow">
+                      <div className="text-base sm:text-xl lg:text-2xl text-slate-200 font-bold truncate drop-shadow-md">
                         {displayTop3.playerGym || "-"}
                       </div>
                     </div>
@@ -853,84 +847,23 @@ const SquareRankingCeremonyScene = ({
             )}
 
             {/* -------------------- [ ◀️ 챔피언 공식 BIO & 압도적 타이포그래피 (사진 없을 시 중앙 정렬) ] -------------------- */}
-            <div className={`space-y-3 sm:space-y-4 ${heroPhoto ? "w-[48%] max-w-xl shrink-0" : "w-full max-w-2xl mx-auto flex flex-col items-center text-center justify-center my-auto"} z-20`}>
+            <div className={`space-y-4 sm:space-y-6 ${heroPhoto ? "w-[48%] max-w-xl shrink-0" : "w-full max-w-2xl mx-auto flex flex-col items-center text-center justify-center my-auto"} z-20`}>
               
-              {/* 🌿 3D 황금 월계관 (Laurel Wreath) & 종목/체급 1위 공식 엠블럼 */}
-              <div className={`laurel-wreath-container flex items-center gap-3.5 bg-gradient-to-r from-amber-500/25 via-yellow-500/15 to-transparent border border-amber-400/50 rounded-3xl p-2.5 sm:p-3 backdrop-blur-2xl shadow-[0_0_35px_rgba(251,191,36,0.35)] ${heroPhoto ? "" : "w-full max-w-xl justify-center"}`}>
-                <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
-                  <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full filter drop-shadow-[0_0_12px_rgba(251,191,36,0.9)] animate-pulse">
-                    <defs>
-                      <linearGradient id="goldLaurelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#fef08a" />
-                        <stop offset="50%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#b45309" />
-                      </linearGradient>
-                    </defs>
-                    {/* Left Laurel Branch */}
-                    <path d="M50 95 C30 90 15 70 18 45 C20 30 30 18 45 12" stroke="url(#goldLaurelGrad)" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
-                    <path d="M42 16 C35 15 32 22 36 26 C40 24 43 19 42 16Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M32 27 C25 28 24 36 29 39 C33 36 34 30 32 27Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M25 42 C18 44 19 53 25 54 C28 50 28 44 25 42Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M22 58 C16 62 19 71 25 70 C27 66 26 60 22 58Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M26 74 C22 80 28 87 34 84 C35 79 32 74 26 74Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M36 87 C34 93 42 98 47 93 C47 88 42 84 36 87Z" fill="url(#goldLaurelGrad)"/>
-
-                    {/* Right Laurel Branch */}
-                    <path d="M70 95 C90 90 105 70 102 45 C100 30 90 18 75 12" stroke="url(#goldLaurelGrad)" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
-                    <path d="M78 16 C85 15 88 22 84 26 C80 24 77 19 78 16Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M88 27 C95 28 96 36 91 39 C87 36 86 30 88 27Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M95 42 C102 44 101 53 95 54 C92 50 92 44 95 42Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M98 58 C104 62 101 71 95 70 C93 66 94 60 98 58Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M94 74 C98 80 92 87 86 84 C85 79 88 74 94 74Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M84 87 C86 93 78 98 73 93 C73 88 78 84 84 87Z" fill="url(#goldLaurelGrad)"/>
-
-                    {/* Bottom Ribbon */}
-                    <path d="M52 94 C57 92 63 92 68 94 C65 98 55 98 52 94Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M54 96 C48 104 42 108 38 110 C44 106 50 102 54 96Z" fill="url(#goldLaurelGrad)"/>
-                    <path d="M66 96 C72 104 78 108 82 110 C76 106 70 102 66 96Z" fill="url(#goldLaurelGrad)"/>
-                  </svg>
-                  {/* Center 1st Place Crown & Text */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center -space-y-0.5 pointer-events-none">
-                    <CrownOutlined className="text-yellow-300 text-sm sm:text-base animate-bounce drop-shadow" />
-                    <span className="font-mono font-black text-2xl sm:text-3xl text-amber-300 tracking-tighter drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
-                      1<span className="text-xs sm:text-sm">ST</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className={`flex flex-col min-w-0 flex-1 ${heroPhoto ? "" : "text-left"}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md">
-                      1ST PLACE
-                    </span>
-                    <span className="text-amber-300 font-bold text-xs sm:text-sm tracking-tight flex items-center gap-1">
-                      <TrophyOutlined className="text-amber-400" /> 공식 1위 우승
-                    </span>
-                  </div>
-                  <div className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight m-0 bg-gradient-to-r from-white via-amber-200 to-yellow-400 bg-clip-text text-transparent drop-shadow-md truncate">
-                    {classDisplay} 1위 우승
-                  </div>
-                </div>
-              </div>
-
-              {/* ① 배부번호 3D 스탬핑 (#15) */}
+              {/* ① 배부번호 & 종목/체급 선명한 바 (블러 제거, 가독성 극대화) */}
               <div
                 ref={numberBadgeRef}
-                className={`inline-flex items-center gap-3 sm:gap-4 bg-gradient-to-r ${theme.bgGradient} ${heroPhoto ? "border-l-4 rounded-r-3xl pl-4 sm:pl-6 pr-6 sm:pr-8" : "border-2 rounded-3xl px-6 sm:px-10"} ${theme.border} py-2 backdrop-blur-2xl shadow-2xl`}
+                className={`inline-flex items-center gap-3 sm:gap-4 bg-black/90 border-2 border-amber-400/60 rounded-2xl px-5 sm:px-7 py-2 shadow-2xl ${heroPhoto ? "" : "justify-center"}`}
               >
-                <div className="flex flex-col">
-                  <span className={`text-[10px] font-black tracking-[0.3em] uppercase ${theme.primary}`}>
-                    WINNER NO
-                  </span>
-                  <span className="text-xs text-amber-300 font-bold">1위 우승자 배부번호</span>
-                </div>
+                <span className="font-mono font-black text-3xl sm:text-4xl text-amber-400 tracking-tight">
+                  {numberChars.join("")}
+                </span>
 
-                <div className={`flex items-center font-mono font-black text-5xl sm:text-6xl lg:text-7xl tracking-tighter ${theme.primary} neon-number-glow`}>
-                  {numberChars.map((digit, i) => (
-                    <span key={i} className="num-digit inline-block">
-                      {digit}
-                    </span>
-                  ))}
+                <div className="h-6 w-[2px] bg-amber-400/40" />
+
+                <div className="text-left">
+                  <span className="text-lg sm:text-xl font-black text-white leading-tight block">
+                    {categoryTitle || "공식 종목"} {classDisplay && <span className="text-amber-300 ml-1.5 font-mono">{classDisplay}</span>}
+                  </span>
                 </div>
               </div>
 
@@ -945,14 +878,12 @@ const SquareRankingCeremonyScene = ({
                 }}
               />
 
-              {/* ② 1위 챔피언 이름 글자별 타격 리빌 */}
-              <div className="space-y-1">
-                <div className={`text-xs font-black tracking-widest text-amber-400 uppercase flex items-center ${heroPhoto ? "" : "justify-center"} gap-2`}>
-                  <CrownOutlined className="text-amber-400 animate-bounce" />
-                  <span>1ST PLACE WINNER • 1위 우승</span>
-                </div>
-                
-                <div className={`flex items-center gap-2 sm:gap-3 flex-wrap ${heroPhoto ? "" : "justify-center"}`}>
+              {/* ② 🔥 [중앙 핵심]: 정통 로마/올림픽 황금 월계관 날개 + 초대형 1위 챔피언 성명 */}
+              <div className={`flex items-center ${heroPhoto ? "justify-start" : "justify-center"} gap-2 sm:gap-6 py-2 flex-nowrap w-full`}>
+                <LaurelBranch side="left" />
+
+                {/* 초대형 성명 */}
+                <div className="flex items-center gap-1 sm:gap-2 flex-nowrap whitespace-nowrap">
                   {nameChars.map((char, i) => (
                     <span
                       key={i}
@@ -962,6 +893,8 @@ const SquareRankingCeremonyScene = ({
                     </span>
                   ))}
                 </div>
+
+                <LaurelBranch side="right" />
               </div>
 
               {/* ③ 소속 헬스장 */}

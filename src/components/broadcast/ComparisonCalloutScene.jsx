@@ -11,8 +11,6 @@ import {
   SoundOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import defaultCalloutVideo from "../../assets/mov/countdown_low.mp4";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
 
@@ -25,7 +23,6 @@ const ComparisonCalloutScene = ({
 }) => {
   const containerRef = useRef(null);
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
-  const videoSrc = backgroundVideoUrl || defaultCalloutVideo;
 
   const roundTitle = calloutData?.roundTitle || "공식 비교심사 (CALLOUT)";
   const rawPlayers = calloutData?.players || [];

@@ -438,6 +438,32 @@ const StageLiveDisplaySquare = () => {
         </button>
       </div>
 
+      {/* 🎬 [Global Root Layer 0: 씬(모드)별 배경 비디오 — 듀얼 버퍼 크로스페이드로 끊김 없이 전환] */}
+      <SmoothBackgroundVideo
+        src={(() => {
+          switch (currentMode) {
+            case "STANDBY": case "COMMERCIAL": default:
+              return videoSettings.standbyVideoUrl;
+            case "ATHLETE_INTRO":
+              return videoSettings.introVideoUrl;
+            case "COMPARISON_CALLOUT":
+              return videoSettings.calloutVideoUrl;
+            case "POSEDOWN":
+              return videoSettings.posedownVideoUrl;
+            case "RANKING": case "SQUARE_RANKING":
+              return videoSettings.rankingVideoUrl;
+            case "CHAMPION_SHOWCASE":
+              return videoSettings.championVideoUrl || videoSettings.rankingVideoUrl;
+            case "AWARD_CEREMONY":
+              return videoSettings.awardVideoUrl || videoSettings.rankingVideoUrl;
+          }
+        })()}
+        fallbackSrc={defaultStandbyVideo}
+        overlayGradient="from-black/75 via-transparent to-black/65"
+        gradientDirection="bg-gradient-to-t"
+        isMuted={!isAudioEnabled}
+      />
+
       {/* ========================================================================================= */}
       {/* 씬별 렌더링 */}
       {/* ========================================================================================= */}
@@ -512,7 +538,7 @@ const StageLiveDisplaySquare = () => {
         <ChampionShowcaseScene
           contestTitle={contestTitle}
           stageInfo={stageInfo}
-          topPlayer={broadcastData?.topPlayer || top1Player}
+          topPlayer={broadcastData?.topPlayer || broadcastData?.activePlayer || top1Player}
           backgroundVideoUrl={videoSettings.championVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           onBackToRanking={handleBackToRanking}

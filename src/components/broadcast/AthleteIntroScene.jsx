@@ -12,8 +12,6 @@ import {
 } from "@ant-design/icons";
 import demoBodybuilderImg from "../../assets/img/demo_bodybuilder.jpg";
 import demoBodybuilderBg from "../../assets/img/demo_bodybuilder_bg.jpg";
-import defaultIntroVideo from "../../assets/mov/introduce.mp4";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import "./AthleteIntroScene.css";
 
 export const THEME_CONFIGS = {
@@ -222,37 +220,27 @@ const AthleteIntroScene = ({
 
   const validPhotos = (Array.isArray(photos) ? photos : []).filter(isValidPhoto);
   
-  // 1번 사진: 3:4 메인 인물 사진 (전면 히어로)
+  // 1번 사진: stagePhoto1 전면 히어로 컷
   const heroPhoto =
     (isValidPhoto(stagePhoto1) && stagePhoto1) ||
     (isValidPhoto(stagePhotoUrl1) && stagePhotoUrl1) ||
     (isValidPhoto(player?.stagePhoto1) && player?.stagePhoto1) ||
     (isValidPhoto(player?.stagePhotoUrl1) && player?.stagePhotoUrl1) ||
     (isValidPhoto(stagePhotoUrl) && stagePhotoUrl) ||
-    (isValidPhoto(profileImageUrl) && profileImageUrl) ||
-    (isValidPhoto(photoUrl) && photoUrl) ||
-    (isValidPhoto(playerPhoto) && playerPhoto) ||
-    validPhotos[0] ||
     null;
 
-  // 2번 사진: 16:9 와이드 배경 사진 (배경 컷)
-  const fallback2nd = validPhotos.length > 1 ? validPhotos[1] : "";
+  // 2번 사진: stagePhoto2 와이드 배경 컷
   const rawBgPhoto =
     (isValidPhoto(stagePhoto2) && stagePhoto2) ||
     (isValidPhoto(stagePhotoUrl2) && stagePhotoUrl2) ||
-    (isValidPhoto(backgroundPhotoUrl) && backgroundPhotoUrl) ||
     (isValidPhoto(player?.stagePhoto2) && player?.stagePhoto2) ||
     (isValidPhoto(player?.stagePhotoUrl2) && player?.stagePhotoUrl2) ||
-    (isValidPhoto(player?.backgroundPhotoUrl) && player?.backgroundPhotoUrl) ||
-    (isValidPhoto(fallback2nd) && fallback2nd) ||
     "";
 
   // 1번과 2번이 동일한 단일 사진일 경우 배경을 비우고 비디오로 폴백 (중복 방지)
   const bgPhoto = rawBgPhoto && rawBgPhoto !== heroPhoto ? rawBgPhoto : "";
 
-  const videoSrc = backgroundVideoUrl || defaultIntroVideo;
-
-  const numberChars = playerNumber ? (`#${playerNumber}`).split("") : [];
+  const numberChars = playerNumber ? (`NO.${playerNumber}`).split("") : [];
   const nameChars = playerName ? playerName.split("") : [];
 
   const hwParts = heightWeight ? heightWeight.split("/").map((s) => s.trim()) : [];

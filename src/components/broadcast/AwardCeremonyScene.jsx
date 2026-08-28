@@ -13,8 +13,6 @@ import {
   ThunderboltFilled,
   FireFilled,
 } from "@ant-design/icons";
-import defaultAwardVideo from "../../assets/mov/award2.mp4";
-import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import "./AthleteIntroScene.css";
 
@@ -39,7 +37,6 @@ const AwardCeremonyScene = ({
   const fetchResultQuery = useFirestoreQuery();
 
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
-  const videoSrc = backgroundVideoUrl || defaultAwardVideo;
 
   const isValidPhoto = (u) =>
     typeof u === "string" &&
@@ -164,6 +161,24 @@ const AwardCeremonyScene = ({
         )
       : [];
 
+  // 🏷️ 시상식 체급 표기: 통합 단어 및 다중 체급 나열 제거 ➜ 1위 선수 고유 체급명 우선 반영
+  const matchedFirst = realPlayersMap[String(firstPlayer.playerNumber).trim()] || realPlayersMap[String(firstPlayer.playerName).trim()];
+  const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
+    if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
+    if (athlete?.gradeTitle) return athlete.gradeTitle;
+    if (matched?.contestGradeTitle) return matched.contestGradeTitle;
+    if (matched?.gradeTitle) return matched.gradeTitle;
+    if (!rawGradeTitle) return "";
+    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    const parts = cleaned.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      return parts[0];
+    }
+    return cleaned;
+  };
+
+  const cleanGradeTitle = getSingleGradeTitle(gradeTitle, firstPlayer, matchedFirst);
+
   // 🎬 GSAP 웅장한 포디움 등장 애니메이션
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -231,7 +246,7 @@ const AwardCeremonyScene = ({
               <span>{contestTitle || "보디빌딩 & 피트니스 챔피언십"}</span>
               <span className="text-amber-400 font-mono">/</span>
               <span className="text-amber-300 truncate">
-                {categoryTitle} {gradeTitle && `• ${gradeTitle}`}
+                {categoryTitle} {cleanGradeTitle && `• ${cleanGradeTitle}`}
               </span>
             </h1>
           </div>
@@ -269,7 +284,7 @@ const AwardCeremonyScene = ({
               {/* 배부번호 */}
               {secondPlayer?.playerNumber && (
                 <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-slate-400/50 font-mono font-black text-xs text-slate-200">
-                  #{secondPlayer.playerNumber}
+                  NO.{secondPlayer.playerNumber}
                 </div>
               )}
 
@@ -282,7 +297,7 @@ const AwardCeremonyScene = ({
                     className="w-full h-full object-cover object-top"
                   />
                 ) : (
-                  <span className="text-3xl text-slate-500 font-black">#2</span>
+                  <TrophyOutlined className="text-4xl text-slate-400" />
                 )}
               </div>
 
@@ -326,7 +341,7 @@ const AwardCeremonyScene = ({
               {/* 배부번호 */}
               {firstPlayer?.playerNumber && (
                 <div className="absolute top-3 right-3 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/60 font-mono font-black text-sm text-amber-300 shadow-md">
-                  #{firstPlayer.playerNumber}
+                  NO.{firstPlayer.playerNumber}
                 </div>
               )}
 
@@ -339,7 +354,7 @@ const AwardCeremonyScene = ({
                     className="w-full h-full object-cover object-top"
                   />
                 ) : (
-                  <span className="text-5xl text-amber-400 font-black">#1</span>
+                  <TrophyOutlined className="text-6xl text-amber-400" />
                 )}
               </div>
 
@@ -378,14 +393,14 @@ const AwardCeremonyScene = ({
             <div className="w-full bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-black/95 rounded-3xl border-2 border-amber-600/60 p-4 shadow-[0_10px_35px_rgba(217,119,6,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
               
               {/* 3위 뱃지 */}
-              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-amber-700 to-amber-900 text-white font-black text-xs shadow-md">
+              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-amber-600 to-amber-800 text-white font-black text-xs shadow-md">
                 🥉 3위 BRONZE
               </div>
 
               {/* 배부번호 */}
               {thirdPlayer?.playerNumber && (
-                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-amber-600/50 font-mono font-black text-xs text-amber-300">
-                  #{thirdPlayer.playerNumber}
+                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-amber-500/50 font-mono font-black text-xs text-amber-300">
+                  NO.{thirdPlayer.playerNumber}
                 </div>
               )}
 
@@ -398,7 +413,7 @@ const AwardCeremonyScene = ({
                     className="w-full h-full object-cover object-top"
                   />
                 ) : (
-                  <span className="text-3xl text-amber-700 font-black">#3</span>
+                  <TrophyOutlined className="text-4xl text-amber-500" />
                 )}
               </div>
 

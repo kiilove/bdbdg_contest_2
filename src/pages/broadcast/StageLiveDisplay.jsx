@@ -450,7 +450,8 @@ const StageLiveDisplay = () => {
     (c.contestTitle || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 🎬 [Global Root Layer 0: 씬별 배경 비디오 소스 결정 (씬 내부 GSAP과 100% 완전 분리)]
+  // 🎬 [Global Root Layer 0: 씬(모드)별 배경 비디오 소스 결정]
+  // ※ SmoothBackgroundVideo 내부의 듀얼 버퍼 크로스페이드가 끊김 없이 전환 처리
   const activeBackgroundVideo = React.useMemo(() => {
     switch (currentMode) {
       case "STANDBY":
@@ -676,6 +677,7 @@ const StageLiveDisplay = () => {
           gradeTitle={stageInfo?.gradeTitle || ""}
           gradeId={stageInfo?.gradeId || legacyStageData?.gradeId || ""}
           rankingData={rankingData}
+          playerCount={stageInfo?.playerCount || 0}
           backgroundVideoUrl={videoSettings.rankingVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           onFinishCeremony={handleFinishCeremony}
@@ -702,7 +704,7 @@ const StageLiveDisplay = () => {
         <ChampionShowcaseScene
           contestTitle={contestTitle}
           stageInfo={stageInfo}
-          topPlayer={broadcastData?.topPlayer || top1Player}
+          topPlayer={broadcastData?.topPlayer || broadcastData?.activePlayer || top1Player}
           backgroundVideoUrl={videoSettings.championVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           onBackToRanking={handleBackToRanking}

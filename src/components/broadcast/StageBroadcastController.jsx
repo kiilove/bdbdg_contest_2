@@ -131,6 +131,31 @@ const StageBroadcastController = ({
   const currentTheme = broadcastData?.colorTheme || "GOLD";
   const currentSpecialId = broadcastData?.specialScreenData?.id || null;
 
+  // 🏆 통합 무대(2개 이상 체급 결합) 감지 및 개별 체급 시상 선택 상태
+  const stageGrades = currentStage?.grades || [];
+  const isIntegratedStage = stageGrades.length > 1;
+  const [selectedGradeId, setSelectedGradeId] = useState("");
+
+  useEffect(() => {
+    if (stageGrades.length > 0) {
+      setSelectedGradeId(stageGrades[0]?.gradeId || "");
+    } else {
+      setSelectedGradeId(currentStage?.gradeId || "");
+    }
+  }, [currentStage?.gradeId, stageGrades.length]);
+
+  // 현재 시상 대상으로 선택된 개별 체급 정보 도출
+  const activeGradeObj =
+    stageGrades.find((g) => g.gradeId === selectedGradeId) ||
+    stageGrades[0] ||
+    null;
+  const activeGradeTitle =
+    activeGradeObj?.gradeTitle || currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
+  const activeGradeId =
+    activeGradeObj?.gradeId || currentStage?.gradeId || stageGrades[0]?.gradeId || "";
+  const activeCategoryTitle =
+    activeGradeObj?.categoryTitle || currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식";
+
   const [invoicePhotoMap, setInvoicePhotoMap] = useState(new Map());
 
   // 📥 invoices_pool 원본 참가신청서 사진 직접 로드 (선수 명단 사진 누락 100% 방지)
@@ -481,13 +506,13 @@ const StageBroadcastController = ({
     }
   };
 
-  // 현재 체급의 Firestore contest_results_list 조회 유틸
-  const fetchCurrentGradeRankings = async () => {
-    const targetGradeId = currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId;
-    if (!targetGradeId) return [];
+  // 특정 체급의 Firestore contest_results_list 조회 유틸 (통합 무대 개별 체급 분리 조회)
+  const fetchCurrentGradeRankings = async (targetGradeId = null) => {
+    const gId = targetGradeId || activeGradeId;
+    if (!gId) return [];
 
     try {
-      const condition = [where("gradeId", "==", targetGradeId)];
+      const condition = [where("gradeId", "==", gId)];
       const data = await fetchResultQuery.getDocuments(
         "contest_results_list",
         condition
@@ -498,7 +523,7 @@ const StageBroadcastController = ({
         );
       }
     } catch (error) {
-      console.error("순위 데이터 조회 실패:", error);
+      console.error(`순위 데이터 조회 실패 (gradeId: ${gId}):`, error);
     }
     return [];
   };
@@ -507,19 +532,16 @@ const StageBroadcastController = ({
   const handleStartCommercials = async () => {
     if (!contestId) return;
 
-    let finalRanks = rankingResults || [];
-    if (finalRanks.length === 0) {
-      finalRanks = await fetchCurrentGradeRankings();
-    }
+    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
 
     try {
       await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
         mode: "COMMERCIAL",
         contestTitle: realContestTitle,
         stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+          categoryTitle: activeCategoryTitle,
+          gradeTitle: activeGradeTitle,
+          gradeId: activeGradeId,
           stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
         },
         rankingData: finalRanks,
@@ -552,13 +574,14 @@ const StageBroadcastController = ({
     ];
   };
 
-  // 6. 🏆 순위 발표 즉시 송출
+  // 6. 🏆 순위 발표 즉시 송출 (선택된 체급 전용)
   const handleDirectRanking = async () => {
     console.log("%c[CONTROLLER] 📢 [전체 순위 동시발표] 버튼 클릭됨!", "background:#22c55e;color:black;font-weight:bold;font-size:14px;", {
       contestId,
       currentContest,
       currentStage,
-      rankingResults,
+      activeGradeTitle,
+      activeGradeId,
       currentPlayers,
     });
 
@@ -568,11 +591,8 @@ const StageBroadcastController = ({
       return;
     }
 
-    let finalRanks = rankingResults || [];
-    if (finalRanks.length === 0) {
-      finalRanks = await fetchCurrentGradeRankings();
-    }
-    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const reliableRanks = getReliableRankings(finalRanks);
 
     // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
     const enrichedRanks = reliableRanks.map((r) => {
@@ -607,9 +627,9 @@ const StageBroadcastController = ({
       mode: "RANKING",
       contestTitle: realContestTitle,
       stageInfo: {
-        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
-        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        categoryTitle: activeCategoryTitle,
+        gradeTitle: activeGradeTitle,
+        gradeId: activeGradeId,
         stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
@@ -632,7 +652,7 @@ const StageBroadcastController = ({
         targetContestId: contestId,
       });
       console.log("%c[CONTROLLER] ✅ [전체 순위 동시발표] Firebase 전송 완료!", "background:#10b981;color:black;font-weight:bold;font-size:14px;");
-      message.success("전광판: 순위 발표 화면 송출!");
+      message.success(`전광판: [${activeGradeTitle}] 순위 발표 화면 송출!`);
     } catch (error) {
       console.error("[CONTROLLER] ❌ 순위 발표 송출 오류:", error);
     }
@@ -645,11 +665,8 @@ const StageBroadcastController = ({
       return;
     }
 
-    let finalRanks = rankingResults || [];
-    if (finalRanks.length === 0) {
-      finalRanks = await fetchCurrentGradeRankings();
-    }
-    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const reliableRanks = getReliableRankings(finalRanks);
 
     // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
     const enrichedRanks = reliableRanks.map((r) => {
@@ -684,9 +701,9 @@ const StageBroadcastController = ({
       mode: "AWARD_CEREMONY",
       contestTitle: realContestTitle,
       stageInfo: {
-        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
-        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        categoryTitle: activeCategoryTitle,
+        gradeTitle: activeGradeTitle,
+        gradeId: activeGradeId,
         stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
@@ -702,7 +719,7 @@ const StageBroadcastController = ({
         ...payload,
         targetContestId: contestId,
       });
-      message.success("전광판: [🏅 공식 시상식 (포디움 단상)] 화면 송출 시작!");
+      message.success(`전광판: [${activeGradeTitle}] 공식 시상식 (포디움) 화면 송출 시작!`);
     } catch (error) {
       console.error("공식 시상식 송출 오류:", error);
     }
@@ -715,11 +732,8 @@ const StageBroadcastController = ({
       return;
     }
 
-    let finalRanks = rankingResults || [];
-    if (finalRanks.length === 0) {
-      finalRanks = await fetchCurrentGradeRankings();
-    }
-    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const reliableRanks = getReliableRankings(finalRanks);
 
     // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
     const enrichedRanks = reliableRanks.map((r) => {
@@ -750,15 +764,15 @@ const StageBroadcastController = ({
       return r;
     });
 
-    const top1 = enrichedRanks.find((p) => (p.playerRank || p.rank || 0) === 1) || enrichedRanks[0];
+    const top1 = enrichedRanks.find((p) => (p.playerRank || p.rank || 0) === 1) || enrichedRanks[0] || null;
 
     const payload = {
       mode: "CHAMPION_SHOWCASE",
       contestTitle: realContestTitle,
       stageInfo: {
-        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 종목",
-        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        categoryTitle: activeCategoryTitle,
+        gradeTitle: activeGradeTitle,
+        gradeId: activeGradeId,
         stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
@@ -776,7 +790,7 @@ const StageBroadcastController = ({
         targetContestId: contestId,
       });
       message.success(
-        top1 ? `1위 [${top1.playerName}] 챔피언 단독 전체화면 송출!` : "1위 챔피언 단독 전체화면 송출!"
+        top1 ? `1위 [${top1.playerName}] (${activeGradeTitle}) 챔피언 단독 전체화면 송출!` : `[${activeGradeTitle}] 1위 챔피언 단독 송출!`
       );
     } catch (error) {
       console.error("1위 단독 송출 오류:", error);
@@ -790,11 +804,8 @@ const StageBroadcastController = ({
       return;
     }
 
-    let finalRanks = rankingResults || [];
-    if (finalRanks.length === 0) {
-      finalRanks = await fetchCurrentGradeRankings();
-    }
-    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const reliableRanks = getReliableRankings(finalRanks);
 
     // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
     const enrichedRanks = reliableRanks.map((r) => {
@@ -1093,6 +1104,57 @@ const StageBroadcastController = ({
             </Button>
           </div>
         </div>
+
+        {/* 🏆 [통합 무대 전용] 시상/성적 발표 체급 선택 바 (무대는 통합이나 순위는 체급별로 독립 발표) */}
+        {isIntegratedStage && (
+          <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3 sm:p-3.5 rounded-2xl border-2 border-amber-500/80 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0" />
+              <div>
+                <div className="text-[11px] font-bold text-amber-400 tracking-wide">
+                  ⚡ 통합 무대 개별 시상 제어기 (무대는 통합 진행, 순위 발표는 체급별 독립 송출)
+                </div>
+                <div className="text-sm font-black text-white flex items-center gap-1.5">
+                  <span>현재 시상/순위발표 대상 체급:</span>
+                  <span className="text-amber-300 font-mono text-base font-black px-2 py-0.5 rounded bg-black/60 border border-amber-400/60">
+                    {activeGradeTitle}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-400 hidden sm:inline">체급 선택:</span>
+              {stageGrades.map((g, gIdx) => {
+                const isSelected = (g.gradeId === selectedGradeId) || (!selectedGradeId && gIdx === 0);
+                const gradePlayers = (currentPlayers || []).filter((p) => p.contestGradeId === g.gradeId);
+
+                return (
+                  <button
+                    key={g.gradeId || gIdx}
+                    onClick={() => {
+                      setSelectedGradeId(g.gradeId);
+                      message.info(`시상 대상 체급이 [${g.gradeTitle}]로 선택되었습니다.`);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer border flex items-center gap-2 ${
+                      isSelected
+                        ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/30 scale-105"
+                        : "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 hover:border-amber-400/50"
+                    }`}
+                  >
+                    <TrophyOutlined className={isSelected ? "text-slate-950" : "text-amber-400"} />
+                    <span>{g.gradeTitle}</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                      isSelected ? "bg-slate-950 text-amber-300 font-bold" : "bg-slate-800 text-slate-400"
+                    }`}>
+                      {gradePlayers.length}명
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 1. 8대 주요 송출 원클릭 액션 버튼 바 */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
