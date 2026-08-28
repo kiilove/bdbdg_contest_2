@@ -643,7 +643,7 @@ const ContestPlayerOrderTable = () => {
                   icon={<DeleteOutlined />}
                   className="font-bold border-red-400 bg-red-50 text-red-700 hover:bg-red-100"
                 >
-                  명단 완전 클리어(비우기)
+                  배정명단 초기화(비우기)
                 </Button>
               </Popconfirm>
             </div>

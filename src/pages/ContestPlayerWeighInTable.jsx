@@ -492,6 +492,8 @@ const ContestPlayerWeighInTable = () => {
         }
       };
 
+      // 🌟 참가신청서 원본(contest_entrys_list) 기반 '진짜 원래 체급(Original Grade)' 맵 구축
+      const entryOriginalGradeMap = new Map();
       if (contestId) {
         try {
           const invSnap = await getDocs(query(collection(db, "invoices_pool"), where("contestId", "==", contestId)));
@@ -502,9 +504,23 @@ const ContestPlayerWeighInTable = () => {
 
         try {
           const entrySnap = await getDocs(query(collection(db, "contest_entrys_list"), where("contestId", "==", contestId)));
-          entrySnap.docs.forEach((d) => processDocPhotos(d.data()));
+          entrySnap.docs.forEach((d) => {
+            const data = d.data();
+            processDocPhotos(data);
+
+            const uid = data.playerUid || "";
+            const catId = data.contestCategoryId || "";
+            const rawName = (data.playerName || data.contestPlayerName || data.name || "").trim();
+            const gId = data.contestGradeId || "";
+            const gTitle = data.contestGradeTitle || "";
+
+            if (gId) {
+              if (uid && catId) entryOriginalGradeMap.set(`${uid}_${catId}`, { contestGradeId: gId, contestGradeTitle: gTitle });
+              if (rawName && catId) entryOriginalGradeMap.set(`${rawName}_${catId}`, { contestGradeId: gId, contestGradeTitle: gTitle });
+            }
+          });
         } catch (err) {
-          console.warn("contest_entrys_list 사진 조회 실패:", err);
+          console.warn("contest_entrys_list 사진/체급 조회 실패:", err);
         }
 
         try {
@@ -557,12 +573,24 @@ const ContestPlayerWeighInTable = () => {
       });
 
       const mergedLoadedPlayers = assignPlayers.map((p) => {
-        const key = getPlayerEntryKey(p);
         const trimmedName = (p.playerName || "").trim();
+        const catId = p.contestCategoryId || "";
         const telPart = (p.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
         const nameKey = `${trimmedName}_${telPart}`;
+        const entryKeyUid = p.playerUid ? `${p.playerUid}_${catId}` : "";
+        const entryKeyName = trimmedName ? `${trimmedName}_${catId}` : "";
 
-        const fp = finalMap.has(key) ? finalMap.get(key) : null;
+        // 🌟 참가신청서 원본(contest_entrys_list)에서 선수의 '진짜 원래 배정 체급' 확정
+        const entryOriginal = (entryKeyUid && entryOriginalGradeMap.get(entryKeyUid)) ||
+                              (entryKeyName && entryOriginalGradeMap.get(entryKeyName));
+
+        const origGradeId = entryOriginal?.contestGradeId || p.originalGradeId || p.contestGradeId;
+        const origGradeTitle = entryOriginal?.contestGradeTitle || p.originalGradeTitle || p.contestGradeTitle;
+
+        // 원본 체급 기반 엔트리 키 생성하여 final 데이터 검색
+        const keyWithOrig = getPlayerEntryKey({ ...p, originalGradeId: origGradeId });
+        const keyCurrent = getPlayerEntryKey(p);
+        const fp = finalMap.get(keyWithOrig) || finalMap.get(keyCurrent) || null;
         const fpPhotos = fp ? extractPlayerPhotos(fp) : [];
 
         // 🌟 모든 소스(신청서 풀, UID맵, 전화번호/이름맵, 배정/최종문서)에서 등록된 '모든 사진'을 빠짐없이 통합 병합
@@ -607,8 +635,16 @@ const ContestPlayerWeighInTable = () => {
           allPlayerPhotos[0] ||
           "";
 
+        const isGradeChanged = fp ? !!fp.isGradeChanged : !!p.isGradeChanged;
+
         let baseObj = {
           ...p,
+          originalGradeId: origGradeId,
+          originalGradeTitle: origGradeTitle,
+          isGradeChanged: isGradeChanged,
+          // 🌟 월체(isGradeChanged === true)일 때만 변경 체급 유지, 월체 취소(false)면 무조건 원래 체급(origGradeId)으로 복귀!
+          contestGradeId: isGradeChanged ? (fp?.contestGradeId || p.contestGradeId || origGradeId) : origGradeId,
+          contestGradeTitle: isGradeChanged ? (fp?.contestGradeTitle || p.contestGradeTitle || origGradeTitle) : origGradeTitle,
           stagePhoto1: stage1,
           stagePhoto2: stage2,
           stagePhotoUrl1: stage1,
@@ -624,14 +660,19 @@ const ContestPlayerWeighInTable = () => {
           baseObj = {
             ...baseObj,
             ...fp,
+            // 🌟 1단계 신청서/배정의 원래 체급을 항상 originalGradeId로 절대 보존!
+            originalGradeId: origGradeId,
+            originalGradeTitle: origGradeTitle,
+            isGradeChanged: isGradeChanged,
+            contestGradeId: isGradeChanged ? (fp.contestGradeId || origGradeId) : origGradeId,
+            contestGradeTitle: isGradeChanged ? (fp.contestGradeTitle || origGradeTitle) : origGradeTitle,
+            // 🌟 [비즈니스 로직 핵심]: 선수 번호 및 표시 순서는 1단계 선수 번호 배정(assign: p)이 무조건 절대 우선!
+            playerNumber: p.playerNumber !== undefined ? p.playerNumber : fp.playerNumber,
+            playerIndex: p.playerIndex !== undefined ? p.playerIndex : fp.playerIndex,
+            // 계측 현장에서 측정한 신장/체중/통과/불참 데이터는 안전하게 보존
             heightWeight: fp.heightWeight || p.heightWeight || "",
             playerNoShow: fp.playerNoShow !== undefined ? fp.playerNoShow : p.playerNoShow,
-            isGradeChanged: fp.isGradeChanged !== undefined ? fp.isGradeChanged : p.isGradeChanged,
             isWeighedIn: fp.isWeighedIn !== undefined ? fp.isWeighedIn : p.isWeighedIn,
-            contestGradeId: fp.contestGradeId || p.contestGradeId,
-            contestGradeTitle: fp.contestGradeTitle || p.contestGradeTitle,
-            playerNumber: fp.playerNumber || p.playerNumber,
-            playerIndex: fp.playerIndex || p.playerIndex,
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
@@ -841,11 +882,10 @@ const ContestPlayerWeighInTable = () => {
             weight: safeWeight,
             playerNoShow: !!lp.playerNoShow,
             isGradeChanged: !!lp.isGradeChanged,
-            isWeighedIn: !!lp.isWeighedIn,
-            contestGradeId: lp.contestGradeId || dbPlayer.contestGradeId,
-            contestGradeTitle: lp.contestGradeTitle || dbPlayer.contestGradeTitle,
-            playerNumber: Number(lp.playerNumber) || dbPlayer.playerNumber,
-            playerIndex: Number(lp.playerIndex) || dbPlayer.playerIndex,
+            contestGradeId: lp.isGradeChanged ? (lp.contestGradeId || dbPlayer.contestGradeId) : dbPlayer.contestGradeId,
+            contestGradeTitle: lp.isGradeChanged ? (lp.contestGradeTitle || dbPlayer.contestGradeTitle) : dbPlayer.contestGradeTitle,
+            playerNumber: dbPlayer.playerNumber !== undefined ? dbPlayer.playerNumber : (Number(lp.playerNumber) || 0),
+            playerIndex: dbPlayer.playerIndex !== undefined ? dbPlayer.playerIndex : (Number(lp.playerIndex) || 0),
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
@@ -1395,87 +1435,267 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 🧹 assign & final 명단 완전 초기화(클리어) 핸들러 */
-  const handleClearAssignAndFinal = async () => {
-    const contestId = currentContest?.contests?.id;
-    const assignId = currentContest?.contests?.contestPlayersAssignId;
-    const finalId = currentContest?.contests?.contestPlayersFinalId;
-
-    if (!contestId || !assignId) {
-      antMessage.error("대회 정보 또는 배정 문서 ID를 확인할 수 없습니다.");
-      return;
-    }
-
+  /** 🔄 1단계 선수 번호 배정(assign) 기준으로 계측 명단 새로 갱신 */
+  const handleRefreshAndSyncAssign = async () => {
     try {
       setIsLoading(true);
-      // 1. assign 문서 비우기
-      await updatePlayersAssign.updateData(assignId, {
-        contestId,
-        players: [],
-        updatedAt: Date.now(),
-      });
-
-      // 2. final 문서 비우기 (있을 경우)
-      if (finalId) {
-        await updatePlayersFinal.updateData(finalId, {
-          contestId,
-          players: [],
-          updatedAt: Date.now(),
-        });
-      }
-
-      setPlayersAssign({ contestId, players: [] });
-      setPlayersArray([]);
-      setMatchedArray([]);
-
-      setMessage({
-        body: "현재 대회의 배정 명단(Assign) 및 최종 계측 명단(Final)이 완전히 초기화(클리어)되었습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setMsgOpen(true);
+      await fetchPool();
+      antMessage.success("1단계 선수 번호 배정 기준으로 명단이 최신 갱신되었습니다!");
     } catch (error) {
-      console.error("초기화 실패:", error);
-      setMessage({
-        body: "초기화 중 오류가 발생했습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setMsgOpen(true);
+      console.error("명단 갱신 실패:", error);
+      antMessage.error("명단 갱신 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  /** ✅ 계측 통과 완료 토글 (복합키 기준 업데이트) */
-  const handleWeighedInToggle = (playerEntryKey, checked) => {
-    const newPlayersArray = playersArray.map((p) => {
-      if (getPlayerEntryKey(p) === playerEntryKey) {
-        return { ...p, isWeighedIn: checked };
-      }
-      return p;
-    });
-    setPlayersArray(newPlayersArray);
-  };
+  /** 🚨 [비상 원상복구] 기존 계측/월체 데이터 완전 무시하고 1단계 선수 번호 배정 원본으로 완전 초기화(덮어쓰기) */
+  const handleForceResetToAssign = async () => {
+    const contestId =
+      currentContest?.contests?.id ||
+      currentContest?.contestInfo?.id ||
+      currentContest?.id ||
+      "";
+    const assignId = currentContest?.contests?.contestPlayersAssignId;
+    const finalId = currentContest?.contests?.contestPlayersFinalId;
 
-  /** 🚫 불참 처리 토글 (동일 선수의 해당 출전 체급 또는 전 종목 불참) */
-  const handleNoShow = (playerNumber, playerEntryKey, e) => {
-    const isChecked = e.target.checked;
-    const newPlayersArray = playersArray.map((p) => {
-      if (getPlayerEntryKey(p) === playerEntryKey) {
+    if (!assignId) {
+      antMessage.error("선수 번호 배정 문서(Assign) ID를 찾을 수 없습니다.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      // 1. 1단계 배정 문서 및 신청서 원본 실시간 조회
+      const returnPlayersAssign = await fetchPlayersAssignDocument.getDocument(assignId);
+      const rawAssignPlayers = returnPlayersAssign?.players || [];
+
+      if (rawAssignPlayers.length === 0) {
+        antMessage.warning("1단계 배정된 선수 명단이 없습니다. 번호 배정을 먼저 진행해 주세요.");
+        return;
+      }
+
+      // 신청서 원본(contest_entrys_list) 체급 맵 구축
+      const entryGradeMap = new Map();
+      if (contestId) {
+        try {
+          const entrySnap = await getDocs(
+            query(collection(db, "contest_entrys_list"), where("contestId", "==", contestId))
+          );
+          entrySnap.docs.forEach((d) => {
+            const data = d.data();
+            const uid = data.playerUid || "";
+            const catId = data.contestCategoryId || "";
+            const rawName = (data.playerName || data.contestPlayerName || data.name || "").trim();
+            const gId = data.contestGradeId || "";
+            const gTitle = data.contestGradeTitle || "";
+            if (gId) {
+              if (uid && catId) entryGradeMap.set(`${uid}_${catId}`, { contestGradeId: gId, contestGradeTitle: gTitle });
+              if (rawName && catId) entryGradeMap.set(`${rawName}_${catId}`, { contestGradeId: gId, contestGradeTitle: gTitle });
+            }
+          });
+        } catch (e) {
+          console.warn("신청서 원본 조회 실패:", e);
+        }
+      }
+
+      // 2. 모든 월체/불참/계측 오염 데이터를 지우고 1단계 순수 배정본으로 깨끗하게 재구성
+      const cleanResetPlayers = rawAssignPlayers.map((p) => {
+        const catId = p.contestCategoryId || "";
+        const rawName = (p.playerName || "").trim();
+        const entryOrig =
+          (p.playerUid && entryGradeMap.get(`${p.playerUid}_${catId}`)) ||
+          (rawName && entryGradeMap.get(`${rawName}_${catId}`));
+
+        const trueGradeId = entryOrig?.contestGradeId || p.originalGradeId || p.contestGradeId;
+        const trueGradeTitle = entryOrig?.contestGradeTitle || p.originalGradeTitle || p.contestGradeTitle;
+
         return {
           ...p,
-          playerNoShow: isChecked,
-          isWeighedIn: isChecked ? false : p.isWeighedIn,
+          originalGradeId: trueGradeId,
+          originalGradeTitle: trueGradeTitle,
+          contestGradeId: trueGradeId,
+          contestGradeTitle: trueGradeTitle,
+          isGradeChanged: false,
+          playerNoShow: false,
+          isWeighedIn: false,
+          heightWeight: "",
+          playerHeight: "",
+          playerWeight: "",
+          height: "",
+          weight: "",
+          playerIndex:
+            Number(p.playerIndex) >= 1000
+              ? Number(p.playerIndex) - 1000
+              : Number(p.playerIndex) || Number(p.playerNumber) || 0,
         };
+      });
+
+      const sanitizedList = sanitizeDataForFirestore(cleanResetPlayers);
+
+      // 3. assign 문서 및 final 문서를 순수 원본 배정본으로 완전 덮어쓰기!
+      const updatePromises = [
+        updateDoc(doc(db, "contest_players_assign", assignId), {
+          players: sanitizedList,
+          updatedAt: new Date().toISOString(),
+        }),
+      ];
+
+      if (finalId) {
+        updatePromises.push(
+          updateDoc(doc(db, "contest_players_final", finalId), {
+            contestId,
+            players: sanitizedList,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+      }
+
+      await Promise.all(updatePromises);
+
+      // 4. 화면 로컬 상태 즉시 갱신
+      await fetchPool();
+
+      antMessage.success(
+        `계측 데이터가 1단계 선수 번호 배정 원본으로 완전히 초기화(덮어쓰기)되었습니다! (총 ${cleanResetPlayers.length}명 완벽 복구)`
+      );
+    } catch (error) {
+      console.error("완전 초기화 덮어쓰기 실패:", error);
+      antMessage.error("초기화 덮어쓰기 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** 🎯 핀셋 개별 선수 계측 확인 및 DB 즉시 저장 함수 (상단 저장 버튼 누를 필요 없이 즉시 저장!) */
+  const persistSinglePlayerWeighIn = async (targetEntryKey, updatedFields) => {
+    const assignId = currentContest?.contests?.contestPlayersAssignId;
+    const finalId = currentContest?.contests?.contestPlayersFinalId;
+    const contestId =
+      currentContest?.contests?.id ||
+      currentContest?.contestInfo?.id ||
+      currentContest?.id ||
+      "";
+
+    let updatedTargetPlayer = null;
+    const updatedList = playersArray.map((p) => {
+      const pKey = getPlayerEntryKey(p);
+      const isMatch =
+        pKey === targetEntryKey ||
+        (p.playerUid && updatedFields.playerUid && p.playerUid === updatedFields.playerUid && p.contestCategoryId === (updatedFields.contestCategoryId || p.contestCategoryId));
+
+      if (isMatch) {
+        const { height, weight } = parseHeightWeight(updatedFields.heightWeight || p.heightWeight);
+        const safeH = height || updatedFields.playerHeight || p.playerHeight || p.height || "";
+        const safeW = weight || updatedFields.playerWeight || p.playerWeight || p.weight || "";
+        const origGId = updatedFields.originalGradeId || p.originalGradeId || p.contestGradeId;
+        const origGTitle = updatedFields.originalGradeTitle || p.originalGradeTitle || p.contestGradeTitle;
+        const isGradeChanged = updatedFields.isGradeChanged !== undefined ? !!updatedFields.isGradeChanged : !!p.isGradeChanged;
+
+        const newObj = {
+          ...p,
+          ...updatedFields,
+          originalGradeId: origGId,
+          originalGradeTitle: origGTitle,
+          isGradeChanged: isGradeChanged,
+          contestGradeId: isGradeChanged ? (updatedFields.contestGradeId || p.contestGradeId || origGId) : origGId,
+          contestGradeTitle: isGradeChanged ? (updatedFields.contestGradeTitle || p.contestGradeTitle || origGTitle) : origGTitle,
+          playerHeight: safeH,
+          playerWeight: safeW,
+          height: safeH,
+          weight: safeW,
+          heightWeight: updatedFields.heightWeight || formatHeightWeight(safeH, safeW) || p.heightWeight || "",
+        };
+        updatedTargetPlayer = newObj;
+        return newObj;
       }
       return p;
     });
-    setPlayersArray(newPlayersArray);
+
+    setPlayersArray(updatedList);
+
+    if (!updatedTargetPlayer) return;
+
+    // Firestore에 즉시 영구 저장
+    try {
+      const sanitizedList = sanitizeDataForFirestore(updatedList);
+      const updatePromises = [];
+
+      if (assignId) {
+        updatePromises.push(
+          updateDoc(doc(db, "contest_players_assign", assignId), {
+            players: sanitizedList,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+      }
+      if (finalId) {
+        updatePromises.push(
+          updateDoc(doc(db, "contest_players_final", finalId), {
+            contestId,
+            players: sanitizedList,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+      }
+
+      await Promise.all(updatePromises);
+
+      if (updatedFields.isWeighedIn === true) {
+        antMessage.success(
+          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인 완료! (DB 즉시 저장됨 ✓)`
+        );
+      } else if (updatedFields.isWeighedIn === false) {
+        antMessage.info(
+          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인이 해제되었습니다.`
+        );
+      }
+    } catch (error) {
+      console.error("핀셋 계측 저장 실패:", error);
+      antMessage.error("계측 데이터 즉시 저장 중 오류가 발생했습니다.");
+    }
   };
 
-  /** ⚖️ 월체 처리 (동일 종목 내 바로 다음 체급으로만 안전하게 승급) */
-  const handleGradeChage = (
+  /** 💾 신장/체중 입력란 옆 [계측완료] 버튼 클릭 시 DB 즉시 저장 */
+  const handleSavePlayerWeighIn = async (player) => {
+    const entryKey = getPlayerEntryKey(player);
+    const { height, weight } = parseHeightWeight(player.heightWeight);
+    const safeH = height || player.playerHeight || player.height || "";
+    const safeW = weight || player.playerWeight || player.weight || "";
+    const combinedHW = formatHeightWeight(safeH, safeW);
+
+    await persistSinglePlayerWeighIn(entryKey, {
+      heightWeight: combinedHW,
+      playerHeight: safeH,
+      playerWeight: safeW,
+      height: safeH,
+      weight: safeW,
+      isWeighedIn: true,
+    });
+  };
+
+  /** 🚫 불참 처리 토글 (체크/해제 즉시 DB에 핀셋 영구 저장!) */
+  const handleNoShow = async (playerNumber, playerEntryKey, e) => {
+    const isChecked = e.target.checked;
+    const targetPlayer = playersArray.find((p) => getPlayerEntryKey(p) === playerEntryKey);
+
+    const updateObj = {
+      playerNoShow: isChecked,
+      isWeighedIn: isChecked ? false : targetPlayer?.isWeighedIn,
+    };
+
+    // 🌟 불참 변경은 즉시 DB에 핀셋 반영
+    await persistSinglePlayerWeighIn(playerEntryKey, updateObj);
+
+    if (isChecked) {
+      antMessage.warning(`[#${targetPlayer?.playerNumber || playerNumber} ${targetPlayer?.playerName || ""}] 선수가 불참(No-Show) 처리되었습니다.`);
+    } else {
+      antMessage.info(`[#${targetPlayer?.playerNumber || playerNumber} ${targetPlayer?.playerName || ""}] 선수의 불참이 취소되어 정상 출전으로 복귀했습니다.`);
+    }
+  };
+
+  /** ⚖️ 월체 처리 (동일 종목 내 바로 다음 체급으로 승급 / 체크 해제 시 원래 배정 체급으로 100% 완벽 원복) */
+  const handleGradeChage = async (
     e,
     currentCategoryId,
     currentGradeId,
@@ -1492,52 +1712,86 @@ const ContestPlayerWeighInTable = () => {
     if (playerFindIndex === -1) return;
 
     const currentPlayerInfo = newPlayers[playerFindIndex];
+    const catId = currentPlayerInfo.contestCategoryId || currentCategoryId;
+
+    // 🌟 선수의 진짜 원래 배정 체급(Original Grade) 확정
+    const assignOriginal = (playersAssign?.players || []).find(
+      (p) =>
+        p.playerUid === currentPlayerInfo.playerUid &&
+        p.contestCategoryId === catId
+    );
+
+    const origGradeId =
+      currentPlayerInfo.originalGradeId ||
+      assignOriginal?.contestGradeId ||
+      currentGradeId;
+
+    const origGradeTitle =
+      currentPlayerInfo.originalGradeTitle ||
+      assignOriginal?.contestGradeTitle ||
+      currentGradeTitle;
+
+    const sameCategoryGrades = gradesArray
+      .filter((g) => g.refCategoryId === catId)
+      .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex);
+
+    let gradeUpdate = {};
 
     if (isChecked) {
-      const sameCategoryGrades = gradesArray
-        .filter((g) => g.refCategoryId === currentCategoryId)
-        .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex);
-
-      const currentGradeIdxInCat = sameCategoryGrades.findIndex(
-        (g) => g.contestGradeId === currentGradeId
+      // 1. 월체 신청: 원래 체급(origGradeId) 기준 바로 다음 상위 체급으로 이동
+      const origGradeIdxInCat = sameCategoryGrades.findIndex(
+        (g) => g.contestGradeId === origGradeId
       );
 
       if (
-        currentGradeIdxInCat !== -1 &&
-        currentGradeIdxInCat < sameCategoryGrades.length - 1
+        origGradeIdxInCat !== -1 &&
+        origGradeIdxInCat < sameCategoryGrades.length - 1
       ) {
-        const nextGrade = sameCategoryGrades[currentGradeIdxInCat + 1];
+        const nextGrade = sameCategoryGrades[origGradeIdxInCat + 1];
 
-        const newPlayerInfo = {
-          ...currentPlayerInfo,
+        gradeUpdate = {
+          originalGradeId: origGradeId,
+          originalGradeTitle: origGradeTitle,
           contestGradeId: nextGrade.contestGradeId,
           contestGradeTitle: nextGrade.contestGradeTitle,
           isGradeChanged: true,
-          playerIndex: currentPlayerInfo.playerIndex + 1000,
+          playerIndex:
+            currentPlayerInfo.playerIndex >= 1000
+              ? currentPlayerInfo.playerIndex
+              : currentPlayerInfo.playerIndex + 1000,
         };
-        newPlayers.splice(playerFindIndex, 1, newPlayerInfo);
-      } else {
-        alert(
-          `해당 종목의 최고 체급입니다. 더 이상 상위 체급이 없어 월체가 불가능합니다.`
+        antMessage.warning(
+          `[${currentPlayerInfo.playerName}] 선수가 ${nextGrade.contestGradeTitle} 체급으로 월체되었습니다.`
         );
+      } else {
+        alert("해당 종목의 최고 체급입니다. 더 이상 상위 체급이 없어 월체가 불가능합니다.");
         return;
       }
     } else {
-      const newPlayerInfo = {
-        ...currentPlayerInfo,
-        contestGradeId: currentPlayerInfo.originalGradeId || currentGradeId,
+      // 2. 월체 취소: 원래 체급(origGradeId)으로 100% 완벽 원복!
+      const originalGradeObj = sameCategoryGrades.find(
+        (g) => g.contestGradeId === origGradeId
+      );
+
+      gradeUpdate = {
+        originalGradeId: origGradeId,
+        originalGradeTitle: origGradeTitle,
+        contestGradeId: origGradeId,
         contestGradeTitle:
-          currentPlayerInfo.originalGradeTitle || currentGradeTitle,
+          originalGradeObj?.contestGradeTitle || origGradeTitle,
         isGradeChanged: false,
         playerIndex:
           currentPlayerInfo.playerIndex >= 1000
             ? currentPlayerInfo.playerIndex - 1000
             : currentPlayerInfo.playerIndex,
       };
-      newPlayers.splice(playerFindIndex, 1, newPlayerInfo);
+      antMessage.info(
+        `[${currentPlayerInfo.playerName}] 선수의 월체가 취소되어 원래 체급(${gradeUpdate.contestGradeTitle})으로 복귀했습니다.`
+      );
     }
 
-    setPlayersArray(newPlayers);
+    // 🌟 월체 변경/취소는 체급 이동이므로 즉시 DB에 핀셋 영구 저장하여 상태를 동기화!
+    await persistSinglePlayerWeighIn(playerEntryKey, gradeUpdate);
   };
 
   /** 📏 신장(height) 개별 수정 */
@@ -2054,23 +2308,41 @@ const ContestPlayerWeighInTable = () => {
 
               <div className="w-px h-8 bg-slate-700 hidden sm:block" />
 
-              {/* 저장 및 클리어 버튼 그룹 */}
-              <div className="flex items-center gap-2">
+              {/* 저장 및 갱신/초기화 버튼 그룹 */}
+              <div className="flex flex-wrap items-center gap-2">
                 <Popconfirm
-                  title="계측 및 최종 명단 완전 초기화"
-                  description="현재 대회의 contest_players_assign 및 contest_players_final 명단을 모두 빈 상태로 클리어합니다. 정말 진행하시겠습니까?"
-                  onConfirm={handleClearAssignAndFinal}
-                  okText="완전 초기화 실행"
+                  title="1단계 배정 기준 명단 갱신"
+                  description="1단계 선수 번호 배정(contest_players_assign)의 최신 번호와 명단을 기준으로 계측 명단을 새로 갱신합니다. 진행하시겠습니까?"
+                  onConfirm={handleRefreshAndSyncAssign}
+                  okText="명단 갱신 실행"
+                  cancelText="취소"
+                >
+                  <button
+                    type="button"
+                    title="1단계 배정본 기준으로 명단 최신 갱신"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-blue-100 font-bold text-xs border border-blue-700/60 shadow-sm transition-all cursor-pointer"
+                  >
+                    <SyncOutlined />
+                    <span>명단 갱신</span>
+                  </button>
+                </Popconfirm>
+
+                {/* 🚨 [비상 원상복구] 기존 계측/월체 데이터 무시하고 1단계 배정본으로 완전 덮어쓰기 */}
+                <Popconfirm
+                  title="🚨 계측 데이터 완전 초기화 (배정본 덮어쓰기)"
+                  description="기존의 모든 월체, 불참, 신장/체중 계측 데이터를 완전히 무시(폐기)하고, 1단계 선수 번호 배정 원본 체급과 번호로 계측 데이터를 깨끗하게 덮어씌웁니다. 정말 초기화하시겠습니까?"
+                  onConfirm={handleForceResetToAssign}
+                  okText="위험: 배정본으로 완전 덮어쓰기"
                   cancelText="취소"
                   okButtonProps={{ danger: true }}
                 >
                   <button
                     type="button"
-                    title="배정 및 계측 명단 완전 비우기"
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-rose-100 font-bold text-xs border border-rose-700/60 shadow-sm transition-all cursor-pointer"
+                    title="기존 계측/월체 데이터를 완전히 지우고 1단계 번호 배정 원본으로 덮어씁니다."
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-300 hover:text-rose-100 font-black text-xs border border-rose-600 shadow-sm transition-all cursor-pointer active:scale-95"
                   >
-                    <DeleteOutlined />
-                    <span>명단 비우기</span>
+                    <WarningOutlined className="text-rose-400" />
+                    <span>계측 완전 초기화 (배정본 덮어쓰기)</span>
                   </button>
                 </Popconfirm>
 
@@ -2080,10 +2352,10 @@ const ContestPlayerWeighInTable = () => {
                   onClick={handleSyncCleanPhotoData}
                   disabled={isSyncingPhotos}
                   title="신청서 원본에서 순수 선수 사진만 다시 정밀 추출하여 포스터/오류 사진을 정리하고 계측 명단에 동기화합니다."
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 font-black text-xs border border-amber-500/40 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 font-black text-xs border border-amber-500/40 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
                 >
                   <SyncOutlined spin={isSyncingPhotos} className="text-amber-400" />
-                  <span>{isSyncingPhotos ? "사진 정리/동기화 중..." : "사진데이터 갱신"}</span>
+                  <span>{isSyncingPhotos ? "사진 정리 중..." : "사진데이터 갱신"}</span>
                 </button>
 
                 {playersArray?.length > 0 ? (
@@ -2251,13 +2523,13 @@ const ContestPlayerWeighInTable = () => {
                             <tr className="border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
                               <th className="py-4 px-3 w-14 text-center">순번</th>
                               <th className="py-4 px-2 w-20 text-center">사진</th>
-                              <th className="py-4 px-3 w-32 text-center">선수번호</th>
+                              <th className="py-4 px-3 w-28 text-center">선수번호</th>
                               <th className="py-4 px-4 w-48">선수 성명 / 상태</th>
-                              <th className="py-4 px-3 w-40">소속</th>
-                              <th className="py-4 px-4 w-96">신장(cm) / 체중(kg) 계측 입력</th>
-                              <th className="py-4 px-3 w-24 text-center">월체</th>
-                              <th className="py-4 px-3 w-28 text-center">불참 (NoShow)</th>
-                              <th className="py-4 px-3 w-24 text-center">관리</th>
+                              <th className="py-4 px-3 w-36">소속</th>
+                              <th className="py-4 px-4 min-w-[340px]">신장(cm) / 체중(kg) 계측 & 저장</th>
+                              <th className="py-4 px-3 w-20 text-center">월체</th>
+                              <th className="py-4 px-3 w-24 text-center">불참 (NoShow)</th>
+                              <th className="py-4 px-3 w-20 text-center">관리</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -2271,6 +2543,7 @@ const ContestPlayerWeighInTable = () => {
                                   playerNumber,
                                   playerNoShow,
                                   isGradeChanged,
+                                  isWeighedIn,
                                   heightWeight,
                                   playerIndex,
                                 } = player;
@@ -2285,6 +2558,8 @@ const ContestPlayerWeighInTable = () => {
                                     className={`transition-colors ${
                                       playerNoShow
                                         ? "bg-rose-100/80 border-l-4 border-l-rose-600"
+                                        : isWeighedIn
+                                        ? "bg-emerald-50/50 hover:bg-emerald-50/80 border-l-4 border-l-emerald-500"
                                         : "hover:bg-slate-50"
                                     }`}
                                   >
@@ -2378,10 +2653,10 @@ const ContestPlayerWeighInTable = () => {
                                       {playerGym || "무소속 / 개인"}
                                     </td>
 
-                                    {/* 📏 대형 신장(cm) / 체중(kg) 분리 입력란 */}
+                                    {/* 📏 대형 신장(cm) / 체중(kg) 분리 입력란 + 일체형 [계측완료] 버튼 */}
                                     <td className="py-5 px-4">
                                       <div className="flex items-center gap-2.5">
-                                        {/* 신장 입력 (더 크고 시원하게) */}
+                                        {/* 신장 입력 */}
                                         <div className="relative flex items-center">
                                           <Input
                                             value={height}
@@ -2390,7 +2665,7 @@ const ContestPlayerWeighInTable = () => {
                                             onChange={(e) =>
                                               handleHeightChange(entryKey, e.target.value)
                                             }
-                                            className={`w-32 sm:w-36 h-12 text-base sm:text-lg font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
+                                            className={`w-24 sm:w-28 h-11 text-base font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
                                               playerNoShow
                                                 ? "bg-slate-100 text-slate-400 border-slate-200"
                                                 : "border-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 bg-white text-blue-950 shadow-sm"
@@ -2401,9 +2676,9 @@ const ContestPlayerWeighInTable = () => {
                                           </span>
                                         </div>
 
-                                        <span className="text-slate-300 font-black text-xl">/</span>
+                                        <span className="text-slate-300 font-black text-lg">/</span>
 
-                                        {/* 체중 입력 (더 크고 시원하게) */}
+                                        {/* 체중 입력 */}
                                         <div className="relative flex items-center">
                                           <Input
                                             value={weight}
@@ -2412,7 +2687,7 @@ const ContestPlayerWeighInTable = () => {
                                             onChange={(e) =>
                                               handleWeightChange(entryKey, e.target.value)
                                             }
-                                            className={`w-32 sm:w-36 h-12 text-base sm:text-lg font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
+                                            className={`w-24 sm:w-28 h-11 text-base font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
                                               playerNoShow
                                                 ? "bg-slate-100 text-slate-400 border-slate-200"
                                                 : "border-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 bg-white text-blue-950 shadow-sm"
@@ -2422,6 +2697,30 @@ const ContestPlayerWeighInTable = () => {
                                             kg
                                           </span>
                                         </div>
+
+                                        {/* 💾 신장/체중 바로 옆에 딱 붙어있는 [신체정보입력완료] 버튼 */}
+                                        <button
+                                          type="button"
+                                          disabled={playerNoShow}
+                                          onClick={() => handleSavePlayerWeighIn(player)}
+                                          className={`inline-flex items-center justify-center gap-1.5 px-3.5 h-11 rounded-xl font-black text-xs shadow-sm transition-all cursor-pointer border-0 shrink-0 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                            isWeighedIn && !playerNoShow
+                                              ? "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-300"
+                                              : "bg-blue-600 hover:bg-blue-500 text-white"
+                                          }`}
+                                        >
+                                          {isWeighedIn && !playerNoShow ? (
+                                            <>
+                                              <CheckCircleOutlined className="text-sm" />
+                                              <span>신체정보입력완료 ✓</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <SaveOutlined className="text-sm" />
+                                              <span>신체정보입력완료</span>
+                                            </>
+                                          )}
+                                        </button>
                                       </div>
                                     </td>
 
@@ -2571,9 +2870,8 @@ const ContestPlayerWeighInTable = () => {
                                   소속: {playerGym || "개인 / 무소속"}
                                 </div>
 
-                                {/* 대형 신장/체중 2개 분리 입력란 */}
+                                {/* 대형 신장/체중 2개 분리 입력란 + 일체형 [계측완료] 버튼 */}
                                 <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                                  <span className="text-xs font-black text-slate-700 shrink-0">계측:</span>
                                   <div className="relative flex-1 flex items-center">
                                     <Input
                                       value={height}
@@ -2603,10 +2901,24 @@ const ContestPlayerWeighInTable = () => {
                                       kg
                                     </span>
                                   </div>
+
+                                  {/* 💾 모바일 일체형 [신체정보입력완료] 버튼 */}
+                                  <button
+                                    type="button"
+                                    disabled={playerNoShow}
+                                    onClick={() => handleSavePlayerWeighIn(player)}
+                                    className={`inline-flex items-center justify-center gap-1 px-3 h-11 rounded-xl font-black text-xs shadow-sm transition-all cursor-pointer border-0 shrink-0 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                      isWeighedIn && !playerNoShow
+                                        ? "bg-emerald-600 text-white"
+                                        : "bg-blue-600 text-white"
+                                    }`}
+                                  >
+                                    {isWeighedIn && !playerNoShow ? "신체정보입력완료 ✓" : "신체정보입력완료"}
+                                  </button>
                                 </div>
 
-                                <div className="flex items-center justify-end gap-3 pt-2.5 border-t border-slate-100">
-                                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 cursor-pointer">
+                                <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                                  <label className="flex items-center gap-1 text-xs font-bold text-slate-600 cursor-pointer">
                                     <Checkbox
                                       checked={isGradeChanged}
                                       disabled={playerNoShow}
@@ -2619,18 +2931,18 @@ const ContestPlayerWeighInTable = () => {
                                           entryKey
                                         )
                                       }
-                                      className="scale-125"
+                                      className="scale-110"
                                     />
-                                    <span>월체</span>
+                                    <span>월체 (즉시반영)</span>
                                   </label>
 
-                                  <label className="flex items-center gap-1.5 text-xs text-rose-700 font-black cursor-pointer">
+                                  <label className="flex items-center gap-1 text-xs text-rose-700 font-black cursor-pointer">
                                     <Checkbox
                                       checked={playerNoShow}
                                       onChange={(e) => handleNoShow(playerNumber, entryKey, e)}
-                                      className="scale-125"
+                                      className="scale-110"
                                     />
-                                    <span>🚨 불참</span>
+                                    <span>🚨 불참 (즉시반영)</span>
                                   </label>
                                 </div>
                               </div>
