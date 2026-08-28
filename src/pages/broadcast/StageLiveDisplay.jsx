@@ -727,6 +727,7 @@ const StageLiveDisplay = () => {
       {(currentMode === "SPECIAL_VIDEO" || currentMode === "SPECIAL_SCREEN") && (
         <SpecialVideoScene
           videoUrl={broadcastData?.specialVideoData?.videoUrl || broadcastData?.specialVideoUrl || videoSettings.standbyVideoUrl}
+          videoCommand={broadcastData?.videoCommand}
           isAudioEnabled={isAudioEnabled}
           onEnded={handleFinishCeremony}
         />

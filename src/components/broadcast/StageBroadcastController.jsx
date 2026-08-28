@@ -61,6 +61,9 @@ import {
   CloudUploadOutlined,
   VideoCameraOutlined,
   LinkOutlined,
+  BackwardOutlined,
+  PauseCircleOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 
@@ -914,6 +917,27 @@ const StageBroadcastController = ({
     }
   };
 
+  // 🎮 특별영상 실시간 원격 재생 제어 (재생, 일시정지, 정지, 앞으로 10초, 뒤로 10초)
+  const handleVideoCommand = async (action) => {
+    if (!contestId) return;
+    const cmd = {
+      action,
+      timestamp: Date.now(),
+    };
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}/videoCommand`, cmd);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE/videoCommand`, cmd);
+
+      if (action === "PLAY") message.success("특별영상: ▶️ 재생 시작");
+      else if (action === "PAUSE") message.info("특별영상: ⏸️ 일시정지");
+      else if (action === "STOP") message.warning("특별영상: ⏹️ 정지 (처음으로)");
+      else if (action === "SEEK_BACK_10") message.info("특별영상: ⏪ 10초 뒤로");
+      else if (action === "SEEK_FORWARD_10") message.info("특별영상: ⏩ 10초 앞으로");
+    } catch (err) {
+      console.error("비디오 제어 명령 전송 실패:", err);
+    }
+  };
+
   // 특별영상 파일 업로드 핸들러 (Firebase Storage 연동)
   const handleUploadSpecialVideoFile = async (file) => {
     if (!file || !contestId) return;
@@ -1430,6 +1454,82 @@ const StageBroadcastController = ({
             </div>
           )}
         </div>
+
+        {/* 🎮 [🎬 특별영상 실시간 원격 제어 바 (재생, 일시정지, 정지, 앞으로/뒤로 10초)] */}
+        {currentMode === "SPECIAL_VIDEO" && (
+          <div className="bg-gradient-to-r from-purple-950/95 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-purple-400/70 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping" />
+              <span className="font-black text-xs sm:text-sm text-purple-200 flex items-center gap-1.5">
+                <VideoCameraOutlined className="text-purple-400" />
+                <span>[특별영상] {broadcastData?.specialVideoTitle || "영상 송출 중"}</span>
+              </span>
+              <Tag color="purple" className="font-black text-xs m-0 animate-pulse">
+                ON AIR
+              </Tag>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* ⏪ 10초 뒤로 */}
+              <Button
+                icon={<BackwardOutlined />}
+                onClick={() => handleVideoCommand("SEEK_BACK_10")}
+                className="bg-slate-800 hover:bg-slate-700 text-purple-300 border-purple-500/50 font-bold text-xs shadow"
+                title="10초 뒤로 이동"
+              >
+                -10초
+              </Button>
+
+              {/* ▶️ 재생 */}
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handleVideoCommand("PLAY")}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs border-none shadow-lg"
+              >
+                재생
+              </Button>
+
+              {/* ⏸️ 일시정지 */}
+              <Button
+                icon={<PauseCircleOutlined />}
+                onClick={() => handleVideoCommand("PAUSE")}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-black text-xs border-none shadow-lg"
+              >
+                일시정지
+              </Button>
+
+              {/* ⏩ 10초 앞으로 */}
+              <Button
+                icon={<ForwardOutlined />}
+                onClick={() => handleVideoCommand("SEEK_FORWARD_10")}
+                className="bg-slate-800 hover:bg-slate-700 text-purple-300 border-purple-500/50 font-bold text-xs shadow"
+                title="10초 앞으로 이동"
+              >
+                +10초
+              </Button>
+
+              {/* ⏹️ 정지 / 처음으로 */}
+              <Button
+                danger
+                icon={<StopOutlined />}
+                onClick={() => handleVideoCommand("STOP")}
+                className="bg-red-600/80 hover:bg-red-600 text-white font-bold text-xs border-none shadow"
+              >
+                정지 (처음으로)
+              </Button>
+
+              {/* 대기 화면 복귀 */}
+              <Button
+                icon={<ForwardOutlined />}
+                onClick={handleSetStandby}
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs ml-1"
+              >
+                송출 종료 (대기 복귀)
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* 3. 선수 무대 입장 시 전체 화면 소개 송출 버튼 */}
         {currentPlayers && currentPlayers.length > 0 && (

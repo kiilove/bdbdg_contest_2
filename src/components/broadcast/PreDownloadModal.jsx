@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useContext } from "react";
 import { Modal, Button, Progress, message, Tag } from "antd";
 import {
   CloudDownloadOutlined,
@@ -17,6 +17,9 @@ import {
   getAllStoredVideosInfo,
   clearStoredVideos,
 } from "../../utils/indexedDbVideoStorage";
+import { CurrentContestContext } from "../../contexts/CurrentContestContext";
+import { useFirestoreQuery } from "../../hooks/useFirestores";
+import { where } from "firebase/firestore";
 
 const SCREEN_SLOTS = [
   { key: "standbyVideoUrl", title: "1. 대기 및 종목 안내", desc: "무대 시작 전 및 종목 준비 화면", color: "blue" },
@@ -31,14 +34,30 @@ const SCREEN_SLOTS = [
 export const PreDownloadModal = ({
   open,
   onClose,
-  videoSettings = {},
-  sponsors = [],
-  specialVideos = [],
+  contestId: propContestId,
+  videoSettings: propVideoSettings = {},
+  sponsors: propSponsors = [],
+  specialVideos: propSpecialVideos = [],
 }) => {
+  const { currentContest } = useContext(CurrentContestContext);
+  const firestoreQuery = useFirestoreQuery();
+
+  const effectiveContestId =
+    propContestId ||
+    currentContest?.contests?.id ||
+    currentContest?.contestInfo?.id ||
+    currentContest?.id ||
+    localStorage.getItem("screen_active_contest_id") ||
+    "";
+
   const [cacheInfo, setCacheInfo] = useState({});
   const [downloadProgress, setDownloadProgress] = useState({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [currentDownloadingKey, setCurrentDownloadingKey] = useState(null);
+
+  const [dbSpecialVideos, setDbSpecialVideos] = useState([]);
+  const [dbSponsors, setDbSponsors] = useState([]);
+  const [dbVideoSettings, setDbVideoSettings] = useState({});
 
   // 로컬 캐시 상태 새로고침
   const refreshCacheInfo = async () => {
@@ -46,11 +65,69 @@ export const PreDownloadModal = ({
     setCacheInfo(info);
   };
 
+  // 모달 열릴 때 최신 특별영상 및 스폰서 데이터 즉시 재조회
   useEffect(() => {
-    if (open) {
-      refreshCacheInfo();
-    }
-  }, [open, videoSettings, sponsors, specialVideos]);
+    if (!open) return;
+
+    refreshCacheInfo();
+
+    const fetchLatestDbMedia = async () => {
+      if (!effectiveContestId) return;
+      try {
+        const condition = [where("contestId", "==", effectiveContestId)];
+        
+        // 특별영상 로드
+        const spData = await firestoreQuery.getDocuments("contest_special_videos", condition);
+        if (spData && spData.length > 0 && Array.isArray(spData[0]?.videos)) {
+          setDbSpecialVideos(spData[0].videos);
+        }
+
+        // 스폰서 & 무대 영상 로드
+        const listData = await firestoreQuery.getDocuments("contest_sponsor_list", condition);
+        if (listData && listData.length > 0) {
+          const item = listData[0];
+          if (Array.isArray(item.sponsors)) setDbSponsors(item.sponsors);
+          setDbVideoSettings({
+            standbyVideoUrl: item?.standbyVideoUrl || "",
+            introVideoUrl: item?.introVideoUrl || "",
+            calloutVideoUrl: item?.calloutVideoUrl || "",
+            posedownVideoUrl: item?.posedownVideoUrl || "",
+            rankingVideoUrl: item?.rankingVideoUrl || "",
+            championVideoUrl: item?.championVideoUrl || "",
+            awardVideoUrl: item?.awardVideoUrl || "",
+          });
+        }
+      } catch (err) {
+        console.error("PreDownloadModal 미디어 최신화 실패:", err);
+      }
+    };
+
+    fetchLatestDbMedia();
+  }, [open, effectiveContestId]);
+
+  // props와 DB 데이터를 지능형 병합
+  const videoSettings = useMemo(() => ({
+    ...dbVideoSettings,
+    ...propVideoSettings,
+  }), [dbVideoSettings, propVideoSettings]);
+
+  const sponsors = useMemo(() => {
+    const map = new Map();
+    [...dbSponsors, ...(propSponsors || [])].forEach((s, idx) => {
+      const key = s.id || s.name || idx;
+      map.set(key, s);
+    });
+    return Array.from(map.values());
+  }, [dbSponsors, propSponsors]);
+
+  const specialVideos = useMemo(() => {
+    const map = new Map();
+    [...dbSpecialVideos, ...(propSpecialVideos || [])].forEach((sv, idx) => {
+      const key = sv.id || sv.videoUrl || sv.url || idx;
+      map.set(key, sv);
+    });
+    return Array.from(map.values());
+  }, [dbSpecialVideos, propSpecialVideos]);
 
   // 바이트 포맷팅 (MB 변환)
   const formatBytes = (bytes) => {

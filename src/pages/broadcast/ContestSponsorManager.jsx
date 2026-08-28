@@ -67,6 +67,7 @@ const ContestSponsorManager = () => {
 
   const [activeTab, setActiveTab] = useState("sponsors");
   const [sponsors, setSponsors] = useState([]);
+  const [specialVideos, setSpecialVideos] = useState([]);
   const [videoSettings, setVideoSettings] = useState({
     standbyVideoUrl: "",
     introVideoUrl: "",
@@ -121,6 +122,14 @@ const ContestSponsorManager = () => {
       } else {
         setDocId(null);
         setSponsors([]);
+      }
+
+      // 🎬 특별영상 목록 로드
+      const spData = await sponsorQuery.getDocuments("contest_special_videos", condition);
+      if (spData && spData.length > 0 && Array.isArray(spData[0]?.videos)) {
+        setSpecialVideos(spData[0].videos);
+      } else {
+        setSpecialVideos([]);
       }
     } catch (error) {
       console.error("스폰서 설정 로드 실패:", error);
@@ -1033,12 +1042,14 @@ const ContestSponsorManager = () => {
         </Form>
       </Modal>
 
-      {/* ⚡ 무대 비디오 및 스폰서 광고 사전 다운로드 매니저 모달 */}
+      {/* ⚡ 무대 비디오 및 스폰서 광고 + 특별영상 사전 다운로드 매니저 모달 */}
       <PreDownloadModal
         open={isPreDownloadOpen}
         onClose={() => setIsPreDownloadOpen(false)}
         videoSettings={videoSettings}
         sponsors={sponsors}
+        specialVideos={specialVideos}
+        contestId={contestId}
       />
     </div>
   );
