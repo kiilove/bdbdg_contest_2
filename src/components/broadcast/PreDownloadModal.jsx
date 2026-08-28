@@ -33,6 +33,7 @@ export const PreDownloadModal = ({
   onClose,
   videoSettings = {},
   sponsors = [],
+  specialVideos = [],
 }) => {
   const [cacheInfo, setCacheInfo] = useState({});
   const [downloadProgress, setDownloadProgress] = useState({});
@@ -49,7 +50,7 @@ export const PreDownloadModal = ({
     if (open) {
       refreshCacheInfo();
     }
-  }, [open, videoSettings, sponsors]);
+  }, [open, videoSettings, sponsors, specialVideos]);
 
   // 바이트 포맷팅 (MB 변환)
   const formatBytes = (bytes) => {
@@ -95,6 +96,29 @@ export const PreDownloadModal = ({
     return list;
   }, [sponsors]);
 
+  // 🎬 특별영상 미디어 목록 정제
+  const specialVideoSlots = useMemo(() => {
+    const list = [];
+    const seenUrls = new Set();
+
+    (specialVideos || []).forEach((sv, idx) => {
+      const vid = sv.videoUrl || sv.url;
+      if (vid && typeof vid === "string" && vid.startsWith("http") && !seenUrls.has(vid)) {
+        seenUrls.add(vid);
+        list.push({
+          key: `special_vid_${sv.id || idx}`,
+          url: vid,
+          title: `[특별영상] ${sv.title || `특별영상 ${idx + 1}`}`,
+          desc: sv.desc || sv.subTitle || "전광판 단독 전체화면 특별영상",
+          type: "video",
+          color: "purple",
+        });
+      }
+    });
+
+    return list;
+  }, [specialVideos]);
+
   // 단일 미디어 다운로드
   const handleDownloadSingle = async (slotKey, url) => {
     if (!url) {
@@ -127,14 +151,15 @@ export const PreDownloadModal = ({
     setCurrentDownloadingKey(null);
   };
 
-  // 전체 미디어 (무대 7종 비디오 + 스폰서 광고 전체) 일괄 사전 다운로드
+  // 전체 미디어 (무대 7종 비디오 + 스폰서 광고 + 특별영상 전체) 일괄 사전 다운로드
   const handleDownloadAll = async () => {
     const activeStageSlots = SCREEN_SLOTS
       .map((s) => ({ ...s, url: videoSettings[s.key] }))
       .filter((s) => Boolean(s.url && s.url.startsWith("http")));
 
     const activeSponsorSlots = sponsorSlots.filter((s) => Boolean(s.url && s.url.startsWith("http")));
-    const allSlotsToDownload = [...activeStageSlots, ...activeSponsorSlots];
+    const activeSpecialVideoSlots = specialVideoSlots.filter((s) => Boolean(s.url && s.url.startsWith("http")));
+    const allSlotsToDownload = [...activeStageSlots, ...activeSponsorSlots, ...activeSpecialVideoSlots];
 
     if (allSlotsToDownload.length === 0) {
       message.info("사전 다운로드할 외부 미디어 URL이 없습니다. (기본 에셋 사용중)");
@@ -143,7 +168,7 @@ export const PreDownloadModal = ({
 
     setIsDownloadingAll(true);
     message.loading({
-      content: `전체 미디어 총 ${allSlotsToDownload.length}개(무대 영상 + 광고) 사전 다운로드를 시작합니다...`,
+      content: `전체 미디어 총 ${allSlotsToDownload.length}개(무대 영상 + 광고 + 특별영상) 사전 다운로드를 시작합니다...`,
       key: "downloadAll",
       duration: 0,
     });
@@ -169,7 +194,7 @@ export const PreDownloadModal = ({
     setIsDownloadingAll(false);
     setCurrentDownloadingKey(null);
     message.success({
-      content: "🎉 모든 무대 비디오 및 스폰서 광고가 브라우저에 안전하게 보관되었습니다! 이제 인터넷 없이도 100% 끊김 없이 재생됩니다.",
+      content: "🎉 모든 무대 비디오, 스폰서 광고 및 특별영상이 브라우저에 안전하게 보관되었습니다! 이제 인터넷 없이도 100% 끊김 없이 재생됩니다.",
       key: "downloadAll",
       duration: 5,
     });
@@ -197,11 +222,13 @@ export const PreDownloadModal = ({
   
   const configuredStageCount = SCREEN_SLOTS.filter((s) => Boolean(videoSettings[s.key] && videoSettings[s.key].startsWith("http"))).length;
   const configuredSponsorCount = sponsorSlots.length;
-  const totalConfiguredCount = configuredStageCount + configuredSponsorCount;
+  const configuredSpecialCount = specialVideoSlots.length;
+  const totalConfiguredCount = configuredStageCount + configuredSponsorCount + configuredSpecialCount;
 
   const downloadedStageCount = SCREEN_SLOTS.filter((s) => Boolean(videoSettings[s.key] && cacheInfo[videoSettings[s.key]])).length;
   const downloadedSponsorCount = sponsorSlots.filter((s) => Boolean(cacheInfo[s.url])).length;
-  const totalDownloadedCount = downloadedStageCount + downloadedSponsorCount;
+  const downloadedSpecialCount = specialVideoSlots.filter((s) => Boolean(cacheInfo[s.url])).length;
+  const totalDownloadedCount = downloadedStageCount + downloadedSponsorCount + downloadedSpecialCount;
 
   return (
     <Modal
@@ -461,11 +488,85 @@ export const PreDownloadModal = ({
             )}
           </div>
 
+          {/* 3. 특별영상 미디어 섹션 */}
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            <div className="text-xs font-black text-purple-400 flex items-center gap-1.5 px-1">
+              <VideoCameraOutlined />
+              <span>3. 특별영상 미디어 ({specialVideoSlots.length}개)</span>
+            </div>
+
+            {specialVideoSlots.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-white/10 text-center text-xs text-slate-400 font-bold">
+                등록된 특별영상 URL이 없습니다. (방송 콘솔에서 특별영상 업로드 시 자동 추가됩니다)
+              </div>
+            ) : (
+              specialVideoSlots.map((slot) => {
+                const url = slot.url;
+                const isCached = Boolean(url && cacheInfo[url]);
+                const cachedSize = url && cacheInfo[url]?.size;
+                const progress = downloadProgress[slot.key];
+                const isCurrentlyDownloading = currentDownloadingKey === slot.key;
+
+                return (
+                  <div
+                    key={slot.key}
+                    className="bg-slate-950/80 border border-white/10 hover:border-white/20 rounded-2xl p-3 flex items-center justify-between gap-3 transition-all"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Tag color={slot.color} className="font-bold text-[10px] m-0">
+                          {slot.title}
+                        </Tag>
+                        <span className="text-xs text-slate-400 font-bold truncate">
+                          {slot.desc}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs font-mono text-slate-300 truncate max-w-md">
+                        {url.split("?")[0].split("/").pop()}
+                      </div>
+
+                      {isCurrentlyDownloading && progress && (
+                        <div className="pt-1">
+                          <Progress
+                            percent={progress.percent}
+                            size="small"
+                            status="active"
+                            strokeColor={{ "0%": "#a855f7", "100%": "#10b981" }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      {isCached ? (
+                        <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-400/30 px-2.5 py-1 rounded-xl text-xs font-black text-emerald-400">
+                          <CheckCircleFilled className="text-emerald-400" />
+                          <span>보관 완료 ({formatBytes(cachedSize)})</span>
+                        </div>
+                      ) : (
+                        <Button
+                          size="small"
+                          icon={<CloudDownloadOutlined />}
+                          loading={isCurrentlyDownloading}
+                          onClick={() => handleDownloadSingle(slot.key, url)}
+                          className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-400/40 rounded-xl font-bold text-xs"
+                        >
+                          다운로드
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
         </div>
 
         {/* 하단 안내 캡션 */}
         <div className="text-[11px] text-slate-400 text-center border-t border-white/10 pt-3">
-          💡 다운로드된 무대 영상과 스폰서 광고는 브라우저 로컬 디스크(IndexedDB)에 영구 보관되어 실시간 송출 시 0초 버퍼링 없이 즉시 재생됩니다.
+          💡 다운로드된 무대 영상, 스폰서 광고 및 특별영상은 브라우저 로컬 디스크(IndexedDB)에 영구 보관되어 실시간 송출 시 0초 버퍼링 없이 즉시 재생됩니다.
         </div>
 
       </div>

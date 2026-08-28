@@ -160,7 +160,7 @@ export const AudioCategoryTabs = ({
         <div className="space-y-1.5 pt-1">
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <span className="text-amber-500">⚡</span>
-            <span>특별 연출 음원 (대기 / 시상식 / 쉬는시간 / 국민의례)</span>
+            <span>특별 연출 음원 (국민의례 / 내빈소개 / 대기 / 시상식 / 쉬는시간)</span>
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">

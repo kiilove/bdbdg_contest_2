@@ -3,6 +3,7 @@
  */
 export const CUSTOM_CATEGORIES = [
   { key: "국민의례 음악", name: "국민의례 음악", icon: "🇰🇷", desc: "개회식, 국기에 대한 경례, 애국가, 순국선열 묵념 등 공식 의전 음원", tagColor: "magenta" },
+  { key: "내빈소개 음악", name: "내빈소개 음악", icon: "🎙️", desc: "개회식, 주요 내빈 및 귀빈, 심사위원 소개 시 재생되는 배경음악", tagColor: "purple" },
   { key: "대기할때 음악", name: "대기할때 음악", icon: "⏳", desc: "선수 무대 대기 및 진행 준비 시 재생되는 배경음악", tagColor: "cyan" },
   { key: "시상식때의 음악", name: "시상식때의 음악", icon: "🏆", desc: "순위 발표 및 메달/트로피 수여 시 재생되는 웅장한 시상식 음악", tagColor: "gold" },
   { key: "쉬는시간의 음악", name: "쉬는시간의 음악", icon: "☕", desc: "인터미션 및 중간 휴식 시간에 재생되는 편안한 배경음악", tagColor: "geekblue" },
@@ -13,6 +14,7 @@ export const CUSTOM_CATEGORIES = [
  */
 export const DEFAULT_TAB_CONFIGS = {
   "국민의례 음악": { fadeDuration: 0.0, autoNext: false },
+  "내빈소개 음악": { fadeDuration: 2.0, autoNext: true },
   "대기할때 음악": { fadeDuration: 10.0, autoNext: true },
   "시상식때의 음악": { fadeDuration: 10.0, autoNext: true },
   "쉬는시간의 음악": { fadeDuration: 10.0, autoNext: true },
@@ -242,6 +244,9 @@ export const isCustomTrack = (t) => {
     cat.includes("국민의례") ||
     cat.includes("애국가") ||
     cat.includes("묵념") ||
+    cat.includes("내빈") ||
+    cat.includes("귀빈") ||
+    cat.includes("소개") ||
     cat.includes("시상") ||
     cat.includes("대기") ||
     cat.includes("휴식") ||
@@ -275,6 +280,21 @@ export const isMatchingCustomTab = (track, tabName) => {
       lowerTitle.includes("애국가") ||
       lowerTitle.includes("국기에") ||
       lowerTitle.includes("묵념")
+    );
+  }
+
+  if (tabName === "내빈소개 음악" || tabName === "내빈소개") {
+    return (
+      lowerCat.includes("내빈") ||
+      lowerCat.includes("귀빈") ||
+      lowerCat.includes("소개") ||
+      lowerCat.includes("vip") ||
+      lowerCat.includes("guest") ||
+      lowerTitle.includes("내빈") ||
+      lowerTitle.includes("귀빈") ||
+      lowerTitle.includes("소개") ||
+      lowerTitle.includes("vip") ||
+      lowerTitle.includes("guest")
     );
   }
 

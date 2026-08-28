@@ -191,7 +191,7 @@ export const AudioModals = ({
 
             <div className="font-bold text-slate-800 flex items-center gap-1.5 pt-1">
               <Tag color="purple">자체 특별 연출 음원</Tag>
-              <span>국민의례, 시상식, 대기, 쉬는시간 전용 독립 BGM</span>
+              <span>국민의례, 내빈소개, 시상식, 대기, 쉬는시간 전용 독립 BGM</span>
             </div>
             <p className="pl-2 m-0 text-slate-500">
               대회 경기 흐름과 독립적으로 운영되며, 탭별로 지정된 페이드 시간 및 연속 재생 규칙에 맞춰 안전하게 재생됩니다.

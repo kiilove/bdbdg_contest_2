@@ -13,6 +13,13 @@ import {
 } from "../../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { extractPlayerPhotos, isNonPlayerUrl } from "../../pages/ContestPlayerWeighInTable";
+import { storage } from "../../firebase";
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 import {
   Card,
   Tag,
@@ -28,6 +35,7 @@ import {
   Popconfirm,
   Divider,
   Checkbox,
+  Progress,
 } from "antd";
 import {
   DesktopOutlined,
@@ -50,34 +58,11 @@ import {
   AppstoreOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
+  CloudUploadOutlined,
+  VideoCameraOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
-
-// 기본 특수화면 프리셋
-const DEFAULT_SPECIAL_SCREENS = [
-  {
-    id: "special_overall",
-    title: "🏆 그랑프리 (OVERALL) 결정전",
-    subTitle: "각 체급 1위 통합 최강자전 공식 심사 결과",
-    displayType: "GRAND_PRIX",
-    colorTheme: "GOLD",
-    players: [
-      { playerRank: 1, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "통합 그랑프리" },
-      { playerRank: 2, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "준우승" },
-      { playerRank: 3, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "3위" },
-    ],
-  },
-  {
-    id: "special_best_pose",
-    title: "✨ 베스트 포즈상 (BEST POSING)",
-    subTitle: "심사위원단 만장일치 최고 포징 아티스트",
-    displayType: "SPECIAL_AWARD",
-    colorTheme: "PURPLE",
-    players: [
-      { playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", note: "베스트 포즈상" },
-    ],
-  },
-];
 
 const POSES_PRESET = [
   "호명된 선수들은 무대 중앙으로 나와 라인업 해주시기 바랍니다.",
@@ -111,14 +96,18 @@ const StageBroadcastController = ({
 
   const updateBroadcast = useFirebaseRealtimeUpdateData();
   const fetchResultQuery = useFirestoreQuery();
-  const updateSpecialQuery = useFirestoreUpdateData("contest_special_screens");
-  const addSpecialQuery = useFirestoreAddData("contest_special_screens");
+  const updateSpecialVideosQuery = useFirestoreUpdateData("contest_special_videos");
+  const addSpecialVideosQuery = useFirestoreAddData("contest_special_videos");
 
-  const [specialScreens, setSpecialScreens] = useState(DEFAULT_SPECIAL_SCREENS);
-  const [specialDocId, setSpecialDocId] = useState(null);
-  const [isSpecialModalOpen, setIsSpecialModalOpen] = useState(false);
-  const [editingSpecialIdx, setEditingSpecialIdx] = useState(null);
-  const [specialForm] = Form.useForm();
+  // 🎬 특별영상 상태 (동적 업로드 및 목록 관리)
+  const [specialVideos, setSpecialVideos] = useState([]);
+  const [specialVideosDocId, setSpecialVideosDocId] = useState(null);
+  const [isSpecialVideoModalOpen, setIsSpecialVideoModalOpen] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [newVideoTitle, setNewVideoTitle] = useState("");
+  const [newVideoUrl, setNewVideoUrl] = useState("");
+  const specialVideoFileInputRef = useRef(null);
 
   // ⚔️ 비교심사 모달 상태
   const [isCalloutModalOpen, setIsCalloutModalOpen] = useState(false);
@@ -129,7 +118,7 @@ const StageBroadcastController = ({
   const currentMode = broadcastData?.mode || "STANDBY";
   const activePlayer = broadcastData?.activePlayer || null;
   const currentTheme = broadcastData?.colorTheme || "GOLD";
-  const currentSpecialId = broadcastData?.specialScreenData?.id || null;
+  const currentSpecialVideoId = broadcastData?.specialVideoData?.id || broadcastData?.specialVideoUrl || null;
 
   // 🏆 통합 무대(2개 이상 체급 결합) 감지 및 개별 체급 시상 선택 상태
   const stageGrades = currentStage?.grades || [];
@@ -210,53 +199,53 @@ const StageBroadcastController = ({
     return Array.from(new Set(all));
   };
 
-  // 1. 특수화면 목록 DB 로드
-  const fetchSpecialScreens = async () => {
+  // 1. 특별영상 목록 DB 로드
+  const fetchSpecialVideos = async () => {
     if (!contestId) return;
     try {
       const condition = [where("contestId", "==", contestId)];
       const data = await fetchResultQuery.getDocuments(
-        "contest_special_screens",
+        "contest_special_videos",
         condition
       );
-      if (data && data.length > 0 && data[0]?.screens) {
-        setSpecialDocId(data[0].id);
-        setSpecialScreens(data[0].screens);
+      if (data && data.length > 0 && Array.isArray(data[0]?.videos)) {
+        setSpecialVideosDocId(data[0].id);
+        setSpecialVideos(data[0].videos);
       } else {
-        setSpecialDocId(null);
-        setSpecialScreens(DEFAULT_SPECIAL_SCREENS);
+        setSpecialVideosDocId(null);
+        setSpecialVideos([]);
       }
     } catch (error) {
-      console.error("특수화면 로드 오류:", error);
+      console.error("특별영상 로드 오류:", error);
     }
   };
 
   useEffect(() => {
-    fetchSpecialScreens();
+    fetchSpecialVideos();
   }, [contestId]);
 
-  // 특수화면 저장
-  const handleSaveSpecialScreensToDb = async (newScreens) => {
+  // 특별영상 목록 저장 (Firestore + Realtime DB 실시간 동기화)
+  const handleSaveSpecialVideos = async (newVideos) => {
     if (!contestId) return;
     try {
-      if (specialDocId) {
-        await updateSpecialQuery.updateData(specialDocId, {
+      if (specialVideosDocId) {
+        await updateSpecialVideosQuery.updateData(specialVideosDocId, {
           contestId,
-          screens: newScreens,
+          videos: newVideos,
           updatedAt: Date.now(),
         });
       } else {
-        await addSpecialQuery.addData({
+        const res = await addSpecialVideosQuery.addData({
           contestId,
-          screens: newScreens,
+          videos: newVideos,
           createdAt: Date.now(),
         });
+        if (res?.id) setSpecialVideosDocId(res.id);
       }
-      setSpecialScreens(newScreens);
-      message.success("특수화면 설정이 저장되었습니다.");
-      fetchSpecialScreens();
+      setSpecialVideos(newVideos);
+      await updateBroadcast.updateData(`contests/${contestId}/specialVideos`, newVideos);
     } catch (error) {
-      console.error("특수화면 저장 실패:", error);
+      console.error("특별영상 저장 실패:", error);
       message.error("저장 중 오류가 발생했습니다.");
     }
   };
@@ -895,65 +884,134 @@ const StageBroadcastController = ({
     }
   };
 
-  // 8. ⭐ 동적 특수화면 송출 핸들러
-  const handleSendSpecialScreen = async (screen) => {
-    if (!contestId || !screen) return;
-    try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-        mode: "SPECIAL_SCREEN",
-        contestTitle: realContestTitle,
-        specialScreenData: screen,
-        colorTheme: screen.colorTheme || currentTheme,
-        updatedAt: Date.now(),
-      });
-      message.success(`전광판: 특수화면 [${screen.title}] 송출 시작!`);
-    } catch (error) {
-      console.error("특수화면 송출 오류:", error);
-    }
-  };
-
-  // 특수화면 모달 열기
-  const openSpecialModal = (index = null) => {
-    setEditingSpecialIdx(index);
-    if (index !== null && specialScreens[index]) {
-      specialForm.setFieldsValue(specialScreens[index]);
-    } else {
-      specialForm.resetFields();
-      specialForm.setFieldsValue({
-        id: `special_${Date.now()}`,
-        displayType: "GRAND_PRIX",
-        colorTheme: "GOLD",
-        players: [
-          { playerRank: 1, playerNumber: "", playerName: "", playerGym: "", score: null, note: "대상" },
-          { playerRank: 2, playerNumber: "", playerName: "", playerGym: "", score: null, note: "준우승" },
-        ],
-      });
-    }
-    setIsSpecialModalOpen(true);
-  };
-
-  // 특수화면 모달 저장
-  const handleSpecialSubmit = (values) => {
-    const newScreens = [...specialScreens];
-    const itemData = {
-      ...values,
-      id: values.id || `special_${Date.now()}`,
+  // 8. 🎬 특별영상 전체화면 즉시 송출 핸들러
+  const handleSendSpecialVideo = async (video) => {
+    if (!contestId || !video) return;
+    const payload = {
+      mode: "SPECIAL_VIDEO",
+      contestTitle: realContestTitle,
+      specialVideoData: {
+        id: video.id,
+        title: video.title,
+        videoUrl: video.videoUrl,
+      },
+      specialVideoUrl: video.videoUrl,
+      specialVideoTitle: video.title,
+      activePlayer: null,
+      calloutData: null,
+      updatedAt: Date.now(),
     };
 
-    if (editingSpecialIdx !== null) {
-      newScreens[editingSpecialIdx] = itemData;
-    } else {
-      newScreens.push(itemData);
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
+      });
+      message.success(`전광판: 특별영상 [${video.title}] 전체화면 즉시 송출!`);
+    } catch (error) {
+      console.error("특별영상 송출 오류:", error);
     }
-
-    handleSaveSpecialScreensToDb(newScreens);
-    setIsSpecialModalOpen(false);
   };
 
-  // 특수화면 삭제
-  const handleDeleteSpecial = (index) => {
-    const newScreens = specialScreens.filter((_, i) => i !== index);
-    handleSaveSpecialScreensToDb(newScreens);
+  // 특별영상 파일 업로드 핸들러 (Firebase Storage 연동)
+  const handleUploadSpecialVideoFile = async (file) => {
+    if (!file || !contestId) return;
+    const title = newVideoTitle.trim() || file.name.replace(/\.[^/.]+$/, "");
+    setIsUploadingVideo(true);
+    setVideoUploadProgress(0);
+
+    try {
+      const cleanName = file.name.replace(/[^a-zA-Z0-9._가-힣]/g, "_");
+      const storagePath = `special_videos/${contestId}/${Date.now()}_${cleanName}`;
+      const sRef = storageRef(storage, storagePath);
+
+      const uploadTask = uploadBytesResumable(sRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          setVideoUploadProgress(percent);
+        },
+        (error) => {
+          console.error("영상 업로드 실패:", error);
+          message.error("영상 업로드 실패: " + error.message);
+          setIsUploadingVideo(false);
+        },
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            const newVideoItem = {
+              id: `spvid_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              title: title,
+              videoUrl: downloadUrl,
+              storagePath: storagePath,
+              createdAt: Date.now(),
+            };
+
+            const updated = [...specialVideos, newVideoItem];
+            await handleSaveSpecialVideos(updated);
+            message.success(`특별영상 '${title}' 등록 완료!`);
+            setIsUploadingVideo(false);
+            setVideoUploadProgress(0);
+            setNewVideoTitle("");
+            setNewVideoUrl("");
+            if (specialVideoFileInputRef.current) {
+              specialVideoFileInputRef.current.value = "";
+            }
+          } catch (e) {
+            console.error("URL 획득 오류:", e);
+            message.error("업로드 완료 후 URL 처리 실패: " + e.message);
+            setIsUploadingVideo(false);
+          }
+        }
+      );
+    } catch (err) {
+      console.error("업로드 오류:", err);
+      message.error("업로드 처리 중 오류 발생: " + err.message);
+      setIsUploadingVideo(false);
+    }
+  };
+
+  // URL 직접 입력으로 특별영상 추가
+  const handleAddVideoByUrl = async () => {
+    if (!newVideoUrl.trim()) {
+      message.warning("동영상 URL을 입력해주세요.");
+      return;
+    }
+    const title = newVideoTitle.trim() || `특별영상 ${specialVideos.length + 1}`;
+    const newVideoItem = {
+      id: `spvid_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      title: title,
+      videoUrl: newVideoUrl.trim(),
+      storagePath: "",
+      createdAt: Date.now(),
+    };
+    const updated = [...specialVideos, newVideoItem];
+    await handleSaveSpecialVideos(updated);
+    message.success(`특별영상 '${title}' 등록 완료!`);
+    setNewVideoTitle("");
+    setNewVideoUrl("");
+  };
+
+  // 특별영상 삭제 핸들러
+  const handleDeleteSpecialVideo = async (video) => {
+    try {
+      if (video.storagePath) {
+        try {
+          const sRef = storageRef(storage, video.storagePath);
+          await deleteObject(sRef);
+        } catch (e) {
+          console.warn("Storage 파일 삭제 건너뜀:", e);
+        }
+      }
+      const updated = specialVideos.filter((v) => v.id !== video.id);
+      await handleSaveSpecialVideos(updated);
+      message.success(`'${video.title}' 영상이 삭제되었습니다.`);
+    } catch (err) {
+      message.error("삭제 실패: " + err.message);
+    }
   };
 
   // 전광판 새창 열기 (기본 16:9 와이드)
@@ -1272,101 +1330,105 @@ const StageBroadcastController = ({
           </button>
         </div>
 
-        {/* 🌟 [2~10위 ➜ 1위 단독 시상식] 실시간 원격 제어 바 */}
-        {currentMode === "SQUARE_RANKING" && (
-          <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-amber-400/60 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
-              <span className="font-black text-xs sm:text-sm text-amber-300">
-                🥇 [2~10위 발표 ➜ 1위 단독 시상식] 실시간 제어 중
-              </span>
-              <Tag color={broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "purple" : "gold"} className="font-black text-xs">
-                {broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "👑 1위 단독 샷 송출 중" : "📋 2·3위 + 4~10위 발표 중"}
-              </Tag>
+          {/* 🌟 [2~10위 ➜ 1위 단독 시상식] 실시간 원격 제어 바 */}
+          {currentMode === "SQUARE_RANKING" && (
+            <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-amber-400/60 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
+                <span className="font-black text-xs sm:text-sm text-amber-300">
+                  🥇 [2~10위 발표 ➜ 1위 단독 시상식] 실시간 제어 중
+                </span>
+                <Tag color={broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "purple" : "gold"} className="font-black text-xs">
+                  {broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "👑 1위 단독 샷 송출 중" : "📋 2·3위 + 4~10위 발표 중"}
+                </Tag>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="primary"
+                  icon={<CrownOutlined />}
+                  onClick={handleSquareChampionSolo}
+                  className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs border-none shadow-lg hover:opacity-90"
+                >
+                  👑 1위 단독 샷 즉시 송출
+                </Button>
+
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={handleSquareBackToFullRanking}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 font-bold text-xs shadow"
+                >
+                  📋 2~10위 순위표 복귀
+                </Button>
+
+                <Button
+                  icon={<ForwardOutlined />}
+                  onClick={handleSetStandby}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs"
+                >
+                  대기 화면 복귀
+                </Button>
+              </div>
             </div>
+          )}
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                type="primary"
-                icon={<CrownOutlined />}
-                onClick={handleSquareChampionSolo}
-                className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs border-none shadow-lg hover:opacity-90"
-              >
-                👑 1위 단독 샷 즉시 송출
-              </Button>
-
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={handleSquareBackToFullRanking}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 font-bold text-xs shadow"
-              >
-                📋 2~10위 순위표 복귀
-              </Button>
-
-              <Button
-                icon={<ForwardOutlined />}
-                onClick={handleSetStandby}
-                className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs"
-              >
-                대기 화면 복귀
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* 🌟 2. 대회별 동적 특수화면 송출 바 */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-3.5 rounded-2xl border border-indigo-500/30 space-y-2.5 shadow-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-black text-xs text-indigo-300 flex items-center gap-1.5 uppercase tracking-wider">
-              <StarOutlined className="text-amber-400" />
-              <span>특수화면 송출 (대회별 동적 점수 및 특별 세레모니 버튼)</span>
+        {/* 🌟 2. 🎬 특별영상 전체화면 송출 바 */}
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-purple-950 p-3.5 rounded-2xl border border-purple-500/30 space-y-2.5 shadow-xl">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="font-black text-xs text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
+              <VideoCameraOutlined className="text-purple-400 text-sm" />
+              <span>특별영상 송출 (전체화면 단독 영상 재생)</span>
+              {currentMode === "SPECIAL_VIDEO" && (
+                <Tag color="purple" className="font-black text-[10px] ml-1 animate-pulse">
+                  🎬 특별영상 송출 중
+                </Tag>
+              )}
             </span>
 
             <Button
               size="small"
-              type="dashed"
-              icon={<PlusOutlined />}
-              onClick={() => openSpecialModal()}
-              className="text-xs text-indigo-300 border-indigo-400/50 hover:text-white"
+              type="primary"
+              icon={<CloudUploadOutlined />}
+              onClick={() => setIsSpecialVideoModalOpen(true)}
+              className="text-xs bg-purple-600 hover:bg-purple-500 font-bold border-none rounded-lg"
             >
-              특수화면 추가 / 점수 관리
+              + 특별영상 업로드 / 관리
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {specialScreens.map((screen, idx) => {
-              const isScreenActive =
-                currentMode === "SPECIAL_SCREEN" && currentSpecialId === screen.id;
+          {specialVideos.length === 0 ? (
+            <div className="text-xs text-slate-400 py-3 text-center border border-dashed border-purple-500/20 rounded-xl bg-purple-950/20">
+              등록된 특별영상이 없습니다. 오른쪽 [+ 특별영상 업로드 / 관리] 버튼을 눌러 영상을 추가하세요.
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {specialVideos.map((video, idx) => {
+                const isVideoActive =
+                  currentMode === "SPECIAL_VIDEO" &&
+                  (currentSpecialVideoId === video.id || broadcastData?.specialVideoUrl === video.videoUrl);
 
-              return (
-                <div key={screen.id || idx} className="flex items-center gap-1">
+                return (
                   <button
-                    onClick={() => handleSendSpecialScreen(screen)}
+                    key={video.id || idx}
+                    onClick={() => handleSendSpecialVideo(video)}
                     className={`px-4 py-2 rounded-xl font-black text-xs transition-all cursor-pointer border flex items-center gap-2 ${
-                      isScreenActive
-                        ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white border-white shadow-lg scale-105"
-                        : "bg-slate-800/90 hover:bg-slate-700 text-slate-100 border-indigo-500/40"
+                      isVideoActive
+                        ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white border-white shadow-lg shadow-purple-500/30 scale-105"
+                        : "bg-slate-800/90 hover:bg-slate-700 text-slate-100 border-purple-500/40"
                     }`}
                   >
-                    <span>{screen.title}</span>
-                    {screen.players?.length > 0 && (
-                      <span className="bg-black/40 px-1.5 py-0.5 rounded text-[10px] text-amber-300 font-mono">
-                        {screen.players.length}명
+                    <VideoCameraOutlined />
+                    <span>{video.title}</span>
+                    {isVideoActive && (
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] text-white font-mono animate-pulse">
+                        ON AIR
                       </span>
                     )}
                   </button>
-
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<EditOutlined className="text-slate-400 hover:text-white text-xs" />}
-                    onClick={() => openSpecialModal(idx)}
-                    title="특수화면 수정"
-                  />
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 3. 선수 무대 입장 시 전체 화면 소개 송출 버튼 */}
@@ -1448,10 +1510,12 @@ const StageBroadcastController = ({
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">비교심사 단계</label>
+              <label className="text-xs font-bold text-slate-600 block mb-1">
+                비교심사 라운드 차수 선택
+              </label>
               <Select
                 value={calloutRound}
-                onChange={setCalloutRound}
+                onChange={(val) => setCalloutRound(val)}
                 className="w-full"
                 options={[
                   { value: "1차 비교심사 (FIRST CALLOUT)", label: "1차 비교심사 (FIRST CALLOUT)" },
@@ -1464,10 +1528,12 @@ const StageBroadcastController = ({
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">무대 포즈 안내 지시문</label>
+              <label className="text-xs font-bold text-slate-600 block mb-1">
+                포즈 안내 지시문 선택
+              </label>
               <Select
                 value={calloutPose}
-                onChange={setCalloutPose}
+                onChange={(val) => setCalloutPose(val)}
                 className="w-full"
                 options={POSES_PRESET.map((p) => ({ value: p, label: p }))}
               />
@@ -1475,26 +1541,23 @@ const StageBroadcastController = ({
           </div>
 
           <Divider className="my-2">
-            <span className="text-xs text-slate-500 font-bold">
-              호명할 출전 선수 선택 (다중 선택 가능, 선택: {selectedCalloutPlayers.length}명)
-            </span>
+            <span className="text-xs text-slate-500 font-bold">호명 대상 선수 선택 (다중 선택 가능)</span>
           </Divider>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-60 overflow-y-auto pr-1">
             {currentPlayers
               .filter((p) => !p.playerNoShow)
               .map((p) => {
-                const pKey = p.playerNumber || p.playerUid;
-                const isChecked = selectedCalloutPlayers.includes(pKey);
-
+                const isChecked = selectedCalloutPlayers.includes(p.playerNumber || p.playerUid);
                 return (
                   <div
-                    key={pKey}
+                    key={p.playerUid || p.playerNumber}
                     onClick={() => {
+                      const id = p.playerNumber || p.playerUid;
                       if (isChecked) {
-                        setSelectedCalloutPlayers(selectedCalloutPlayers.filter((k) => k !== pKey));
+                        setSelectedCalloutPlayers(selectedCalloutPlayers.filter((v) => v !== id));
                       } else {
-                        setSelectedCalloutPlayers([...selectedCalloutPlayers, pKey]);
+                        setSelectedCalloutPlayers([...selectedCalloutPlayers, id]);
                       }
                     }}
                     className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
@@ -1519,157 +1582,166 @@ const StageBroadcastController = ({
         </div>
       </Modal>
 
-      {/* 🌟 특수화면 추가 및 점수 입력 모달 */}
+      {/* 🎬 특별영상 업로드 및 관리 모달 */}
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <StarOutlined className="text-amber-500" />
-            <span>{editingSpecialIdx !== null ? "특수화면 및 점수 수정" : "새 특수화면 등록"}</span>
+            <VideoCameraOutlined className="text-purple-500 text-lg" />
+            <span className="font-black text-slate-900">특별영상 업로드 및 목록 관리</span>
           </div>
         }
-        open={isSpecialModalOpen}
-        onCancel={() => setIsSpecialModalOpen(false)}
+        open={isSpecialVideoModalOpen}
+        onCancel={() => setIsSpecialVideoModalOpen(false)}
         footer={null}
         destroyOnClose
-        width={720}
+        width={680}
       >
-        <Form form={specialForm} layout="vertical" onFinish={handleSpecialSubmit} className="pt-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Form.Item
-              name="title"
-              label="특수화면 명칭"
-              rules={[{ required: true, message: "화면 명칭을 입력하세요." }]}
-            >
-              <Input placeholder="예: 🏆 그랑프리 (OVERALL) 결정전, ✨ 베스트 포즈상" />
-            </Form.Item>
+        <div className="space-y-4 pt-2">
+          {/* 새 영상 등록 섹션 */}
+          <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-3">
+            <div className="font-bold text-xs text-purple-900 flex items-center gap-1.5">
+              <CloudUploadOutlined className="text-purple-600" />
+              <span>새 특별영상 파일 업로드 (.mp4, .mov 등)</span>
+            </div>
 
-            <Form.Item name="displayType" label="특수화면 표출 형태" required>
-              <Select>
-                <Select.Option value="GRAND_PRIX">🏆 그랑프리/통합 오버롤 (포디움 + 후보자)</Select.Option>
-                <Select.Option value="SPECIAL_AWARD">✨ 단독 특별상 (대상 1명 집중 조명)</Select.Option>
-                <Select.Option value="SCORE_BOARD">📊 동적 점수/투표 집계 스코어보드</Select.Option>
-              </Select>
-            </Form.Item>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Form.Item name="subTitle" label="부제 / 설명 문구">
-              <Input placeholder="예: 각 체급 1위 통합 최강자전 공식 심사 결과" />
-            </Form.Item>
-
-            <Form.Item name="colorTheme" label="화면 테마 색상">
-              <Select>
-                <Select.Option value="GOLD">🏆 골드 챔피언</Select.Option>
-                <Select.Option value="PURPLE">🔮 로얄 바이올렛</Select.Option>
-                <Select.Option value="BLUE">⚡ 일렉트릭 블루</Select.Option>
-                <Select.Option value="RED">🔥 크림슨 파이어</Select.Option>
-                <Select.Option value="GREEN">💎 에메랄드 몬스터</Select.Option>
-              </Select>
-            </Form.Item>
-          </div>
-
-          <Divider className="my-2">
-            <span className="text-xs text-slate-500 font-bold">출전 선수 및 동적 점수 입력</span>
-          </Divider>
-
-          <Form.List name="players">
-            {(fields, { add, remove }) => (
-              <div className="space-y-2">
-                {fields.map(({ key, name, ...restField }, idx) => (
-                  <div key={key} className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border">
-                    <span className="font-bold text-xs text-slate-500 w-8 text-center">{idx + 1}위</span>
-                    
-                    <Form.Item
-                      {...restField}
-                      name={[name, "playerNumber"]}
-                      rules={[{ required: true, message: "번호" }]}
-                      className="mb-0 w-20"
-                    >
-                      <Input placeholder="번호" />
-                    </Form.Item>
-
-                    <Form.Item
-                      {...restField}
-                      name={[name, "playerName"]}
-                      rules={[{ required: true, message: "선수명" }]}
-                      className="mb-0 w-28"
-                    >
-                      <Input placeholder="선수명" />
-                    </Form.Item>
-
-                    <Form.Item
-                      {...restField}
-                      name={[name, "playerGym"]}
-                      className="mb-0 flex-1"
-                    >
-                      <Input placeholder="소속 체육관" />
-                    </Form.Item>
-
-                    <Form.Item
-                      {...restField}
-                      name={[name, "score"]}
-                      className="mb-0 w-24"
-                    >
-                      <InputNumber placeholder="점수" step={0.1} className="w-full" />
-                    </Form.Item>
-
-                    <Form.Item
-                      {...restField}
-                      name={[name, "note"]}
-                      className="mb-0 w-28"
-                    >
-                      <Input placeholder="비고(예: 대상)" />
-                    </Form.Item>
-
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => remove(name)}
-                    />
-                  </div>
-                ))}
-
-                <Button
-                  type="dashed"
-                  onClick={() => add({ playerRank: fields.length + 1 })}
-                  block
-                  icon={<PlusOutlined />}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  영상 제목 / 명칭
+                </label>
+                <Input
+                  placeholder="예: 개회식 특별 오프닝 영상"
+                  value={newVideoTitle}
+                  onChange={(e) => setNewVideoTitle(e.target.value)}
                   className="rounded-xl"
-                >
-                  선수 추가하기
-                </Button>
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  동영상 파일 선택
+                </label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  ref={specialVideoFileInputRef}
+                  disabled={isUploadingVideo}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleUploadSpecialVideoFile(e.target.files[0]);
+                    }
+                  }}
+                  className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 file:cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {isUploadingVideo && (
+              <div className="space-y-1 pt-1">
+                <div className="flex justify-between text-xs font-bold text-purple-900">
+                  <span>Firebase Storage 업로드 중...</span>
+                  <span>{videoUploadProgress}%</span>
+                </div>
+                <Progress
+                  percent={videoUploadProgress}
+                  status="active"
+                  strokeColor={{ "0%": "#a855f7", "100%": "#ec4899" }}
+                />
               </div>
             )}
-          </Form.List>
 
-          <Form.Item name="id" hidden>
-            <Input />
-          </Form.Item>
-
-          <div className="flex justify-between items-center pt-4 mt-3 border-t">
-            {editingSpecialIdx !== null && (
-              <Popconfirm
-                title="정말 이 특수화면을 삭제하시겠습니까?"
-                onConfirm={() => {
-                  handleDeleteSpecial(editingSpecialIdx);
-                  setIsSpecialModalOpen(false);
-                }}
-                okText="삭제"
-                cancelText="취소"
+            {/* 또는 URL 직접 입력 */}
+            <Divider className="my-2 text-[11px] text-slate-400">또는 기존 영상 URL 직접 입력</Divider>
+            <div className="flex gap-2">
+              <Input
+                placeholder="https://... (직접 비디오 URL 입력)"
+                value={newVideoUrl}
+                onChange={(e) => setNewVideoUrl(e.target.value)}
+                prefix={<LinkOutlined className="text-slate-400" />}
+                className="rounded-xl text-xs flex-1"
+              />
+              <Button
+                type="primary"
+                onClick={handleAddVideoByUrl}
+                className="bg-purple-600 font-bold rounded-xl text-xs"
               >
-                <Button danger>특수화면 삭제</Button>
-              </Popconfirm>
-            )}
-
-            <div className="flex gap-2 ml-auto">
-              <Button onClick={() => setIsSpecialModalOpen(false)}>취소</Button>
-              <Button type="primary" htmlType="submit" className="bg-indigo-600 font-bold">
-                저장하기
+                URL 등록
               </Button>
             </div>
           </div>
-        </Form>
+
+          {/* 등록된 특별영상 목록 */}
+          <div className="space-y-2">
+            <div className="font-bold text-xs text-slate-700 flex items-center justify-between">
+              <span>등록된 특별영상 목록 ({specialVideos.length}개)</span>
+              <span className="text-[11px] text-slate-400 font-normal">
+                클릭 시 즉시 전광판 전체화면으로 송출됩니다
+              </span>
+            </div>
+
+            {specialVideos.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border">
+                등록된 특별영상이 없습니다.
+              </div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {specialVideos.map((vid, idx) => (
+                  <div
+                    key={vid.id || idx}
+                    className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3 shadow-2xs hover:border-purple-300 transition-all"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Tag color="purple" className="font-mono text-xs m-0">
+                          #{idx + 1}
+                        </Tag>
+                        <span className="text-xs font-bold text-slate-800 truncate">
+                          {vid.title}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono truncate max-w-md">
+                        {vid.videoUrl}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        onClick={() => {
+                          handleSendSpecialVideo(vid);
+                          setIsSpecialVideoModalOpen(false);
+                        }}
+                        className="bg-purple-600 font-bold text-xs rounded-lg"
+                      >
+                        송출하기
+                      </Button>
+
+                      <Popconfirm
+                        title="이 특별영상을 삭제하시겠습니까?"
+                        onConfirm={() => handleDeleteSpecialVideo(vid)}
+                        okText="삭제"
+                        cancelText="취소"
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          type="text"
+                          icon={<DeleteOutlined />}
+                        />
+                      </Popconfirm>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="text-[11px] text-slate-400 text-center pt-2 border-t">
+            💡 등록된 특별영상은 '사전 다운로드(P)' 매니저에도 자동 등록되어 오프라인에서도 끊김 없이 재생됩니다.
+          </div>
+        </div>
       </Modal>
     </Card>
   );

@@ -16,7 +16,7 @@ import SquareRankingCeremonyScene from "../../components/broadcast/SquareRanking
 import RankingCeremonyScene from "../../components/broadcast/RankingCeremonyScene";
 import AwardCeremonyScene from "../../components/broadcast/AwardCeremonyScene";
 import ChampionShowcaseScene from "../../components/broadcast/ChampionShowcaseScene";
-import SpecialStageScene from "../../components/broadcast/SpecialStageScene";
+import SpecialVideoScene from "../../components/broadcast/SpecialVideoScene";
 import ComparisonCalloutScene from "../../components/broadcast/ComparisonCalloutScene";
 import PosedownScene from "../../components/broadcast/PosedownScene";
 import {
@@ -94,6 +94,7 @@ const StageLiveDisplaySquare = () => {
   const [rankingStyle, setRankingStyle] = useState("SQUARE_V2");
 
   const [sponsors, setSponsors] = useState([]);
+  const [specialVideos, setSpecialVideos] = useState([]);
   const [videoSettings, setVideoSettings] = useState({
     standbyVideoUrl: "",
     introVideoUrl: "",
@@ -226,7 +227,7 @@ const StageLiveDisplaySquare = () => {
     };
   }, []);
 
-  // 스폰서 및 미디어 설정 불러오기
+  // 스폰서, 미디어 설정 및 특별영상 불러오기
   const fetchMediaSettings = async (cId) => {
     if (!cId) return;
     try {
@@ -244,6 +245,14 @@ const StageLiveDisplaySquare = () => {
           championVideoUrl: item?.championVideoUrl || "",
           awardVideoUrl: item?.awardVideoUrl || "",
         });
+      }
+
+      // 🎬 특별영상 목록 로드
+      const spData = await sponsorQuery.getDocuments("contest_special_videos", condition);
+      if (spData && spData.length > 0 && Array.isArray(spData[0]?.videos)) {
+        setSpecialVideos(spData[0].videos);
+      } else {
+        setSpecialVideos([]);
       }
     } catch (error) {
       console.error("미디어 설정 로드 실패:", error);
@@ -546,14 +555,12 @@ const StageLiveDisplaySquare = () => {
         />
       )}
 
-      {currentMode === "SPECIAL_SCREEN" && (
-        <SpecialStageScene
-          contestTitle={contestTitle}
-          stageInfo={stageInfo}
-          specialData={broadcastData?.specialScreenData}
-          backgroundVideoUrl={videoSettings.standbyVideoUrl}
-          colorTheme={broadcastData?.colorTheme || "GOLD"}
-          onFinish={handleFinishCeremony}
+      {/* ⑦ 특별 영상 씬 (전체화면 단독 비디오 재생) */}
+      {(currentMode === "SPECIAL_VIDEO" || currentMode === "SPECIAL_SCREEN") && (
+        <SpecialVideoScene
+          videoUrl={broadcastData?.specialVideoData?.videoUrl || broadcastData?.specialVideoUrl || videoSettings.standbyVideoUrl}
+          isAudioEnabled={isAudioEnabled}
+          onEnded={handleFinishCeremony}
         />
       )}
 
@@ -610,6 +617,7 @@ const StageLiveDisplaySquare = () => {
         contestTitle={contestTitle}
         videoSettings={videoSettings}
         sponsors={sponsors}
+        specialVideos={specialVideos}
       />
     </div>
   );
