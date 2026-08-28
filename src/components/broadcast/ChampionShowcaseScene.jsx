@@ -33,10 +33,10 @@ const ChampionShowcaseScene = ({
     topPlayer && (topPlayer.playerName || topPlayer.playerNumber)
   );
 
-  // 🌟 데이터가 없을 때도 완전한 챔피언 화면 테스트가 가능하도록 슬롯 지원
+  // 🌟 데이터가 없을 때의 안전한 기본 표기
   const playerNumber = topPlayer?.playerNumber || "-";
-  const playerName = topPlayer?.playerName || "[1위 챔피언]";
-  const playerGym = topPlayer?.playerGym || "심사위원 채점 집계 진행중";
+  const playerName = topPlayer?.playerName || "데이터 없음";
+  const playerGym = topPlayer?.playerGym || "심사 결과 집계 대기";
 
   // 🌟 실제 선수 사진 목록 (지정된 stagePhotoUrl 최우선 노출)
   const photoList = React.useMemo(() => {
@@ -177,10 +177,11 @@ const ChampionShowcaseScene = ({
       gsap.set(".champ-gym-badge", { opacity: 0, y: 40, scale: 0.9 });
       gsap.set(".champ-hero-img", { opacity: 0, scale: 1.15, filter: "brightness(2)" });
       gsap.set(".champ-footer", { opacity: 0, y: 30 });
-      gsap.set(flashRef.current, { opacity: 1 });
 
       // [0.0s] 화이트 플래시 폭발 & 서서히 페이드
-      tl.to(flashRef.current, { opacity: 0, duration: 0.8, ease: "power2.out" }, 0);
+      if (flashRef.current) {
+        tl.fromTo(flashRef.current, { opacity: 0.8 }, { opacity: 0, duration: 0.8, ease: "power2.out" }, 0);
+      }
 
       // [0.1s] 상단 헤더 슬라이드
       tl.to(".champ-header", { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.1);
@@ -272,7 +273,7 @@ const ChampionShowcaseScene = ({
       className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none"
     >
       {/* ⚡ [Layer 40: 순간 충격파 플래시] */}
-      <div ref={flashRef} className="absolute inset-0 z-40 pointer-events-none bg-white" />
+      <div ref={flashRef} className="absolute inset-0 z-40 pointer-events-none bg-white opacity-0" />
 
       {/* ======================= [ Layer 30: 상단 공식 챔피언 헤더 바 ] ======================= */}
       <div className="champ-header relative z-30 flex items-center justify-between border-b border-white/15 pb-4">
@@ -281,7 +282,7 @@ const ChampionShowcaseScene = ({
           <div>
             <div className={`text-xs font-black tracking-widest ${theme.primary} uppercase flex items-center gap-1.5`}>
               <FireOutlined className="animate-pulse" />
-              <span>GRAND CHAMPION CEREMONY • 공식 1위 단독 세레모니</span>
+              <span>OFFICIAL 1ST PLACE WINNER • 공식 1위 단독 세레모니</span>
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white m-0 tracking-tight leading-tight">
               {catTitle} <span className={`${theme.primary} ml-2 font-mono`}>{grdTitle}</span>
@@ -295,14 +296,14 @@ const ChampionShowcaseScene = ({
               <>
                 <CheckCircleOutlined className="text-emerald-400 text-lg" />
                 <span className="text-xs font-black text-emerald-300 uppercase tracking-wider">
-                  공식 1위 대상 우승 확정
+                  공식 1위 우승 확정
                 </span>
               </>
             ) : (
               <>
                 <FieldTimeOutlined className="text-amber-400 text-lg animate-pulse" />
                 <span className="text-xs font-black text-amber-300 uppercase tracking-wider">
-                  실시간 채점 테스트 모드
+                  심사 집계 중
                 </span>
               </>
             )}
@@ -350,7 +351,7 @@ const ChampionShowcaseScene = ({
                 <CrownOutlined className="text-8xl text-amber-400 animate-bounce mb-4" />
                 <TrophyOutlined className="text-6xl text-amber-300" />
                 <span className="mt-4 text-xs font-black text-amber-300/80 uppercase tracking-widest font-mono">
-                  CHAMPION TROPHY
+                  1ST PLACE TROPHY
                 </span>
               </div>
             )}
@@ -378,12 +379,56 @@ const ChampionShowcaseScene = ({
         {/* 우측: 1위 챔피언 프로필 정보 */}
         <div className="space-y-6 max-w-2xl w-full z-10 text-center lg:text-left">
           
-          {/* ① 👑 1위 황금 엠블럼 */}
-          <div className="champ-emblem inline-flex items-center gap-4 bg-gradient-to-r from-amber-500/40 via-amber-900/60 to-black/95 border-2 border-amber-400 px-9 py-4 rounded-3xl shadow-[0_15px_50px_rgba(251,191,36,0.5)]">
-            <CrownOutlined className="text-amber-400 text-4xl sm:text-5xl animate-bounce" />
-            <span className="text-4xl sm:text-5xl lg:text-6xl font-black text-amber-300 tracking-tight drop-shadow-[0_4px_15px_rgba(251,191,36,0.8)] font-sans">
-              1위
-            </span>
+          {/* ① 🌿 3D 골드 월계관 (Laurel Wreath) & 1위 황금 엠블럼 */}
+          <div className="champ-emblem inline-flex items-center gap-5 bg-gradient-to-r from-amber-500/30 via-yellow-500/20 to-black/90 border-2 border-amber-400/80 px-8 py-3.5 rounded-3xl shadow-[0_0_40px_rgba(251,191,36,0.45)] backdrop-blur-2xl">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center">
+              <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full filter drop-shadow-[0_0_14px_rgba(251,191,36,0.9)] animate-pulse">
+                <defs>
+                  <linearGradient id="goldLaurelGradShowcase" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#fef08a" />
+                    <stop offset="50%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#b45309" />
+                  </linearGradient>
+                </defs>
+                <path d="M50 95 C30 90 15 70 18 45 C20 30 30 18 45 12" stroke="url(#goldLaurelGradShowcase)" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
+                <path d="M42 16 C35 15 32 22 36 26 C40 24 43 19 42 16Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M32 27 C25 28 24 36 29 39 C33 36 34 30 32 27Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M25 42 C18 44 19 53 25 54 C28 50 28 44 25 42Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M22 58 C16 62 19 71 25 70 C27 66 26 60 22 58Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M26 74 C22 80 28 87 34 84 C35 79 32 74 26 74Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M36 87 C34 93 42 98 47 93 C47 88 42 84 36 87Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M70 95 C90 90 105 70 102 45 C100 30 90 18 75 12" stroke="url(#goldLaurelGradShowcase)" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
+                <path d="M78 16 C85 15 88 22 84 26 C80 24 77 19 78 16Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M88 27 C95 28 96 36 91 39 C87 36 86 30 88 27Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M95 42 C102 44 101 53 95 54 C92 50 92 44 95 42Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M98 58 C104 62 101 71 95 70 C93 66 94 60 98 58Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M94 74 C98 80 92 87 86 84 C85 79 88 74 94 74Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M84 87 C86 93 78 98 73 93 C73 88 78 84 84 87Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M52 94 C57 92 63 92 68 94 C65 98 55 98 52 94Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M54 96 C48 104 42 108 38 110 C44 106 50 102 54 96Z" fill="url(#goldLaurelGradShowcase)"/>
+                <path d="M66 96 C72 104 78 108 82 110 C76 106 70 102 66 96Z" fill="url(#goldLaurelGradShowcase)"/>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center -space-y-0.5 pointer-events-none">
+                <CrownOutlined className="text-yellow-300 text-sm sm:text-base animate-bounce drop-shadow" />
+                <span className="font-mono font-black text-2xl sm:text-3xl text-amber-300 tracking-tighter drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                  1<span className="text-xs sm:text-sm">ST</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-2">
+                <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md">
+                  1ST PLACE
+                </span>
+                <span className="text-amber-300 font-bold text-xs sm:text-sm tracking-tight flex items-center gap-1">
+                  <TrophyOutlined className="text-amber-400" /> 공식 체급 1위 우승
+                </span>
+              </div>
+              <span className="text-3xl sm:text-4xl lg:text-5xl font-black text-amber-300 tracking-tight drop-shadow-[0_4px_15px_rgba(251,191,36,0.8)] font-sans">
+                1위 우승자
+              </span>
+            </div>
           </div>
 
           {/* ② 배부번호 & 출전 종목/체급 */}

@@ -47,6 +47,9 @@ import {
   FireOutlined,
   SoundOutlined,
   AudioMutedOutlined,
+  AppstoreOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 
@@ -59,9 +62,9 @@ const DEFAULT_SPECIAL_SCREENS = [
     displayType: "GRAND_PRIX",
     colorTheme: "GOLD",
     players: [
-      { playerRank: 1, playerNumber: "100", playerName: "김재준", playerGym: "Get_in", score: 98.5, note: "통합 대상 (그랑프리)" },
-      { playerRank: 2, playerNumber: "104", playerName: "이정우", playerGym: "몬스터짐", score: 96.2, note: "준우승" },
-      { playerRank: 3, playerNumber: "108", playerName: "박성민", playerGym: "골드피트니스", score: 94.8, note: "3위" },
+      { playerRank: 1, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "통합 그랑프리" },
+      { playerRank: 2, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "준우승" },
+      { playerRank: 3, playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", score: null, note: "3위" },
     ],
   },
   {
@@ -71,7 +74,7 @@ const DEFAULT_SPECIAL_SCREENS = [
     displayType: "SPECIAL_AWARD",
     colorTheme: "PURPLE",
     players: [
-      { playerNumber: "102", playerName: "최현진", playerGym: "에슬레틱짐", note: "베스트 퍼포먼스 대상" },
+      { playerNumber: "-", playerName: "데이터 없음", playerGym: "심사 결과 집계 대기", note: "베스트 포즈상" },
     ],
   },
 ];
@@ -95,7 +98,12 @@ const StageBroadcastController = ({
   rankingResults = [],
 }) => {
   const { currentContest } = useContext(CurrentContestContext);
-  const contestId = currentContest?.contests?.id || "";
+  const contestId =
+    currentContest?.contests?.id ||
+    currentContest?.contestInfo?.id ||
+    currentContest?.id ||
+    currentStage?.contestId ||
+    "";
 
   const { data: broadcastData } = useFirebaseRealtimeGetDocument(
     contestId ? `currentBroadcast/${contestId}` : null
@@ -363,14 +371,21 @@ const StageBroadcastController = ({
         resolvedPhotos[0] ||
         "";
 
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      const payload = {
         mode: "ATHLETE_INTRO",
         contestTitle: realContestTitle,
         activePlayer: {
           playerNumber: player.playerNumber,
           playerName: player.playerName,
           playerGym: player.playerGym || "",
-          heightWeight: player.heightWeight || "",
+          heightWeight:
+            player.heightWeight ||
+            (player.playerHeight && player.playerWeight
+              ? `${player.playerHeight} / ${player.playerWeight}`
+              : "") ||
+            "",
+          playerHeight: player.playerHeight || player.height || "",
+          playerWeight: player.playerWeight || player.weight || "",
           stagePhoto1: stage1,
           stagePhoto2: stage2,
           stagePhotoUrl1: stage1,
@@ -385,6 +400,12 @@ const StageBroadcastController = ({
         specialScreenData: null,
         calloutData: null,
         updatedAt: Date.now(),
+      };
+
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
       });
       message.success(`${player.playerNumber}번 ${player.playerName} 선수 전체화면 소개 송출!`);
     } catch (error) {
@@ -513,61 +534,173 @@ const StageBroadcastController = ({
     }
   };
 
+  // 🏆 랭킹 데이터가 비어있을 때는 임의의 가짜 순위를 만들지 않고 '데이터 없음'으로 정직하게 대체
+  const getReliableRankings = (rawRanks) => {
+    if (rawRanks && rawRanks.length > 0) {
+      return rawRanks;
+    }
+    return [
+      {
+        playerRank: 1,
+        rank: 1,
+        playerNumber: "-",
+        playerName: "데이터 없음",
+        playerGym: "심사 결과 집계 대기",
+        playerHeight: "",
+        playerWeight: "",
+      },
+    ];
+  };
+
   // 6. 🏆 순위 발표 즉시 송출
   const handleDirectRanking = async () => {
-    if (!contestId) return;
+    console.log("%c[CONTROLLER] 📢 [전체 순위 동시발표] 버튼 클릭됨!", "background:#22c55e;color:black;font-weight:bold;font-size:14px;", {
+      contestId,
+      currentContest,
+      currentStage,
+      rankingResults,
+      currentPlayers,
+    });
+
+    if (!contestId) {
+      console.warn("[CONTROLLER] ⚠️ contestId가 비어있습니다! currentContest 확인 필요");
+      message.warning("대회 ID를 확인할 수 없습니다. 대회를 선택해주세요.");
+      return;
+    }
 
     let finalRanks = rankingResults || [];
     if (finalRanks.length === 0) {
       finalRanks = await fetchCurrentGradeRankings();
     }
+    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+
+    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
+    const enrichedRanks = reliableRanks.map((r) => {
+      const p = (currentPlayers || []).find(
+        (cp) =>
+          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
+          cp.playerName === r.playerName ||
+          cp.playerUid === r.playerUid
+      );
+      if (p) {
+        const photos = extractPlayerPhotos(p);
+        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
+        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
+        return {
+          ...r,
+          ...p,
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          stagePhotoUrl: stage1 || r.stagePhotoUrl,
+          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
+          playerGym: p.playerGym || r.playerGym,
+          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
+          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
+        };
+      }
+      return r;
+    });
+
+    const payload = {
+      mode: "RANKING",
+      contestTitle: realContestTitle,
+      stageInfo: {
+        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
+        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+      },
+      rankingData: enrichedRanks,
+      activePlayer: null,
+      specialScreenData: null,
+      calloutData: null,
+      updatedAt: Date.now(),
+    };
+
+    console.log("%c[CONTROLLER] 🚀 Firebase 전송 시작:", "background:#3b82f6;color:white;font-weight:bold;", {
+      path: `currentBroadcast/${contestId}`,
+      payload,
+    });
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-        mode: "RANKING",
-        contestTitle: realContestTitle,
-        stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
-        },
-        rankingData: finalRanks,
-        activePlayer: null,
-        specialScreenData: null,
-        calloutData: null,
-        updatedAt: Date.now(),
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      // 전역 fallback 슬롯에도 동시 업데이트 (전광판 화면 contestId 불일치 자동 방어)
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
       });
+      console.log("%c[CONTROLLER] ✅ [전체 순위 동시발표] Firebase 전송 완료!", "background:#10b981;color:black;font-weight:bold;font-size:14px;");
       message.success("전광판: 순위 발표 화면 송출!");
     } catch (error) {
-      console.error("순위 발표 송출 오류:", error);
+      console.error("[CONTROLLER] ❌ 순위 발표 송출 오류:", error);
     }
   };
 
   // 6-1. 🏅 공식 시상식 (1위·2위·3위 포디움 단상 + TOP 5 리스트) 송출
   const handleSendAwardCeremony = async () => {
-    if (!contestId) return;
+    if (!contestId) {
+      message.warning("대회 ID를 확인할 수 없습니다.");
+      return;
+    }
 
     let finalRanks = rankingResults || [];
     if (finalRanks.length === 0) {
       finalRanks = await fetchCurrentGradeRankings();
     }
+    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+
+    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
+    const enrichedRanks = reliableRanks.map((r) => {
+      const p = (currentPlayers || []).find(
+        (cp) =>
+          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
+          cp.playerName === r.playerName ||
+          cp.playerUid === r.playerUid
+      );
+      if (p) {
+        const photos = extractPlayerPhotos(p);
+        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
+        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
+        return {
+          ...r,
+          ...p,
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          stagePhotoUrl: stage1 || r.stagePhotoUrl,
+          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
+          playerGym: p.playerGym || r.playerGym,
+          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
+          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
+        };
+      }
+      return r;
+    });
+
+    const payload = {
+      mode: "AWARD_CEREMONY",
+      contestTitle: realContestTitle,
+      stageInfo: {
+        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
+        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+      },
+      rankingData: enrichedRanks,
+      activePlayer: null,
+      specialScreenData: null,
+      calloutData: null,
+      updatedAt: Date.now(),
+    };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-        mode: "AWARD_CEREMONY",
-        contestTitle: realContestTitle,
-        stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
-        },
-        rankingData: finalRanks,
-        activePlayer: null,
-        specialScreenData: null,
-        calloutData: null,
-        updatedAt: Date.now(),
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
       });
       message.success("전광판: [🏅 공식 시상식 (포디움 단상)] 화면 송출 시작!");
     } catch (error) {
@@ -577,36 +710,177 @@ const StageBroadcastController = ({
 
   // 7. 👑 1위 우승자 단독 전체화면 송출
   const handleShowChampion = async () => {
-    if (!contestId) return;
+    if (!contestId) {
+      message.warning("대회 ID를 확인할 수 없습니다.");
+      return;
+    }
 
     let finalRanks = rankingResults || [];
     if (finalRanks.length === 0) {
       finalRanks = await fetchCurrentGradeRankings();
     }
+    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
 
-    const top1 = finalRanks.find((p) => (p.playerRank || p.rank || 0) === 1);
+    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
+    const enrichedRanks = reliableRanks.map((r) => {
+      const p = (currentPlayers || []).find(
+        (cp) =>
+          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
+          cp.playerName === r.playerName ||
+          cp.playerUid === r.playerUid
+      );
+      if (p) {
+        const photos = extractPlayerPhotos(p);
+        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
+        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
+        return {
+          ...r,
+          ...p,
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          stagePhotoUrl: stage1 || r.stagePhotoUrl,
+          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
+          playerGym: p.playerGym || r.playerGym,
+          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
+          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
+        };
+      }
+      return r;
+    });
+
+    const top1 = enrichedRanks.find((p) => (p.playerRank || p.rank || 0) === 1) || enrichedRanks[0];
+
+    const payload = {
+      mode: "CHAMPION_SHOWCASE",
+      contestTitle: realContestTitle,
+      stageInfo: {
+        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 종목",
+        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+      },
+      rankingData: enrichedRanks,
+      activePlayer: top1 || null,
+      topPlayer: top1 || null,
+      specialScreenData: null,
+      calloutData: null,
+      updatedAt: Date.now(),
+    };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-        mode: "CHAMPION_SHOWCASE",
-        contestTitle: realContestTitle,
-        stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
-        },
-        rankingData: finalRanks,
-        activePlayer: top1 || null,
-        specialScreenData: null,
-        calloutData: null,
-        updatedAt: Date.now(),
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
       });
       message.success(
         top1 ? `1위 [${top1.playerName}] 챔피언 단독 전체화면 송출!` : "1위 챔피언 단독 전체화면 송출!"
       );
     } catch (error) {
       console.error("1위 단독 송출 오류:", error);
+    }
+  };
+
+  // 7-1. 🔲 2~10위 발표 ➜ 1위 단독 시상식 송출
+  const handleSendSquareRanking = async () => {
+    if (!contestId) {
+      message.warning("대회 ID를 확인할 수 없습니다.");
+      return;
+    }
+
+    let finalRanks = rankingResults || [];
+    if (finalRanks.length === 0) {
+      finalRanks = await fetchCurrentGradeRankings();
+    }
+    const reliableRanks = getReliableRankings(finalRanks, currentPlayers);
+
+    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
+    const enrichedRanks = reliableRanks.map((r) => {
+      const p = (currentPlayers || []).find(
+        (cp) =>
+          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
+          cp.playerName === r.playerName ||
+          cp.playerUid === r.playerUid
+      );
+      if (p) {
+        const photos = extractPlayerPhotos(p);
+        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
+        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
+        return {
+          ...r,
+          ...p,
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          stagePhotoUrl: stage1 || r.stagePhotoUrl,
+          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
+          playerGym: p.playerGym || r.playerGym,
+          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
+          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
+        };
+      }
+      return r;
+    });
+
+    const payload = {
+      mode: "SQUARE_RANKING",
+      rankingPhase: "FULL_RANKING",
+      contestTitle: realContestTitle,
+      stageInfo: {
+        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
+        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+      },
+      rankingData: enrichedRanks,
+      activePlayer: null,
+      specialScreenData: null,
+      calloutData: null,
+      updatedAt: Date.now(),
+    };
+
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
+        ...payload,
+        targetContestId: contestId,
+      });
+      message.success("전광판: [2~10위 발표 ➜ 1위 단독 시상식] 송출 시작!");
+    } catch (error) {
+      console.error("순위발표 송출 오류:", error);
+    }
+  };
+
+  // 7-2. 👑 1:1 1위 우승자 단독 선수소개 샷 즉시 전환 (콘솔 원클릭)
+  const handleSquareChampionSolo = async () => {
+    if (!contestId) return;
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+        mode: "SQUARE_RANKING",
+        rankingPhase: "CHAMPION_SOLO",
+        updatedAt: Date.now(),
+      });
+      message.success("전광판: [👑 1위 단독 선수소개 샷] 즉시 송출!");
+    } catch (error) {
+      console.error("1위 단독 샷 전환 오류:", error);
+    }
+  };
+
+  // 7-3. 📋 1:1 전체 순위표 복귀 (콘솔 원클릭)
+  const handleSquareBackToFullRanking = async () => {
+    if (!contestId) return;
+    try {
+      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+        mode: "SQUARE_RANKING",
+        rankingPhase: "FULL_RANKING",
+        updatedAt: Date.now(),
+      });
+      message.success("전광판: [📋 1:1 전체 순위표] 로 복귀했습니다.");
+    } catch (error) {
+      console.error("전체 순위표 복귀 오류:", error);
     }
   };
 
@@ -671,12 +945,21 @@ const StageBroadcastController = ({
     handleSaveSpecialScreensToDb(newScreens);
   };
 
-  // 전광판 새창 열기
+  // 전광판 새창 열기 (기본 16:9 와이드)
   const openDisplayWindow = () => {
     window.open(
       `/stage-live?contestId=${contestId}`,
       "StageLiveDisplay",
       "width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no"
+    );
+  };
+
+  // 🔲 1:1 정방형 전광판 새창 열기 (신규)
+  const openSquareDisplayWindow = () => {
+    window.open(
+      `/stage-square?contestId=${contestId}`,
+      "StageSquareDisplay",
+      "width=1080,height=1080,menubar=no,toolbar=no,location=no,status=no"
     );
   };
 
@@ -717,17 +1000,17 @@ const StageBroadcastController = ({
             )}
             {currentMode === "COMMERCIAL" && (
               <Tag color="orange" className="font-black text-xs mr-0 animate-pulse">
-                📢 스폰서 광고 로테이션 중 (10초 루프)
+                📢 스폰서 광고 로테이션 중
               </Tag>
             )}
             {currentMode === "RANKING" && (
               <Tag color="gold" className="font-black text-xs mr-0">
-                🏆 순위 발표 (1~3위 사진)
+                🏆 순위 발표 중
               </Tag>
             )}
             {currentMode === "AWARD_CEREMONY" && (
               <Tag color="gold" className="font-black text-xs mr-0 animate-pulse">
-                🏅 공식 시상식 (포디움 단상) 송출 중
+                🏅 공식 시상식 송출 중
               </Tag>
             )}
             {currentMode === "CHAMPION_SHOWCASE" && (
@@ -746,9 +1029,9 @@ const StageBroadcastController = ({
               type="primary"
               icon={<ExportOutlined />}
               onClick={openDisplayWindow}
-              className="bg-blue-600 font-bold text-xs ml-2 rounded-lg"
+              className="bg-blue-600 hover:bg-blue-500 font-bold text-xs ml-2 rounded-lg"
             >
-              전광판 화면 열기
+              📺 실시간 전광판 화면 열기
             </Button>
           </div>
         </div>
@@ -865,7 +1148,7 @@ const StageBroadcastController = ({
             <span>광고 무한 로테이션</span>
           </button>
 
-          {/* ⑤ 순위 발표 즉시 송출 */}
+          {/* ⑤ 시상식 1: 기존 전체 순위 동시 발표 (1~10위 동시 노출) */}
           <button
             onClick={handleDirectRanking}
             className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
@@ -875,7 +1158,20 @@ const StageBroadcastController = ({
             }`}
           >
             <TrophyOutlined className="text-lg" />
-            <span>순위 발표 (채점표)</span>
+            <span>🏆 전체 순위 동시발표</span>
+          </button>
+
+          {/* ⑤-0 시상식 2: 2~10위 먼저 발표 ➜ 1위 단독 샷으로 이어지는 시상식 */}
+          <button
+            onClick={handleSendSquareRanking}
+            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              currentMode === "SQUARE_RANKING"
+                ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/50 scale-105"
+                : "bg-gradient-to-r from-amber-950/90 to-yellow-950/90 hover:from-amber-900 hover:to-yellow-900 text-amber-300 border-amber-500/60"
+            }`}
+          >
+            <CrownOutlined className="text-lg text-amber-400 animate-pulse" />
+            <span>🥇 2~10위 ➜ 1위단독 시상</span>
           </button>
 
           {/* ⑤-1 🏅 공식 시상식 (포디움 단상) 송출 */}
@@ -887,7 +1183,7 @@ const StageBroadcastController = ({
                 : "bg-gradient-to-r from-amber-950/80 to-yellow-950/80 hover:from-amber-900 hover:to-yellow-900 text-amber-300 border-amber-500/60"
             }`}
           >
-            <TrophyOutlined className="text-lg text-amber-300 animate-bounce" />
+            <TrophyOutlined className="text-lg text-amber-300" />
             <span>🏅 공식 시상식 (포디움)</span>
           </button>
 
@@ -913,6 +1209,48 @@ const StageBroadcastController = ({
             <span>다음 종목 대기</span>
           </button>
         </div>
+
+        {/* 🌟 [2~10위 ➜ 1위 단독 시상식] 실시간 원격 제어 바 */}
+        {currentMode === "SQUARE_RANKING" && (
+          <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-amber-400/60 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
+              <span className="font-black text-xs sm:text-sm text-amber-300">
+                🥇 [2~10위 발표 ➜ 1위 단독 시상식] 실시간 제어 중
+              </span>
+              <Tag color={broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "purple" : "gold"} className="font-black text-xs">
+                {broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "👑 1위 단독 샷 송출 중" : "📋 2·3위 + 4~10위 발표 중"}
+              </Tag>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="primary"
+                icon={<CrownOutlined />}
+                onClick={handleSquareChampionSolo}
+                className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs border-none shadow-lg hover:opacity-90"
+              >
+                👑 1위 단독 샷 즉시 송출
+              </Button>
+
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={handleSquareBackToFullRanking}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 font-bold text-xs shadow"
+              >
+                📋 2~10위 순위표 복귀
+              </Button>
+
+              <Button
+                icon={<ForwardOutlined />}
+                onClick={handleSetStandby}
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs"
+              >
+                대기 화면 복귀
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* 🌟 2. 대회별 동적 특수화면 송출 바 */}
         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-3.5 rounded-2xl border border-indigo-500/30 space-y-2.5 shadow-xl">

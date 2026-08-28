@@ -30,6 +30,7 @@ const DEFAULT_COMMERCIALS = [
     mediaType: "video",
     videoUrl: defaultAwardVideo,
     duration: 10,
+    durationSeconds: 10,
     weight: 3,
   },
   {
@@ -39,7 +40,8 @@ const DEFAULT_COMMERCIALS = [
     tag: "OFFICIAL ENERGY",
     mediaType: "image",
     imageUrl: demoBodybuilderImg,
-    duration: 10,
+    duration: 5,
+    durationSeconds: 5,
     weight: 2,
   },
   {
@@ -50,6 +52,7 @@ const DEFAULT_COMMERCIALS = [
     mediaType: "video",
     videoUrl: defaultIntroVideo,
     duration: 10,
+    durationSeconds: 10,
     weight: 2,
   },
   {
@@ -59,7 +62,8 @@ const DEFAULT_COMMERCIALS = [
     tag: "GOLD PARTNER",
     mediaType: "image",
     imageUrl: demoBodybuilderImg,
-    duration: 10,
+    duration: 5,
+    durationSeconds: 5,
     weight: 1,
   },
 ];
@@ -71,6 +75,7 @@ const PosedownScene = ({
   sponsors = [],
   backgroundVideoUrl,
   colorTheme = "RED",
+  isAudioEnabled = false,
 }) => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -95,6 +100,8 @@ const PosedownScene = ({
   const basePoolRef = useRef(basePool);
   basePoolRef.current = basePool;
 
+  const progressBarRef = useRef(null);
+
   // 🎯 현재 송출 중인 광고
   const [currentAd, setCurrentAd] = useState(() =>
     prepareNextAd(basePool, null, "STAGE_LIVE", "POSEDOWN") || basePool[0]
@@ -105,11 +112,25 @@ const PosedownScene = ({
   // 🔄 무한 사이클 제어용 state
   const [adCycle, setAdCycle] = useState(0);
 
-  // 🚀 2초 전에 광고 엔진에게 미리 물어봐서 프리로드할 '다음 광고'
+  // 🚀 종료 1.5초 전에 광고 엔진에게 미리 물어봐서 프리로드할 '다음 광고'
   const [upcomingAd, setUpcomingAd] = useState(null);
 
-  const [adProgress, setAdProgress] = useState(0);
-  const adDurationMs = 10000; // 10초 보장
+  // ⏱️ [핵심] 스폰서별 커스텀 노출 시간 (영상 기본 10초 / 로고·이미지 기본 5초 or 사용자 설정 초)
+  const isCurrentVideo =
+    currentAd?.mediaType === "video" ||
+    currentAd?.mediaType === "VIDEO" ||
+    !!currentAd?.videoUrl;
+  const displayAdDurationSeconds =
+    Number(currentAd?.durationSeconds || currentAd?.duration) ||
+    (isCurrentVideo ? 10 : 5);
+  // 🌟 [유저 요구사항] 표기는 10초로 표시하되, 실제 동영상 재생은 +1초(11초)를 주어 마지막 1초가 급하게 바뀌지 않도록 여유 버퍼 부여
+  const actualDurationSeconds = isCurrentVideo
+    ? displayAdDurationSeconds + 1
+    : displayAdDurationSeconds;
+  const adDurationMs = Math.max(2000, actualDurationSeconds * 1000);
+
+  // ⏱️ 1초에 1번만 업데이트되어 리렌더링 부하를 95% 절감하는 카운트다운 state
+  const [remainingSeconds, setRemainingSeconds] = useState(displayAdDurationSeconds);
 
   const currentAdKey = currentAd?.id || currentAd?.name;
 
@@ -136,21 +157,44 @@ const PosedownScene = ({
     }
   }, [currentAdKey]);
 
-  // ⏱️ 10초 타이머 & 2초 전(80% 시점) 광고엔진 질의 & 프리로드 & 무한 로테이션
+  // ⏱️ [초경량 고성능 타이머] React 리렌더링 없이 GPU 가속으로 부드럽게 프로그레스 바를 구동하고, 1초에 1번만 UI 갱신
   useEffect(() => {
-    setAdProgress(0);
+    setRemainingSeconds(displayAdDurationSeconds);
     setUpcomingAd(null);
+    if (progressBarRef.current) {
+      progressBarRef.current.style.width = "0%";
+    }
+
+    const startTime = Date.now();
     let isPrefetched = false;
     let nextTarget = null;
-    const startTime = Date.now();
+    let animFrameId = null;
 
-    const progressTimer = setInterval(() => {
+    // 1. 60FPS DOM 직접 제어 프로그레스 바 (React 리렌더링 0회)
+    const updateBar = () => {
       const elapsed = Date.now() - startTime;
       const progressPercent = Math.min((elapsed / adDurationMs) * 100, 100);
-      setAdProgress(progressPercent);
+      if (progressBarRef.current) {
+        progressBarRef.current.style.width = `${progressPercent}%`;
+      }
+      if (elapsed < adDurationMs) {
+        animFrameId = requestAnimationFrame(updateBar);
+      }
+    };
+    animFrameId = requestAnimationFrame(updateBar);
 
-      // 🌟 [2초 전 = 80% 도달 시]: 다음 광고 미리 질의 & 프리로드
-      if (progressPercent >= 80 && !isPrefetched) {
+    // 2. 1초에 1번만 숫자 카운트다운 갱신 (CPU 메인스레드 부하 0%에 수렴)
+    const secondTimer = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remainMs = Math.max(0, adDurationMs - elapsed);
+      const remainSec = Math.max(1, Math.ceil((remainMs / adDurationMs) * displayAdDurationSeconds));
+      setRemainingSeconds(remainSec);
+    }, 1000);
+
+    // 3. 종료 1.5초 전 다음 광고 사전 프리패치
+    const prefetchDelay = Math.max(0, adDurationMs - 1500);
+    const prefetchTimer = setTimeout(() => {
+      if (!isPrefetched) {
         isPrefetched = true;
         nextTarget = prepareNextAd(
           basePoolRef.current,
@@ -172,30 +216,34 @@ const PosedownScene = ({
           }
         }
       }
+    }, prefetchDelay);
 
-      // 🎯 [10초 완료 = 100% 도달 시]: 다음 광고로 전환 및 다음 사이클 구동
-      if (elapsed >= adDurationMs) {
-        clearInterval(progressTimer);
-        const finalNext =
-          nextTarget ||
-          prepareNextAd(
-            basePoolRef.current,
-            currentAdRef.current,
-            "STAGE_LIVE",
-            "POSEDOWN"
-          ) ||
-          basePoolRef.current[0];
+    // 4. 설정 시간 완료 시 다음 광고로 전환
+    const switchTimer = setTimeout(() => {
+      const finalNext =
+        nextTarget ||
+        prepareNextAd(
+          basePoolRef.current,
+          currentAdRef.current,
+          "STAGE_LIVE",
+          "POSEDOWN"
+        ) ||
+        basePoolRef.current[0];
 
-        if (finalNext) {
-          currentAdRef.current = finalNext;
-          setCurrentAd(finalNext);
-        }
-        setAdCycle((prev) => prev + 1);
+      if (finalNext) {
+        currentAdRef.current = finalNext;
+        setCurrentAd(finalNext);
       }
-    }, 50);
+      setAdCycle((prev) => prev + 1);
+    }, adDurationMs);
 
-    return () => clearInterval(progressTimer);
-  }, [adCycle]);
+    return () => {
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      clearInterval(secondTimer);
+      clearTimeout(prefetchTimer);
+      clearTimeout(switchTimer);
+    };
+  }, [adCycle, currentAdKey, adDurationMs, displayAdDurationSeconds]);
 
   // 비디오 변경 시 자동 재생
   useEffect(() => {
@@ -312,10 +360,11 @@ const PosedownScene = ({
         0.7
       );
 
-      // 타이틀 광란의 펄스 비트
+      // 타이틀 부드러운 펄스 (좌측 기준 확대)
       gsap.to(".posedown-title", {
-        scale: 1.03,
-        duration: 0.8,
+        scale: 1.02,
+        transformOrigin: "center left",
+        duration: 0.9,
         repeat: -1,
         yoyo: true,
         ease: "sine.inOut",
@@ -377,218 +426,220 @@ const PosedownScene = ({
       {/* ⚡ [Layer 40: 순간 플래시] */}
       <div ref={flashRef} className="absolute inset-0 z-40 pointer-events-none bg-white" />
 
-      {/* ======================= [ Layer 30: 1. 상단 공식 헤더 & 대회 Info ] ======================= */}
-      <div className="relative z-30 flex items-center justify-between gap-3 border-b border-white/15 pb-3 sm:pb-4 shrink-0">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1 mr-2">
-          <div className={`w-2.5 sm:w-3.5 h-10 sm:h-12 rounded-full bg-gradient-to-b ${theme.textGradient} shrink-0`} />
-          <div className="posedown-badge space-y-0.5 min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg ${theme.badgeBg} border text-[10px] sm:text-xs font-black uppercase tracking-widest ${theme.primary} shadow-lg shrink-0`}>
-                <FireOutlined className="animate-pulse" />
-                <span>OFFICIAL POSEDOWN • 포즈다운 배틀</span>
-              </span>
-              <span className="text-[11px] sm:text-xs text-slate-300 font-mono font-black truncate">
-                {catTitle} {grdTitle && `• ${grdTitle}`}
-              </span>
-            </div>
-            <h1 className="text-base sm:text-xl md:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate">
-              {contestTitle || "보디빌딩 & 피트니스 챔피언십"}
-            </h1>
+      {/* ======================= [ Layer 30: 1. 상단 공식 헤더 ] ======================= */}
+      <div className="relative z-30 flex items-center justify-between border-b border-white/15 pb-2.5 sm:pb-3 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl ${theme.badgeBg} border backdrop-blur-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-lg shrink-0`}>
+            <FireOutlined className="text-amber-400 animate-pulse text-sm sm:text-base" />
+            <span className="text-white">POSEDOWN BATTLE</span>
           </div>
+          <div className="h-4 w-[1px] bg-white/20 shrink-0" />
+          <h1 className="text-sm sm:text-lg lg:text-xl font-black text-white m-0 tracking-tight leading-tight truncate">
+            {catTitle} {grdTitle && <span className={`${theme.primary} ml-2 font-mono`}>{grdTitle}</span>}
+          </h1>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 bg-black/70 px-3.5 py-1.5 rounded-xl border border-white/15 text-xs text-slate-300 font-bold shrink-0">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+          <span>자유 포징 배틀 진행중</span>
         </div>
       </div>
 
-      {/* ======================= [ Layer 10: 2. 메인 듀얼 스테이지: 좌측 포즈다운 배틀 vs 우측 대형 광고 상영관 ] ======================= */}
-      <div className="relative z-10 my-auto flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-6 w-full h-[calc(100vh-140px)] py-1 overflow-hidden">
+      {/* ======================= [ Layer 10: 2. 메인 듀얼 스테이지: 좌측 포즈다운 배틀 vs 우측 대형 1:1 광고 상영관 ] ======================= */}
+      <div className="relative z-10 my-auto flex flex-col md:flex-row items-center justify-between gap-4 lg:gap-8 w-full h-[calc(100vh-125px)] py-2 overflow-hidden">
         
         {/* ================= 좌측: 포즈다운 엠블럼 + 60초 타이머 + 출전 선수 그리드 ================= */}
-        <div className="flex flex-col justify-center items-center md:items-start text-center md:text-left space-y-2 sm:space-y-3 w-full md:w-[50%] lg:w-[54%] min-w-0">
+        <div className="flex flex-col justify-center items-center md:items-start text-center md:text-left space-y-3 sm:space-y-4 flex-1 min-w-0 pr-2 lg:pr-6 overflow-hidden">
           
-          {/* 🔥 초대형 POSEDOWN 타이틀 (반응형 폰트 축소 적용) */}
-          <div className="posedown-title space-y-1 w-full">
-            <div className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-0.5 sm:py-1 rounded-full bg-red-600/35 border border-red-500/80 backdrop-blur-xl text-red-300 text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-2xl">
+          {/* 🔥 깔끔하고 역동적인 POSEDOWN 타이틀 */}
+          <div className="posedown-title space-y-1.5 w-full">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-red-600/30 border border-red-500/60 backdrop-blur-xl text-red-300 text-xs font-black uppercase tracking-wider shadow-lg">
               <FireOutlined className="animate-bounce text-amber-400" />
-              <span>UNLEASH YOUR PHYSIQUE • 60 SECONDS FREE BATTLE</span>
-              <FireOutlined className="animate-bounce text-amber-400" />
+              <span>60 SECONDS FREE BATTLE</span>
             </div>
 
-            <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-rose-300 to-red-600 m-0 tracking-tighter leading-none drop-shadow-[0_20px_80px_rgba(225,29,72,0.95)]">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-rose-200 to-red-600 m-0 tracking-tight leading-none drop-shadow-[0_15px_40px_rgba(225,29,72,0.8)]">
               POSEDOWN
             </h1>
-            <p className="text-xs sm:text-sm lg:text-base font-black text-slate-200 tracking-wide drop-shadow-md m-0 break-keep">
+            <p className="text-xs sm:text-sm lg:text-base font-bold text-slate-200 tracking-wide drop-shadow m-0">
               무대 위 최고의 자유 포징을 펼쳐주시기 바랍니다!
             </p>
           </div>
 
           {/* ⏱️ 배틀 카운트다운 타이머 */}
-          <div className="posedown-timer inline-flex items-center gap-3 sm:gap-4 bg-black/85 backdrop-blur-2xl border-2 border-red-500/80 px-4 sm:px-6 py-1.5 sm:py-2.5 rounded-2xl shadow-[0_10px_40px_rgba(239,68,68,0.5)]">
-            <FieldTimeOutlined className="text-amber-400 text-xl sm:text-2xl animate-spin" />
+          <div className="posedown-timer inline-flex items-center gap-3 sm:gap-4 bg-black/85 backdrop-blur-2xl border-2 border-red-500/80 px-5 sm:px-7 py-2 sm:py-3 rounded-2xl shadow-[0_10px_35px_rgba(239,68,68,0.45)]">
+            <FieldTimeOutlined className="text-amber-400 text-2xl sm:text-3xl animate-spin" />
             <div className="text-left">
               <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider font-mono">
-                POSEDOWN BATTLE TIME
+                REMAINING TIME
               </span>
-              <span className="text-xl sm:text-2xl lg:text-3xl font-black font-mono text-amber-400 leading-none">
+              <span className="text-2xl sm:text-3xl lg:text-4xl font-black font-mono text-amber-400 leading-none">
                 {seconds}초
               </span>
             </div>
           </div>
 
-          {/* 🏷️ 출전 선수 칩 카드 그리드 */}
-          <div className="space-y-1 w-full pt-1">
-            <div className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 justify-center md:justify-start">
-              <TrophyOutlined className="text-amber-400" />
-              <span>무대 위 출전 선수 (ATHLETES ON STAGE)</span>
-            </div>
+          {/* 🏷️ 출전 선수 칩 카드 그리드 (선수가 있을 때만 깔끔하게 노출) */}
+          {activePlayers.length > 0 && (
+            <div className="space-y-1.5 w-full pt-1">
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 justify-center md:justify-start">
+                <TrophyOutlined className="text-amber-400" />
+                <span>출전 선수 명단</span>
+              </div>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 max-h-[110px] sm:max-h-[140px] overflow-y-auto">
-              {activePlayers.length === 0 ? (
-                <div className="px-3 py-1 rounded-xl bg-slate-900/60 border border-white/10 text-xs text-slate-400 font-bold">
-                  무대 위 출전 선수 명단 준비 중
-                </div>
-              ) : (
-                activePlayers.map((player, idx) => (
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 max-h-[110px] overflow-y-auto">
+                {activePlayers.map((player, idx) => (
                   <div
                     key={player.playerNumber || idx}
-                    className="posedown-player-chip flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-white/20 backdrop-blur-xl shadow-md hover:scale-105 transition-all"
+                    className="posedown-player-chip flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-white/20 backdrop-blur-xl shadow-md"
                   >
-                    <span className="font-mono font-black text-sm sm:text-base text-amber-400">
+                    <span className="font-mono font-black text-sm text-amber-400">
                       #{player.playerNumber}
                     </span>
-                    <div className="text-left">
-                      <div className="text-xs sm:text-sm font-black text-white">{player.playerName}</div>
-                      {player.playerGym && (
-                        <div className="text-[9px] sm:text-[10px] text-slate-400 truncate max-w-[75px]">
-                          {player.playerGym}
-                        </div>
-                      )}
-                    </div>
+                    <span className="text-xs font-bold text-white">
+                      {player.playerName}
+                    </span>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 
-        {/* ================= 우측: 📢 대형 공식 스폰서 광고 상영관 ================= */}
-        <div className="posedown-ad-screen w-full md:w-[50%] lg:w-[46%] h-full max-h-[540px] flex flex-col rounded-3xl overflow-hidden bg-slate-950/90 border-2 border-amber-400/70 shadow-[0_20px_60px_rgba(251,191,36,0.35)] backdrop-blur-2xl relative">
+        {/* ================= 우측: 📢 1:1 정방형 공식 스폰서 광고 상영관 ================= */}
+        <div
+          className="posedown-ad-screen flex flex-col rounded-3xl overflow-hidden bg-slate-950/90 border-2 border-amber-400/70 shadow-[0_20px_60px_rgba(251,191,36,0.35)] backdrop-blur-2xl relative shrink-0"
+          style={{
+            width: "min(46vw, calc(100vh - 160px))",
+            height: "min(46vw, calc(100vh - 160px))",
+            aspectRatio: "1 / 1",
+          }}
+        >
           
           {/* ① 광고 상단 헤더 & 프로그레스 바 */}
-          <div className="bg-black/85 backdrop-blur-xl px-4 py-2.5 border-b border-white/15 flex items-center justify-between z-20 shrink-0">
-            <div className="flex items-center gap-2">
-              <NotificationOutlined className="text-amber-400 text-sm animate-pulse" />
-              <div>
-                <div className="text-[9px] sm:text-[10px] font-mono font-black text-amber-400 uppercase tracking-wider">
-                  OFFICIAL STAGE SPONSOR ADS
+          <div className="bg-black/85 backdrop-blur-xl px-4 py-2 border-b border-white/15 flex items-center justify-between z-20 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <NotificationOutlined className="text-amber-400 text-sm animate-pulse shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[9px] font-mono font-black text-amber-400 uppercase tracking-wider">
+                  OFFICIAL SPONSOR
                 </div>
-                <div className="text-xs sm:text-sm font-black text-white truncate max-w-[180px] sm:max-w-[220px]">
+                <div className="text-xs sm:text-sm font-black text-white truncate max-w-[140px] sm:max-w-[180px]">
                   {currentAd?.name || "공식 협찬사"}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-300 bg-white/10 px-2 py-0.5 rounded-md">
-                10초 로테이션
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-mono font-bold text-slate-300 bg-white/10 px-2 py-0.5 rounded-md">
+                {displayAdDurationSeconds}초
               </span>
               <span className="text-xs font-mono font-black text-amber-300">
-                {Math.ceil(((100 - adProgress) / 100) * (currentAd?.duration || 10))}s
+                {remainingSeconds}s
               </span>
             </div>
           </div>
 
-          {/* 광고 실시간 진행 프로그레스 바 (10초 네온 게이지) */}
-          <div className="w-full bg-black/60 h-1.5 z-20 shrink-0 overflow-hidden border-b border-white/10">
+          {/* 광고 실시간 진행 프로그레스 바 (DOM 직접 제어로 60FPS 무결점 구동) */}
+          <div className="w-full bg-black/60 h-1 z-20 shrink-0 overflow-hidden border-b border-white/10">
             <div
-              className="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-300 h-full transition-all duration-75 shadow-[0_0_15px_rgba(251,191,36,1)]"
-              style={{ width: `${adProgress}%` }}
+              ref={progressBarRef}
+              className="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-300 h-full shadow-[0_0_15px_rgba(251,191,36,1)]"
+              style={{ width: "0%" }}
             />
           </div>
 
-          {/* ② 광고 메인 미디어 뷰 (영상 MP4 or 대형 이미지) */}
+          {/* ② 광고 메인 미디어 뷰 (영상 MP4 or 1:1 정방형 이미지) */}
           <div className="relative flex-1 w-full h-full overflow-hidden bg-slate-950 flex items-center justify-center">
             {isAdVideo ? (
-              <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-slate-950">
-                {/* 1. 배경을 채워주는 은은한 블러 앰비언트 비디오 백드롭 */}
-                <video
-                  src={adMediaSrc}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-35 scale-110 pointer-events-none"
-                />
+              <>
+                <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-slate-950">
+                  {/* 영상 1:1 꽉 찬 화면 (Full Cover) */}
+                  <video
+                    ref={adVideoRef}
+                    key={`ad-v-${currentAd?.id || currentAd?.name}`}
+                    src={adMediaSrc}
+                    autoPlay
+                    loop
+                    muted={!isAudioEnabled}
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                </div>
 
-                {/* 2. 전면 센터 정렬: 16:9, 4:3, 1:1 등 어떤 해상도에서도 상하/좌우 잘림 0% 완전 보존 */}
-                <video
-                  ref={adVideoRef}
-                  key={`ad-v-${currentAd?.id || currentAd?.name}`}
-                  src={adMediaSrc}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="relative z-1 max-h-[88%] max-w-[94%] object-contain drop-shadow-[0_10px_35px_rgba(0,0,0,0.95)]"
-                />
-              </div>
+                {/* 하단 스폰서 상세 정보 오버레이 (영상 전용: 군더더기 없이 깔끔한 뱃지 + 이름) */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black via-black/80 to-transparent z-10 text-left space-y-0.5 pointer-events-none">
+                  {currentAd?.tag && (
+                    <span className="inline-block text-[9px] font-mono font-black px-2 py-0.5 rounded bg-amber-400 text-slate-950 uppercase shadow-md mb-0.5">
+                      {currentAd.tag}
+                    </span>
+                  )}
+
+                  <h2 className="text-sm sm:text-base font-black text-white m-0 tracking-tight leading-tight drop-shadow-md truncate">
+                    {currentAd?.name}
+                  </h2>
+
+                  {currentAd?.slogan && (
+                    <p className="text-[11px] font-bold text-amber-300 m-0 truncate drop-shadow">
+                      {currentAd.slogan}
+                    </p>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-slate-950">
-                {/* 1. 배경을 은은하고 고급스럽게 채워주는 블러 앰비언트 백드롭 */}
-                <img
-                  src={adMediaSrc}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none"
-                />
+              /* 🖼️ 로고/이미지 광고 전용: 상하좌우 완벽 정중앙 & 바깥 프레임 최대 확장 */
+              <div className="relative w-full h-full flex items-center justify-center p-3 sm:p-4 overflow-hidden bg-slate-950">
+                {adMediaSrc && (
+                  <img
+                    src={adMediaSrc}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110 pointer-events-none"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-tr from-black via-slate-950/90 to-black pointer-events-none" />
 
-                {/* 2. 전면 센터 정렬: 원본 비율 100% 완전 보존 (원형 로고·포스터 등 잘림 0% 보장) */}
-                <img
-                  key={`ad-img-${currentAd?.id || currentAd?.name}`}
-                  src={adMediaSrc}
-                  alt={currentAd?.name}
-                  className="relative z-1 max-h-[75%] max-w-[90%] object-contain drop-shadow-[0_15px_40px_rgba(0,0,0,0.95)] animate-fade-in"
-                />
+                {/* 로고 글래스모피즘 스테이지 */}
+                <div className="relative z-10 w-[94%] h-[90%] rounded-2xl bg-white/[0.06] border border-white/20 p-4 sm:p-6 backdrop-blur-xl flex items-center justify-center overflow-hidden shadow-lg group">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
+                  {adMediaSrc ? (
+                    <img
+                      key={`ad-img-${currentAd?.id || currentAd?.name}`}
+                      src={adMediaSrc}
+                      alt={currentAd?.name}
+                      className="w-full h-full max-h-full max-w-full object-contain filter brightness-105 drop-shadow-[0_8px_20px_rgba(0,0,0,0.9)] animate-fade-in"
+                    />
+                  ) : (
+                    <div className="text-3xl font-black text-amber-400 font-mono">
+                      {currentAd?.name?.slice(0, 2) || "LOGO"}
+                    </div>
+                  )}
+                </div>
+
+                {currentAd?.slogan && (
+                  <div className="absolute bottom-2 left-3 right-3 z-20 text-center pointer-events-none">
+                    <span className="inline-block px-3 py-0.5 rounded-full bg-black/80 border border-amber-400/50 text-[10px] sm:text-xs font-bold text-amber-300 shadow-lg truncate max-w-[90%]">
+                      "{currentAd.slogan}"
+                    </span>
+                  </div>
+                )}
               </div>
             )}
-
-            {/* ③ 광고 하단 스폰서 상세 정보 오버레이 */}
-            <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black via-black/85 to-transparent z-10 text-left space-y-0.5 pointer-events-none">
-              <div className="flex items-center gap-2">
-                {currentAd?.tag && (
-                  <span className="text-[9px] sm:text-[10px] font-mono font-black px-2 py-0.5 rounded-lg bg-amber-400 text-slate-950 uppercase shadow-md">
-                    {currentAd.tag}
-                  </span>
-                )}
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-300 font-mono">
-                  {contestTitle} 공식 파트너
-                </span>
-              </div>
-
-              <h2 className="text-base sm:text-lg font-black text-white m-0 tracking-tight leading-tight drop-shadow-md">
-                {currentAd?.name}
-              </h2>
-
-              {currentAd?.slogan && (
-                <p className="text-[11px] sm:text-xs font-bold text-amber-300 m-0 line-clamp-1 drop-shadow-md">
-                  {currentAd.slogan}
-                </p>
-              )}
-            </div>
-
           </div>
 
         </div>
 
       </div>
 
-      {/* ======================= [ Layer 30: 3. 하단 공식 방송 바 (순수 Info 집중) ] ======================= */}
-      <div className="relative z-30 flex items-center justify-between border-t border-white/15 pt-3 shrink-0">
-        <div className="text-xs text-slate-400 font-bold flex items-center gap-2">
+      {/* ======================= [ Layer 30: 3. 하단 공식 방송 바 (간결하고 정돈된 1줄) ] ======================= */}
+      <div className="relative z-30 flex items-center justify-between border-t border-white/15 pt-2 sm:pt-2.5 shrink-0 text-xs">
+        <div className="text-slate-400 font-bold flex items-center gap-2 truncate mr-2">
           <ThunderboltOutlined className={theme.primary} />
-          <span>{contestTitle || "보디빌딩 & 피트니스"} • 공식 포즈다운 & 스폰서 쇼케이스</span>
+          <span className="truncate">{contestTitle || "보디빌딩 & 피트니스"} • 포즈다운 배틀</span>
         </div>
 
-        <div className={`text-xs font-black tracking-widest ${theme.primary} uppercase font-mono`}>
-          OFFICIAL STAGE PERFORMANCE & SPONSOR SHOWCASE
+        <div className={`font-black tracking-widest ${theme.primary} uppercase font-mono shrink-0 text-[11px]`}>
+          STAGE LIVE
         </div>
       </div>
 

@@ -34,7 +34,15 @@ const SpecialStageScene = ({
   const displayType = specialData?.displayType || "GRAND_PRIX"; // "GRAND_PRIX" | "SPECIAL_AWARD" | "SCORE_BOARD"
   const players = specialData?.players || [];
 
-  const top1 = players.find((p) => (p.playerRank || 0) === 1) || players[0] || null;
+  const top1 =
+    players.find((p) => (p.playerRank || 0) === 1) ||
+    players[0] || {
+      playerRank: 1,
+      playerNumber: "-",
+      playerName: "데이터 없음",
+      playerGym: "심사 결과 집계 대기",
+      note: "수상자 집계 대기",
+    };
   const restPlayers = players.filter((p) => p !== top1);
 
   // 🎬 GSAP 엔트런스 애니메이션
@@ -128,12 +136,16 @@ const SpecialStageScene = ({
               </div>
 
               <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6 my-auto">
-                <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-3xl overflow-hidden border-2 border-amber-400 bg-slate-950 shadow-2xl shrink-0">
-                  <img
-                    src={top1.photoUrl || demoBodybuilderImg}
-                    alt={top1.playerName}
-                    className="w-full h-full object-cover object-top"
-                  />
+                <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-3xl overflow-hidden border-2 border-amber-400 bg-slate-950 shadow-2xl shrink-0 flex items-center justify-center">
+                  {top1.photoUrl ? (
+                    <img
+                      src={top1.photoUrl}
+                      alt={top1.playerName}
+                      className="w-full h-full object-cover object-top"
+                    />
+                  ) : (
+                    <TrophyOutlined className="text-5xl text-amber-400" />
+                  )}
                 </div>
 
                 <div className="space-y-2 text-center sm:text-left">
@@ -247,12 +259,16 @@ const SpecialStageScene = ({
 
             {/* 수상자 카드 */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-8 py-4">
-              <div className="w-36 h-36 lg:w-48 lg:h-48 rounded-3xl overflow-hidden border-2 border-purple-400 bg-slate-950 shadow-2xl">
-                <img
-                  src={top1.photoUrl || demoBodybuilderImg}
-                  alt={top1.playerName}
-                  className="w-full h-full object-cover object-top"
-                />
+              <div className="w-36 h-36 lg:w-48 lg:h-48 rounded-3xl overflow-hidden border-2 border-purple-400 bg-slate-950 shadow-2xl flex items-center justify-center">
+                {top1.photoUrl ? (
+                  <img
+                    src={top1.photoUrl}
+                    alt={top1.playerName}
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <StarOutlined className="text-6xl text-purple-400" />
+                )}
               </div>
 
               <div className="space-y-3 text-center sm:text-left">

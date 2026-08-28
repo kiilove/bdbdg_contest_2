@@ -827,9 +827,18 @@ const ContestPlayerWeighInTable = () => {
             combinedPhotos[0] ||
             "";
 
+          const { height: lpParsedH, weight: lpParsedW } = parseHeightWeight(lp.heightWeight);
+          const safeHeight = lpParsedH || lp.playerHeight || lp.height || dbPlayer.playerHeight || dbPlayer.height || "";
+          const safeWeight = lpParsedW || lp.playerWeight || lp.weight || dbPlayer.playerWeight || dbPlayer.weight || "";
+          const safeHW = lp.heightWeight || formatHeightWeight(safeHeight, safeWeight) || "";
+
           return {
             ...dbPlayer,
-            heightWeight: lp.heightWeight || "",
+            heightWeight: safeHW,
+            playerHeight: safeHeight,
+            playerWeight: safeWeight,
+            height: safeHeight,
+            weight: safeWeight,
             playerNoShow: !!lp.playerNoShow,
             isGradeChanged: !!lp.isGradeChanged,
             isWeighedIn: !!lp.isWeighedIn,
@@ -858,8 +867,17 @@ const ContestPlayerWeighInTable = () => {
           dbPlayer.profileImageUrl ||
           pUidPrimary;
 
+        const { height: dbH, weight: dbW } = parseHeightWeight(dbPlayer.heightWeight);
+        const safeDbH = dbH || dbPlayer.playerHeight || dbPlayer.height || "";
+        const safeDbW = dbW || dbPlayer.playerWeight || dbPlayer.weight || "";
+
         return {
           ...dbPlayer,
+          heightWeight: dbPlayer.heightWeight || formatHeightWeight(safeDbH, safeDbW) || "",
+          playerHeight: safeDbH,
+          playerWeight: safeDbW,
+          height: safeDbH,
+          weight: safeDbW,
           stagePhoto1: stage1,
           stagePhoto2: stage2,
           stagePhotoUrl1: stage1,
@@ -879,8 +897,17 @@ const ContestPlayerWeighInTable = () => {
           const stage1 = (!isNonPlayerUrl(localPlayer.stagePhoto1) && localPlayer.stagePhoto1) || "";
           const stage2 = (!isNonPlayerUrl(localPlayer.stagePhoto2) && localPlayer.stagePhoto2) || "";
           const pUidPrimary = stage1 || stage2 || localPlayer.stagePhotoUrl || pUidPhotos[0] || localPlayer.profileImageUrl || "";
+          const { height: lH, weight: lW } = parseHeightWeight(localPlayer.heightWeight);
+          const safeLH = lH || localPlayer.playerHeight || localPlayer.height || "";
+          const safeLW = lW || localPlayer.playerWeight || localPlayer.weight || "";
+
           mergedAssignPlayers.push({
             ...localPlayer,
+            heightWeight: localPlayer.heightWeight || formatHeightWeight(safeLH, safeLW) || "",
+            playerHeight: safeLH,
+            playerWeight: safeLW,
+            height: safeLH,
+            weight: safeLW,
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
@@ -894,7 +921,7 @@ const ContestPlayerWeighInTable = () => {
         }
       });
 
-      // 4. 최종 명단 (Final) 데이터 구성 (선수 사진 필드 및 무대 1, 2번 슬롯 100% 온전히 보존)
+      // 4. 최종 명단 (Final) 데이터 구성 (선수 사진 필드 및 신장/체중 데이터 100% 온전히 보존)
       const mergedFinalPlayers = mergedAssignPlayers.map((player) => {
         const pUidPhotos = (player.playerUid && saveUidPhotoMap.get(player.playerUid)) || extractPlayerPhotos(player);
         const stage1 = (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) || "";
@@ -906,6 +933,10 @@ const ContestPlayerWeighInTable = () => {
           player.profileImageUrl ||
           pUidPhotos[0] ||
           "";
+
+        const { height: fH, weight: fW } = parseHeightWeight(player.heightWeight);
+        const safeFH = fH || player.playerHeight || player.height || "";
+        const safeFW = fW || player.playerWeight || player.weight || "";
 
         return {
           ...player,
@@ -920,7 +951,11 @@ const ContestPlayerWeighInTable = () => {
           playerNoShow: !!player.playerNoShow,
           playerText: player.playerText || "",
           isGradeChanged: !!player.isGradeChanged,
-          heightWeight: player.heightWeight || "",
+          heightWeight: player.heightWeight || formatHeightWeight(safeFH, safeFW) || "",
+          playerHeight: safeFH,
+          playerWeight: safeFW,
+          height: safeFH,
+          weight: safeFW,
           // 📸 선수 사진 및 무대 송출 슬롯(1, 2) 완벽 보존
           stagePhoto1: stage1,
           stagePhoto2: stage2,

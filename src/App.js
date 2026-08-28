@@ -50,6 +50,7 @@ import ContestResultManager from "./pages/ContestResultManager";
 import JudgeAssignmentPrint from "./pages/JudgeAssignmentPrint";
 import JudgeSeatMatrixPrint from "./pages/JudgeSeatMatrixPrint";
 import StageLiveDisplay from "./pages/broadcast/StageLiveDisplay";
+import StageLiveDisplaySquare from "./pages/broadcast/StageLiveDisplaySquare";
 import ContestSponsorManager from "./pages/broadcast/ContestSponsorManager";
 import ContestMonitoringMC from "./pages/ContestMonitoringMC";
 
@@ -233,6 +234,9 @@ function App() {
             />
             <Route path="/stage-live" element={<StageLiveDisplay />} />
             <Route path="/broadcast" element={<StageLiveDisplay />} />
+            <Route path="/stage-square" element={<StageLiveDisplaySquare />} />
+            <Route path="/broadcast-square" element={<StageLiveDisplaySquare />} />
+            <Route path="/ranking-square" element={<StageLiveDisplaySquare />} />
             <Route path="/mc" element={<ContestMonitoringMC />} />
             <Route path="/stage-mc" element={<ContestMonitoringMC />} />
             <Route path="/mc-stage" element={<ContestMonitoringMC />} />

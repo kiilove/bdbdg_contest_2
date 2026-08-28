@@ -84,6 +84,7 @@ const ContestSponsorManager = () => {
   const [editingIndex, setEditingIndex] = useState(null);
   const [form] = Form.useForm();
   const [selectedMediaType, setSelectedMediaType] = useState("IMAGE");
+  const watchedDuration = Form.useWatch("durationSeconds", form);
 
   // 업로드 상태
   const [isUploading, setIsUploading] = useState(false);
@@ -145,11 +146,12 @@ const ContestSponsorManager = () => {
     setEditingIndex(index);
     if (index !== null && sponsors[index]) {
       const sp = sponsors[index];
-      setSelectedMediaType(sp.mediaType || (sp.videoUrl ? "VIDEO" : "IMAGE"));
+      const isVideo = sp.mediaType === "VIDEO" || !!sp.videoUrl;
+      setSelectedMediaType(sp.mediaType || (isVideo ? "VIDEO" : "IMAGE"));
       setMediaPreview(sp.videoUrl || sp.imageUrl || sp.logoUrl || "");
       form.setFieldsValue({
         ...sp,
-        durationSeconds: sp.durationSeconds || sp.duration || 10,
+        durationSeconds: sp.durationSeconds || sp.duration || (isVideo ? 10 : 5),
         weight: sp.weight || 1,
         targetScenes: sp.targetScenes || ["POSEDOWN", "COMMERCIAL"],
       });
@@ -163,7 +165,7 @@ const ContestSponsorManager = () => {
         slogan: "",
         tag: "OFFICIAL",
         mediaType: "IMAGE",
-        durationSeconds: 10,
+        durationSeconds: 5,
         weight: 1,
         targetScenes: ["POSEDOWN", "COMMERCIAL"],
         isActive: true,
@@ -386,6 +388,21 @@ const ContestSponsorManager = () => {
         ) : (
           <Tag color="cyan" icon={<FileImageOutlined />}>이미지</Tag>
         ),
+    },
+    {
+      title: "1회 송출 시간",
+      key: "durationSeconds",
+      width: 110,
+      align: "center",
+      render: (_, record) => {
+        const isVideo = record.mediaType === "VIDEO" || !!record.videoUrl;
+        const sec = Number(record.durationSeconds || record.duration) || (isVideo ? 10 : 5);
+        return (
+          <Tag color={isVideo ? "geekblue" : "blue"} className="font-mono font-black text-xs">
+            ⏱️ {sec}초
+          </Tag>
+        );
+      },
     },
     {
       title: "스폰서 / 광고명",
@@ -867,13 +884,54 @@ const ContestSponsorManager = () => {
               <Slider min={1} max={10} marks={{ 1: "1배", 3: "3배(추천)", 5: "5배", 10: "10배(독점)" }} />
             </Form.Item>
 
-            <Form.Item
-              name="durationSeconds"
-              label="1회 노출 시간 (초)"
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={5} max={30} step={1} className="w-full" addonAfter="초 (기본 10초)" />
-            </Form.Item>
+            <div className="space-y-1">
+              <Form.Item
+                name="durationSeconds"
+                label={
+                  <span className="font-bold flex items-center justify-between w-full">
+                    <span>1회 송출 시간 (초)</span>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      {selectedMediaType === "VIDEO" ? "(영상 권장: 10초)" : "(로고/이미지 권장: 5초)"}
+                    </span>
+                  </span>
+                }
+                rules={[{ required: true, message: "송출 시간을 입력하세요." }]}
+                className="mb-1"
+              >
+                <InputNumber min={2} max={60} step={1} className="w-full" addonAfter="초" />
+              </Form.Item>
+
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                <Tag
+                  color={watchedDuration === 5 ? "blue" : "default"}
+                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
+                  onClick={() => form.setFieldsValue({ durationSeconds: 5 })}
+                >
+                  ⚡ 5초 (로고 권장)
+                </Tag>
+                <Tag
+                  color={watchedDuration === 10 ? "purple" : "default"}
+                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
+                  onClick={() => form.setFieldsValue({ durationSeconds: 10 })}
+                >
+                  🎬 10초 (영상 권장)
+                </Tag>
+                <Tag
+                  color={watchedDuration === 15 ? "geekblue" : "default"}
+                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
+                  onClick={() => form.setFieldsValue({ durationSeconds: 15 })}
+                >
+                  15초
+                </Tag>
+                <Tag
+                  color={watchedDuration === 20 ? "gold" : "default"}
+                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
+                  onClick={() => form.setFieldsValue({ durationSeconds: 20 })}
+                >
+                  20초
+                </Tag>
+              </div>
+            </div>
           </div>
 
           {/* 🌟 노출 대상 화면 선택 */}
@@ -895,11 +953,20 @@ const ContestSponsorManager = () => {
           <Form.Item label="광고 콘텐츠 형태" required>
             <Radio.Group
               value={selectedMediaType}
-              onChange={(e) => setSelectedMediaType(e.target.value)}
+              onChange={(e) => {
+                const nextType = e.target.value;
+                setSelectedMediaType(nextType);
+                const curDur = form.getFieldValue("durationSeconds");
+                if (nextType === "IMAGE" && curDur === 10) {
+                  form.setFieldsValue({ durationSeconds: 5 });
+                } else if (nextType === "VIDEO" && curDur === 5) {
+                  form.setFieldsValue({ durationSeconds: 10 });
+                }
+              }}
               buttonStyle="solid"
             >
-              <Radio.Button value="IMAGE">🖼️ 이미지 배너/포스터</Radio.Button>
-              <Radio.Button value="VIDEO">🎬 MP4 동영상 광고</Radio.Button>
+              <Radio.Button value="IMAGE">🖼️ 이미지 배너/포스터 (기본 5초)</Radio.Button>
+              <Radio.Button value="VIDEO">🎬 MP4 동영상 광고 (기본 10초)</Radio.Button>
             </Radio.Group>
           </Form.Item>
 

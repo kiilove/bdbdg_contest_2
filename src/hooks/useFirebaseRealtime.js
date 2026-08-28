@@ -116,6 +116,19 @@ export function useFirebaseRealtimeGetDocument(collectionInfo) {
   };
 }
 
+// Firebase Realtime DB는 객체 트리에 undefined가 포함되어 있으면 전체 쓰기가 실패(에러)하므로 안전하게 정제
+const sanitizeFirebaseData = (obj) => {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== "object") return obj;
+  try {
+    return JSON.parse(
+      JSON.stringify(obj, (key, value) => (value === undefined ? null : value))
+    );
+  } catch {
+    return obj;
+  }
+};
+
 // 데이터 추가 훅
 export function useFirebaseRealtimeAddData() {
   const [data, setData] = useState(null);
@@ -126,20 +139,21 @@ export function useFirebaseRealtimeAddData() {
     try {
       setLoading(true);
 
+      const cleanData = sanitizeFirebaseData(newData);
       let dataRef;
       if (key) {
         dataRef = ref(database, `${collectionInfo}/${key}`);
-        await set(dataRef, newData);
+        await set(dataRef, cleanData);
       } else {
         dataRef = push(ref(database, collectionInfo));
-        await set(dataRef, newData);
+        await set(dataRef, cleanData);
       }
 
       const newId = dataRef.key;
 
-      setData({ id: newId, ...newData });
+      setData({ id: newId, ...cleanData });
       setLoading(false);
-      return { id: newId, ...newData };
+      return { id: newId, ...cleanData };
     } catch (error) {
       console.error("데이터 추가 에러:", error);
       setError(error);
@@ -161,12 +175,13 @@ export function useFirebaseRealtimeUpdateData() {
     try {
       setLoading(true);
 
+      const cleanData = sanitizeFirebaseData(newData);
       const dataRef = ref(database, collectionInfo);
-      await update(dataRef, newData);
+      await update(dataRef, cleanData);
 
-      setData({ ...newData });
+      setData({ ...cleanData });
       setLoading(false);
-      return { ...newData };
+      return { ...cleanData };
     } catch (error) {
       console.error("데이터 업데이트 에러:", error);
       setError(error);

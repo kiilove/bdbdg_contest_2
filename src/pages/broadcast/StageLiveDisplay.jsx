@@ -13,6 +13,7 @@ import StandbyStageScene from "../../components/broadcast/StandbyStageScene";
 import CommercialScene from "../../components/broadcast/CommercialScene";
 import AthleteIntroScene from "../../components/broadcast/AthleteIntroScene";
 import RankingCeremonyScene from "../../components/broadcast/RankingCeremonyScene";
+import SquareRankingCeremonyScene from "../../components/broadcast/SquareRankingCeremonyScene";
 import AwardCeremonyScene from "../../components/broadcast/AwardCeremonyScene";
 import ChampionShowcaseScene from "../../components/broadcast/ChampionShowcaseScene";
 import SpecialStageScene from "../../components/broadcast/SpecialStageScene";
@@ -107,9 +108,16 @@ const StageLiveDisplay = () => {
   const updateBroadcast = useFirebaseRealtimeUpdateData();
 
   // 📡 Realtime DB 실시간 브로드캐스트 상태 리스너
-  const { data: broadcastData } = useFirebaseRealtimeGetDocument(
+  const { data: directBroadcastData } = useFirebaseRealtimeGetDocument(
     contestId ? `currentBroadcast/${contestId}` : null
   );
+
+  // 📡 전역 ACTIVE_STAGE 브로드캐스트 슬롯도 함께 구독 (contestId 매칭 실패 시 100% 자동 백업)
+  const { data: globalActiveBroadcast } = useFirebaseRealtimeGetDocument(
+    "currentBroadcast/ACTIVE_STAGE"
+  );
+
+  const broadcastData = directBroadcastData || globalActiveBroadcast || null;
 
   // 📡 기존 currentStage 실시간 데이터도 함께 구독 (레거시 호환성 보장)
   const { data: legacyStageData } = useFirebaseRealtimeGetDocument(
@@ -351,6 +359,16 @@ const StageLiveDisplay = () => {
     currentMode = "RANKING";
   }
 
+  useEffect(() => {
+    console.log("%c[STAGE LIVE DISPLAY (16:9)] 📡 수신 상태 변경 감지!", "background:#f59e0b;color:black;font-weight:bold;font-size:14px;", {
+      contestId,
+      currentMode,
+      broadcastData,
+      directBroadcastData,
+      globalActiveBroadcast,
+    });
+  }, [contestId, currentMode, broadcastData, directBroadcastData, globalActiveBroadcast]);
+
   // 1. 스테이지 정보 (본부석 currentStage 및 방송 제어기 실시간 동기화)
   const activeCategory =
     legacyStageData?.categoryTitle ||
@@ -397,7 +415,7 @@ const StageLiveDisplay = () => {
   const top1Player =
     rankingData.find((p) => (p.playerRank || p.rank || 0) === 1) ||
     activePlayer ||
-    null;
+    (rankingData.length > 0 ? rankingData[0] : null);
 
   // 🏁 순위 발표 종료 시 다음 종목 대기 화면으로 복귀 핸들러
   const handleFinishCeremony = async () => {
@@ -513,7 +531,7 @@ const StageLiveDisplay = () => {
         fallbackSrc={activeBackgroundVideo.fallback}
         overlayGradient={activeBackgroundVideo.overlay}
         gradientDirection={activeBackgroundVideo.direction}
-        isMuted={currentMode === "COMMERCIAL" ? true : !isAudioEnabled}
+        isMuted={!isAudioEnabled}
       />
 
       {/* ========================================================================================= */}
@@ -636,6 +654,7 @@ const StageLiveDisplay = () => {
           sponsors={sponsors}
           backgroundVideoUrl={videoSettings.posedownVideoUrl}
           colorTheme={broadcastData?.colorTheme || "RED"}
+          isAudioEnabled={isAudioEnabled}
         />
       )}
 
@@ -649,7 +668,7 @@ const StageLiveDisplay = () => {
         />
       )}
 
-      {/* ⑤ 2열 순위 발표 씬 */}
+      {/* ⑤ 2열 순위 발표 씬 (16:9 기본형) */}
       {currentMode === "RANKING" && (
         <RankingCeremonyScene
           contestTitle={contestTitle}
@@ -659,6 +678,21 @@ const StageLiveDisplay = () => {
           rankingData={rankingData}
           backgroundVideoUrl={videoSettings.rankingVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
+          onFinishCeremony={handleFinishCeremony}
+        />
+      )}
+
+      {/* ⑤-0 🔲 1:1 정방형 통합 순위 발표 씬 (좌: 2·3위 / 우: 4~10위 ➜ 1위 단독 샷) */}
+      {currentMode === "SQUARE_RANKING" && (
+        <SquareRankingCeremonyScene
+          contestTitle={contestTitle}
+          categoryTitle={stageInfo?.categoryTitle || "공식 시상식"}
+          gradeTitle={stageInfo?.gradeTitle || ""}
+          gradeId={stageInfo?.gradeId || legacyStageData?.gradeId || ""}
+          rankingData={rankingData}
+          backgroundVideoUrl={videoSettings.rankingVideoUrl}
+          colorTheme={broadcastData?.colorTheme || "GOLD"}
+          rankingPhase={broadcastData?.rankingPhase}
           onFinishCeremony={handleFinishCeremony}
         />
       )}
@@ -850,7 +884,7 @@ const StageLiveDisplay = () => {
 class StageDisplayErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -859,31 +893,84 @@ class StageDisplayErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("[StageLiveDisplay Error Boundary]:", error, errorInfo);
+    this.setState({ errorInfo });
   }
 
   handleReload = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.reload();
+  };
+
+  handleCopyError = () => {
+    const errorText = [
+      "=== StageLiveDisplay Error ===",
+      this.state.error?.toString() || "",
+      "\n=== Stack Trace ===",
+      this.state.error?.stack || "",
+      "\n=== Component Stack ===",
+      this.state.errorInfo?.componentStack || "",
+    ].join("\n");
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(errorText);
+      alert("✅ 에러 내용이 클립보드에 복사되었습니다! 채팅창에 붙여넣기(Ctrl+V) 해주세요.");
+    } else {
+      alert("직접 아래 텍스트 상자에서 Ctrl+A, Ctrl+C로 복사해 주세요.");
+    }
   };
 
   render() {
     if (this.state.hasError) {
+      const errorFullText = [
+        this.state.error?.toString() || "",
+        this.state.error?.stack || "",
+        this.state.errorInfo?.componentStack || "",
+      ].filter(Boolean).join("\n\n");
+
       return (
-        <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-8 text-center select-none">
-          <div className="max-w-md space-y-4 bg-slate-900/90 p-8 rounded-3xl border border-amber-500/30 shadow-2xl">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-3xl">
+        <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center select-text overflow-auto" style={{ userSelect: "text" }}>
+          <div className="max-w-3xl w-full space-y-4 bg-slate-900/95 p-8 rounded-3xl border-2 border-red-500/40 shadow-2xl select-text" style={{ userSelect: "text" }}>
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center text-red-400 text-3xl animate-pulse">
               <DatabaseOutlined />
             </div>
-            <h2 className="text-2xl font-black text-white m-0">무대 송출 화면 새로고침</h2>
-            <p className="text-sm text-slate-400 break-keep">
-              실시간 화면을 준비 중입니다. 아래 버튼을 누르면 즉시 복구됩니다.
-            </p>
-            <button
-              onClick={this.handleReload}
-              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-base shadow-xl hover:opacity-90 transition-all cursor-pointer border-none"
-            >
-              화면 즉시 복구하기
-            </button>
+            <h2 className="text-2xl font-black text-white m-0 select-text">무대 송출 화면 오류 감지 및 디버깅</h2>
+            
+            {/* 📋 에러 복사용 텍스트에리어 및 프리뷰 */}
+            <div className="space-y-2 text-left select-text">
+              <div className="flex justify-between items-center text-xs font-mono text-red-300">
+                <span className="font-bold">❌ 에러 상세 내용:</span>
+                <button
+                  onClick={this.handleCopyError}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs cursor-pointer border-none shadow transition-all"
+                >
+                  📋 에러 내용 1초 복사하기
+                </button>
+              </div>
+
+              <textarea
+                readOnly
+                value={errorFullText}
+                rows={8}
+                onClick={(e) => e.target.select()}
+                className="w-full bg-black/90 p-3 rounded-xl border border-red-500/40 text-[11px] font-mono text-red-300 select-text focus:outline-none focus:border-red-400"
+                style={{ userSelect: "text" }}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={this.handleCopyError}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-base shadow-xl transition-all cursor-pointer border-none"
+              >
+                📋 에러 내용 복사하기
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-base shadow-xl hover:opacity-90 transition-all cursor-pointer border-none"
+              >
+                화면 새로고침 (F5)
+              </button>
+            </div>
           </div>
         </div>
       );

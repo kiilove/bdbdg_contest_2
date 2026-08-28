@@ -49,8 +49,34 @@ const AwardCeremonyScene = ({
     !u.toLowerCase().includes("logo") &&
     !u.toLowerCase().includes("certificate");
 
+  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 실시간 조회
+  const [realPlayersMap, setRealPlayersMap] = useState({});
+
+  useEffect(() => {
+    const fetchRealPlayers = async () => {
+      const cId = currentContest?.contests?.id || currentContest?.contestInfo?.id;
+      if (!cId) return;
+      try {
+        const condition = [where("contestId", "==", cId)];
+        const data = await fetchResultQuery.getDocuments("contest_players", condition);
+        if (data && data.length > 0) {
+          const map = {};
+          data.forEach((p) => {
+            if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
+            if (p.playerName) map[String(p.playerName).trim()] = p;
+          });
+          setRealPlayersMap(map);
+        }
+      } catch (e) {
+        console.error("선수 사진 데이터 로드 실패:", e);
+      }
+    };
+    fetchRealPlayers();
+  }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+
   const getPlayerPhoto = (p) => {
     if (!p) return "";
+    const matched = realPlayersMap[String(p.playerNumber).trim()] || realPlayersMap[String(p.playerName).trim()];
     return (
       (isValidPhoto(p.stagePhoto1) && p.stagePhoto1) ||
       (isValidPhoto(p.stagePhotoUrl1) && p.stagePhotoUrl1) ||
@@ -61,6 +87,14 @@ const AwardCeremonyScene = ({
       (isValidPhoto(p.photoUrl) && p.photoUrl) ||
       (isValidPhoto(p.playerPhoto) && p.playerPhoto) ||
       (Array.isArray(p.photos) && p.photos.find(isValidPhoto)) ||
+      (matched && (
+        (isValidPhoto(matched.stagePhoto1) && matched.stagePhoto1) ||
+        (isValidPhoto(matched.stagePhotoUrl1) && matched.stagePhotoUrl1) ||
+        (isValidPhoto(matched.stagePhotoUrl) && matched.stagePhotoUrl) ||
+        (isValidPhoto(matched.stagePhoto2) && matched.stagePhoto2) ||
+        (isValidPhoto(matched.profileImageUrl) && matched.profileImageUrl) ||
+        (isValidPhoto(matched.photoUrl) && matched.photoUrl)
+      )) ||
       ""
     );
   };
@@ -98,20 +132,44 @@ const AwardCeremonyScene = ({
     }
   }, [rankingData, gradeId]);
 
-  // 포디움 3인방 및 하위 순위 분리
-  const firstPlayer = ranks.find((p) => (p.playerRank || p.rank) === 1) || null;
-  const secondPlayer = ranks.find((p) => (p.playerRank || p.rank) === 2) || null;
-  const thirdPlayer = ranks.find((p) => (p.playerRank || p.rank) === 3) || null;
-  const otherFinalists = ranks.filter(
-    (p) => (p.playerRank || p.rank) >= 4 && (p.playerRank || p.rank) <= 6
-  );
+  // 포디움 3인방 및 하위 순위 분리 (실제 참가 인원만 분리)
+  const firstPlayer =
+    ranks.find((p) => (p.playerRank || p.rank) === 1) ||
+    (ranks.length > 0 ? ranks[0] : null) || {
+      playerRank: 1,
+      playerNumber: "-",
+      playerName: "데이터 없음",
+      playerGym: "심사 결과 집계 대기",
+    };
+
+  const secondPlayer =
+    ranks.find((p) => (p.playerRank || p.rank) === 2) ||
+    (ranks.length > 1 && ranks[1]?.playerNumber !== firstPlayer?.playerNumber ? ranks[1] : null);
+
+  const thirdPlayer =
+    ranks.find((p) => (p.playerRank || p.rank) === 3) ||
+    (ranks.length > 2 &&
+    ranks[2]?.playerNumber !== firstPlayer?.playerNumber &&
+    ranks[2]?.playerNumber !== secondPlayer?.playerNumber
+      ? ranks[2]
+      : null);
+
+  const otherFinalists =
+    ranks.length > 3
+      ? ranks.filter(
+          (p) =>
+            p.playerNumber !== firstPlayer?.playerNumber &&
+            p.playerNumber !== secondPlayer?.playerNumber &&
+            p.playerNumber !== thirdPlayer?.playerNumber
+        )
+      : [];
 
   // 🎬 GSAP 웅장한 포디움 등장 애니메이션
   useEffect(() => {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
 
-      // 3위 -> 2위 -> 1위 순차 등장
+      // 3위 (있을 때만) -> 2위 -> 1위 순차 등장
       if (podium3Ref.current) {
         tl.fromTo(
           podium3Ref.current,
@@ -189,174 +247,180 @@ const AwardCeremonyScene = ({
         )}
       </div>
 
-      {/* 3. 중앙 메인: 🏆 포디움 3인방 단상 (2위 🥈 - 1위 🥇 - 3위 🥉) */}
-      <div className="relative z-10 flex-1 flex items-end justify-center gap-4 sm:gap-6 my-auto max-h-[68vh]">
+      {/* 3. 중앙 메인: 🏆 포디움 단상 (인원수에 따라 2인 or 3인 동적 렌더링) */}
+      <div className="relative z-10 flex-1 flex items-end justify-center gap-6 sm:gap-8 lg:gap-10 my-auto max-h-[68vh]">
         
         {/* ========================================================================================= */}
-        {/* 🥈 [2위 SILVER - LEFT PODIUM] */}
+        {/* 🥈 [2위 SILVER PODIUM] */}
         {/* ========================================================================================= */}
-        <div
-          ref={podium2Ref}
-          className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
-        >
-          {/* 선수 카드 */}
-          <div className="w-full bg-gradient-to-b from-slate-800/90 via-slate-900/90 to-black/95 rounded-3xl border-2 border-slate-300/60 p-4 shadow-[0_10px_35px_rgba(203,213,225,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
-            
-            {/* 2위 뱃지 */}
-            <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-xs shadow-md">
-              🥈 2위 SILVER
-            </div>
-
-            {/* 배부번호 */}
-            {secondPlayer?.playerNumber && (
-              <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-slate-400/50 font-mono font-black text-xs text-slate-200">
-                #{secondPlayer.playerNumber}
+        {secondPlayer && (
+          <div
+            ref={podium2Ref}
+            className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
+          >
+            {/* 선수 카드 */}
+            <div className="w-full bg-gradient-to-b from-slate-800/90 via-slate-900/90 to-black/95 rounded-3xl border-2 border-slate-300/60 p-4 shadow-[0_10px_35px_rgba(203,213,225,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
+              
+              {/* 2위 뱃지 */}
+              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-xs shadow-md">
+                🥈 2위 SILVER
               </div>
-            )}
 
-            {/* 선수 사진 */}
-            <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-slate-400/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
-              {getPlayerPhoto(secondPlayer) ? (
-                <img
-                  src={getPlayerPhoto(secondPlayer)}
-                  alt={secondPlayer?.playerName || "2위"}
-                  className="w-full h-full object-cover object-top"
-                />
-              ) : (
-                <span className="text-3xl text-slate-500 font-black">#2</span>
+              {/* 배부번호 */}
+              {secondPlayer?.playerNumber && (
+                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-slate-400/50 font-mono font-black text-xs text-slate-200">
+                  #{secondPlayer.playerNumber}
+                </div>
               )}
+
+              {/* 선수 사진 */}
+              <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-slate-400/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
+                {getPlayerPhoto(secondPlayer) ? (
+                  <img
+                    src={getPlayerPhoto(secondPlayer)}
+                    alt={secondPlayer?.playerName || "2위"}
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <span className="text-3xl text-slate-500 font-black">#2</span>
+                )}
+              </div>
+
+              {/* 선수 이름 및 소속 */}
+              <div className="space-y-1 w-full">
+                <h2 className="text-2xl font-black text-slate-100 tracking-tight truncate">
+                  {secondPlayer?.playerName || "2위 선수"}
+                </h2>
+                <p className="text-xs font-bold text-slate-400 truncate m-0">
+                  {secondPlayer?.playerGym || "개인 / 무소속"}
+                </p>
+              </div>
             </div>
 
-            {/* 선수 이름 및 소속 */}
-            <div className="space-y-1 w-full">
-              <h2 className="text-2xl font-black text-slate-100 tracking-tight truncate">
-                {secondPlayer?.playerName || "2위 선수"}
-              </h2>
-              <p className="text-xs font-bold text-slate-400 truncate m-0">
-                {secondPlayer?.playerGym || "개인 / 무소속"}
-              </p>
+            {/* 2위 단상 받침대 (높이: 중간) */}
+            <div className="w-full h-20 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-900 rounded-b-2xl border-t border-slate-400 flex items-center justify-center shadow-2xl">
+              <span className="font-mono font-black text-4xl text-slate-200 tracking-widest drop-shadow-md">
+                2
+              </span>
             </div>
           </div>
-
-          {/* 2위 단상 받침대 (높이: 중간) */}
-          <div className="w-full h-20 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-900 rounded-b-2xl border-t border-slate-400 flex items-center justify-center shadow-2xl">
-            <span className="font-mono font-black text-4xl text-slate-200 tracking-widest drop-shadow-md">
-              2
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* ========================================================================================= */}
         {/* 🥇 [1위 챔피언 GOLD - CENTER PODIUM (가장 높고 화려함)] */}
         {/* ========================================================================================= */}
-        <div
-          ref={podium1Ref}
-          className="w-80 sm:w-96 flex flex-col items-center justify-end -translate-y-4 group transition-all z-20"
-        >
-          {/* 선수 카드 (골드 특화 디자인) */}
-          <div className="w-full bg-gradient-to-b from-amber-950/90 via-slate-950/95 to-black rounded-3xl border-2 border-amber-400 p-5 shadow-[0_0_50px_rgba(251,191,36,0.45)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-lg">
-            
-            {/* 왕관 & 1위 골드 뱃지 */}
-            <div className="absolute top-3 left-3 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center gap-1.5 animate-pulse">
-              <CrownOutlined className="text-sm" />
-              <span>🥇 1위 WINNER</span>
-            </div>
-
-            {/* 배부번호 */}
-            {firstPlayer?.playerNumber && (
-              <div className="absolute top-3 right-3 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/60 font-mono font-black text-sm text-amber-300 shadow-md">
-                #{firstPlayer.playerNumber}
+        {firstPlayer && (
+          <div
+            ref={podium1Ref}
+            className="w-80 sm:w-96 flex flex-col items-center justify-end -translate-y-4 group transition-all z-20"
+          >
+            {/* 선수 카드 (골드 특화 디자인) */}
+            <div className="w-full bg-gradient-to-b from-amber-950/90 via-slate-950/95 to-black rounded-3xl border-2 border-amber-400 p-5 shadow-[0_0_50px_rgba(251,191,36,0.45)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-lg">
+              
+              {/* 왕관 & 1위 골드 뱃지 */}
+              <div className="absolute top-3 left-3 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-slate-950 font-black text-xs shadow-lg flex items-center gap-1.5 animate-pulse">
+                <CrownOutlined className="text-sm" />
+                <span>🥇 1위 WINNER</span>
               </div>
-            )}
 
-            {/* 1위 선수 사진 (대형) */}
-            <div className="w-40 h-52 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.3)] mt-6 flex items-center justify-center relative">
-              {getPlayerPhoto(firstPlayer) ? (
-                <img
-                  src={getPlayerPhoto(firstPlayer)}
-                  alt={firstPlayer?.playerName || "1위"}
-                  className="w-full h-full object-cover object-top"
-                />
-              ) : (
-                <span className="text-5xl text-amber-400 font-black">#1</span>
+              {/* 배부번호 */}
+              {firstPlayer?.playerNumber && (
+                <div className="absolute top-3 right-3 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/60 font-mono font-black text-sm text-amber-300 shadow-md">
+                  #{firstPlayer.playerNumber}
+                </div>
               )}
+
+              {/* 1위 선수 사진 (대형) */}
+              <div className="w-40 h-52 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.3)] mt-6 flex items-center justify-center relative">
+                {getPlayerPhoto(firstPlayer) ? (
+                  <img
+                    src={getPlayerPhoto(firstPlayer)}
+                    alt={firstPlayer?.playerName || "1위"}
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <span className="text-5xl text-amber-400 font-black">#1</span>
+                )}
+              </div>
+
+              {/* 선수 이름 및 소속 */}
+              <div className="space-y-1 w-full">
+                <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 tracking-tight truncate">
+                  {firstPlayer?.playerName || "1위 우승자"}
+                </h2>
+                <p className="text-sm font-bold text-amber-200/80 truncate m-0">
+                  {firstPlayer?.playerGym || "개인 / 무소속"}
+                </p>
+              </div>
             </div>
 
-            {/* 선수 이름 및 소속 */}
-            <div className="space-y-1 w-full">
-              <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 tracking-tight truncate">
-                {firstPlayer?.playerName || "1위 우승자"}
-              </h2>
-              <p className="text-sm font-bold text-amber-200/80 truncate m-0">
-                {firstPlayer?.playerGym || "개인 / 무소속"}
-              </p>
+            {/* 1위 단상 받침대 (높이: 최고 높음) */}
+            <div className="w-full h-32 bg-gradient-to-b from-amber-500 via-amber-600 to-yellow-800 rounded-b-2xl border-t-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_15px_40px_rgba(251,191,36,0.5)]">
+              <span className="font-mono font-black text-6xl text-slate-950 tracking-widest drop-shadow-md">
+                1
+              </span>
+              <span className="text-[10px] font-black text-slate-950/80 tracking-widest uppercase font-mono">
+                CHAMPION
+              </span>
             </div>
           </div>
-
-          {/* 1위 단상 받침대 (높이: 최고 높음) */}
-          <div className="w-full h-32 bg-gradient-to-b from-amber-500 via-amber-600 to-yellow-800 rounded-b-2xl border-t-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_15px_40px_rgba(251,191,36,0.5)]">
-            <span className="font-mono font-black text-6xl text-slate-950 tracking-widest drop-shadow-md">
-              1
-            </span>
-            <span className="text-[10px] font-black text-slate-950/80 tracking-widest uppercase font-mono">
-              CHAMPION
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* ========================================================================================= */}
-        {/* 🥉 [3위 BRONZE - RIGHT PODIUM] */}
+        {/* 🥉 [3위 BRONZE PODIUM - 3명 이상 출전 시에만 렌더링] */}
         {/* ========================================================================================= */}
-        <div
-          ref={podium3Ref}
-          className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
-        >
-          {/* 선수 카드 */}
-          <div className="w-full bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-black/95 rounded-3xl border-2 border-amber-600/60 p-4 shadow-[0_10px_35px_rgba(217,119,6,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
-            
-            {/* 3위 뱃지 */}
-            <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-amber-700 to-amber-900 text-white font-black text-xs shadow-md">
-              🥉 3위 BRONZE
-            </div>
-
-            {/* 배부번호 */}
-            {thirdPlayer?.playerNumber && (
-              <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-amber-600/50 font-mono font-black text-xs text-amber-300">
-                #{thirdPlayer.playerNumber}
+        {thirdPlayer && (
+          <div
+            ref={podium3Ref}
+            className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
+          >
+            {/* 선수 카드 */}
+            <div className="w-full bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-black/95 rounded-3xl border-2 border-amber-600/60 p-4 shadow-[0_10px_35px_rgba(217,119,6,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
+              
+              {/* 3위 뱃지 */}
+              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-amber-700 to-amber-900 text-white font-black text-xs shadow-md">
+                🥉 3위 BRONZE
               </div>
-            )}
 
-            {/* 선수 사진 */}
-            <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-amber-600/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
-              {getPlayerPhoto(thirdPlayer) ? (
-                <img
-                  src={getPlayerPhoto(thirdPlayer)}
-                  alt={thirdPlayer?.playerName || "3위"}
-                  className="w-full h-full object-cover object-top"
-                />
-              ) : (
-                <span className="text-3xl text-amber-700 font-black">#3</span>
+              {/* 배부번호 */}
+              {thirdPlayer?.playerNumber && (
+                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-amber-600/50 font-mono font-black text-xs text-amber-300">
+                  #{thirdPlayer.playerNumber}
+                </div>
               )}
+
+              {/* 선수 사진 */}
+              <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-amber-600/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
+                {getPlayerPhoto(thirdPlayer) ? (
+                  <img
+                    src={getPlayerPhoto(thirdPlayer)}
+                    alt={thirdPlayer?.playerName || "3위"}
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <span className="text-3xl text-amber-700 font-black">#3</span>
+                )}
+              </div>
+
+              {/* 선수 이름 및 소속 */}
+              <div className="space-y-1 w-full">
+                <h2 className="text-2xl font-black text-amber-100 tracking-tight truncate">
+                  {thirdPlayer?.playerName || "3위 선수"}
+                </h2>
+                <p className="text-xs font-bold text-amber-200/60 truncate m-0">
+                  {thirdPlayer?.playerGym || "개인 / 무소속"}
+                </p>
+              </div>
             </div>
 
-            {/* 선수 이름 및 소속 */}
-            <div className="space-y-1 w-full">
-              <h2 className="text-2xl font-black text-amber-100 tracking-tight truncate">
-                {thirdPlayer?.playerName || "3위 선수"}
-              </h2>
-              <p className="text-xs font-bold text-amber-200/60 truncate m-0">
-                {thirdPlayer?.playerGym || "개인 / 무소속"}
-              </p>
+            {/* 3위 단상 받침대 (높이: 낮음) */}
+            <div className="w-full h-14 bg-gradient-to-b from-amber-800 via-amber-900 to-stone-950 rounded-b-2xl border-t border-amber-600 flex items-center justify-center shadow-xl">
+              <span className="font-mono font-black text-3xl text-amber-300 tracking-widest drop-shadow-md">
+                3
+              </span>
             </div>
           </div>
-
-          {/* 3위 단상 받침대 (높이: 낮음) */}
-          <div className="w-full h-14 bg-gradient-to-b from-amber-800 via-amber-900 to-stone-950 rounded-b-2xl border-t border-amber-600 flex items-center justify-center shadow-xl">
-            <span className="font-mono font-black text-3xl text-amber-300 tracking-widest drop-shadow-md">
-              3
-            </span>
-          </div>
-        </div>
+        )}
 
       </div>
 

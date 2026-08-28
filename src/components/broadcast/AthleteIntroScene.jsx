@@ -233,7 +233,7 @@ const AthleteIntroScene = ({
     (isValidPhoto(photoUrl) && photoUrl) ||
     (isValidPhoto(playerPhoto) && playerPhoto) ||
     validPhotos[0] ||
-    demoBodybuilderImg;
+    null;
 
   // 2번 사진: 16:9 와이드 배경 사진 (배경 컷)
   const fallback2nd = validPhotos.length > 1 ? validPhotos[1] : "";
@@ -503,15 +503,15 @@ const AthleteIntroScene = ({
       </div>
 
       {/* ======================= [ Layer 5: 메인 뷰 (16:9, 4:3, 1:1 반응형 완벽 대응) ] ======================= */}
-      <div className="relative z-10 w-full h-[calc(100vh-130px)] flex items-center justify-between gap-4 sm:gap-8 px-6 sm:px-10 lg:px-16 overflow-hidden">
+      <div className={`relative z-10 w-full h-[calc(100vh-130px)] flex items-center ${heroPhoto ? "justify-between" : "justify-center"} gap-4 sm:gap-8 px-6 sm:px-10 lg:px-16 overflow-hidden`}>
         
-        {/* -------------------- [ 좌측: 선수 핵심 BIO 영역 ] -------------------- */}
-        <div className="space-y-4 sm:space-y-6 w-[45%] max-w-xl z-20 shrink-0">
+        {/* -------------------- [ 선수 핵심 BIO 영역 (사진이 없으면 중앙 집중 정렬) ] -------------------- */}
+        <div className={`space-y-4 sm:space-y-6 ${heroPhoto ? "w-[45%] max-w-xl shrink-0" : "w-full max-w-2xl mx-auto flex flex-col items-center text-center justify-center"} z-20`}>
           
           {/* ① 배부번호 3D 스탬핑 (#100) */}
           <div
             ref={numberBadgeRef}
-            className={`inline-flex items-center gap-3 sm:gap-4 bg-gradient-to-r ${theme.bgGradient} border-l-4 ${theme.border} pl-4 sm:pl-6 pr-6 sm:pr-10 py-2 sm:py-2.5 rounded-r-3xl backdrop-blur-2xl shadow-2xl`}
+            className={`inline-flex items-center gap-3 sm:gap-4 bg-gradient-to-r ${theme.bgGradient} ${heroPhoto ? "border-l-4 rounded-r-3xl pl-4 sm:pl-6 pr-6 sm:pr-10" : "border-2 rounded-3xl px-6 sm:px-10"} ${theme.border} py-2 sm:py-2.5 backdrop-blur-2xl shadow-2xl`}
           >
             <div className="flex flex-col">
               <span className={`text-[10px] font-black tracking-[0.3em] uppercase ${theme.primary}`}>
@@ -533,19 +533,21 @@ const AthleteIntroScene = ({
           <div
             className="laser-line h-[2px] w-full"
             style={{
-              background: `linear-gradient(to right, ${theme.shockColor}, transparent)`,
+              background: heroPhoto
+                ? `linear-gradient(to right, ${theme.shockColor}, transparent)`
+                : `linear-gradient(to right, transparent, ${theme.shockColor}, transparent)`,
               boxShadow: `0 0 12px ${theme.laserShadow}`,
             }}
           />
 
           {/* ② 이름 글자별 묵직한 타격 리빌 (인 ➜ 경 ➜ 미) */}
           <div className="space-y-1">
-            <div className="text-xs font-black tracking-widest text-slate-400 uppercase flex items-center gap-2">
+            <div className={`text-xs font-black tracking-widest text-slate-400 uppercase flex items-center ${heroPhoto ? "" : "justify-center"} gap-2`}>
               <UserOutlined className={theme.primary} />
               <span>ATHLETE NAME</span>
             </div>
             
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div className={`flex items-center gap-2 sm:gap-3 flex-wrap ${heroPhoto ? "" : "justify-center"}`}>
               {nameChars.map((char, i) => (
                 <span
                   key={i}
@@ -560,7 +562,7 @@ const AthleteIntroScene = ({
           {/* ③ 소속 헬스장 (포항IN) */}
           <div
             ref={gymBadgeRef}
-            className="flex items-center gap-3 sm:gap-4 text-xl sm:text-2xl lg:text-3xl text-slate-100 font-black"
+            className={`flex items-center ${heroPhoto ? "" : "justify-center"} gap-3 sm:gap-4 text-xl sm:text-2xl lg:text-3xl text-slate-100 font-black`}
           >
             <div className={`p-2 sm:p-2.5 rounded-2xl bg-white/10 border ${theme.border50} ${theme.primary} shadow-xl`}>
               <EnvironmentOutlined />
@@ -571,7 +573,7 @@ const AthleteIntroScene = ({
           </div>
 
           {/* ④ BIO 스펙 항목별 순차 팝업 */}
-          <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 pt-1">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 pt-1 w-full">
             {/* 1. HEIGHT */}
             <div className={`bio-card-item bg-black/80 backdrop-blur-2xl border ${theme.border40} rounded-2xl p-2.5 sm:p-3.5 shadow-xl`}>
               <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
@@ -605,56 +607,58 @@ const AthleteIntroScene = ({
 
         </div>
 
-        {/* -------------------- [ 우측: 1번 메인 사진 (3:4 비율 전용, 가운데 중심 정렬, 소프트 페더링 블렌딩 마스크) ] -------------------- */}
-        <div className="flex-1 h-full flex items-center justify-center relative z-10 pl-2">
-          
-          {/* 뒤쪽 3D 테마 글로우 */}
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[160px] pointer-events-none"
-            style={{ backgroundColor: theme.glowRgba }}
-          />
-
-          {/* 🌟 헐리우드급 아나모픽 호라이즌 렌즈 플레어 스트릭 */}
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[140%] h-[3px] pointer-events-none animate-anamorphic-flare z-0"
-            style={{
-              background: `linear-gradient(to right, transparent, ${theme.shockColor}, #ffffff, ${theme.shockColor}, transparent)`,
-              boxShadow: `0 0 24px 2px ${theme.laserShadow}`,
-            }}
-          />
-
-          {/* 🌫️ 무대 스모크/포그 앰비언스 이펙트 */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-[540px] h-[380px] bg-white/10 rounded-full blur-[90px] animate-pulse pointer-events-none" />
-          </div>
-
-          {/* 🖼️ 1번 메인 사진 (3:4 비율 전용 박스 + 센터 정렬 + 럭셔리 크롬 림 & 라이트 스윕) */}
-          <div
-            ref={heroWrapperRef}
-            className="relative h-[74vh] sm:h-[78vh] lg:h-[82vh] max-h-[800px] aspect-[3/4] flex items-center justify-center rounded-[32px] overflow-hidden border border-white/20 shadow-[0_25px_80px_rgba(0,0,0,0.95)] z-10"
-          >
-            <img
-              ref={heroImageRef}
-              src={heroPhoto}
-              alt={playerName}
-              className="w-full h-full object-cover object-top hero-photo-34-mask drop-shadow-[0_25px_80px_rgba(0,0,0,0.98)]"
+        {/* -------------------- [ 우측: 1번 메인 사진 (사진이 있을 때만 프레임 렌더링) ] -------------------- */}
+        {heroPhoto && (
+          <div className="flex-1 h-full flex items-center justify-center relative z-10 pl-2">
+            
+            {/* 뒤쪽 3D 테마 글로우 */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[160px] pointer-events-none"
+              style={{ backgroundColor: theme.glowRgba }}
             />
 
-            {/* ✨ 대각선 챔피언 크롬 라이트 스윕 (Card Light Sheen) */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              <div className="w-[200%] h-[200%] bg-gradient-to-r from-transparent via-white/20 to-transparent animate-card-sheen" />
+            {/* 🌟 헐리우드급 아나모픽 호라이즌 렌즈 플레어 스트릭 */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[140%] h-[3px] pointer-events-none animate-anamorphic-flare z-0"
+              style={{
+                background: `linear-gradient(to right, transparent, ${theme.shockColor}, #ffffff, ${theme.shockColor}, transparent)`,
+                boxShadow: `0 0 24px 2px ${theme.laserShadow}`,
+              }}
+            />
+
+            {/* 🌫️ 무대 스모크/포그 앰비언스 이펙트 */}
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="w-[540px] h-[380px] bg-white/10 rounded-full blur-[90px] animate-pulse pointer-events-none" />
             </div>
 
-            {/* 📐 정밀 프로 방송 HUD 코너 브래킷 액센트 */}
-            <div className="absolute top-3 left-3 w-3.5 h-3.5 border-t-2 border-l-2 border-white/60 pointer-events-none" />
-            <div className="absolute top-3 right-3 w-3.5 h-3.5 border-t-2 border-r-2 border-white/60 pointer-events-none" />
-            <div className="absolute bottom-3 left-3 w-3.5 h-3.5 border-b-2 border-l-2 border-white/60 pointer-events-none" />
-            <div className="absolute bottom-3 right-3 w-3.5 h-3.5 border-b-2 border-r-2 border-white/60 pointer-events-none" />
+            {/* 🖼️ 1번 메인 사진 (3:4 비율 전용 박스 + 센터 정렬 + 럭셔리 크롬 림 & 라이트 스윕) */}
+            <div
+              ref={heroWrapperRef}
+              className="relative h-[74vh] sm:h-[78vh] lg:h-[82vh] max-h-[800px] aspect-[3/4] flex items-center justify-center rounded-[32px] overflow-hidden border border-white/20 shadow-[0_25px_80px_rgba(0,0,0,0.95)] z-10"
+            >
+              <img
+                ref={heroImageRef}
+                src={heroPhoto}
+                alt={playerName}
+                className="w-full h-full object-cover object-top hero-photo-34-mask drop-shadow-[0_25px_80px_rgba(0,0,0,0.98)]"
+              />
 
-            {/* 테두리 이질감 완전 소멸 4방향 소프트 앰비언트 비네팅 */}
-            <div className="absolute inset-0 rounded-[32px] pointer-events-none shadow-[inset_0_0_60px_rgba(0,0,0,0.9),inset_0_0_20px_rgba(0,0,0,0.95)]" />
+              {/* ✨ 대각선 챔피언 크롬 라이트 스윕 (Card Light Sheen) */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="w-[200%] h-[200%] bg-gradient-to-r from-transparent via-white/20 to-transparent animate-card-sheen" />
+              </div>
+
+              {/* 📐 정밀 프로 방송 HUD 코너 브래킷 액센트 */}
+              <div className="absolute top-3 left-3 w-3.5 h-3.5 border-t-2 border-l-2 border-white/60 pointer-events-none" />
+              <div className="absolute top-3 right-3 w-3.5 h-3.5 border-t-2 border-r-2 border-white/60 pointer-events-none" />
+              <div className="absolute bottom-3 left-3 w-3.5 h-3.5 border-b-2 border-l-2 border-white/60 pointer-events-none" />
+              <div className="absolute bottom-3 right-3 w-3.5 h-3.5 border-b-2 border-r-2 border-white/60 pointer-events-none" />
+
+              {/* 테두리 이질감 완전 소멸 4방향 소프트 앰비언트 비네팅 */}
+              <div className="absolute inset-0 rounded-[32px] pointer-events-none shadow-[inset_0_0_60px_rgba(0,0,0,0.9),inset_0_0_20px_rgba(0,0,0,0.95)]" />
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 

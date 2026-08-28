@@ -11,7 +11,6 @@ import {
   SoundOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import demoBodybuilderImg from "../../assets/img/demo_bodybuilder.jpg";
 import defaultCalloutVideo from "../../assets/mov/countdown_low.mp4";
 import SmoothBackgroundVideo from "./SmoothBackgroundVideo";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
