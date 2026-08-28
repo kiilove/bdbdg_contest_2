@@ -21,6 +21,7 @@ import {
   getStoredVibeFlowToken,
   getStoredVibeFlowUser,
   clearVibeFlowToken,
+  isTrackExposed,
 } from "../../services/vibeflowService";
 
 // 📦 서브 모듈 & 컴포넌트 임포트
@@ -600,19 +601,22 @@ export const VibeFlowAudioCenter = () => {
       console.log("[VibeFlow Audio] fetchVibeFlowContestSongs 결과:", res);
       setRawApiResponse(res?.raw || res);
 
+      let rawTrackList = [];
       if (res && res.success && Array.isArray(res.tracks)) {
-        setTracks(res.tracks);
+        rawTrackList = res.tracks;
       } else if (res && Array.isArray(res.tracks)) {
-        setTracks(res.tracks);
+        rawTrackList = res.tracks;
       } else if (res && Array.isArray(res.songs)) {
-        setTracks(res.songs);
+        rawTrackList = res.songs;
       } else if (Array.isArray(res)) {
-        setTracks(res);
+        rawTrackList = res;
       } else if (res?.data && Array.isArray(res.data)) {
-        setTracks(res.data);
-      } else {
-        setTracks([]);
+        rawTrackList = res.data;
       }
+
+      // 👁️ is_active = 1 (노출 중인 음원만 100% 필터링)
+      const finalExposed = rawTrackList.filter(isTrackExposed);
+      setTracks(finalExposed);
     } catch (err) {
       console.error("[VibeFlow Audio] 트랙 로드 에러:", err);
       if (err.message?.includes("401") || err.message?.includes("인증")) {

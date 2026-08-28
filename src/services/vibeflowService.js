@@ -205,7 +205,7 @@ export const loginVibeFlow = async (email, password, rememberMe = true) => {
 export const isTrackExposed = (track) => {
   if (!track || typeof track !== "object") return false;
 
-  // 1. 📌 [공식 명세 1순위 검증] is_active가 0/false/"0"/"false"인 경우 100% 제외
+  // 1. 📌 [공식 명세 1순위 검증] is_active / active / contest_is_active 등 비활성(0, false, "0", "false")인 경우 100% 제외
   if (
     track.is_active === 0 ||
     track.is_active === "0" ||
@@ -218,7 +218,47 @@ export const isTrackExposed = (track) => {
     track.contest_is_active === 0 ||
     track.contest_is_active === "0" ||
     track.contest_is_active === false ||
-    track.contest_is_active === "false"
+    track.contest_is_active === "false" ||
+    track.song_is_active === 0 ||
+    track.song_is_active === "0" ||
+    track.song_is_active === false ||
+    track.song_is_active === "false" ||
+    track.is_exposed === 0 ||
+    track.is_exposed === "0" ||
+    track.is_exposed === false ||
+    track.is_exposed === "false" ||
+    track.exposed === 0 ||
+    track.exposed === "0" ||
+    track.exposed === false ||
+    track.exposed === "false" ||
+    track.is_display === 0 ||
+    track.is_display === "0" ||
+    track.is_display === false ||
+    track.is_display === "false" ||
+    track.display === 0 ||
+    track.display === "0" ||
+    track.display === false ||
+    track.display === "false" ||
+    track.is_visible === 0 ||
+    track.is_visible === "0" ||
+    track.is_visible === false ||
+    track.is_visible === "false" ||
+    track.visible === 0 ||
+    track.visible === "0" ||
+    track.visible === false ||
+    track.visible === "false" ||
+    track.is_show === 0 ||
+    track.is_show === "0" ||
+    track.is_show === false ||
+    track.is_show === "false" ||
+    track.is_use === 0 ||
+    track.is_use === "0" ||
+    track.is_use === false ||
+    track.is_use === "false" ||
+    track.is_enabled === 0 ||
+    track.is_enabled === "0" ||
+    track.is_enabled === false ||
+    track.is_enabled === "false"
   ) {
     return false;
   }
@@ -232,9 +272,18 @@ export const isTrackExposed = (track) => {
     track.hidden === 1 ||
     track.hidden === true ||
     track.hidden === "1" ||
+    track.hidden === "true" ||
+    track.is_hide === 1 ||
+    track.is_hide === true ||
+    track.is_hide === "1" ||
     track.is_deleted === 1 ||
     track.is_deleted === true ||
-    track.deleted === true
+    track.is_deleted === "1" ||
+    track.is_deleted === "true" ||
+    track.deleted === 1 ||
+    track.deleted === true ||
+    track.deleted === "1" ||
+    track.deleted === "true"
   ) {
     return false;
   }
@@ -242,7 +291,7 @@ export const isTrackExposed = (track) => {
   // 3. 상태(status) 문자열이 비노출 계열인 경우 제외
   if (typeof track.status === "string") {
     const s = track.status.trim().toLowerCase();
-    if (["hidden", "inactive", "draft", "deleted", "disabled", "private", "hide", "block", "0"].includes(s)) {
+    if (["hidden", "inactive", "draft", "deleted", "disabled", "private", "hide", "block", "0", "unexposed", "invisible"].includes(s)) {
       return false;
     }
   }
