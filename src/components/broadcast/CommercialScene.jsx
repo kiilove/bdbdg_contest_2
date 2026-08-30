@@ -278,18 +278,13 @@ const CommercialScene = ({
       /\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(mediaSrc));
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-transparent text-white select-none flex items-center justify-center p-4 sm:p-6 lg:p-8">
+    <div className="relative w-screen h-screen overflow-hidden bg-transparent text-white select-none flex items-center justify-center p-0">
       
       {/* ========================================================================================= */}
-      {/* 📺 1:1 정방형 전용 (영상 & 로고 모두 1:1 고정) 플로팅 메인 스폰서 쇼케이스 무대 박스 */}
+      {/* 📺 세로형 전광판 최적화: 가로 꽉 채우고 세로를 동적 계산 (배경 찌그러짐 허용, 광고창 최대화) */}
       {/* ========================================================================================= */}
       <div
-        className="relative flex flex-col justify-between rounded-3xl overflow-hidden bg-slate-950/90 border-2 border-amber-400/60 shadow-[0_30px_90px_rgba(0,0,0,0.95)] z-10 transition-all duration-300"
-        style={{
-          width: "min(86vh, 90vw)",
-          height: "min(86vh, 90vw)",
-          aspectRatio: "1 / 1",
-        }}
+        className="relative flex flex-col justify-between rounded-none overflow-hidden bg-slate-950/90 border-0 shadow-[0_30px_90px_rgba(0,0,0,0.95)] z-10 w-full h-full"
       >
         
         {/* ======================= [ 1. 상단 공식 헤더 & 10초 타이머 ] ======================= */}

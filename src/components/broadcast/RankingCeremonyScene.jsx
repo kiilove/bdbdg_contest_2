@@ -3,7 +3,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { where, doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 import { gsap } from "gsap";
 import { TrophyOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
@@ -132,30 +133,30 @@ const RankingCeremonyScene = ({
   const displayTop3 = slotCount >= 3 ? (top3 || makePlaceholder(3)) : null;
   const displayRestRanks = restRanks && restRanks.length > 0 ? restRanks : [];
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 및 고유 출전 체급 실시간 조회
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진 및 고유 출전 체급 실시간 조회
   const [realPlayersMap, setRealPlayersMap] = useState({});
 
   useEffect(() => {
     const fetchRealPlayers = async () => {
-      const cId = currentContest?.contests?.id || currentContest?.contestInfo?.id;
-      if (!cId) return;
+      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+      if (!finalDocId) return;
       try {
-        const condition = [where("contestId", "==", cId)];
-        const data = await fetchResultQuery.getDocuments("contest_players", condition);
-        if (data && data.length > 0) {
+        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+        if (snap.exists()) {
+          const players = snap.data()?.players || [];
           const map = {};
-          data.forEach((p) => {
+          players.forEach((p) => {
             if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
             if (p.playerName) map[String(p.playerName).trim()] = p;
           });
           setRealPlayersMap(map);
         }
       } catch (e) {
-        console.error("선수 사진 데이터 로드 실패:", e);
+        console.error("순위 선수 사진 데이터 로드 실패:", e);
       }
     };
     fetchRealPlayers();
-  }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const matchedTop1 = realPlayersMap[String(displayTop1.playerNumber).trim()] || realPlayersMap[String(displayTop1.playerName).trim()];
 
@@ -300,26 +301,26 @@ const RankingCeremonyScene = ({
       <div className="relative z-10 my-auto w-full h-[calc(100vh-130px)] py-1 sm:py-2 flex items-center justify-center">
         
         {displayRestRanks.length > 0 ? (
-          /* 4명 이상 출전: 좌측 1·2·3위 포디움 + 우측 4~N위 순위표 */
-          <div className="grid grid-cols-12 gap-2.5 sm:gap-4 lg:gap-6 w-full h-full">
+          /* 4명 이상 출전: 세로형 전광판 최적화 — 상단 1·2·3위 포디움 + 하단 4~N위 순위표 세로 스택 */
+          <div className="flex flex-col gap-3 w-full h-full">
             
-            {/* ===================== [ 좌측: 1위, 2위, 3위 포디움 ] ===================== */}
-            <div className="col-span-6 lg:col-span-7 flex flex-col justify-between gap-2 sm:gap-3 h-full">
+            {/* ===================== [ 상단: 1위, 2위, 3위 포디움 ] ===================== */}
+            <div className="flex flex-col gap-2.5 shrink-0">
               
               {/* 🥇 1위 카드 (초투명 크리스탈 & 대형 황금 월계관) */}
               {displayTop1 && (
                 <div
                   ref={card1Ref}
-                  className={`relative flex-[1.3] rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border-2 border-amber-400/90 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_35px_rgba(251,191,36,0.2)] overflow-hidden`}
+                  className={`relative rounded-2xl px-5 py-4 border-2 border-amber-400/90 bg-black/20 backdrop-blur-md flex items-center shadow-[0_10px_35px_rgba(251,191,36,0.2)] overflow-hidden`}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 via-yellow-500/5 to-transparent pointer-events-none z-0" />
                   <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-400 via-yellow-300 to-amber-500 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                  <div className="relative z-10 flex items-center gap-5 min-w-0 pl-2 w-full">
                     {/* 선수 사진 (있을 때만 표시) */}
                     {getPlayerPhoto(displayTop1) && (
                       <div className="relative shrink-0">
-                        <div className={`w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-amber-400 bg-black/50 shadow-[0_0_20px_rgba(251,191,36,0.3)] flex items-center justify-center`}>
+                        <div className={`w-20 h-20 rounded-2xl overflow-hidden border-2 border-amber-400 bg-black/50 shadow-[0_0_20px_rgba(251,191,36,0.3)] flex items-center justify-center`}>
                           <img
                             src={getPlayerPhoto(displayTop1)}
                             alt={displayTop1.playerName}
@@ -329,28 +330,28 @@ const RankingCeremonyScene = ({
                       </div>
                     )}
 
-                    <div className="min-w-0 space-y-2 flex-1">
+                    <div className="min-w-0 space-y-1.5 flex-1">
                       {/* [1. 순위] ➜ [2. 번호] */}
                       <div className="flex items-center gap-3">
-                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        <span className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 text-slate-950 font-black text-2xl shadow-2xl tracking-tight leading-none shrink-0">
                           1위
                         </span>
-                        <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-400/90 font-mono font-black text-base sm:text-lg lg:text-xl text-amber-300 shadow-xl leading-none shrink-0`}>
+                        <span className={`px-3.5 py-1.5 rounded-xl bg-black/90 border-2 border-amber-400/90 font-mono font-black text-lg text-amber-300 shadow-xl leading-none shrink-0`}>
                           NO.{displayTop1.playerNumber}
                         </span>
                       </div>
 
                       {/* [3. 이름] 성명 + 황금 월계관 날개 */}
-                      <div className="flex items-center gap-2 sm:gap-4 py-0.5 flex-nowrap">
-                        <LaurelBranch side="left" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
-                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-amber-300 m-0 tracking-tight leading-none break-keep truncate drop-shadow-[0_2px_15px_rgba(251,191,36,0.45)] whitespace-nowrap">
+                      <div className="flex items-center gap-2 py-0.5 flex-nowrap">
+                        <LaurelBranch side="left" className="w-8 h-16 shrink-0" />
+                        <h2 className="text-4xl font-black text-amber-300 m-0 tracking-tight leading-none break-keep truncate drop-shadow-[0_2px_15px_rgba(251,191,36,0.45)] whitespace-nowrap">
                           {displayTop1.playerName}
                         </h2>
-                        <LaurelBranch side="right" className="w-10 h-20 sm:w-14 sm:h-28 shrink-0" />
+                        <LaurelBranch side="right" className="w-8 h-16 shrink-0" />
                       </div>
 
                       {/* [4. 소속] */}
-                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
+                      <div className="text-lg text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop1.playerGym || "-"}
                       </div>
                     </div>
@@ -358,19 +359,19 @@ const RankingCeremonyScene = ({
                 </div>
               )}
 
-              {/* 🥈 2위 카드 (초투명 크리스탈) */}
+              {/* 🥈 2위 카드 */}
               {displayTop2 && (
                 <div
                   ref={card2Ref}
-                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
+                  className="relative rounded-2xl px-5 py-3.5 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
                   <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-slate-200 to-slate-400 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                  <div className="relative z-10 flex items-center gap-4 min-w-0 pl-2 w-full">
                     {getPlayerPhoto(displayTop2) && (
                       <div className="relative shrink-0">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-300/80 bg-black/50 shadow-xl flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-300/80 bg-black/50 shadow-xl flex items-center justify-center">
                           <img
                             src={getPlayerPhoto(displayTop2)}
                             alt={displayTop2.playerName}
@@ -380,26 +381,21 @@ const RankingCeremonyScene = ({
                       </div>
                     )}
 
-                    <div className="min-w-0 space-y-2 flex-1">
-                      {/* [1. 순위] ➜ [2. 번호] */}
+                    <div className="min-w-0 space-y-1 flex-1">
                       <div className="flex items-center gap-3">
-                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        <span className="px-4 py-1 rounded-xl bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-xl shadow-2xl tracking-tight leading-none shrink-0">
                           2위
                         </span>
-                        <span className="px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-slate-400/50 font-mono font-black text-base sm:text-lg lg:text-xl text-slate-200 shadow-xl leading-none shrink-0">
+                        <span className="px-3 py-1 rounded-xl bg-black/90 border-2 border-slate-400/50 font-mono font-black text-base text-slate-200 shadow-xl leading-none shrink-0">
                           NO.{displayTop2.playerNumber}
                         </span>
                       </div>
 
-                      {/* [3. 이름] */}
-                      <div className="py-0.5">
-                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
-                          {displayTop2.playerName}
-                        </h2>
-                      </div>
+                      <h2 className="text-3xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                        {displayTop2.playerName}
+                      </h2>
                       
-                      {/* [4. 소속] */}
-                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
+                      <div className="text-base text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop2.playerGym || "-"}
                       </div>
                     </div>
@@ -407,19 +403,19 @@ const RankingCeremonyScene = ({
                 </div>
               )}
 
-              {/* 🥉 3위 카드 (초투명 크리스탈) */}
+              {/* 🥉 3위 카드 */}
               {displayTop3 && (
                 <div
                   ref={card3Ref}
-                  className="relative flex-1 rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-4 sm:py-5 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
+                  className="relative rounded-2xl px-5 py-3.5 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
                   <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-b from-amber-600 to-amber-800 z-10" />
 
-                  <div className="relative z-10 flex items-center gap-4 sm:gap-6 min-w-0 pl-1.5 w-full">
+                  <div className="relative z-10 flex items-center gap-4 min-w-0 pl-2 w-full">
                     {getPlayerPhoto(displayTop3) && (
                       <div className="relative shrink-0">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-amber-600/80 bg-black/50 shadow-xl flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border border-amber-600/80 bg-black/50 shadow-xl flex items-center justify-center">
                           <img
                             src={getPlayerPhoto(displayTop3)}
                             alt={displayTop3.playerName}
@@ -429,26 +425,21 @@ const RankingCeremonyScene = ({
                       </div>
                     )}
 
-                    <div className="min-w-0 space-y-2 flex-1">
-                      {/* [1. 순위] ➜ [2. 번호] */}
+                    <div className="min-w-0 space-y-1 flex-1">
                       <div className="flex items-center gap-3">
-                        <span className="px-4 sm:px-5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-xl sm:text-2xl lg:text-3xl shadow-2xl tracking-tight leading-none shrink-0">
+                        <span className="px-4 py-1 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-xl shadow-2xl tracking-tight leading-none shrink-0">
                           3위
                         </span>
-                        <span className={`px-3.5 sm:px-4 py-1.5 rounded-xl bg-black/90 border-2 border-amber-600/50 font-mono font-black text-base sm:text-lg lg:text-xl ${theme.primary} shadow-xl leading-none shrink-0`}>
+                        <span className={`px-3 py-1 rounded-xl bg-black/90 border-2 border-amber-600/50 font-mono font-black text-base ${theme.primary} shadow-xl leading-none shrink-0`}>
                           NO.{displayTop3.playerNumber}
                         </span>
                       </div>
 
-                      {/* [3. 이름] */}
-                      <div className="py-0.5">
-                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
-                          {displayTop3.playerName}
-                        </h2>
-                      </div>
+                      <h2 className="text-3xl font-black text-white m-0 tracking-tight leading-none break-keep truncate drop-shadow-md whitespace-nowrap">
+                        {displayTop3.playerName}
+                      </h2>
                       
-                      {/* [4. 소속] */}
-                      <div className="text-base sm:text-xl lg:text-2xl text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
+                      <div className="text-base text-slate-100 font-bold tracking-wide break-keep truncate drop-shadow-md">
                         {displayTop3.playerGym || "-"}
                       </div>
                     </div>
@@ -458,53 +449,48 @@ const RankingCeremonyScene = ({
 
             </div>
 
-            {/* ===================== [ 우측: 4위 ~ N위 순위표 ] ===================== */}
-            <div className="col-span-6 lg:col-span-5 flex flex-col h-full bg-black/20 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-white/15 overflow-hidden shadow-2xl">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 sm:pb-3 mb-2 shrink-0">
-                <span className="font-black text-xs sm:text-sm text-slate-200 tracking-wider flex items-center gap-1.5 sm:gap-2">
+            {/* ===================== [ 하단: 4위 ~ N위 순위표 — 세로형 글자 크게 ] ===================== */}
+            <div className="flex-1 flex flex-col bg-black/20 backdrop-blur-md rounded-2xl p-4 border border-white/15 overflow-hidden shadow-2xl min-h-0">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2 shrink-0">
+                <span className="font-black text-sm text-slate-200 tracking-wider flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${theme.primary} bg-current`} />
                   <span>TOP 4 ~ {ranks.length}</span>
                 </span>
-                <span className="text-[10px] sm:text-xs text-slate-400 font-bold">
+                <span className="text-sm text-slate-400 font-bold">
                   총 {ranks.length}명
                 </span>
               </div>
 
               {/* 4위 ~ N위 카드 목록 */}
-              <div className="flex-1 flex flex-col justify-start gap-2 sm:gap-2.5 overflow-y-auto pr-0.5">
+              <div className="flex-1 flex flex-col justify-start gap-2.5 overflow-y-auto pr-0.5">
                 {displayRestRanks.map((item, idx) => {
                   const rank = item.playerRank || idx + 4;
-                  const isDense = displayRestRanks.length >= 6;
 
                   return (
                     <div
                       key={idx}
-                      className={`rest-rank-item rounded-xl sm:rounded-2xl ${
-                        isDense ? "p-1.5 sm:p-2" : "p-2.5 sm:p-3"
-                      } border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-between shadow-md backdrop-blur-md transition-all`}
+                      className="rest-rank-item rounded-xl p-3 border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-between shadow-md backdrop-blur-md transition-all shrink-0"
                     >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         {/* 1. 순위 */}
-                        <div className={`flex items-center justify-center ${
-                          isDense ? "w-7 h-7 sm:w-8 sm:h-8 text-xs font-black" : "w-8 h-8 sm:w-10 sm:h-10 text-xs sm:text-sm font-black"
-                        } rounded-lg sm:rounded-xl bg-slate-800 border border-slate-700 text-white shrink-0`}>
+                        <div className="flex items-center justify-center w-10 h-10 text-lg font-black rounded-xl bg-slate-800 border border-slate-700 text-white shrink-0">
                           {rank}위
                         </div>
 
                         {/* 2. 번호 */}
-                        <div className={`${isDense ? "px-2 py-0.5" : "px-2.5 py-1"} rounded-md sm:rounded-lg bg-slate-950 border border-white/10 shrink-0`}>
-                          <span className={`text-xs sm:text-sm font-mono font-black ${theme.primary}`}>
+                        <div className="px-3 py-1 rounded-lg bg-slate-950 border border-white/10 shrink-0">
+                          <span className={`text-base font-mono font-black ${theme.primary}`}>
                             NO.{item.playerNumber}
                           </span>
                         </div>
 
                         {/* 3. 이름 & 4. 소속 */}
                         <div className="min-w-0 space-y-0.5">
-                          <div className={`${isDense ? "text-xs sm:text-sm lg:text-base" : "text-sm sm:text-base lg:text-lg"} font-black text-white leading-tight break-keep truncate`}>
+                          <div className="text-xl font-black text-white leading-tight break-keep truncate">
                             {item.playerName}
                           </div>
                           {item.playerGym && (
-                            <div className="text-xs sm:text-sm text-slate-300 font-semibold break-keep truncate max-w-[120px] sm:max-w-[180px]">
+                            <div className="text-base text-slate-300 font-semibold break-keep truncate">
                               {item.playerGym}
                             </div>
                           )}

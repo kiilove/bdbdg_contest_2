@@ -91,23 +91,23 @@ const ComparisonCalloutScene = ({
     calloutPlayers.length <= 2
       ? "grid-cols-1 sm:grid-cols-2 max-w-4xl"
       : calloutPlayers.length === 3
-      ? "grid-cols-1 sm:grid-cols-3 max-w-6xl"
+      ? "grid-cols-3 max-w-6xl"
       : calloutPlayers.length === 4
-      ? "grid-cols-2 sm:grid-cols-4 max-w-7xl"
+      ? "grid-cols-2 max-w-7xl"
       : calloutPlayers.length === 5
-      ? "grid-cols-2 sm:grid-cols-5 max-w-[96vw]"
+      ? "grid-cols-2 max-w-[96vw]"
       : calloutPlayers.length === 6
-      ? "grid-cols-3 sm:grid-cols-6 max-w-[98vw]"
+      ? "grid-cols-3 max-w-[98vw]"
       : calloutPlayers.length <= 8
-      ? "grid-cols-4 max-w-[94vw]"
+      ? "grid-cols-3 max-w-[94vw]"
       : calloutPlayers.length <= 10
-      ? "grid-cols-5 max-w-[96vw]"
-      : "grid-cols-6 max-w-[98vw]";
+      ? "grid-cols-3 max-w-[96vw]"
+      : "grid-cols-3 max-w-[98vw]";
 
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8 overflow-hidden select-none"
+      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-3 sm:p-4 overflow-hidden select-none"
     >
       {/* ======================= [ 1. 상단 공식 헤더 ] ======================= */}
       <div className="relative z-30 flex items-center justify-between gap-3 border-b border-white/15 pb-2.5 sm:pb-3 shrink-0">
@@ -149,7 +149,7 @@ const ComparisonCalloutScene = ({
               <div
                 key={player.playerNumber || idx}
                 className={`callout-player-card relative flex flex-col justify-between bg-gradient-to-b from-slate-900/95 via-slate-950 to-black rounded-3xl ${
-                  isCompact ? "p-3 sm:p-4 min-h-[220px]" : "p-5 sm:p-6 min-h-[280px]"
+                  isCompact ? "p-3 sm:p-4 min-h-[160px]" : "p-5 sm:p-6 min-h-[200px]"
                 } border-2 border-white/20 hover:border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.8)] transition-all overflow-hidden text-center`}
               >
                 {/* 상단 테마 컬러 림 라이트 */}
@@ -161,14 +161,14 @@ const ComparisonCalloutScene = ({
                 {/* 🌟 거대한 배부번호 뱃지 */}
                 <div className="relative z-10 my-1">
                   <div className={`inline-block ${isCompact ? "px-3 py-1 rounded-xl" : "px-5 py-2 rounded-2xl"} bg-black/80 border-2 border-amber-400/80 shadow-2xl`}>
-                    <span className={`${isCompact ? "text-3xl sm:text-4xl" : "text-4xl sm:text-5xl lg:text-6xl"} font-black font-mono text-amber-400 tracking-tight drop-shadow-md`}>
+                    <span className={`${isCompact ? "text-3xl sm:text-4xl" : "text-3xl sm:text-4xl"} font-black font-mono text-amber-400 tracking-tight drop-shadow-md`}>
                       #{player.playerNumber}
                     </span>
                   </div>
                 </div>
 
                 {/* 🖼️ 선수 썸네일 */}
-                <div className={`relative z-10 ${isCompact ? "w-16 h-16 sm:w-20 sm:h-20 my-1.5" : "w-24 h-24 sm:w-28 sm:h-28 my-3"} mx-auto rounded-2xl overflow-hidden border-2 border-white/20 bg-slate-950 shadow-xl shrink-0 flex items-center justify-center`}>
+                <div className={`relative z-10 ${isCompact ? "w-16 h-16 sm:w-20 sm:h-20 my-1.5" : "w-20 h-20 sm:w-24 sm:h-24 my-3"} mx-auto rounded-2xl overflow-hidden border-2 border-white/20 bg-slate-950 shadow-xl shrink-0 flex items-center justify-center`}>
                   {player.profileImageUrl || player.photoUrl ? (
                     <img
                       src={player.profileImageUrl || player.photoUrl}
@@ -182,7 +182,7 @@ const ComparisonCalloutScene = ({
 
                 {/* 📝 성명 및 소속 */}
                 <div className="relative z-10 space-y-0.5 mt-1">
-                  <h2 className={`${isCompact ? "text-lg sm:text-2xl" : "text-2xl sm:text-3xl lg:text-4xl"} font-black text-white m-0 tracking-tight leading-tight truncate`}>
+                  <h2 className={`${isCompact ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"} font-black text-white m-0 tracking-tight leading-tight truncate`}>
                     {player.playerName}
                   </h2>
                   <p className={`${isCompact ? "text-[11px]" : "text-xs sm:text-sm"} text-slate-300 font-bold m-0 truncate`}>

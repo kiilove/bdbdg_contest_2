@@ -445,76 +445,13 @@ const PosedownScene = ({
         </div>
       </div>
 
-      {/* ======================= [ Layer 10: 2. 메인 듀얼 스테이지: 좌측 포즈다운 배틀 vs 우측 대형 1:1 광고 상영관 ] ======================= */}
-      <div className="relative z-10 my-auto flex flex-col md:flex-row items-center justify-between gap-4 lg:gap-8 w-full h-[calc(100vh-125px)] py-2 overflow-hidden">
+      {/* ======================= [ Layer 10: 2. 세로형 전광판: 상단 광고 + 하단 포즈다운 배틀 ] ======================= */}
+      <div className="relative z-10 my-auto flex flex-col gap-3 w-full h-[calc(100vh-110px)] py-1 overflow-hidden">
         
-        {/* ================= 좌측: 포즈다운 엠블럼 + 60초 타이머 + 출전 선수 그리드 ================= */}
-        <div className="flex flex-col justify-center items-center md:items-start text-center md:text-left space-y-3 sm:space-y-4 flex-1 min-w-0 pr-2 lg:pr-6 overflow-hidden">
-          
-          {/* 🔥 깔끔하고 역동적인 POSEDOWN 타이틀 */}
-          <div className="posedown-title space-y-1.5 w-full">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-red-600/30 border border-red-500/60 backdrop-blur-xl text-red-300 text-xs font-black uppercase tracking-wider shadow-lg">
-              <FireOutlined className="animate-bounce text-amber-400" />
-              <span>60 SECONDS FREE BATTLE</span>
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-rose-200 to-red-600 m-0 tracking-tight leading-none drop-shadow-[0_15px_40px_rgba(225,29,72,0.8)]">
-              POSEDOWN
-            </h1>
-            <p className="text-xs sm:text-sm lg:text-base font-bold text-slate-200 tracking-wide drop-shadow m-0">
-              무대 위 최고의 자유 포징을 펼쳐주시기 바랍니다!
-            </p>
-          </div>
-
-          {/* ⏱️ 배틀 카운트다운 타이머 */}
-          <div className="posedown-timer inline-flex items-center gap-3 sm:gap-4 bg-black/85 backdrop-blur-2xl border-2 border-red-500/80 px-5 sm:px-7 py-2 sm:py-3 rounded-2xl shadow-[0_10px_35px_rgba(239,68,68,0.45)]">
-            <FieldTimeOutlined className="text-amber-400 text-2xl sm:text-3xl animate-spin" />
-            <div className="text-left">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider font-mono">
-                REMAINING TIME
-              </span>
-              <span className="text-2xl sm:text-3xl lg:text-4xl font-black font-mono text-amber-400 leading-none">
-                {seconds}초
-              </span>
-            </div>
-          </div>
-
-          {/* 🏷️ 출전 선수 칩 카드 그리드 (선수가 있을 때만 깔끔하게 노출) */}
-          {activePlayers.length > 0 && (
-            <div className="space-y-1.5 w-full pt-1">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 justify-center md:justify-start">
-                <TrophyOutlined className="text-amber-400" />
-                <span>출전 선수 명단</span>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 max-h-[110px] overflow-y-auto">
-                {activePlayers.map((player, idx) => (
-                  <div
-                    key={player.playerNumber || idx}
-                    className="posedown-player-chip flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-white/20 backdrop-blur-xl shadow-md"
-                  >
-                    <span className="font-mono font-black text-sm text-amber-400">
-                      #{player.playerNumber}
-                    </span>
-                    <span className="text-xs font-bold text-white">
-                      {player.playerName}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* ================= 우측: 📢 1:1 정방형 공식 스폰서 광고 상영관 ================= */}
+        {/* ================= 상단: 📢 공식 스폰서 광고 상영관 (가로 꽉 채움) ================= */}
         <div
-          className="posedown-ad-screen flex flex-col rounded-3xl overflow-hidden bg-slate-950/90 border-2 border-amber-400/70 shadow-[0_20px_60px_rgba(251,191,36,0.35)] backdrop-blur-2xl relative shrink-0"
-          style={{
-            width: "min(46vw, calc(100vh - 160px))",
-            height: "min(46vw, calc(100vh - 160px))",
-            aspectRatio: "1 / 1",
-          }}
+          className="posedown-ad-screen flex flex-col rounded-2xl overflow-hidden bg-slate-950/90 border-2 border-amber-400/70 shadow-[0_20px_60px_rgba(251,191,36,0.35)] backdrop-blur-2xl relative shrink-0 w-full"
+          style={{ height: "45%" }}
         >
           
           {/* ① 광고 상단 헤더 & 프로그레스 바 */}
@@ -525,7 +462,7 @@ const PosedownScene = ({
                 <div className="text-[9px] font-mono font-black text-amber-400 uppercase tracking-wider">
                   OFFICIAL SPONSOR
                 </div>
-                <div className="text-xs sm:text-sm font-black text-white truncate max-w-[140px] sm:max-w-[180px]">
+                <div className="text-xs sm:text-sm font-black text-white truncate max-w-[200px]">
                   {currentAd?.name || "공식 협찬사"}
                 </div>
               </div>
@@ -541,7 +478,7 @@ const PosedownScene = ({
             </div>
           </div>
 
-          {/* 광고 실시간 진행 프로그레스 바 (DOM 직접 제어로 60FPS 무결점 구동) */}
+          {/* 광고 프로그레스 바 */}
           <div className="w-full bg-black/60 h-1 z-20 shrink-0 overflow-hidden border-b border-white/10">
             <div
               ref={progressBarRef}
@@ -550,12 +487,11 @@ const PosedownScene = ({
             />
           </div>
 
-          {/* ② 광고 메인 미디어 뷰 (영상 MP4 or 1:1 정방형 이미지) */}
+          {/* ② 광고 메인 미디어 뷰 */}
           <div className="relative flex-1 w-full h-full overflow-hidden bg-slate-950 flex items-center justify-center">
             {isAdVideo ? (
               <>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-slate-950">
-                  {/* 영상 1:1 꽉 찬 화면 (Full Cover) */}
                   <video
                     ref={adVideoRef}
                     key={`ad-v-${currentAd?.id || currentAd?.name}`}
@@ -568,8 +504,8 @@ const PosedownScene = ({
                   />
                 </div>
 
-                {/* 하단 스폰서 상세 정보 오버레이 (영상 전용: 군더더기 없이 깔끔한 뱃지 + 이름) */}
-                <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black via-black/80 to-transparent z-10 text-left space-y-0.5 pointer-events-none">
+                {/* 하단 스폰서 오버레이 */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/80 to-transparent z-10 text-left space-y-0.5 pointer-events-none">
                   {currentAd?.tag && (
                     <span className="inline-block text-[9px] font-mono font-black px-2 py-0.5 rounded bg-amber-400 text-slate-950 uppercase shadow-md mb-0.5">
                       {currentAd.tag}
@@ -588,8 +524,8 @@ const PosedownScene = ({
                 </div>
               </>
             ) : (
-              /* 🖼️ 로고/이미지 광고 전용: 상하좌우 완벽 정중앙 & 바깥 프레임 최대 확장 */
-              <div className="relative w-full h-full flex items-center justify-center p-3 sm:p-4 overflow-hidden bg-slate-950">
+              /* 로고/이미지 광고 */
+              <div className="relative w-full h-full flex items-center justify-center p-3 overflow-hidden bg-slate-950">
                 {adMediaSrc && (
                   <img
                     src={adMediaSrc}
@@ -599,8 +535,7 @@ const PosedownScene = ({
                 )}
                 <div className="absolute inset-0 bg-gradient-to-tr from-black via-slate-950/90 to-black pointer-events-none" />
 
-                {/* 로고 글래스모피즘 스테이지 */}
-                <div className="relative z-10 w-[94%] h-[90%] rounded-2xl bg-white/[0.06] border border-white/20 p-4 sm:p-6 backdrop-blur-xl flex items-center justify-center overflow-hidden shadow-lg group">
+                <div className="relative z-10 w-[94%] h-[90%] rounded-2xl bg-white/[0.06] border border-white/20 p-4 backdrop-blur-xl flex items-center justify-center overflow-hidden shadow-lg group">
                   <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
                   {adMediaSrc ? (
                     <img
@@ -618,7 +553,7 @@ const PosedownScene = ({
 
                 {currentAd?.slogan && (
                   <div className="absolute bottom-2 left-3 right-3 z-20 text-center pointer-events-none">
-                    <span className="inline-block px-3 py-0.5 rounded-full bg-black/80 border border-amber-400/50 text-[10px] sm:text-xs font-bold text-amber-300 shadow-lg truncate max-w-[90%]">
+                    <span className="inline-block px-3 py-0.5 rounded-full bg-black/80 border border-amber-400/50 text-[10px] font-bold text-amber-300 shadow-lg truncate max-w-[90%]">
                       "{currentAd.slogan}"
                     </span>
                   </div>
@@ -626,6 +561,65 @@ const PosedownScene = ({
               </div>
             )}
           </div>
+
+        </div>
+
+        {/* ================= 하단: 포즈다운 배틀 정보 (타이틀 + 타이머 + 선수 목록) ================= */}
+        <div className="flex flex-col justify-center items-center text-center space-y-3 flex-1 min-w-0 overflow-hidden">
+          
+          {/* 🔥 POSEDOWN 타이틀 */}
+          <div className="posedown-title space-y-1.5 w-full">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-red-600/30 border border-red-500/60 backdrop-blur-xl text-red-300 text-xs font-black uppercase tracking-wider shadow-lg">
+              <FireOutlined className="animate-bounce text-amber-400" />
+              <span>60 SECONDS FREE BATTLE</span>
+            </div>
+
+            <h1 className="text-5xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-rose-200 to-red-600 m-0 tracking-tight leading-none drop-shadow-[0_15px_40px_rgba(225,29,72,0.8)]">
+              POSEDOWN
+            </h1>
+            <p className="text-sm font-bold text-slate-200 tracking-wide drop-shadow m-0">
+              무대 위 최고의 자유 포징을 펼쳐주시기 바랍니다!
+            </p>
+          </div>
+
+          {/* ⏱️ 배틀 카운트다운 타이머 */}
+          <div className="posedown-timer inline-flex items-center gap-4 bg-black/85 backdrop-blur-2xl border-2 border-red-500/80 px-7 py-3 rounded-2xl shadow-[0_10px_35px_rgba(239,68,68,0.45)]">
+            <FieldTimeOutlined className="text-amber-400 text-3xl animate-spin" />
+            <div className="text-left">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider font-mono">
+                REMAINING TIME
+              </span>
+              <span className="text-4xl font-black font-mono text-amber-400 leading-none">
+                {seconds}초
+              </span>
+            </div>
+          </div>
+
+          {/* 🏷️ 출전 선수 칩 카드 그리드 */}
+          {activePlayers.length > 0 && (
+            <div className="space-y-1.5 w-full pt-1">
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 justify-center">
+                <TrophyOutlined className="text-amber-400" />
+                <span>출전 선수 명단</span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2 max-h-[100px] overflow-y-auto px-2">
+                {activePlayers.map((player, idx) => (
+                  <div
+                    key={player.playerNumber || idx}
+                    className="posedown-player-chip flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/20 backdrop-blur-xl shadow-md"
+                  >
+                    <span className="font-mono font-black text-base text-amber-400">
+                      #{player.playerNumber}
+                    </span>
+                    <span className="text-sm font-bold text-white">
+                      {player.playerName}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 

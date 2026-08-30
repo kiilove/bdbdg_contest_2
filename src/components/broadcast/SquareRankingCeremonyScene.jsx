@@ -3,7 +3,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { where, doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 import { gsap } from "gsap";
 import {
   TrophyOutlined,
@@ -121,30 +122,30 @@ const SquareRankingCeremonyScene = ({
   const displayTop3 = top3 || null;
   const displayRestRanks = restRanks && restRanks.length > 0 ? restRanks : [];
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 실시간 조회
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진 실시간 조회
   const [realPlayersMap, setRealPlayersMap] = useState({});
 
   useEffect(() => {
     const fetchRealPlayers = async () => {
-      const cId = currentContest?.contests?.id || currentContest?.contestInfo?.id;
-      if (!cId) return;
+      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+      if (!finalDocId) return;
       try {
-        const condition = [where("contestId", "==", cId)];
-        const data = await fetchResultQuery.getDocuments("contest_players", condition);
-        if (data && data.length > 0) {
+        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+        if (snap.exists()) {
+          const players = snap.data()?.players || [];
           const map = {};
-          data.forEach((p) => {
+          players.forEach((p) => {
             if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
             if (p.playerName) map[String(p.playerName).trim()] = p;
           });
           setRealPlayersMap(map);
         }
       } catch (e) {
-        console.error("선수 사진 데이터 로드 실패:", e);
+        console.error("정방형 순위 선수 사진 데이터 로드 실패:", e);
       }
     };
     fetchRealPlayers();
-  }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const matchedReal =
     realPlayersMap[String(displayTop1.playerNumber).trim()] ||
@@ -548,24 +549,24 @@ const SquareRankingCeremonyScene = ({
         {/* ======================================================================================= */}
         {phase === "FULL_RANKING" && (
           displayRestRanks.length > 0 ? (
-            /* 4명 이상 출전: 좌측 2·3위 포디움 + 우측 4~N위 순위표 */
-            <div className="w-full h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch max-w-5xl mx-auto animate-fade-in py-1">
+            /* 4명 이상 출전: 세로형 전광판 최적화 — 상단 2·3위 + 하단 4~N위 순위표 세로 스택 */
+            <div className="w-full h-full flex flex-col gap-3 max-w-2xl mx-auto animate-fade-in py-1">
               
-              {/* ◀️ [좌측 (50%)]: 2위 & 3위 대형 포디움 카드 + 1위 발표 카운트다운 */}
-              <div className="col-span-6 flex flex-col justify-between gap-2.5 h-full">
+              {/* ◀️ [상단]: 2위 & 3위 대형 포디움 카드 */}
+              <div className="flex flex-col gap-3 shrink-0">
                 
-                {/* 🥈 2위 포디움 카드 (초투명 크리스탈) */}
+                {/* 🥈 2위 포디움 카드 */}
                 {displayTop2 && (
                   <div
                     ref={card2Ref}
-                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
+                    className="relative rounded-2xl p-4 border border-slate-300/60 bg-black/20 backdrop-blur-md flex items-center shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-400/10 to-transparent pointer-events-none z-0" />
                     <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-slate-200 via-slate-300 to-slate-400 z-10" />
 
-                    <div className="relative z-10 flex items-center gap-3 sm:gap-4 min-w-0 pl-1.5">
+                    <div className="relative z-10 flex items-center gap-4 min-w-0 pl-2 w-full">
                       <div className="relative shrink-0">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-300 bg-black/50 shadow-xl flex items-center justify-center">
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-300 bg-black/50 shadow-xl flex items-center justify-center">
                           {displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl ? (
                             <img
                               src={displayTop2.stagePhotoUrl || displayTop2.profileImageUrl || displayTop2.photoUrl}
@@ -576,26 +577,26 @@ const SquareRankingCeremonyScene = ({
                             <TrophyOutlined className="text-2xl text-slate-300" />
                           )}
                         </div>
-                        <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-[10px] sm:text-xs shadow">
+                        <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-sm shadow">
                           2위
                         </div>
                       </div>
 
-                      <div className="min-w-0 space-y-1.5 flex-1">
+                      <div className="min-w-0 space-y-1 flex-1">
                         <div className="flex items-center gap-2.5">
-                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-base sm:text-lg shadow-xl tracking-tight leading-none shrink-0">
+                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 text-slate-950 font-black text-xl shadow-xl tracking-tight leading-none shrink-0">
                             2위
                           </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-slate-400/50 font-mono font-black text-xs sm:text-sm text-slate-200 leading-none shrink-0">
+                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-slate-400/50 font-mono font-black text-base text-slate-200 leading-none shrink-0">
                             NO.{displayTop2.playerNumber}
                           </span>
                         </div>
 
-                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
+                        <h2 className="text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                           {displayTop2.playerName}
                         </h2>
                         
-                        <div className="text-sm sm:text-base text-slate-200 font-bold truncate drop-shadow">
+                        <div className="text-lg text-slate-200 font-bold truncate drop-shadow">
                           {displayTop2.playerGym || "-"}
                         </div>
                       </div>
@@ -603,19 +604,19 @@ const SquareRankingCeremonyScene = ({
                   </div>
                 )}
 
-                {/* 🥉 3위 포디움 카드 (초투명 크리스탈) */}
+                {/* 🥉 3위 포디움 카드 */}
                 {displayTop3 && (
                   <div
                     ref={card3Ref}
-                    className="relative flex-1 rounded-2xl sm:rounded-3xl p-3 sm:p-4 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
+                    className="relative rounded-2xl p-4 border border-amber-600/60 bg-black/20 backdrop-blur-md flex items-center shadow-[0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent pointer-events-none z-0" />
                     <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 z-10" />
 
-                    <div className="relative z-10 flex items-center gap-3 sm:gap-4 min-w-0 pl-1.5 w-full">
+                    <div className="relative z-10 flex items-center gap-4 min-w-0 pl-2 w-full">
                       {displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl ? (
                         <div className="relative shrink-0">
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-amber-600 bg-black/50 shadow-xl flex items-center justify-center">
+                          <div className="w-20 h-20 rounded-2xl overflow-hidden border border-amber-600 bg-black/50 shadow-xl flex items-center justify-center">
                             <img
                               src={displayTop3.stagePhotoUrl || displayTop3.profileImageUrl || displayTop3.photoUrl}
                               alt={displayTop3.playerName}
@@ -625,21 +626,21 @@ const SquareRankingCeremonyScene = ({
                         </div>
                       ) : null}
 
-                      <div className="min-w-0 space-y-1.5 flex-1">
+                      <div className="min-w-0 space-y-1 flex-1">
                         <div className="flex items-center gap-2.5">
-                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-base sm:text-lg shadow-xl tracking-tight leading-none shrink-0">
+                          <span className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-amber-600 to-amber-800 text-white font-black text-xl shadow-xl tracking-tight leading-none shrink-0">
                             3위
                           </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-amber-600/50 font-mono font-black text-xs sm:text-sm text-amber-400 leading-none shrink-0">
+                          <span className="px-2.5 py-1 rounded-lg bg-black/80 border border-amber-600/50 font-mono font-black text-base text-amber-400 leading-none shrink-0">
                             NO.{displayTop3.playerNumber}
                           </span>
                         </div>
 
-                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
+                        <h2 className="text-3xl font-black text-white m-0 tracking-tight leading-tight truncate drop-shadow-md">
                           {displayTop3.playerName}
                         </h2>
                         
-                        <div className="text-sm sm:text-base text-slate-200 font-bold truncate drop-shadow">
+                        <div className="text-lg text-slate-200 font-bold truncate drop-shadow">
                           {displayTop3.playerGym || "-"}
                         </div>
                       </div>
@@ -648,14 +649,14 @@ const SquareRankingCeremonyScene = ({
                 )}
 
                 {/* 👑 1위 대상 발표 대기 알림 바 */}
-                <div className="pending-champion-box bg-gradient-to-r from-amber-500/20 via-yellow-500/30 to-amber-500/20 p-2.5 rounded-2xl border border-amber-400/50 flex items-center justify-between shadow-lg">
+                <div className="pending-champion-box bg-gradient-to-r from-amber-500/20 via-yellow-500/30 to-amber-500/20 p-3 rounded-2xl border border-amber-400/50 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                    <span className="text-xs sm:text-sm font-black text-amber-300">
+                    <span className="text-base font-black text-amber-300">
                       👑 1위 우승자 발표
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-black/70 px-2.5 py-0.5 rounded-lg border border-amber-400/40 text-xs font-mono font-bold text-amber-300">
+                  <div className="flex items-center gap-1.5 bg-black/70 px-3 py-1 rounded-lg border border-amber-400/40 text-sm font-mono font-bold text-amber-300">
                     <span>{countdown}초 후 단독 공개</span>
                     <ArrowRightOutlined className="animate-pulse" />
                   </div>
@@ -663,35 +664,35 @@ const SquareRankingCeremonyScene = ({
 
               </div>
 
-              {/* ▶️ [우측 (50%)]: 4위 ~ N위 실제 순위 카드 스택 */}
-              <div className="col-span-6 flex flex-col gap-2 h-full bg-black/20 rounded-3xl p-3.5 sm:p-4 border border-white/15 shadow-2xl backdrop-blur-md overflow-hidden">
+              {/* ▶️ [하단]: 4위 ~ N위 실제 순위 카드 스택 — 세로형에서 글자 크게 */}
+              <div className="flex-1 flex flex-col gap-2 bg-black/20 rounded-3xl p-4 border border-white/15 shadow-2xl backdrop-blur-md overflow-hidden min-h-0">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1 shrink-0">
-                  <span className="text-xs font-mono font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <StarFilled className="text-amber-400 text-[10px]" />
+                  <span className="text-sm font-mono font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <StarFilled className="text-amber-400 text-xs" />
                     <span>TOP 4 ~ {ranks.length}</span>
                   </span>
-                  <span className="text-[11px] text-slate-400 font-bold">공식 순위표</span>
+                  <span className="text-sm text-slate-400 font-bold">공식 순위표</span>
                 </div>
 
-                <div className="flex-1 flex flex-col justify-start gap-2 overflow-y-auto pr-0.5">
+                <div className="flex-1 flex flex-col justify-start gap-2.5 overflow-y-auto pr-0.5">
                   {displayRestRanks.map((player, idx) => (
                     <div
                       key={`sq-rank-${player.playerNumber}-${idx}`}
-                      className="rest-rank-item flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 shadow-md transition-all shrink-0"
+                      className="rest-rank-item flex items-center justify-between px-4 py-3.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 shadow-md transition-all shrink-0"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-7 h-7 rounded-lg bg-slate-800 border border-white/20 flex items-center justify-center font-mono font-black text-xs text-slate-300 shadow shrink-0">
-                          {player.playerRank}위
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-10 h-10 rounded-lg bg-slate-800 border border-white/20 flex items-center justify-center font-mono font-black text-lg text-slate-300 shadow shrink-0">
+                          {player.playerRank}
                         </span>
-                        <span className="font-mono font-bold text-xs text-amber-400 shrink-0">
+                        <span className="font-mono font-bold text-base text-amber-400 shrink-0">
                           NO.{player.playerNumber}
                         </span>
-                        <span className="font-black text-sm text-white truncate max-w-[130px]">
+                        <span className="font-black text-xl text-white truncate">
                           {player.playerName}
                         </span>
                       </div>
 
-                      <span className="text-xs text-slate-400 font-semibold truncate max-w-[130px] text-right">
+                      <span className="text-base text-slate-400 font-semibold truncate max-w-[160px] text-right">
                         {player.playerGym || "-"}
                       </span>
                     </div>

@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "contest-bdbdg",
+    "site": "bdbdgmain",
     "public": "build",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [

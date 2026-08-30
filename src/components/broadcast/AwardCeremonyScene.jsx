@@ -3,7 +3,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { where, doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 import { gsap } from "gsap";
 import {
   TrophyOutlined,
@@ -46,30 +47,30 @@ const AwardCeremonyScene = ({
     !u.toLowerCase().includes("logo") &&
     !u.toLowerCase().includes("certificate");
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진 실시간 조회
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진 실시간 조회
   const [realPlayersMap, setRealPlayersMap] = useState({});
 
   useEffect(() => {
     const fetchRealPlayers = async () => {
-      const cId = currentContest?.contests?.id || currentContest?.contestInfo?.id;
-      if (!cId) return;
+      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+      if (!finalDocId) return;
       try {
-        const condition = [where("contestId", "==", cId)];
-        const data = await fetchResultQuery.getDocuments("contest_players", condition);
-        if (data && data.length > 0) {
+        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+        if (snap.exists()) {
+          const players = snap.data()?.players || [];
           const map = {};
-          data.forEach((p) => {
+          players.forEach((p) => {
             if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
             if (p.playerName) map[String(p.playerName).trim()] = p;
           });
           setRealPlayersMap(map);
         }
       } catch (e) {
-        console.error("선수 사진 데이터 로드 실패:", e);
+        console.error("시상식 선수 사진 데이터 로드 실패:", e);
       }
     };
     fetchRealPlayers();
-  }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const getPlayerPhoto = (p) => {
     if (!p) return "";
@@ -263,71 +264,15 @@ const AwardCeremonyScene = ({
       </div>
 
       {/* 3. 중앙 메인: 🏆 포디움 단상 (인원수에 따라 2인 or 3인 동적 렌더링) */}
-      <div className="relative z-10 flex-1 flex items-end justify-center gap-6 sm:gap-8 lg:gap-10 my-auto max-h-[68vh]">
+      <div className="relative z-10 flex-1 flex flex-col items-center gap-4 my-auto overflow-hidden">
         
-        {/* ========================================================================================= */}
-        {/* 🥈 [2위 SILVER PODIUM] */}
-        {/* ========================================================================================= */}
-        {secondPlayer && (
-          <div
-            ref={podium2Ref}
-            className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
-          >
-            {/* 선수 카드 */}
-            <div className="w-full bg-gradient-to-b from-slate-800/90 via-slate-900/90 to-black/95 rounded-3xl border-2 border-slate-300/60 p-4 shadow-[0_10px_35px_rgba(203,213,225,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
-              
-              {/* 2위 뱃지 */}
-              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-xs shadow-md">
-                🥈 2위 SILVER
-              </div>
-
-              {/* 배부번호 */}
-              {secondPlayer?.playerNumber && (
-                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-slate-400/50 font-mono font-black text-xs text-slate-200">
-                  NO.{secondPlayer.playerNumber}
-                </div>
-              )}
-
-              {/* 선수 사진 */}
-              <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-slate-400/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
-                {getPlayerPhoto(secondPlayer) ? (
-                  <img
-                    src={getPlayerPhoto(secondPlayer)}
-                    alt={secondPlayer?.playerName || "2위"}
-                    className="w-full h-full object-cover object-top"
-                  />
-                ) : (
-                  <TrophyOutlined className="text-4xl text-slate-400" />
-                )}
-              </div>
-
-              {/* 선수 이름 및 소속 */}
-              <div className="space-y-1 w-full">
-                <h2 className="text-2xl font-black text-slate-100 tracking-tight truncate">
-                  {secondPlayer?.playerName || "2위 선수"}
-                </h2>
-                <p className="text-xs font-bold text-slate-400 truncate m-0">
-                  {secondPlayer?.playerGym || "개인 / 무소속"}
-                </p>
-              </div>
-            </div>
-
-            {/* 2위 단상 받침대 (높이: 중간) */}
-            <div className="w-full h-20 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-900 rounded-b-2xl border-t border-slate-400 flex items-center justify-center shadow-2xl">
-              <span className="font-mono font-black text-4xl text-slate-200 tracking-widest drop-shadow-md">
-                2
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* ========================================================================================= */}
         {/* 🥇 [1위 챔피언 GOLD - CENTER PODIUM (가장 높고 화려함)] */}
         {/* ========================================================================================= */}
         {firstPlayer && (
           <div
             ref={podium1Ref}
-            className="w-80 sm:w-96 flex flex-col items-center justify-end -translate-y-4 group transition-all z-20"
+            className="w-full max-w-sm flex flex-col items-center justify-end group transition-all z-20"
           >
             {/* 선수 카드 (골드 특화 디자인) */}
             <div className="w-full bg-gradient-to-b from-amber-950/90 via-slate-950/95 to-black rounded-3xl border-2 border-amber-400 p-5 shadow-[0_0_50px_rgba(251,191,36,0.45)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-lg">
@@ -346,7 +291,7 @@ const AwardCeremonyScene = ({
               )}
 
               {/* 1위 선수 사진 (대형) */}
-              <div className="w-40 h-52 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.3)] mt-6 flex items-center justify-center relative">
+              <div className="w-28 h-36 rounded-2xl overflow-hidden border-2 border-amber-400/80 bg-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.3)] mt-6 flex items-center justify-center relative">
                 {getPlayerPhoto(firstPlayer) ? (
                   <img
                     src={getPlayerPhoto(firstPlayer)}
@@ -370,7 +315,7 @@ const AwardCeremonyScene = ({
             </div>
 
             {/* 1위 단상 받침대 (높이: 최고 높음) */}
-            <div className="w-full h-32 bg-gradient-to-b from-amber-500 via-amber-600 to-yellow-800 rounded-b-2xl border-t-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_15px_40px_rgba(251,191,36,0.5)]">
+            <div className="w-full h-16 bg-gradient-to-b from-amber-500 via-amber-600 to-yellow-800 rounded-b-2xl border-t-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_15px_40px_rgba(251,191,36,0.5)]">
               <span className="font-mono font-black text-6xl text-slate-950 tracking-widest drop-shadow-md">
                 1
               </span>
@@ -382,12 +327,68 @@ const AwardCeremonyScene = ({
         )}
 
         {/* ========================================================================================= */}
+        {/* 🥈 [2위 SILVER PODIUM] */}
+        {/* ========================================================================================= */}
+        {secondPlayer && (
+          <div
+            ref={podium2Ref}
+            className="w-full max-w-xs flex flex-col items-center justify-end group transition-all"
+          >
+            {/* 선수 카드 */}
+            <div className="w-full bg-gradient-to-b from-slate-800/90 via-slate-900/90 to-black/95 rounded-3xl border-2 border-slate-300/60 p-4 shadow-[0_10px_35px_rgba(203,213,225,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
+              
+              {/* 2위 뱃지 */}
+              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-gradient-to-r from-slate-200 to-slate-400 text-slate-950 font-black text-xs shadow-md">
+                🥈 2위 SILVER
+              </div>
+
+              {/* 배부번호 */}
+              {secondPlayer?.playerNumber && (
+                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 border border-slate-400/50 font-mono font-black text-xs text-slate-200">
+                  NO.{secondPlayer.playerNumber}
+                </div>
+              )}
+
+              {/* 선수 사진 */}
+              <div className="w-24 h-32 rounded-2xl overflow-hidden border-2 border-slate-400/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
+                {getPlayerPhoto(secondPlayer) ? (
+                  <img
+                    src={getPlayerPhoto(secondPlayer)}
+                    alt={secondPlayer?.playerName || "2위"}
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <TrophyOutlined className="text-4xl text-slate-400" />
+                )}
+              </div>
+
+              {/* 선수 이름 및 소속 */}
+              <div className="space-y-1 w-full">
+                <h2 className="text-2xl font-black text-slate-100 tracking-tight truncate">
+                  {secondPlayer?.playerName || "2위 선수"}
+                </h2>
+                <p className="text-xs font-bold text-slate-400 truncate m-0">
+                  {secondPlayer?.playerGym || "개인 / 무소속"}
+                </p>
+              </div>
+            </div>
+
+            {/* 2위 단상 받침대 (높이: 중간) */}
+            <div className="w-full h-12 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-900 rounded-b-2xl border-t border-slate-400 flex items-center justify-center shadow-2xl">
+              <span className="font-mono font-black text-4xl text-slate-200 tracking-widest drop-shadow-md">
+                2
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================================= */}
         {/* 🥉 [3위 BRONZE PODIUM - 3명 이상 출전 시에만 렌더링] */}
         {/* ========================================================================================= */}
         {thirdPlayer && (
           <div
             ref={podium3Ref}
-            className="w-72 sm:w-80 flex flex-col items-center justify-end group transition-all"
+            className="w-full max-w-xs flex flex-col items-center justify-end group transition-all"
           >
             {/* 선수 카드 */}
             <div className="w-full bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-black/95 rounded-3xl border-2 border-amber-600/60 p-4 shadow-[0_10px_35px_rgba(217,119,6,0.2)] flex flex-col items-center text-center space-y-3 relative overflow-hidden backdrop-blur-md">
@@ -405,7 +406,7 @@ const AwardCeremonyScene = ({
               )}
 
               {/* 선수 사진 */}
-              <div className="w-32 h-44 rounded-2xl overflow-hidden border-2 border-amber-600/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
+              <div className="w-24 h-32 rounded-2xl overflow-hidden border-2 border-amber-600/40 bg-slate-950 shadow-inner mt-6 flex items-center justify-center">
                 {getPlayerPhoto(thirdPlayer) ? (
                   <img
                     src={getPlayerPhoto(thirdPlayer)}
@@ -429,7 +430,7 @@ const AwardCeremonyScene = ({
             </div>
 
             {/* 3위 단상 받침대 (높이: 낮음) */}
-            <div className="w-full h-14 bg-gradient-to-b from-amber-800 via-amber-900 to-stone-950 rounded-b-2xl border-t border-amber-600 flex items-center justify-center shadow-xl">
+            <div className="w-full h-8 bg-gradient-to-b from-amber-800 via-amber-900 to-stone-950 rounded-b-2xl border-t border-amber-600 flex items-center justify-center shadow-xl">
               <span className="font-mono font-black text-3xl text-amber-300 tracking-widest drop-shadow-md">
                 3
               </span>
@@ -460,7 +461,7 @@ const AwardCeremonyScene = ({
                 <span className="font-mono font-black text-amber-300 text-xs">
                   #{player.playerNumber}
                 </span>
-                <span className="font-black text-sm text-white">{player.playerName}</span>
+                <span className="font-black text-base text-white">{player.playerName}</span>
                 <span className="text-xs text-slate-400">{player.playerGym}</span>
               </div>
             ))}

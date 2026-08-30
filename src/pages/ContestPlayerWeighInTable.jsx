@@ -605,24 +605,24 @@ const ContestPlayerWeighInTable = () => {
           ])
         );
 
-        // 🌟 사용자가 계측 명단에서 명시적으로 선택한 '무대 전광판 송출용 사진' 또는 신청서(YBBF) 지정 사진
+        // 🌟 사용자가 계측 명단에서 명시적으로 선택한 '무대 전광판 송출용 사진' (fp > p > 신청서 원본 순으로 절대 우선)
         const stage1 =
           filterValid(fp?.stagePhoto1) ||
+          filterValid(fp?.stagePhotoUrl1) ||
           filterValid(p?.stagePhoto1) ||
+          filterValid(p?.stagePhotoUrl1) ||
           (p.playerUid && invoiceStage1Map.get(p.playerUid)) ||
           invoiceStage1Map.get(nameKey) ||
           (trimmedName && invoiceStage1Map.get(trimmedName)) ||
-          filterValid(fp?.stagePhotoUrl1) ||
-          filterValid(p?.stagePhotoUrl1) ||
           "";
         const stage2 =
           filterValid(fp?.stagePhoto2) ||
+          filterValid(fp?.stagePhotoUrl2) ||
           filterValid(p?.stagePhoto2) ||
+          filterValid(p?.stagePhotoUrl2) ||
           (p.playerUid && invoiceStage2Map.get(p.playerUid)) ||
           invoiceStage2Map.get(nameKey) ||
           (trimmedName && invoiceStage2Map.get(trimmedName)) ||
-          filterValid(fp?.stagePhotoUrl2) ||
-          filterValid(p?.stagePhotoUrl2) ||
           "";
 
         const designatedStagePhoto =
@@ -696,7 +696,7 @@ const ContestPlayerWeighInTable = () => {
   };
 
   // 📡 [다중 계측대 실시간 Live-Sync 리스너]
-  // 계측대 1에서 저장 시, 계측대 2 및 모든 화면에서 자동으로 신장/체중/월체/불참이 실시간 자동 업데이트!
+  // 계측대 1에서 저장 시, 계측대 2 및 모든 화면에서 자동으로 신장/체중/월체/불참/무대사진이 실시간 자동 업데이트!
   useEffect(() => {
     const assignDocId = currentContest?.contests?.contestPlayersAssignId;
     if (!assignDocId) return;
@@ -737,6 +737,15 @@ const ContestPlayerWeighInTable = () => {
                       contestGradeTitle: rp.contestGradeTitle || localP.contestGradeTitle,
                       playerNumber: Number(rp.playerNumber) || localP.playerNumber,
                       playerIndex: Number(rp.playerIndex) || localP.playerIndex,
+                      stagePhoto1: rp.stagePhoto1 !== undefined ? rp.stagePhoto1 : localP.stagePhoto1,
+                      stagePhoto2: rp.stagePhoto2 !== undefined ? rp.stagePhoto2 : localP.stagePhoto2,
+                      stagePhotoUrl1: rp.stagePhotoUrl1 !== undefined ? rp.stagePhotoUrl1 : localP.stagePhotoUrl1,
+                      stagePhotoUrl2: rp.stagePhotoUrl2 !== undefined ? rp.stagePhotoUrl2 : localP.stagePhotoUrl2,
+                      stagePhotoUrl: rp.stagePhotoUrl || localP.stagePhotoUrl,
+                      profileImageUrl: rp.profileImageUrl || localP.profileImageUrl,
+                      photoUrl: rp.photoUrl || localP.photoUrl,
+                      playerPhoto: rp.playerPhoto || localP.playerPhoto,
+                      photos: rp.photos && rp.photos.length > 0 ? rp.photos : localP.photos,
                     };
                   }
                 }
@@ -1049,6 +1058,11 @@ const ContestPlayerWeighInTable = () => {
 
     const currentPhotos = extractPlayerPhotos(targetPlayer);
     const targetKey = getPlayerEntryKey(targetPlayer);
+    const contestId =
+      currentContest?.contests?.id ||
+      currentContest?.contestInfo?.id ||
+      currentContest?.id ||
+      "";
 
     // 1. playersArray 업데이트 (동일 선수의 모든 출전 체급에 슬롯1, 2 동기화)
     const updatedList = playersArray.map((p) => {
@@ -1093,31 +1107,137 @@ const ContestPlayerWeighInTable = () => {
         : null
     );
 
-    // 2. Firestore 직접 updateDoc으로 즉시 영구 저장!
+    // 2. Firestore 직접 updateDoc으로 final, assign, contest_entrys_list, invoices_pool에 즉시 영구 저장!
     try {
       const assignId = currentContest?.contests?.contestPlayersAssignId;
       const finalId = currentContest?.contests?.contestPlayersFinalId;
       const sanitizedList = sanitizeDataForFirestore(updatedList);
+      const updatePromises = [];
+
+      // final 문서 업데이트
       if (finalId) {
-        await updateDoc(doc(db, "contest_players_final", finalId), {
-          players: sanitizedList,
-          updatedAt: new Date().toISOString(),
-        });
+        updatePromises.push(
+          updateDoc(doc(db, "contest_players_final", finalId), {
+            players: sanitizedList,
+            updatedAt: new Date().toISOString(),
+          })
+        );
       }
+      // assign 문서 업데이트
       if (assignId) {
-        await updateDoc(doc(db, "contest_players_assign", assignId), {
-          players: sanitizedList,
-          updatedAt: new Date().toISOString(),
-        });
+        updatePromises.push(
+          updateDoc(doc(db, "contest_players_assign", assignId), {
+            players: sanitizedList,
+            updatedAt: new Date().toISOString(),
+          })
+        );
       }
-      console.log("무대 사진 슬롯 DB 저장 완료:", { stage1, stage2 });
+
+      // 3. 참가신청서 원본(contest_entrys_list & invoices_pool)에도 stagePhoto1, stagePhoto2 영구 동기화
+      if (contestId && targetPlayer.playerName) {
+        try {
+          const entryQueryCondition = targetPlayer.playerUid
+            ? [where("contestId", "==", contestId), where("playerUid", "==", targetPlayer.playerUid)]
+            : [where("contestId", "==", contestId), where("playerName", "==", targetPlayer.playerName)];
+          
+          const entrySnap = await getDocs(query(collection(db, "contest_entrys_list"), ...entryQueryCondition));
+          entrySnap.forEach((entryDoc) => {
+            updatePromises.push(
+              updateDoc(doc(db, "contest_entrys_list", entryDoc.id), {
+                stagePhoto1: stage1,
+                stagePhoto2: stage2,
+                stagePhotoUrl1: stage1,
+                stagePhotoUrl2: stage2,
+                stagePhotoUrl: primaryStage,
+                profileImageUrl: primaryStage,
+                selectedPhotoUrls: [stage1, stage2].filter(Boolean),
+                updatedAt: new Date().toISOString(),
+              })
+            );
+          });
+
+          // invoices_pool도 함께 동기화
+          const invSnap = await getDocs(query(collection(db, "invoices_pool"), ...entryQueryCondition));
+          invSnap.forEach((invDoc) => {
+            updatePromises.push(
+              updateDoc(doc(db, "invoices_pool", invDoc.id), {
+                stagePhoto1: stage1,
+                stagePhoto2: stage2,
+                stagePhotoUrl1: stage1,
+                stagePhotoUrl2: stage2,
+                stagePhotoUrl: primaryStage,
+                profileImageUrl: primaryStage,
+                selectedPhotoUrls: [stage1, stage2].filter(Boolean),
+                updatedAt: new Date().toISOString(),
+              })
+            );
+          });
+        } catch (entryErr) {
+          console.warn("신청서 원본 사진 동기화 실패(무시가능):", entryErr);
+        }
+      }
+
+      await Promise.all(updatePromises);
+      console.log("무대 사진 슬롯 전체 DB 영구 저장 완료:", { stage1, stage2 });
     } catch (e) {
       console.error("무대 사진 슬롯 DB 저장 실패:", e);
       antMessage.error("DB 저장 중 오류가 발생했습니다.");
     }
   };
 
-  /** 📺 갤러리 사진 클릭 시 무대 사진 1, 2 슬롯에 순차 배치 (이미 차있는 경우 덮어쓰지 않고 경고) */
+  /** 🎯 특정 슬롯(1번 또는 2번)에 사진 직접 지정 및 DB 즉시 저장 */
+  const handleSetStageSlot = async (slotNumber, imgUrl) => {
+    if (!photoModalPlayer || !imgUrl) return;
+
+    const currentStage1 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) && photoModalPlayer.stagePhoto1) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) && photoModalPlayer.stagePhotoUrl1) ||
+      "";
+    const currentStage2 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) && photoModalPlayer.stagePhoto2) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
+      "";
+
+    let nextStage1 = currentStage1;
+    let nextStage2 = currentStage2;
+
+    if (slotNumber === 1) {
+      nextStage1 = imgUrl;
+      // 만약 2번에 같은 사진이 있었다면 2번은 비워줌 (중복 방지)
+      if (nextStage2 === imgUrl) nextStage2 = "";
+    } else if (slotNumber === 2) {
+      nextStage2 = imgUrl;
+      // 만약 1번에 같은 사진이 있었다면 1번은 비워줌 (중복 방지)
+      if (nextStage1 === imgUrl) nextStage1 = "";
+    }
+
+    await persistPlayerStageSlots(photoModalPlayer, nextStage1, nextStage2);
+    antMessage.success(`[무대용 사진 ${slotNumber}번]으로 지정 및 저장되었습니다! ✓`);
+  };
+
+  /** 🔄 1번 사진과 2번 사진 순서 맞바꾸기(Swap) */
+  const handleSwapStageSlots = async () => {
+    if (!photoModalPlayer) return;
+
+    const currentStage1 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) && photoModalPlayer.stagePhoto1) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) && photoModalPlayer.stagePhotoUrl1) ||
+      "";
+    const currentStage2 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) && photoModalPlayer.stagePhoto2) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
+      "";
+
+    if (!currentStage1 && !currentStage2) {
+      antMessage.info("교체할 무대 사진이 없습니다.");
+      return;
+    }
+
+    await persistPlayerStageSlots(photoModalPlayer, currentStage2, currentStage1);
+    antMessage.success("1번 사진과 2번 사진의 순서가 변경 및 저장되었습니다! ⇄");
+  };
+
+  /** 📺 갤러리 사진 클릭 시 빈 슬롯에 자동 순차 배치 */
   const handleAssignStageSlot = async (imgUrl) => {
     if (!photoModalPlayer || !imgUrl) return;
 
@@ -1130,25 +1250,13 @@ const ContestPlayerWeighInTable = () => {
       (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
       "";
 
-    if (currentStage1 === imgUrl) {
-      antMessage.info("이미 [무대용 사진 1]에 등록된 사진입니다.");
-      return;
-    }
-    if (currentStage2 === imgUrl) {
-      antMessage.info("이미 [무대용 사진 2]에 등록된 사진입니다.");
-      return;
-    }
-
     if (!currentStage1) {
-      await persistPlayerStageSlots(photoModalPlayer, imgUrl, currentStage2);
-      antMessage.success("[무대용 사진 1]에 등록 및 DB 저장이 완료되었습니다!");
+      await handleSetStageSlot(1, imgUrl);
     } else if (!currentStage2) {
-      await persistPlayerStageSlots(photoModalPlayer, currentStage1, imgUrl);
-      antMessage.success("[무대용 사진 2]에 등록 및 DB 저장이 완료되었습니다!");
+      await handleSetStageSlot(2, imgUrl);
     } else {
-      antMessage.warning(
-        "무대용 사진 1, 2가 모두 등록되어 있습니다. 변경하시려면 기존 슬롯의 [비우기] 버튼을 누른 후 다시 선택해 주세요."
-      );
+      // 둘 다 차있는 경우 1번 사진을 새 사진으로 교체
+      await handleSetStageSlot(1, imgUrl);
     }
   };
 
@@ -1172,6 +1280,26 @@ const ContestPlayerWeighInTable = () => {
       await persistPlayerStageSlots(photoModalPlayer, currentStage1, "");
       antMessage.info("[무대용 사진 2] 슬롯이 비워졌습니다.");
     }
+  };
+
+  /** 💾 모달 내 [무대 송출 사진 확정 저장] 버튼 클릭 핸들러 (전체 DB 문서에 100% 확실히 확정 저장!) */
+  const handleConfirmSavePhotoModal = async () => {
+    if (!photoModalPlayer) return;
+    const stage1 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) && photoModalPlayer.stagePhoto1) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) && photoModalPlayer.stagePhotoUrl1) ||
+      "";
+    const stage2 =
+      (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) && photoModalPlayer.stagePhoto2) ||
+      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
+      "";
+
+    await persistPlayerStageSlots(photoModalPlayer, stage1, stage2);
+    antMessage.success(
+      `[#${photoModalPlayer.playerNumber || ""} ${photoModalPlayer.playerName}] 선수의 무대 사진(1번: ${stage1 ? "등록됨" : "미등록"}, 2번: ${stage2 ? "등록됨" : "미등록"})이 안전하게 최종 저장되었습니다! ✓`
+    );
+    setPhotoModalOpen(false);
+    setPhotoModalPlayer(null);
   };
 
   /** 📸 신청서 원본 및 엔트리에서 순수 선수 사진만 재추출하여 포스터/오류 사진을 정리하고 DB에 갱신 */
@@ -2075,16 +2203,22 @@ const ContestPlayerWeighInTable = () => {
 
                   {/* 📺 1. 무대용 사진 1, 2 슬롯 섹션 */}
                   <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-amber-400 font-black text-sm flex items-center gap-1.5">
                           <span className="animate-pulse">📺</span>
                           <span>무대 공식 송출용 지정 사진 (슬롯 1, 슬롯 2)</span>
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-400 font-medium">
-                        * 하단 갤러리에서 사진 클릭 시 빈 슬롯에 자동 배치
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSwapStageSlots}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 text-xs font-black border border-amber-500/40 cursor-pointer transition-all active:scale-95"
+                        >
+                          <span>⇄ 1번 ↔ 2번 맞바꾸기</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -2093,7 +2227,7 @@ const ContestPlayerWeighInTable = () => {
                         <div className="flex items-center justify-between px-1">
                           <span className="text-xs font-black text-amber-300 flex items-center gap-1">
                             <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
-                            <span>무대용 사진 1 (메인)</span>
+                            <span>무대용 사진 1 (전면 메인)</span>
                           </span>
                           {stage1 && (
                             <button
@@ -2115,7 +2249,7 @@ const ContestPlayerWeighInTable = () => {
                             />
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent py-1 text-center">
                               <span className="text-amber-300 text-[11px] font-black">
-                                ★ 1번 메인 송출용
+                                ★ 1번 전면 메인 송출용 (저장됨 ✓)
                               </span>
                             </div>
                           </div>
@@ -2126,7 +2260,7 @@ const ContestPlayerWeighInTable = () => {
                               [무대용 사진 1] 비어있음
                             </span>
                             <span className="text-[11px] text-slate-400">
-                              하단 갤러리에서 사진을 선택하세요
+                              하단 갤러리에서 [1번 지정] 버튼을 누르세요
                             </span>
                           </div>
                         )}
@@ -2137,7 +2271,7 @@ const ContestPlayerWeighInTable = () => {
                         <div className="flex items-center justify-between px-1">
                           <span className="text-xs font-black text-emerald-300 flex items-center gap-1">
                             <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
-                            <span>무대용 사진 2 (서브/교차)</span>
+                            <span>무대용 사진 2 (배경 와이드)</span>
                           </span>
                           {stage2 && (
                             <button
@@ -2159,7 +2293,7 @@ const ContestPlayerWeighInTable = () => {
                             />
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent py-1 text-center">
                               <span className="text-emerald-300 text-[11px] font-black">
-                                ★ 2번 서브 송출용
+                                ★ 2번 배경 와이드 송출용 (저장됨 ✓)
                               </span>
                             </div>
                           </div>
@@ -2170,7 +2304,7 @@ const ContestPlayerWeighInTable = () => {
                               [무대용 사진 2] 비어있음
                             </span>
                             <span className="text-[11px] text-slate-400">
-                              하단 갤러리에서 사진을 선택하세요
+                              하단 갤러리에서 [2번 지정] 버튼을 누르세요
                             </span>
                           </div>
                         )}
@@ -2191,54 +2325,84 @@ const ContestPlayerWeighInTable = () => {
                     </div>
                   ) : (
                     <div>
-                      <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
-                        <span>
-                          선수 등록 사진 갤러리 ({photos.length}장)
+                      <div className="text-xs font-bold text-slate-700 mb-2.5 flex items-center justify-between">
+                        <span className="text-sm font-black text-slate-800">
+                          선수 등록 사진 갤러리 (총 {photos.length}장)
                         </span>
-                        <span className="text-[11px] text-slate-500 font-normal">
-                          사진을 클릭하면 빈 슬롯(1 ➜ 2)에 안전하게 등록됩니다
+                        <span className="text-xs text-blue-600 font-bold">
+                          💡 아래 [1번 지정] 또는 [2번 지정] 버튼을 누르면 즉시 DB에 저장됩니다!
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto p-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-72 overflow-y-auto p-1">
                         {photos.map((imgUrl, i) => {
                           const isSlot1 = imgUrl === stage1;
                           const isSlot2 = imgUrl === stage2;
-                          const isAssigned = isSlot1 || isSlot2;
 
                           return (
                             <div
                               key={i}
-                              onClick={() => handleAssignStageSlot(imgUrl)}
-                              className={`relative rounded-xl border-2 overflow-hidden transition-all group cursor-pointer ${
+                              className={`flex flex-col rounded-2xl border-2 overflow-hidden transition-all bg-white shadow-sm ${
                                 isSlot1
-                                  ? "border-amber-400 ring-2 ring-amber-300 shadow-md scale-[1.02]"
+                                  ? "border-amber-400 ring-4 ring-amber-200/80 shadow-md"
                                   : isSlot2
-                                  ? "border-emerald-400 ring-2 ring-emerald-300 shadow-md scale-[1.02]"
-                                  : "border-slate-200 hover:border-blue-400 hover:shadow"
+                                  ? "border-emerald-400 ring-4 ring-emerald-200/80 shadow-md"
+                                  : "border-slate-200 hover:border-slate-300"
                               }`}
                             >
-                              <img
-                                src={imgUrl}
-                                alt={`사진 ${i + 1}`}
-                                className="w-full h-24 object-cover"
-                              />
+                              <div
+                                onClick={() => handleAssignStageSlot(imgUrl)}
+                                className="relative h-28 bg-slate-900 cursor-pointer group flex items-center justify-center overflow-hidden"
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`사진 ${i + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                />
 
-                              {isSlot1 && (
-                                <div className="absolute inset-x-0 bottom-0 bg-amber-500 text-slate-950 text-[10px] font-black text-center py-0.5 shadow">
-                                  ★ 무대 1번 등록됨
-                                </div>
-                              )}
-                              {isSlot2 && (
-                                <div className="absolute inset-x-0 bottom-0 bg-emerald-500 text-slate-950 text-[10px] font-black text-center py-0.5 shadow">
-                                  ★ 무대 2번 등록됨
-                                </div>
-                              )}
-                              {!isAssigned && (
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-black text-white transition-opacity text-center px-1">
-                                  {!stage1 ? "무대 1번에 등록" : !stage2 ? "무대 2번에 등록" : "슬롯 가득참 (비우기 필요)"}
-                                </div>
-                              )}
+                                {isSlot1 && (
+                                  <div className="absolute top-1.5 left-1.5 bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow border border-white">
+                                    ★ 1번 등록됨
+                                  </div>
+                                )}
+                                {isSlot2 && (
+                                  <div className="absolute top-1.5 left-1.5 bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow border border-white">
+                                    ★ 2번 등록됨
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 🔘 1번 / 2번 직접 지정 원터치 버튼 */}
+                              <div className="grid grid-cols-2 gap-1 p-1.5 bg-slate-50 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetStageSlot(1, imgUrl);
+                                  }}
+                                  className={`py-1 px-1 rounded-lg text-xs font-black transition-all cursor-pointer border-0 active:scale-95 ${
+                                    isSlot1
+                                      ? "bg-amber-500 text-slate-950 shadow-sm"
+                                      : "bg-amber-100 hover:bg-amber-200 text-amber-900"
+                                  }`}
+                                >
+                                  {isSlot1 ? "1번 완료✓" : "1번 지정"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetStageSlot(2, imgUrl);
+                                  }}
+                                  className={`py-1 px-1 rounded-lg text-xs font-black transition-all cursor-pointer border-0 active:scale-95 ${
+                                    isSlot2
+                                      ? "bg-emerald-600 text-white shadow-sm"
+                                      : "bg-emerald-100 hover:bg-emerald-200 text-emerald-900"
+                                  }`}
+                                >
+                                  {isSlot2 ? "2번 완료✓" : "2번 지정"}
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -2246,17 +2410,30 @@ const ContestPlayerWeighInTable = () => {
                     </div>
                   )}
 
-                  <div className="text-center pt-2">
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        setPhotoModalOpen(false);
-                        setPhotoModalPlayer(null);
-                      }}
-                      className="rounded-xl px-8 font-bold bg-slate-900 hover:bg-slate-800"
-                    >
-                      닫기
-                    </Button>
+                  {/* 💾 하단 액션 버튼 바: [취소] 및 [무대 송출 사진 확정 저장] */}
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
+                    <div className="text-xs text-slate-500 font-semibold">
+                      선택된 1번/2번 사진이 무대 전광판 및 시상식 화면에 그대로 자동 송출됩니다.
+                    </div>
+                    <div className="flex items-center gap-2.5 ml-auto">
+                      <Button
+                        onClick={() => {
+                          setPhotoModalOpen(false);
+                          setPhotoModalPlayer(null);
+                        }}
+                        className="rounded-xl px-4 font-bold h-11 text-slate-600 border-slate-300 hover:bg-slate-50"
+                      >
+                        닫기
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmSavePhotoModal}
+                        className="inline-flex items-center justify-center gap-2 px-6 h-11 rounded-xl font-black text-sm text-white bg-blue-600 hover:bg-blue-500 active:scale-95 shadow-md hover:shadow-lg transition-all cursor-pointer border-0"
+                      >
+                        <SaveOutlined className="text-base" />
+                        <span>💾 무대 송출 사진 확정 저장</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

@@ -44,7 +44,8 @@ import {
   AppstoreOutlined,
   CalendarOutlined,
 } from "@ant-design/icons";
-import { where } from "firebase/firestore";
+import { where, doc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 
 const { Title, Text } = Typography;
 
@@ -195,6 +196,34 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       setIsLoading(false);
     }
   };
+
+  // 📡 [계측 파이널 및 사진 변경 실시간 Live-Sync 리스너]
+  // 계측대에서 무대 사진(1번, 2번)이나 선수 정보를 변경하면 본부석에서도 즉시 실시간 동기화!
+  useEffect(() => {
+    const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+    if (!finalDocId) return;
+
+    const unsub = onSnapshot(
+      doc(db, "contest_players_final", finalDocId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const remoteData = docSnap.data();
+          const remotePlayers = remoteData?.players || [];
+          if (remotePlayers.length > 0) {
+            const cleanList = remotePlayers
+              .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
+              .filter((f) => f.playerNoShow === false);
+            setPlayersArray(cleanList);
+          }
+        }
+      },
+      (err) => {
+        console.warn("[Basecamp] contest_players_final 실시간 리스너 오류:", err);
+      }
+    );
+
+    return () => unsub();
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
     const condition = [where("gradeId", "==", gradeId)];

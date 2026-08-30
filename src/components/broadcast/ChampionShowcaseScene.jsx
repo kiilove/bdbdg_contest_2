@@ -8,7 +8,8 @@ import {
   ThunderboltOutlined,
   FieldTimeOutlined,
 } from "@ant-design/icons";
-import { where } from "firebase/firestore";
+import { where, doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import { LaurelBranch } from "./LaurelWreathWings";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
@@ -32,30 +33,30 @@ const ChampionShowcaseScene = ({
   const fetchResultQuery = useFirestoreQuery();
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록에서 사진/이름/소속 실시간 조회 (누락 100% 방지)
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진/이름/소속 실시간 조회 (누락 100% 방지)
   const [realPlayersMap, setRealPlayersMap] = useState({});
 
   useEffect(() => {
     const fetchRealPlayers = async () => {
-      const cId = currentContest?.contests?.id || currentContest?.contestInfo?.id;
-      if (!cId) return;
+      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+      if (!finalDocId) return;
       try {
-        const condition = [where("contestId", "==", cId)];
-        const data = await fetchResultQuery.getDocuments("contest_players", condition);
-        if (data && data.length > 0) {
+        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+        if (snap.exists()) {
+          const players = snap.data()?.players || [];
           const map = {};
-          data.forEach((p) => {
+          players.forEach((p) => {
             if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
             if (p.playerName) map[String(p.playerName).trim()] = p;
           });
           setRealPlayersMap(map);
         }
       } catch (e) {
-        console.error("선수 데이터 로드 실패:", e);
+        console.error("챔피언 선수 데이터 로드 실패:", e);
       }
     };
     fetchRealPlayers();
-  }, [currentContest?.contests?.id, currentContest?.contestInfo?.id]);
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const rawPNum = topPlayer?.playerNumber || "";
   const rawPName = topPlayer?.playerName || "";
@@ -307,7 +308,7 @@ const ChampionShowcaseScene = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden select-none"
+      className="relative w-screen h-screen bg-transparent text-white flex flex-col justify-between p-4 sm:p-6 overflow-hidden select-none"
     >
       {/* ⚡ [Layer 40: 순간 충격파 플래시] */}
       <div ref={flashRef} className="absolute inset-0 z-40 pointer-events-none bg-white opacity-0" />
@@ -349,20 +350,20 @@ const ChampionShowcaseScene = ({
       </div>
 
       {/* ======================= [ Layer 10: 메인 중앙 컨텐츠 영역 ] ======================= */}
-      <div className={`relative z-10 my-auto flex flex-col ${photoList.length > 0 ? "lg:flex-row items-center justify-between px-6 lg:px-16" : "items-center justify-center w-full max-w-5xl mx-auto px-6 text-center"} gap-8 w-full h-[calc(100vh-170px)] py-2`}>
+      <div className={`relative z-10 my-auto flex flex-col items-center justify-center px-4 gap-4 w-full h-[calc(100vh-170px)] py-2`}>
         
         {/* 좌측: 1위 챔피언 무대 사진 2장 슬라이더 (사진이 있을 때만 표출) */}
         {photoList.length > 0 && (
-          <div className="relative flex items-center justify-center h-full max-h-[82vh] w-full lg:w-1/2">
+          <div className="relative flex items-center justify-center h-full max-h-[45vh] w-full">
             
             {/* 거대한 CHAMPION 워터마크 */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white/[0.05] font-black text-[12rem] lg:text-[16rem] leading-none pointer-events-none select-none font-mono tracking-tighter">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white/[0.05] font-black text-[8rem] leading-none pointer-events-none select-none font-mono tracking-tighter">
               WINNER
             </div>
 
             {/* 림 라이트 글로우 */}
             <div
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full blur-[150px] pointer-events-none"
               style={{ backgroundColor: theme.glowRgba }}
             />
 
@@ -375,7 +376,7 @@ const ChampionShowcaseScene = ({
                     key={`champ-p-${pIdx}`}
                     src={photoUrl}
                     alt={`${playerName} - stage ${pIdx + 1}`}
-                    className={`absolute max-h-[80vh] w-auto object-contain hero-photo-flawless-mask drop-shadow-[0_30px_90px_rgba(0,0,0,0.98)] transition-opacity duration-700 ${
+                    className={`absolute max-h-[42vh] w-auto object-contain hero-photo-flawless-mask drop-shadow-[0_30px_90px_rgba(0,0,0,0.98)] transition-opacity duration-700 ${
                       isActive
                         ? "opacity-100 scale-100 z-10"
                         : "opacity-0 scale-100 z-0 pointer-events-none"
@@ -406,7 +407,7 @@ const ChampionShowcaseScene = ({
         )}
 
         {/* 1위 챔피언 프로필 정보 (완벽한 수직/수평 중앙 정렬) */}
-        <div className={`space-y-6 sm:space-y-8 w-full z-10 ${photoList.length > 0 ? "text-center lg:text-left lg:w-1/2" : "text-center mx-auto max-w-4xl"} flex flex-col items-center justify-center`}>
+        <div className={`space-y-6 sm:space-y-8 w-full z-10 text-center flex flex-col items-center justify-center`}>
           
           {/* ① 배부번호 & 출전 종목/체급 바 (중앙 정렬) */}
           <div className="champ-no-badge inline-flex items-center justify-center gap-4">
@@ -431,7 +432,7 @@ const ChampionShowcaseScene = ({
             <LaurelBranch side="left" />
 
             {/* 초대형 성명 */}
-            <div className="text-7xl sm:text-8xl lg:text-9xl font-black tracking-tighter leading-none m-0 uppercase bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_20px_60px_rgba(251,191,36,0.65)] whitespace-nowrap">
+            <div className="text-5xl sm:text-6xl font-black tracking-tighter leading-none m-0 uppercase bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_20px_60px_rgba(251,191,36,0.65)] whitespace-nowrap">
               {playerName}
             </div>
 
@@ -442,7 +443,7 @@ const ChampionShowcaseScene = ({
           <div className="champ-gym-badge pt-1 flex justify-center w-full">
             <div className="inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-2xl bg-slate-950/95 border border-white/20 shadow-2xl">
               <TrophyOutlined className={`${theme.primary} text-2xl sm:text-3xl`} />
-              <span className="text-2xl sm:text-3xl lg:text-4xl font-black text-white">
+              <span className="text-xl sm:text-2xl font-black text-white">
                 소속 : <span className={theme.primary}>{playerGym}</span>
               </span>
             </div>

@@ -11,9 +11,9 @@ import {
   useFirestoreUpdateData,
   useFirestoreAddData,
 } from "../../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { where, doc, getDoc } from "firebase/firestore";
 import { extractPlayerPhotos, isNonPlayerUrl } from "../../pages/ContestPlayerWeighInTable";
-import { storage } from "../../firebase";
+import { storage, db } from "../../firebase";
 import {
   ref as storageRef,
   uploadBytesResumable,
@@ -363,18 +363,41 @@ const StageBroadcastController = ({
     }
   };
 
-  // 2. 실시간 선수 전체 화면 스포트라이트 송출 (계측에서 지정한 무대용 사진 stagePhotoUrl 100% 우선 송출)
+  // 2. 실시간 선수 전체 화면 스포트라이트 송출 (계측에서 지정한 무대용 사진 stagePhotoUrl 100% 최신 상태로 즉시 조회하여 송출)
   const handleIntroPlayer = async (player) => {
     if (!contestId || !player) return;
     try {
-      const resolvedPhotos = getPlayerResolvedPhotos(player);
+      // 🌟 contest_players_final에서 최신 선수 사진 데이터를 즉시 조회하여 보장
+      let latestPlayer = player;
+      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+      if (finalDocId) {
+        try {
+          const finalSnap = await getDoc(doc(db, "contest_players_final", finalDocId));
+          if (finalSnap.exists()) {
+            const finalPlayers = finalSnap.data()?.players || [];
+            const matched = finalPlayers.find(
+              (fp) =>
+                (fp.playerUid && player.playerUid && fp.playerUid === player.playerUid && fp.contestCategoryId === player.contestCategoryId) ||
+                (fp.playerNumber && player.playerNumber && String(fp.playerNumber) === String(player.playerNumber) && fp.contestCategoryId === player.contestCategoryId) ||
+                (fp.playerName === player.playerName && String(fp.playerNumber) === String(player.playerNumber))
+            );
+            if (matched) {
+              latestPlayer = { ...player, ...matched };
+            }
+          }
+        } catch (fErr) {
+          console.warn("선수 소개 시 최신 final 조회 실패(기존 데이터 사용):", fErr);
+        }
+      }
+
+      const resolvedPhotos = getPlayerResolvedPhotos(latestPlayer);
       let stage1 =
-        (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) ||
-        (!isNonPlayerUrl(player.stagePhotoUrl1) && player.stagePhotoUrl1) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhoto1) && latestPlayer.stagePhoto1) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl1) && latestPlayer.stagePhotoUrl1) ||
         "";
       let stage2 =
-        (!isNonPlayerUrl(player.stagePhoto2) && player.stagePhoto2) ||
-        (!isNonPlayerUrl(player.stagePhotoUrl2) && player.stagePhotoUrl2) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhoto2) && latestPlayer.stagePhoto2) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl2) && latestPlayer.stagePhotoUrl2) ||
         "";
 
       if (!stage1 && resolvedPhotos.length > 0) stage1 = resolvedPhotos[0];
@@ -383,8 +406,8 @@ const StageBroadcastController = ({
       const designatedStagePhoto =
         stage1 ||
         stage2 ||
-        (!isNonPlayerUrl(player.stagePhotoUrl) && player.stagePhotoUrl) ||
-        (!isNonPlayerUrl(player.profileImageUrl) && player.profileImageUrl) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl) && latestPlayer.stagePhotoUrl) ||
+        (!isNonPlayerUrl(latestPlayer.profileImageUrl) && latestPlayer.profileImageUrl) ||
         resolvedPhotos[0] ||
         "";
 
@@ -392,22 +415,22 @@ const StageBroadcastController = ({
         mode: "ATHLETE_INTRO",
         contestTitle: realContestTitle,
         activePlayer: {
-          playerNumber: player.playerNumber,
-          playerName: player.playerName,
-          playerGym: player.playerGym || "",
+          playerNumber: latestPlayer.playerNumber,
+          playerName: latestPlayer.playerName,
+          playerGym: latestPlayer.playerGym || "",
           heightWeight:
-            player.heightWeight ||
-            (player.playerHeight && player.playerWeight
-              ? `${player.playerHeight} / ${player.playerWeight}`
+            latestPlayer.heightWeight ||
+            (latestPlayer.playerHeight && latestPlayer.playerWeight
+              ? `${latestPlayer.playerHeight} / ${latestPlayer.playerWeight}`
               : "") ||
             "",
-          playerHeight: player.playerHeight || player.height || "",
-          playerWeight: player.playerWeight || player.weight || "",
+          playerHeight: latestPlayer.playerHeight || latestPlayer.height || "",
+          playerWeight: latestPlayer.playerWeight || latestPlayer.weight || "",
           stagePhoto1: stage1,
           stagePhoto2: stage2,
           stagePhotoUrl1: stage1,
           stagePhotoUrl2: stage2,
-          backgroundPhotoUrl: stage2 || player.backgroundPhotoUrl || "",
+          backgroundPhotoUrl: stage2 || latestPlayer.backgroundPhotoUrl || "",
           stagePhotoUrl: designatedStagePhoto,
           profileImageUrl: designatedStagePhoto,
           photos: resolvedPhotos,
@@ -424,7 +447,7 @@ const StageBroadcastController = ({
         ...payload,
         targetContestId: contestId,
       });
-      message.success(`${player.playerNumber}번 ${player.playerName} 선수 전체화면 소개 송출!`);
+      message.success(`${latestPlayer.playerNumber}번 ${latestPlayer.playerName} 선수 전체화면 소개 송출!`);
     } catch (error) {
       console.error("선수 소개 송출 오류:", error);
     }
