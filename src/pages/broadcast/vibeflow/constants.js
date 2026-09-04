@@ -59,10 +59,18 @@ export const extractGender = (text = "", explicitGender = "") => {
  */
 export const normalizeCategory = (name = "") => {
   if (!name || typeof name !== "string") return "";
-  return name
+  let cleaned = name
     .toLowerCase()
     .replace(/\s+/g, "")
-    .replace(/(여자|여성|우먼|우먼스|남자|남성|맨즈|일반부|마스터즈|학생부|클래스)/g, "");
+    .replace(/[()[\]{}_-]/g, "") // 괄호 및 특수문자 제거
+    .replace(/(여자|여성|우먼|우먼스|남자|남성|맨즈|일반부|마스터즈|학생부|고등부|중등부|대학부|청소년부|클래스|18세이하|19세이하)/g, "");
+
+  // "남자일반부", "일반부", "마스터즈", "18세이하" 처럼 종목명이 생략된 경우 보디빌딩 대회의 관례상 "보디빌딩"으로 추론
+  if (!cleaned && /(남자|남성|일반부|마스터즈|학생부|18세|장년부|그랑프리)/.test(name)) {
+    return "보디빌딩";
+  }
+
+  return cleaned;
 };
 
 /**
@@ -129,11 +137,12 @@ export const isCategoryMatched = (
   const SYNONYM_GROUPS = [
     ["비키니", "모던키니", "모노키니", "보디피트니스", "바디피트니스", "bodyfitness", "bikini"],
     ["피지크", "머슬", "physique"],
-    ["보디빌딩", "바디빌딩", "보디빌더", "bodybuilding"],
-    ["스포츠모델", "청바지모델", "청바지", "바디핏", "스포츠", "피트니스모델", "sportsmodel", "jean", "jeans"],
+    ["보디빌딩", "바디빌딩", "보디빌더", "bodybuilding", "클래식보디빌딩"],
+    ["스포츠모델", "청바지모델", "청바지", "바디핏", "스포츠", "피트니스모델", "sportsmodel", "jean", "jeans", "핏모델"],
     ["클래식피지크", "classicphysique"],
     ["클래식보디빌딩", "classicbodybuilding"],
     ["피규어", "figure"],
+    ["피트니스챌린지", "피트니스", "fitness", "챌린지", "challenge"],
     ["애슬레틱", "어슬레틱", "athletic"],
   ];
 

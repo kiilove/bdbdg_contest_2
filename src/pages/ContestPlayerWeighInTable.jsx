@@ -1588,7 +1588,7 @@ const ContestPlayerWeighInTable = () => {
     const finalId = currentContest?.contests?.contestPlayersFinalId;
 
     if (!assignId) {
-      antMessage.error("선수 번호 배정 문서(Assign) ID를 찾을 수 없습니다.");
+      antMessage.error("관련 문서를 확인할 수 없습니다. 다시 로그인하시면 해결될 수 있습니다.");
       return;
     }
 

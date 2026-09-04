@@ -4,6 +4,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import LoadingPage from "./LoadingPage";
 import { TfiWrite } from "react-icons/tfi";
 import {
+  useFirestoreAddData,
   useFirestoreGetDocument,
   useFirestoreQuery,
   useFirestoreUpdateData,
@@ -13,6 +14,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { TbWorldWww } from "react-icons/tb";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
 import { Button, Card, Space, Tag, Checkbox, Alert, Divider, Popconfirm } from "antd";
 import {
   SaveOutlined,
@@ -43,6 +45,7 @@ const ContestPlayerOrderTable = () => {
 
   // ✅ 개별 항목 선택 상태 (행 단위: mIdx:pIdx:playerUid)
   const [selectedEntries, setSelectedEntries] = useState(new Set());
+  const [healthModalOpen, setHealthModalOpen] = useState(false);
 
   const { currentContest } = useContext(CurrentContestContext);
 
@@ -102,10 +105,12 @@ const ContestPlayerOrderTable = () => {
       }
 
       // 그레이드
-      const returnGrades = await fetchGradeDocument.getDocument(
-        currentContest.contests.contestGradesListId
-      );
-      setGradesArray([...(returnGrades?.grades || [])]);
+      if (currentContest.contests.contestGradesListId) {
+        const returnGrades = await fetchGradeDocument.getDocument(
+          currentContest.contests.contestGradesListId
+        );
+        setGradesArray([...(returnGrades?.grades || [])]);
+      }
 
       // 엔트리
       const condition = [where("contestId", "==", currentContest.contests.id)];
@@ -116,10 +121,12 @@ const ContestPlayerOrderTable = () => {
       setEntrysArray([...(returnEntrys || [])]);
 
       // assign (저장본)
-      const returnPlayersAssign = await fetchPlayersAssignDocument.getDocument(
-        currentContest.contests.contestPlayersAssignId
-      );
-      setPlayersAssign({ ...(returnPlayersAssign || {}) });
+      if (currentContest.contests.contestPlayersAssignId) {
+        const returnPlayersAssign = await fetchPlayersAssignDocument.getDocument(
+          currentContest.contests.contestPlayersAssignId
+        );
+        setPlayersAssign({ ...(returnPlayersAssign || {}) });
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -358,30 +365,62 @@ const ContestPlayerOrderTable = () => {
     }
   };
 
-  // 저장은 assign만
+  // 저장은 assign + final 동기화
   const handleUpdatePlayersAssign = async (assignId) => {
+    const targetAssignId =
+      assignId || currentContest?.contests?.contestPlayersAssignId;
+
+    if (!targetAssignId) {
+      setMessage({
+        body: "관련 문서를 확인할 수 없습니다. 다시 로그인하시면 해결될 수 있습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+      return;
+    }
+
     const allPlayers = matchedArray.flatMap((m) => m.matchedPlayers || []);
-    const newPlayersAssign = { ...playersAssign, players: [...allPlayers] };
+    const newPlayersAssign = {
+      contestId: currentContest?.contests?.id,
+      ...playersAssign,
+      players: [...allPlayers],
+    };
 
     try {
-      await updatePlayersAssign.updateData(assignId, newPlayersAssign);
+      setIsLoading(true);
+      await updatePlayersAssign.updateData(targetAssignId, newPlayersAssign);
+
+      // 계측 명단 contest_players_final도 함께 동기화
+      const targetFinalId = currentContest?.contests?.contestPlayersFinalId;
+      if (targetFinalId) {
+        await updatePlayersFinal.updateData(targetFinalId, {
+          contestId: currentContest?.contests?.id,
+          players: [...allPlayers],
+        });
+      }
+
+      setPlayersAssign({ ...newPlayersAssign, id: targetAssignId });
+
       const hasDup = Object.keys(duplicatesMap).length > 0;
       setMessage({
         body: hasDup
           ? "저장되었습니다. (중복 플레이어가 남아있습니다)"
-          : "저장되었습니다.",
+          : "계측명단(선수 배정)이 성공적으로 저장되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
       setMsgOpen(true);
     } catch (error) {
-      console.log(error);
+      console.error("선수 배정 저장 에러:", error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다.",
+        body: "저장 중 오류가 발생했습니다: " + (error?.message || ""),
         isButton: true,
         confirmButtonText: "확인",
       });
       setMsgOpen(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -622,6 +661,32 @@ const ContestPlayerOrderTable = () => {
             onCancel={() => setMsgOpen(false)}
             onConfirm={() => setMsgOpen(false)}
           />
+
+          <ContestHealthCheckModal
+            isOpen={healthModalOpen}
+            onClose={() => setHealthModalOpen(false)}
+          />
+
+          {!currentContest?.contests?.contestPlayersAssignId && (
+            <Alert
+              type="warning"
+              showIcon
+              message="관련 문서를 확인할 수 없습니다."
+              description="대회 필수 데이터 구조가 아직 생성되지 않았거나 연결이 누락되었을 수 있습니다."
+              action={
+                <Button
+                  size="small"
+                  type="primary"
+                  danger
+                  onClick={() => setHealthModalOpen(true)}
+                  className="font-bold"
+                >
+                  대회 구조 점검 & 즉시 복구
+                </Button>
+              }
+              className="mb-3"
+            />
+          )}
 
           {/* ✅ 상단 중복 요약 */}
           <DuplicateSummary />

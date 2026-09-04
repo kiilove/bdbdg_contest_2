@@ -3,7 +3,8 @@
 import { useContext, useEffect, useState } from "react";
 import { BsInfoLg } from "react-icons/bs";
 import { message, Progress, Card, Input, Button } from "antd";
-import { UploadOutlined, SaveOutlined, PlusOutlined } from "@ant-design/icons";
+import { UploadOutlined, SaveOutlined, PlusOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
 import "react-datepicker/dist/react-datepicker.css";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -42,6 +43,7 @@ const ContestInfo = () => {
   const [originalContestInfo, setOriginalContestInfo] = useState({});
   const [changed, setChanged] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [healthModalOpen, setHealthModalOpen] = useState(false);
   const [judgePasswords] = useState(generatePasswords());
   const updateContestInfo = useFirestoreUpdateData("contest_notice");
   const [files, setFiles] = useState([]);
@@ -251,15 +253,30 @@ const ContestInfo = () => {
               </div>
               <h1 className="text-2xl font-bold text-gray-800">대회정보관리</h1>
             </div>
-            {changed && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-lg border border-red-200">
-                <span className="text-red-600 text-sm font-medium">
-                  수정사항이 저장되지 않았습니다
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="primary"
+                icon={<SafetyCertificateOutlined />}
+                onClick={() => setHealthModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 font-bold shadow-sm"
+              >
+                대회 구조 무결성 점검 & 자동 복구
+              </Button>
+              {changed && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-lg border border-red-200">
+                  <span className="text-red-600 text-sm font-medium">
+                    수정사항이 저장되지 않았습니다
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </Card>
+
+        <ContestHealthCheckModal
+          isOpen={healthModalOpen}
+          onClose={() => setHealthModalOpen(false)}
+        />
 
         {progress > 0 && progress < 100 && (
           <Card className="mb-4 shadow-sm border-0">

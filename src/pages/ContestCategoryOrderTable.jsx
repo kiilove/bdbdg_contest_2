@@ -21,6 +21,7 @@ const ContestCategoryOrderTable = () => {
     category: false,
     grade: false,
     player: false,
+    grandPrix: false,
     categoryId: "",
     gradeId: "",
   });
@@ -167,7 +168,7 @@ const ContestCategoryOrderTable = () => {
 
   return (
     <div className="flex flex-col lg:flex-row gap-y-2 w-full h-auto bg-white mb-3 rounded-tr-lg rounded-b-lg p-2 gap-x-4 overflow-y-auto">
-      <Modal open={isOpen.grandPrix} onClose={handleGrandPrixClose}>
+      <Modal open={Boolean(isOpen?.grandPrix)} onClose={handleGrandPrixClose}>
         <div
           className="flex w-full lg:w-full h-screen lg:h-auto absolute top-1/2 left-1/2 lg:shadow-md lg:rounded-lg bg-white p-3"
           style={{ transform: "translate(-50%, -50%)" }}
@@ -180,7 +181,7 @@ const ContestCategoryOrderTable = () => {
           />
         </div>
       </Modal>
-      <Modal open={isOpen.category} onClose={handleCategoryClose}>
+      <Modal open={Boolean(isOpen?.category)} onClose={handleCategoryClose}>
         <div
           className="flex w-full lg:w-1/3 h-screen lg:h-auto absolute top-1/2 left-1/2 lg:shadow-md lg:rounded-lg bg-white p-3"
           style={{ transform: "translate(-50%, -50%)" }}

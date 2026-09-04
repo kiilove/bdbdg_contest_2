@@ -12,11 +12,15 @@ import {
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
+import { Tooltip } from "antd";
+import { SafetyCertificateOutlined } from "@ant-design/icons";
+import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
 
 const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
   const [isOpenDrawer, setIsOpenDrawer] = useState(false);
   const [contestList, setContestList] = useState([]);
   const [contestNoticeId, setContestNoticeId] = useState();
+  const [healthModalOpen, setHealthModalOpen] = useState(false);
 
   const { currentContest, setCurrentContest } = useContext(
     CurrentContestContext
@@ -113,12 +117,12 @@ const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
           >
             <RxHamburgerMenu className="text-2xl" />
           </button>
-          <div className="flex justify-start items-center h-8 px-10 gap-x-1 overflow-hidden">
+          <div className="flex justify-start items-center h-8 px-4 gap-x-3 overflow-hidden flex-1">
             <span className="text-sm text-gray-500">
               <BsTrophyFill />
             </span>
             <select
-              className=" bg-transparent text-base"
+              className=" bg-transparent text-base max-w-[320px] font-medium"
               onClick={(e) => setContestNoticeId(e.target.value)}
               onChange={(e) => setContestNoticeId(e.target.value)}
             >
@@ -129,6 +133,17 @@ const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
                   </option>
                 ))}
             </select>
+
+            <Tooltip title="대회 필수 문서 및 구조 무결성 점검 / 누락 문서 자동 복구">
+              <button
+                type="button"
+                onClick={() => setHealthModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-md text-xs font-bold shadow-sm transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              >
+                <SafetyCertificateOutlined className="text-sm" />
+                <span>대회 구조 점검</span>
+              </button>
+            </Tooltip>
           </div>
         </div>
         <Drawer
@@ -139,6 +154,10 @@ const TopBar = ({ user, isLoadingMain, setIsLoadingMain }) => {
         >
           <Drawbar setOpen={handleDrawer} />
         </Drawer>
+        <ContestHealthCheckModal
+          isOpen={healthModalOpen}
+          onClose={() => setHealthModalOpen(false)}
+        />
         <div
           className="flex justify-start items-center h-8 px-5 gap-x-2 cursor-pointer"
           onClick={handleLogout}

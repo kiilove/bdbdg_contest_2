@@ -46,8 +46,30 @@ const ContestJudgeTable = () => {
   const updateJudgesAssignPool = useFirestoreUpdateData("contest_judges_pool");
   const deleteJudgesAssignPool = useFirestoreDeleteData("contest_judges_pool");
 
+  const [passwordDocId, setPasswordDocId] = useState("");
+  const fetchPasswordQuery = useFirestoreQuery();
+
   const getPassword = useFirestoreGetDocument("contest_passwords");
   const updatePassword = useFirestoreUpdateData("contest_passwords");
+  const addPassword = useFirestoreAddData("contest_passwords");
+  const updateContest = useFirestoreUpdateData("contests");
+
+  const generatePasswords = () => {
+    const passwords = [];
+    const usedPasswords = new Set();
+    while (passwords.length < 100) {
+      const password = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+      if (!usedPasswords.has(password)) {
+        passwords.push(password);
+        usedPasswords.add(password);
+      }
+    }
+    return passwords.map((password, pIdx) => ({
+      id: pIdx,
+      value: password,
+      used: false,
+    }));
+  };
 
   const fetchPool = async (contestId) => {
     setIsLoading(true);
@@ -65,9 +87,44 @@ const ContestJudgeTable = () => {
           )
         );
 
-      await getPassword
-        .getDocument(currentContest.contests.contestPasswordId)
-        .then((data) => setJudgePasswords([...data.passwords]));
+      let passId = currentContest?.contests?.contestPasswordId;
+      let loadedPasswords = null;
+
+      if (passId) {
+        const passData = await getPassword.getDocument(passId);
+        if (passData?.passwords && passData.passwords.length > 0) {
+          loadedPasswords = passData.passwords;
+          setPasswordDocId(passData.id || passId);
+        }
+      }
+
+      if (!loadedPasswords) {
+        const passDocs = await fetchPasswordQuery.getDocuments("contest_passwords", conditions);
+        if (passDocs && passDocs.length > 0 && passDocs[0]?.passwords && passDocs[0].passwords.length > 0) {
+          loadedPasswords = passDocs[0].passwords;
+          setPasswordDocId(passDocs[0].id);
+        }
+      }
+
+      // 비밀번호 풀이 완전히 없는 경우 즉시 100개 자동 생성 및 DB 연결
+      if (!loadedPasswords) {
+        const newGenerated = generatePasswords();
+        const added = await addPassword.addData({
+          contestId,
+          passwords: newGenerated,
+        });
+        if (added?.id) {
+          loadedPasswords = newGenerated;
+          setPasswordDocId(added.id);
+          await updateContest.updateData(contestId, {
+            contestPasswordId: added.id,
+          });
+        }
+      }
+
+      if (loadedPasswords) {
+        setJudgePasswords([...loadedPasswords]);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -273,18 +330,29 @@ const ContestJudgeTable = () => {
           isConfirmed: true,
         };
         const newPassword = [...judgePasswords];
-        const onedayPassword = newPassword.find(
-          (password) => password.used === false
-        ).value;
+        const availablePassword = newPassword.find(
+          (password) => password.used === false || password.used === undefined
+        );
 
-        const findIndexOneDayPassword = judgePasswords.findIndex(
+        if (!availablePassword || !availablePassword.value) {
+          alert("사용 가능한 심판 일회용 비밀번호가 부족합니다. 비밀번호 풀 설정을 확인해주세요.");
+          return;
+        }
+
+        const onedayPassword = availablePassword.value;
+
+        const findIndexOneDayPassword = newPassword.findIndex(
           (password) => password.value === onedayPassword
         );
 
-        newPassword.splice(findIndexOneDayPassword, 1, {
-          ...newPassword[findIndexOneDayPassword],
-          used: true,
-        });
+        if (findIndexOneDayPassword !== -1) {
+          newPassword.splice(findIndexOneDayPassword, 1, {
+            ...newPassword[findIndexOneDayPassword],
+            used: true,
+          });
+        }
+
+        const passTargetId = passwordDocId || currentContest?.contests?.contestPasswordId;
 
         await addJudgesAssignPool
           .addData({
@@ -299,14 +367,16 @@ const ContestJudgeTable = () => {
             setJudgesAssignPool(() => [...newJudgesAssignPool]);
           })
           .then(async () => {
-            await updatePassword.updateData(
-              currentContest.contests.contestPasswordId,
-              { contestId, passwords: [...newPassword] }
-            );
+            if (passTargetId) {
+              await updatePassword.updateData(
+                passTargetId,
+                { contestId, passwords: [...newPassword] }
+              );
+            }
             setJudgePasswords(() => [...newPassword]);
           });
       } catch (error) {
-        console.log(error);
+        console.error("심판 배정 중 에러:", error);
       }
     } else {
       if (!judgeAssignId) {
@@ -317,19 +387,27 @@ const ContestJudgeTable = () => {
           const findIndexJudgesAssignPool = newJudgesAssignPool.findIndex(
             (judge) => judge.id === judgeAssignId
           );
+          if (findIndexJudgesAssignPool === -1) return;
+
           const { onedayPassword } =
             newJudgesAssignPool[findIndexJudgesAssignPool];
 
           const newPassword = [...judgePasswords];
 
-          const findIndexOneDayPassword = newPassword.findIndex(
-            (password) => password.value === onedayPassword
-          );
+          if (onedayPassword) {
+            const findIndexOneDayPassword = newPassword.findIndex(
+              (password) => password.value === onedayPassword
+            );
 
-          newPassword.splice(findIndexOneDayPassword, 1, {
-            ...newPassword[findIndexOneDayPassword],
-            used: false,
-          });
+            if (findIndexOneDayPassword !== -1) {
+              newPassword.splice(findIndexOneDayPassword, 1, {
+                ...newPassword[findIndexOneDayPassword],
+                used: false,
+              });
+            }
+          }
+
+          const passTargetId = passwordDocId || currentContest?.contests?.contestPasswordId;
 
           await deleteJudgesAssignPool
             .deleteData(judgeAssignId)
@@ -338,14 +416,16 @@ const ContestJudgeTable = () => {
             )
             .then(() => setJudgesAssignPool(() => [...newJudgesAssignPool]))
             .then(async () => {
-              await updatePassword.updateData(
-                currentContest.contests.contestPasswordId,
-                { contestId, passwords: [...newPassword] }
-              );
+              if (passTargetId) {
+                await updatePassword.updateData(
+                  passTargetId,
+                  { contestId, passwords: [...newPassword] }
+                );
+              }
               setJudgePasswords(() => [...newPassword]);
             });
         } catch (error) {
-          console.log(error);
+          console.error("심판 배정 취소 중 에러:", error);
         }
       }
     }
