@@ -36,22 +36,35 @@ const ContestNewInvoiceManual = () => {
   const addInvoice = useFirestoreAddData("invoices_pool");
 
   const fetchPool = async () => {
+    if (!currentContest?.contests?.id) return;
+
     if (currentContest.contests.contestCategorysListId) {
       const returnCategorys = await fetchCategoryDocument.getDocument(
         currentContest.contests.contestCategorysListId
       );
-      setCategorysList({ ...returnCategorys });
-      setCategorysArray([
-        ...returnCategorys?.categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
-      ]);
+      if (returnCategorys) {
+        setCategorysList({ ...returnCategorys });
+        setCategorysArray(
+          Array.isArray(returnCategorys?.categorys)
+            ? [...returnCategorys.categorys].sort(
+                (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+              )
+            : []
+        );
+      } else {
+        setCategorysList({});
+        setCategorysArray([]);
+      }
+    }
 
+    if (currentContest.contests.contestGradesListId) {
       const returnGrades = await fetchGradeDocument.getDocument(
         currentContest.contests.contestGradesListId
       );
 
-      setGradesArray([...returnGrades?.grades]);
+      setGradesArray(
+        Array.isArray(returnGrades?.grades) ? [...returnGrades.grades] : []
+      );
     }
   };
 
@@ -70,7 +83,9 @@ const ContestNewInvoiceManual = () => {
     const gradeId = splitValue[0];
     const gradeTitle = splitValue[1];
     const categoryPriceType = splitValue[2];
-    const dummy = [...invoiceInfo.joins];
+    const dummy = Array.isArray(invoiceInfo.joins)
+      ? [...invoiceInfo.joins]
+      : [];
     const newInvoiceInfo = { ...invoiceInfo };
     const findCategory = dummy.some(
       (category) => category.contestCategoryId === id
@@ -88,7 +103,9 @@ const ContestNewInvoiceManual = () => {
     };
 
     if (gradeId === "체급선택") {
-      dummy.splice(findIndex, 1);
+      if (findIndex !== -1) {
+        dummy.splice(findIndex, 1);
+      }
     } else if (!findCategory) {
       dummy.push({ ...newValue });
     } else {
@@ -99,25 +116,22 @@ const ContestNewInvoiceManual = () => {
   };
 
   const initInvoiceInfo = () => {
-    const {
-      invoicesPoolId: invoicePoolId,
-      contestCategorysListId: categoryListId,
-      contestGradesListId: gradeListId,
-      contestNoticeId: noticeId,
-      id: contestId,
-    } = currentContest.contests;
+    const contestObj = currentContest?.contests || {};
+    const infoObj = currentContest?.contestInfo || {};
+
+    const { id: contestId = "" } = contestObj;
 
     const {
-      contestTitle,
-      contestDate,
-      contestLocation,
-      contestPromoter,
-      contestPriceBasic,
-      contestPriceExtra,
-      contestPriceExtraType,
-      contestPriceType1,
-      contestPriceType2,
-    } = currentContest.contestInfo;
+      contestTitle = "",
+      contestDate = "",
+      contestLocation = "",
+      contestPromoter = "",
+      contestPriceBasic = 0,
+      contestPriceExtra = 0,
+      contestPriceExtraType = "누적",
+      contestPriceType1 = 0,
+      contestPriceType2 = 0,
+    } = infoObj;
 
     const initInfo = {
       //invoicePoolId: invoicePoolId,
@@ -152,33 +166,44 @@ const ContestNewInvoiceManual = () => {
     setMessage({ body: "저장중", isButton: false });
     setAddMsgOpen(true);
 
+    const rawPriceSum = String(propData?.contestPriceSum ?? 0).replace(
+      /,/g,
+      ""
+    );
+    const parsedPriceSum = Number.parseInt(rawPriceSum, 10);
+
     const added = await addInvoice.addData({
       ...propData,
       createBy: "manual",
       playerUid: generateUUID(),
       invoiceCreateAt: generateToday(),
-      contestPriceSum: Number.parseInt(propData.contestPriceSum),
+      contestPriceSum: Number.isNaN(parsedPriceSum) ? 0 : parsedPriceSum,
     });
     if (added) {
-      console.log(added.data);
       setMessage({
         body: "저장되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
       setInvoiceInfo(initInvoiceInfo());
+    } else {
+      setMessage({
+        body: "저장 중 오류가 발생했습니다. 다시 시도해주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
   useEffect(() => {
-    if (currentContest?.contests.id) {
-      setInvoiceInfo(initInvoiceInfo());
-    }
+    if (!currentContest?.contests?.id) return;
+    setInvoiceInfo(initInvoiceInfo());
   }, [currentContest?.contests?.id]);
 
   useEffect(() => {
+    if (!currentContest?.contests?.id) return;
     fetchPool();
-  }, []);
+  }, [currentContest?.contests?.id]);
 
   useEffect(() => {
     //console.log(invoiceInfo);

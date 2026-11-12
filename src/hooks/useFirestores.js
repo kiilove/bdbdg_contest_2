@@ -14,6 +14,31 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
+function sanitizeFirestoreData(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      item === undefined ? null : sanitizeFirestoreData(item)
+    );
+  }
+  if (value.constructor === Object) {
+    const sanitized = {};
+    Object.keys(value).forEach((key) => {
+      const val = value[key];
+      if (val !== undefined) {
+        sanitized[key] = sanitizeFirestoreData(val);
+      }
+    });
+    return sanitized;
+  }
+  return value;
+}
+
 export function useFirestoreQuery() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,22 +51,32 @@ export function useFirestoreQuery() {
     orderByDirection = "asc",
     limitNumber = 0
   ) {
-    let q = collection(db, collectionName);
-
-    if (conditions.length > 0) {
-      conditions.forEach((condition) => {
-        q = query(q, condition);
-      });
-    }
-    if (orderByField) {
-      q = query(q, orderBy(orderByField, orderByDirection));
-    }
-    if (limitNumber) {
-      q = query(q, limit(limitNumber));
+    if (!collectionName) {
+      setLoading(false);
+      return [];
     }
 
     try {
       setLoading(true);
+
+      let q = collection(db, collectionName);
+
+      if (Array.isArray(conditions) && conditions.length > 0) {
+        conditions.forEach((condition) => {
+          if (!condition) return;
+          if (Array.isArray(condition) && condition.length === 3) {
+            q = query(q, where(condition[0], condition[1], condition[2]));
+          } else {
+            q = query(q, condition);
+          }
+        });
+      }
+      if (orderByField) {
+        q = query(q, orderBy(orderByField, orderByDirection));
+      }
+      if (limitNumber) {
+        q = query(q, limit(limitNumber));
+      }
 
       const querySnapshot = await getDocs(q);
 
@@ -77,19 +112,26 @@ export function useFirestoreGetDocument(collectionName) {
   const [error, setError] = useState(null);
 
   async function getDocument(collectionId) {
+    if (!collectionName || !collectionId) {
+      setLoading(false);
+      return null;
+    }
     try {
       setLoading(true);
       const docSnapshot = await getDoc(doc(db, collectionName, collectionId));
       if (docSnapshot.exists()) {
         const getData = { id: docSnapshot.id, ...docSnapshot.data() };
-        setData({ id: docSnapshot.id, ...docSnapshot.data() });
+        setData(getData);
         return getData;
       } else {
         setError({ message: "Document does not exist" });
         setData([]);
+        return null;
       }
     } catch (error) {
+      console.error(error);
       setError(error);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -109,15 +151,26 @@ export function useFirestoreAddData(collectionName) {
   const [error, setError] = useState(null);
 
   const addData = async (newData) => {
-    console.log(newData);
+    if (!collectionName) {
+      const err = new Error("Collection name is required for addData");
+      console.error(err);
+      setError(err);
+      return null;
+    }
     try {
       setLoading(true);
-      const docRef = await addDoc(collection(db, collectionName), newData);
-      const addedData = { ...newData, id: docRef.id };
+      const sanitizedData = sanitizeFirestoreData(newData);
+      const docRef = await addDoc(
+        collection(db, collectionName),
+        sanitizedData
+      );
+      const addedData = { ...sanitizedData, id: docRef.id };
       setData(addedData);
       return addedData;
     } catch (error) {
+      console.error(error);
       setError(error);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -132,12 +185,19 @@ export function useFirestoreUpdateData(collectionName) {
   const [error, setError] = useState(null);
 
   const updateData = async (id, newData, callback) => {
-    // console.log(id);
-    console.log(newData);
+    if (!collectionName || !id) {
+      const err = new Error(
+        "Collection name and document ID are required for updateData"
+      );
+      console.error(err);
+      setError(err);
+      return null;
+    }
     try {
       setLoading(true);
-      await updateDoc(doc(db, collectionName, id), newData);
-      const updatedData = { ...newData };
+      const sanitizedData = sanitizeFirestoreData(newData);
+      await updateDoc(doc(db, collectionName, id), sanitizedData);
+      const updatedData = { ...sanitizedData };
       setData(updatedData);
       setLoading(false);
       callback && callback();
@@ -157,6 +217,12 @@ export function useFirestoreDeleteData(collectionName) {
   const [data, setData] = useState([]);
 
   const deleteData = async (id) => {
+    if (!collectionName || !id) {
+      console.error(
+        new Error("Collection name and document ID are required for deleteData")
+      );
+      return false;
+    }
     try {
       await deleteDoc(doc(db, collectionName, id));
       setData(id);

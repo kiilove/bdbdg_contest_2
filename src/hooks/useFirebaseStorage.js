@@ -10,14 +10,45 @@ import {
 import ColorThief from "colorthief";
 import { compressImage } from "./imageUtils";
 
+const DEFAULT_COLOR_PALETTE = [
+  [59, 130, 246],
+  [6, 182, 212],
+  [30, 41, 59],
+  [100, 116, 139],
+  [241, 245, 249],
+];
+
+const buildColorTheme = (palette) => {
+  const validColors = Array.isArray(palette)
+    ? palette.filter((rgb) => Array.isArray(rgb) && rgb.length >= 3)
+    : [];
+
+  return Array.from({ length: 5 }, (_, idx) => {
+    const rgb =
+      validColors[idx] ||
+      validColors[0] ||
+      DEFAULT_COLOR_PALETTE[idx] ||
+      DEFAULT_COLOR_PALETTE[0];
+    return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  });
+};
+
 const useFirebaseStorage = (files, storagePath) => {
   const [progress, setProgress] = useState(0);
   const [urls, setUrls] = useState([]);
   const [errors, setErrors] = useState([]);
   const [representativeImage, setRepresentativeImage] = useState(null);
 
-  //console.log(files);
   useEffect(() => {
+    if (!files || files.length === 0 || !storagePath) {
+      setProgress(0);
+      setUrls((prev) => (prev.length > 0 ? [] : prev));
+      return;
+    }
+
+    let cancelled = false;
+    const activeObjectUrls = new Set();
+
     const storage = getStorage();
     const originalRef = ref(storage, `${storagePath}/original`);
     const compressRef = ref(storage, `${storagePath}/compress`);
@@ -28,141 +59,176 @@ const useFirebaseStorage = (files, storagePath) => {
       );
 
       return Promise.all([metadataPromise]).then(async ([existingMetadata]) => {
-        if (existingMetadata && existingMetadata.size === file.size) {
-          setUrls((prevUrls) => [
-            ...prevUrls,
-            {
-              url: existingMetadata.customMetadata.compressedUrl,
-              ...existingMetadata.customMetadata,
-            },
-          ]);
-          return null;
-        }
-
-        const maxSize = 1024 * 1024;
-        const compressOptions = { maxWidthOrHeight: 1024, quality: 0.5 };
-        const shouldCompress = file.size > maxSize;
-        const compressedFile = shouldCompress
-          ? await compressImage(file, compressOptions)
-          : file;
-
-        const newName = `bdbdg_${Date.now()}`;
-        const uploadRef = shouldCompress
-          ? ref(compressRef, newName)
-          : ref(originalRef, newName);
-        const uploadMetadata = {
-          contentType: compressedFile.type,
-          customMetadata: {
-            url: "",
-          },
-        };
-
-        // ColorThief 라이브러리를 사용하여 테마 색상 추출
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = URL.createObjectURL(compressedFile);
-        const colorThief = new ColorThief();
-        const colorPalette = await new Promise((resolve) => {
-          img.addEventListener("load", () => {
-            const palette = colorThief.getPalette(img, 5);
-            resolve(palette);
-          });
-        });
-
-        const customMetadata = {
-          name: compressedFile.name, // 원래 파일 이름 설정
-          contentDisposition: `attachment; filename="${compressedFile.name}"`, // 다운로드 시 파일 이름 설정
-          colorTheme: [
-            `rgb(${colorPalette[0].join(",")})`,
-            `rgb(${colorPalette[1].join(",")})`,
-            `rgb(${colorPalette[2].join(",")})`,
-            `rgb(${colorPalette[3].join(",")})`,
-            `rgb(${colorPalette[4].join(",")})`,
-          ],
-        };
-
-        const uploadTask = uploadBytesResumable(
-          uploadRef,
-          compressedFile,
-          uploadMetadata
-        );
-
-        return new Promise((resolve) => {
-          uploadTask.on(
-            "state_changed",
-            (snapshot) => {
-              const progress = Math.round(
-                (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-              );
-              setProgress(progress);
-            },
-            (error) => {
-              setErrors((prevErrors) => [
-                ...prevErrors,
-                { name: file.name, error },
-              ]);
-              resolve(null);
-            },
-            async () => {
-              const downloadURL = await getDownloadURL(uploadRef);
-              const originalUrl = shouldCompress
-                ? uploadMetadata.customMetadata.url
-                : downloadURL;
-              const compressedUrl = shouldCompress ? downloadURL : originalUrl;
-
-              const customMetadata = {
-                name: compressedFile.name,
-                contentDisposition: `attachment; filename="${compressedFile.name}"`,
-                colorTheme: [
-                  `rgb(${colorPalette[0].join(",")})`,
-                  `rgb(${colorPalette[1].join(",")})`,
-                  `rgb(${colorPalette[2].join(",")})`,
-                  `rgb(${colorPalette[3].join(",")})`,
-                  `rgb(${colorPalette[4].join(",")})`,
-                ],
-              };
-
-              // 이미지 메타데이터 업데이트
-              try {
-                await updateMetadata(uploadRef, { customMetadata });
-              } catch (error) {
-                console.error(error);
-              }
-
-              setUrls((prevUrls) => [
-                ...prevUrls,
-                { url: originalUrl, compressedUrl, ...customMetadata },
-              ]);
-
-              const image = {
-                url: originalUrl,
-                compressedUrl,
-                ...customMetadata,
-              };
-
-              if (index === 0) {
-                setRepresentativeImage(image);
-              }
-
-              resolve(image);
-            }
-          );
-        }).then((image) => {
-          if (!image) {
+        try {
+          if (existingMetadata && existingMetadata.size === file.size) {
+            const existingCustomMeta = existingMetadata.customMetadata || {};
+            setUrls((prevUrls) => [
+              ...prevUrls,
+              {
+                url: existingCustomMeta.compressedUrl || "",
+                ...existingCustomMeta,
+              },
+            ]);
             return null;
           }
-          const { url, compressedUrl, ...metadata } = image;
-          const finalUrl = compressedUrl || url;
-          return {
-            url,
-            compressedUrl: compressedUrl ? finalUrl : null,
-            ...metadata,
+
+          const maxSize = 1024 * 1024;
+          const compressOptions = { maxWidthOrHeight: 1024, quality: 0.5 };
+          const shouldCompress = file.size > maxSize;
+          const compressedFile = shouldCompress
+            ? await compressImage(file, compressOptions)
+            : file;
+
+          const randomSuffix = Math.random().toString(36).slice(2, 8);
+          const newName = `bdbdg_${Date.now()}_${index}_${randomSuffix}`;
+          const uploadRef = shouldCompress
+            ? ref(compressRef, newName)
+            : ref(originalRef, newName);
+          const uploadMetadata = {
+            contentType: compressedFile.type,
+            customMetadata: {
+              url: "",
+            },
           };
-        });
+
+          // ColorThief 라이브러리를 사용하여 테마 색상 추출
+          const objectUrl = URL.createObjectURL(compressedFile);
+          activeObjectUrls.add(objectUrl);
+
+          let extractedPalette = DEFAULT_COLOR_PALETTE;
+          try {
+            extractedPalette = await new Promise((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                try {
+                  const colorThief = new ColorThief();
+                  const palette = colorThief.getPalette(img, 5);
+                  resolve(palette);
+                } catch (paletteErr) {
+                  console.warn("ColorThief palette fallback:", paletteErr);
+                  resolve(DEFAULT_COLOR_PALETTE);
+                }
+              };
+              img.onerror = () => {
+                reject(new Error(`Failed to decode image: ${file.name}`));
+              };
+              img.src = objectUrl;
+            });
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+            activeObjectUrls.delete(objectUrl);
+          }
+
+          const colorTheme = buildColorTheme(extractedPalette);
+
+          const uploadTask = uploadBytesResumable(
+            uploadRef,
+            compressedFile,
+            uploadMetadata
+          );
+
+          return new Promise((resolve) => {
+            uploadTask.on(
+              "state_changed",
+              (snapshot) => {
+                if (cancelled) return;
+                const nextProgress = snapshot.totalBytes
+                  ? Math.round(
+                      (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+                    )
+                  : 0;
+                setProgress(nextProgress);
+              },
+              (error) => {
+                if (!cancelled) {
+                  setErrors((prevErrors) => [
+                    ...prevErrors,
+                    { name: file.name, error },
+                  ]);
+                }
+                resolve(null);
+              },
+              async () => {
+                try {
+                  const downloadURL = await getDownloadURL(uploadRef);
+                  const originalUrl = shouldCompress
+                    ? uploadMetadata.customMetadata.url
+                    : downloadURL;
+                  const compressedUrl = shouldCompress
+                    ? downloadURL
+                    : originalUrl;
+
+                  const customMetadata = {
+                    name: compressedFile.name,
+                    contentDisposition: `attachment; filename="${compressedFile.name}"`,
+                    colorTheme,
+                  };
+
+                  // 이미지 메타데이터 업데이트
+                  try {
+                    await updateMetadata(uploadRef, {
+                      customMetadata: {
+                        name: customMetadata.name,
+                        contentDisposition: customMetadata.contentDisposition,
+                        colorTheme: JSON.stringify(colorTheme),
+                      },
+                    });
+                  } catch (error) {
+                    console.error(error);
+                  }
+
+                  const image = {
+                    url: originalUrl,
+                    compressedUrl,
+                    ...customMetadata,
+                  };
+
+                  if (!cancelled) {
+                    setUrls((prevUrls) => [...prevUrls, image]);
+                    if (index === 0) {
+                      setRepresentativeImage(image);
+                    }
+                  }
+
+                  resolve(image);
+                } catch (completeErr) {
+                  if (!cancelled) {
+                    setErrors((prevErrors) => [
+                      ...prevErrors,
+                      { name: file.name, error: completeErr },
+                    ]);
+                  }
+                  resolve(null);
+                }
+              }
+            );
+          }).then((image) => {
+            if (!image) {
+              return null;
+            }
+            const { url, compressedUrl, ...metadata } = image;
+            const finalUrl = compressedUrl || url;
+            return {
+              url,
+              compressedUrl: compressedUrl ? finalUrl : null,
+              ...metadata,
+            };
+          });
+        } catch (fileError) {
+          if (!cancelled) {
+            setErrors((prevErrors) => [
+              ...prevErrors,
+              { name: file.name, error: fileError },
+            ]);
+          }
+          return null;
+        }
       });
     });
 
     Promise.all(promises).then((uploadedImages) => {
+      if (cancelled) return;
       setProgress(0);
       const uploadedUrls = uploadedImages
         .filter((image) => image !== null)
@@ -173,6 +239,14 @@ const useFirebaseStorage = (files, storagePath) => {
         }));
       setUrls(uploadedUrls);
     });
+
+    return () => {
+      cancelled = true;
+      activeObjectUrls.forEach((objectUrl) => {
+        URL.revokeObjectURL(objectUrl);
+      });
+      activeObjectUrls.clear();
+    };
   }, [files, storagePath]);
 
   return { progress, urls, errors, representativeImage };

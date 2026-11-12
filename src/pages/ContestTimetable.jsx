@@ -118,6 +118,7 @@ const ContestTimetable = () => {
   };
 
   const handleSaveCategorys = async (data) => {
+    if (!currentContest?.contests?.contestCategorysListId) return;
     try {
       await contestCategoryUpdate.updateData(
         currentContest.contests.contestCategorysListId,
@@ -142,7 +143,9 @@ const ContestTimetable = () => {
       const findIndex = dummy.findIndex(
         (grade) => grade.contestGradeId === order.contestGradeId
       );
-      dummy.splice(findIndex, 1, { ...order });
+      if (findIndex !== -1) {
+        dummy.splice(findIndex, 1, { ...order });
+      }
     });
     return dummy;
   };
@@ -195,21 +198,34 @@ const ContestTimetable = () => {
   };
 
   const fetchPool = async () => {
+    if (!currentContest?.contests?.id) return;
+
     if (currentContest.contests.contestCategorysListId) {
       const returnCategorys = await fetchCategoryDocument.getDocument(
         currentContest.contests.contestCategorysListId
       );
-      setCategorysList({ ...returnCategorys });
-      setCategorysArray([
-        ...returnCategorys?.categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
-      ]);
+      if (returnCategorys) {
+        setCategorysList({ ...returnCategorys });
+        setCategorysArray(
+          Array.isArray(returnCategorys?.categorys)
+            ? [...returnCategorys.categorys].sort(
+                (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+              )
+            : []
+        );
+      } else {
+        setCategorysList({});
+        setCategorysArray([]);
+      }
+    }
 
+    if (currentContest.contests.contestGradesListId) {
       const returnGrades = await fetchGradeDocument.getDocument(
         currentContest.contests.contestGradesListId
       );
-      setGradesArray([...returnGrades?.grades]);
+      setGradesArray(
+        Array.isArray(returnGrades?.grades) ? [...returnGrades.grades] : []
+      );
     }
 
     const condition = [where("contestId", "==", currentContest.contests.id)];
@@ -231,9 +247,13 @@ const ContestTimetable = () => {
       condition
     );
 
-    setEntrysArray([...returnEntrys]);
-    setJudgesArray([...returnJudges]);
-    setJudgeAssignTable([...returnAssign[0].judges]);
+    setEntrysArray(Array.isArray(returnEntrys) ? [...returnEntrys] : []);
+    setJudgesArray(Array.isArray(returnJudges) ? [...returnJudges] : []);
+    setJudgeAssignTable(
+      Array.isArray(returnAssign?.[0]?.judges)
+        ? [...returnAssign[0].judges]
+        : []
+    );
   };
 
   useEffect(() => {
@@ -243,8 +263,9 @@ const ContestTimetable = () => {
   }, [location]);
 
   useEffect(() => {
+    if (!currentContest?.contests?.id) return;
     fetchPool();
-  }, []);
+  }, [currentContest?.contests?.id]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 md:p-6 gap-y-4">

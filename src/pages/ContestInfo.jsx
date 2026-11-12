@@ -59,9 +59,12 @@ const ContestInfo = () => {
     errors: orgLogoErrors,
   } = useFirebaseStorage(orgLogo, "org/logos");
 
-  const addCollection = useFirestoreAddData(
-    currentContest?.contests?.collectionName || ""
-  );
+  const targetCollectionName = (
+    currentContestInfo?.contestCollectionName ||
+    currentContest?.contests?.collectionName ||
+    ""
+  ).trim();
+  const addCollection = useFirestoreAddData(targetCollectionName);
   const addPlayersAssign = useFirestoreAddData("contest_players_assign");
   const addPlayersFinal = useFirestoreAddData("contest_players_final");
   const addJudgesAssign = useFirestoreAddData("contest_judges_assign");
@@ -100,9 +103,10 @@ const ContestInfo = () => {
   }, [currentContestInfo, originalContestInfo]);
 
   const formatNumber = (value) => {
-    if (isNaN(value) || value === "") return 0;
-    if (value.length >= 4) return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return Number.parseInt(value).toLocaleString();
+    if (value === undefined || value === null || value === "") return 0;
+    const cleaned = String(value).replace(/,/g, "").trim();
+    if (cleaned === "" || isNaN(Number(cleaned))) return 0;
+    return Number.parseInt(cleaned, 10).toLocaleString();
   };
 
   const handleContestInfo = (e) => {
@@ -162,37 +166,83 @@ const ContestInfo = () => {
   };
 
   const handleCollectionAdd = async () => {
+    if (!currentContest?.contests?.id) {
+      message.error("현재 선택된 대회 정보가 없습니다.");
+      return;
+    }
+
+    const trimmedCollectionName = (
+      currentContestInfo?.contestCollectionName || ""
+    ).trim();
+    if (!trimmedCollectionName) {
+      message.warning("컬렉션 이름을 입력해주세요.");
+      return;
+    }
+
+    const existingCompanionKeys = [
+      "contestStagesAssignId",
+      "contestPasswordId",
+      "contestPlayersAssignId",
+      "contestPlayersFinalId",
+      "contestJudgesAssignId",
+      "contestComparesListId",
+    ];
+    const hasExistingCompanions = existingCompanionKeys.some((key) =>
+      Boolean(currentContest?.contests?.[key])
+    );
+
+    if (hasExistingCompanions) {
+      const confirmed = window.confirm(
+        "이미 생성된 대회 보조 컬렉션(배정/비밀번호/비교심사 등)이 존재합니다. 새로 생성하면 기존 컬렉션 연결이 덮어씌워집니다. 계속하시겠습니까?"
+      );
+      if (!confirmed) return;
+    }
+
     try {
+      const contestId = currentContest.contests.id;
       const addedCollection = await addCollection.addData({
-        contestId: currentContest.contests.id,
+        contestId,
       });
       const addedStagesAssign = await addStagesAssign.addData({
-        contestId: currentContest.contests.id,
-        collectionName: currentContestInfo.contestCollectionName,
+        contestId,
+        collectionName: trimmedCollectionName,
         stages: [],
       });
       const addedPlayersAssign = await addPlayersAssign.addData({
-        contestId: currentContest.contests.id,
+        contestId,
         players: [],
       });
       const addedJudgesAssign = await addJudgesAssign.addData({
-        contestId: currentContest.contests.id,
+        contestId,
         judges: [],
       });
       const addedPlayersFinal = await addPlayersFinal.addData({
-        contestId: currentContest.contests.id,
+        contestId,
         players: [],
       });
       const addedPassword = await addPasswords.addData({
         passwords: [...judgePasswords],
-        contestId: currentContest.contests.id,
+        contestId,
       });
       const addedCompare = await addComparesList.addData({
-        contestId: currentContest.contests.id,
+        contestId,
         compares: [],
       });
 
-      await updateContest.updateData(currentContest.contests.id, {
+      if (
+        !addedCollection?.id ||
+        !addedStagesAssign?.id ||
+        !addedPlayersAssign?.id ||
+        !addedJudgesAssign?.id ||
+        !addedPlayersFinal?.id ||
+        !addedPassword?.id ||
+        !addedCompare?.id
+      ) {
+        message.error("일부 컬렉션 생성에 실패했습니다. 다시 시도해주세요.");
+        return;
+      }
+
+      const nextContestsDoc = {
         ...currentContest.contests,
         contestStagesAssignId: addedStagesAssign.id,
         contestPasswordId: addedPassword.id,
@@ -200,8 +250,17 @@ const ContestInfo = () => {
         contestPlayersFinalId: addedPlayersFinal.id,
         contestJudgesAssignId: addedJudgesAssign.id,
         contestComparesListId: addedCompare.id,
-        collectionName: currentContestInfo.contestCollectionName,
-      });
+        collectionName: trimmedCollectionName,
+      };
+
+      const updated = await updateContest.updateData(contestId, nextContestsDoc);
+      if (updated) {
+        setCurrentContest({
+          ...currentContest,
+          contests: nextContestsDoc,
+        });
+        message.success("대회 컬렉션이 생성되었습니다");
+      }
     } catch (error) {
       console.error(error);
       message.error("컬렉션 생성 중 오류가 발생했습니다");

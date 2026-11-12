@@ -25,12 +25,16 @@ const NewContest = () => {
 
   const handleStart = async () => {
     setIsLoading(true);
+    let createdSuccess = false;
 
     try {
       const addedContest = await contestHook.addData({ isCompleted: false });
-      if (addedContest) {
-        setNewContestId(addedContest.id);
+      if (!addedContest?.id) {
+        throw new Error("대회 문서 생성에 실패했습니다.");
       }
+
+      const createdContestId = addedContest.id;
+      setNewContestId(createdContestId);
 
       const [
         contestNoticeData,
@@ -39,7 +43,8 @@ const NewContest = () => {
       ] = await Promise.all([
         contestNoticeHook
           .addData({
-            refContestId: addedContest.id,
+            contestId: createdContestId,
+            refContestId: createdContestId,
             contestStatus: "접수중",
             contestTitle: "새로운대회",
           })
@@ -50,7 +55,8 @@ const NewContest = () => {
 
         contestCategorysListHook
           .addData({
-            refContestId: addedContest.id,
+            contestId: createdContestId,
+            refContestId: createdContestId,
             categorys: [],
           })
           .catch((error) => {
@@ -59,29 +65,12 @@ const NewContest = () => {
           }),
         contestGradesListHook
           .addData({
-            refContestId: addedContest.id,
+            contestId: createdContestId,
+            refContestId: createdContestId,
             grades: [],
           })
           .catch((error) => {
             console.error("Error adding contest grades list:", error);
-            return null;
-          }),
-        contestEntrysListHook
-          .addData({
-            refContestId: addedContest.id,
-            entrys: [],
-          })
-          .catch((error) => {
-            console.error("Error adding contest invoices list:", error);
-            return null;
-          }),
-        invoicesPoolHook
-          .addData({
-            refContestId: addedContest.id,
-            invoices: [],
-          })
-          .catch((error) => {
-            console.error("Error adding contest invoices list:", error);
             return null;
           }),
       ]);
@@ -91,38 +80,47 @@ const NewContest = () => {
         contestCategorysListData &&
         contestGradesListData
       ) {
-        await updateContest.updateData(addedContest.id, {
+        const contestLinks = {
           contestNoticeId: contestNoticeData.id,
           contestCategorysListId: contestCategorysListData.id,
           contestGradesListId: contestGradesListData.id,
-        });
+        };
 
-        setCurrentContest({
-          contestId: addedContest.id,
-          contestNoticeId: contestNoticeData.id,
-          contestCategorysListId: contestCategorysListData.id,
-          contestGradesListId: contestGradesListData.id,
-        });
+        await updateContest.updateData(createdContestId, contestLinks);
 
+        const nextContestContext = {
+          contests: {
+            ...addedContest,
+            ...contestLinks,
+            id: createdContestId,
+          },
+          contestInfo: { ...contestNoticeData },
+        };
+
+        setCurrentContest(nextContestContext);
+        sessionStorage.setItem(
+          "currentContest",
+          JSON.stringify(nextContestContext)
+        );
         localStorage.setItem(
           "currentContest",
-          JSON.stringify({
-            contestId: newContestId,
-            contestNoticeId: contestNoticeData.id,
-            contestCategorysListId: contestCategorysListData.id,
-            contestGradesListId: contestGradesListData.id,
-          })
+          JSON.stringify(nextContestContext)
         );
+        createdSuccess = true;
       } else {
         console.error(
           "One or more errors occurred while adding data to collections."
         );
+        alert("대회 기본 컬렉션 생성 중 오류가 발생했습니다.");
       }
     } catch (error) {
       console.error("Error during the handleStart process:", error);
+      alert("새로운 대회를 개설하는 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
-      navigate("/contestinfo");
+      if (createdSuccess) {
+        navigate("/contestinfo");
+      }
     }
   };
 

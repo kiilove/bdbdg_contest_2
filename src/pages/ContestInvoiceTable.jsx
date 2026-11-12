@@ -194,6 +194,7 @@ const ContestInvoiceTable = () => {
 
   /** ✅ 입금확인 처리 */
   const handleIsPriceCheckUpdate = async (invoiceId, playerUid, checked) => {
+    if (!invoiceId) return;
     setIsLoading(true);
     try {
       const sessionUser = JSON.parse(sessionStorage.getItem("user") || "{}");
@@ -202,18 +203,20 @@ const ContestInvoiceTable = () => {
       );
       if (findIndex === -1) return;
 
+      const targetInvoice = invoiceList[findIndex];
       const newInvoiceList = [...invoiceList];
       const newInvoice = {
-        ...newInvoiceList[findIndex],
+        ...targetInvoice,
         isPriceCheck: checked,
       };
       newInvoiceList.splice(findIndex, 1, newInvoice);
 
       if (checked) {
-        if (newInvoiceList[findIndex].joins?.length > 0) {
+        let createdEntries = [];
+        if (Array.isArray(targetInvoice.joins) && targetInvoice.joins.length > 0) {
           const {
             contestId,
-            playerUid,
+            playerUid: invPlayerUid,
             playerName,
             playerBirth,
             playerGym,
@@ -221,10 +224,13 @@ const ContestInvoiceTable = () => {
             playerText,
             invoiceCreateAt,
             createBy,
-          } = newInvoiceList[findIndex];
+          } = targetInvoice;
 
-          await Promise.all(
-            newInvoiceList[findIndex].joins.map(async (join) => {
+          const resolvedContestId = contestId || currentContest?.contests?.id;
+          const resolvedInvoiceId = targetInvoice.id || invoiceId;
+
+          const addedResults = await Promise.all(
+            targetInvoice.joins.map(async (join) => {
               const {
                 contestCategoryTitle,
                 contestCategoryId,
@@ -233,15 +239,15 @@ const ContestInvoiceTable = () => {
               } = join;
 
               const entryInfo = {
-                contestId,
-                invoiceId,
-                playerUid,
-                playerName,
-                playerBirth,
-                playerGym,
-                playerTel,
-                playerText,
-                invoiceCreateAt,
+                contestId: resolvedContestId,
+                invoiceId: resolvedInvoiceId,
+                playerUid: invPlayerUid ?? "",
+                playerName: playerName ?? "",
+                playerBirth: playerBirth ?? "",
+                playerGym: playerGym ?? "",
+                playerTel: playerTel ?? "",
+                playerText: playerText ?? "",
+                invoiceCreateAt: invoiceCreateAt ?? null,
                 createBy: createBy || "web",
                 contestCategoryTitle,
                 contestCategoryId,
@@ -259,57 +265,154 @@ const ContestInvoiceTable = () => {
                   clientDevice: navigator.userAgent,
                 },
               };
-              await addEntry.addData(entryInfo);
+              return await addEntry.addData(entryInfo);
             })
           );
+
+          createdEntries = addedResults.filter((res) => res && res.id);
+          const hasAddFailure = addedResults.some((res) => !res || !res.id);
+
+          if (hasAddFailure) {
+            if (createdEntries.length > 0) {
+              await Promise.all(
+                createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
+              );
+            }
+            alert(
+              "출전 명단 등록 중 오류가 발생하여 입금확인이 취소되었습니다. 다시 시도해주세요."
+            );
+            return;
+          }
         }
+
+        const updatedInvoice = await updateInvoice.updateData(invoiceId, {
+          ...newInvoice,
+        });
+        if (!updatedInvoice) {
+          if (createdEntries.length > 0) {
+            await Promise.all(
+              createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
+            );
+          }
+          alert("입금확인 상태 저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+          return;
+        }
+
         await writePriceCheckLog({
           action: "add",
-          invoice: newInvoiceList[findIndex],
+          invoice: newInvoice,
           sessionUser,
           currentContest,
         });
       } else {
-        await initInvoice(playerUid);
+        const deletedOk = await initInvoice(targetInvoice, playerUid);
+        if (!deletedOk) {
+          alert(
+            "출전 명단 삭제 중 오류가 발생하여 입금확인 해제가 취소되었습니다. 다시 시도해주세요."
+          );
+          return;
+        }
+
+        const updatedInvoice = await updateInvoice.updateData(invoiceId, {
+          ...newInvoice,
+        });
+        if (!updatedInvoice) {
+          alert(
+            "신청서 상태 업데이트 중 오류가 발생했습니다. 페이지를 새로고침 후 확인해주세요."
+          );
+          return;
+        }
+
         await writePriceCheckLog({
           action: "del",
-          invoice: newInvoiceList[findIndex],
+          invoice: newInvoice,
           sessionUser,
           currentContest,
         });
       }
 
-      await updateInvoice.updateData(invoiceId, { ...newInvoice });
       setInvoiceList([...newInvoiceList]);
     } catch (error) {
       console.error(error);
+      alert("입금확인 처리 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const initInvoice = async (playerUid) => {
-    const invoiceCondition = [
-      where("contestId", "==", currentContest.contests.id),
-    ];
+  const initInvoice = async (invoice, fallbackPlayerUid = "") => {
+    const activeContestId =
+      invoice?.contestId || currentContest?.contests?.id || "";
+    if (!activeContestId) {
+      return false;
+    }
+
+    const invoiceCondition = [where("contestId", "==", activeContestId)];
     const returnEntry = await getQuery.getDocuments(
       "contest_entrys_list",
       invoiceCondition
     );
-    const filteredEntryByPlayerUid = returnEntry.filter(
-      (entry) => entry.playerUid === playerUid
-    );
 
-    if (filteredEntryByPlayerUid.length <= 0) {
+    if (!Array.isArray(returnEntry) || returnEntry.length === 0) {
       console.log("일치하는 선수명단이 없습니다.");
-      return;
+      return true;
     }
 
-    await Promise.all(
-      filteredEntryByPlayerUid.map(async (filter) => {
-        await deleteEntry.deleteData(filter.id);
+    const targetInvoiceId = invoice?.id || "";
+    const trimmedUid = String(
+      invoice?.playerUid ?? fallbackPlayerUid ?? ""
+    ).trim();
+    const joinGradeIds = new Set(
+      Array.isArray(invoice?.joins)
+        ? invoice.joins.map((j) => j?.contestGradeId).filter(Boolean)
+        : []
+    );
+
+    let entriesToDelete = [];
+    if (targetInvoiceId) {
+      entriesToDelete = returnEntry.filter(
+        (entry) => entry.invoiceId && entry.invoiceId === targetInvoiceId
+      );
+    }
+
+    // invoiceId가 저장되지 않은 구버전 엔트리 폴백 (빈 playerUid 전체 매칭 절대 금지)
+    if (entriesToDelete.length === 0) {
+      entriesToDelete = returnEntry.filter((entry) => {
+        if (entry.invoiceId && targetInvoiceId && entry.invoiceId !== targetInvoiceId) {
+          return false;
+        }
+        if (entry.contestId !== activeContestId) {
+          return false;
+        }
+        if (trimmedUid !== "") {
+          return entry.playerUid === trimmedUid;
+        }
+        const hasNameAndTel =
+          Boolean(invoice?.playerName) &&
+          Boolean(invoice?.playerTel) &&
+          entry.playerName === invoice.playerName &&
+          entry.playerTel === invoice.playerTel;
+        if (!hasNameAndTel) {
+          return false;
+        }
+        return (
+          joinGradeIds.size > 0 && joinGradeIds.has(entry.contestGradeId)
+        );
+      });
+    }
+
+    if (entriesToDelete.length <= 0) {
+      console.log("일치하는 선수명단이 없습니다.");
+      return true;
+    }
+
+    const deleteResults = await Promise.all(
+      entriesToDelete.map(async (entry) => {
+        return await deleteEntry.deleteData(entry.id);
       })
     );
+
+    return deleteResults.every(Boolean);
   };
 
   return (

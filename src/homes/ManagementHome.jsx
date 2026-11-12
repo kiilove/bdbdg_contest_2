@@ -27,22 +27,25 @@ const ManagementHome = ({ children }) => {
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUserInfo(parsedUser);
+        if (parsedUser && typeof parsedUser === "object") {
+          setUserInfo(parsedUser);
+          setIsLoadingMain(false);
+          return;
+        }
       } catch (e) {
         console.error("사용자 정보 파싱 오류:", e);
-
-        navigate("/login");
       }
-    } else {
-      navigate("/login");
     }
+    setUserInfo(null);
     setIsLoadingMain(false);
+    navigate("/login", { replace: true });
   }, [navigate]);
 
   // MenuArray를 userGroup에 따라 필터링
   const filterMenu = (menus, userGroup) => {
+    if (!Array.isArray(menus) || !userGroup) return [];
     return menus
-      .filter((menu) => menu.requiredGroup.includes(userGroup))
+      .filter((menu) => menu?.requiredGroup?.includes(userGroup))
       .map((menu) => {
         if (menu.title === "로그아웃") {
           return {
@@ -62,7 +65,7 @@ const ManagementHome = ({ children }) => {
         }
         if (menu.subMenus && menu.subMenus.length > 0) {
           const filteredSubMenus = menu.subMenus.filter((subMenu) =>
-            subMenu.requiredGroup.includes(userGroup)
+            subMenu?.requiredGroup?.includes(userGroup)
           );
           if (filteredSubMenus.length > 0) {
             return {
@@ -73,21 +76,24 @@ const ManagementHome = ({ children }) => {
                   <span style={{ marginLeft: "8px" }}>{menu.title}</span>
                 </>
               ),
-              children: filteredSubMenus.map((subMenu) => ({
-                key: subMenu.link,
-                label: (
-                  <>
-                    {subMenu.icon}
-                    <span style={{ marginLeft: "8px" }}>{subMenu.title}</span>
-                  </>
-                ),
-                onClick: () => {
-                  navigate(subMenu.link);
-                  if (isTabletOrMobile) toggleDrawer();
-                },
-              })),
+              children: filteredSubMenus
+                .map((subMenu) => ({
+                  key: subMenu.link,
+                  label: (
+                    <>
+                      {subMenu.icon}
+                      <span style={{ marginLeft: "8px" }}>{subMenu.title}</span>
+                    </>
+                  ),
+                  onClick: () => {
+                    navigate(subMenu.link);
+                    if (isTabletOrMobile) toggleDrawer();
+                  },
+                }))
+                .filter(Boolean),
             };
           }
+          return null;
         } else {
           return {
             key: menu.link,
@@ -104,7 +110,7 @@ const ManagementHome = ({ children }) => {
           };
         }
       })
-      .filter((menu) => menu !== null);
+      .filter(Boolean);
   };
 
   const filteredMenuItems = userInfo
@@ -129,7 +135,7 @@ const ManagementHome = ({ children }) => {
 
   return (
     <Layout className="min-h-screen">
-      {isLoadingMain ? (
+      {isLoadingMain || !userInfo ? (
         <div className="flex w-full h-full justify-center items-center">
           <LoadingPage />
         </div>

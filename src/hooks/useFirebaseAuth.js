@@ -4,7 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut,
+  signOut as firebaseSignOut,
 } from "firebase/auth";
 
 const useFirebaseAuth = () => {
@@ -88,10 +88,10 @@ const useFirebaseAuth = () => {
     }
   };
 
-  const signOut = async () => {
+  const logOut = async () => {
     const auth = getAuth();
     try {
-      await signOut(auth);
+      await firebaseSignOut(auth);
       setUser(null);
     } catch (error) {
       setError(error);
@@ -105,7 +105,8 @@ const useFirebaseAuth = () => {
     error,
     signInWithEmail,
     signUpWithEmail,
-    signOut,
+    signOut: logOut,
+    logOut,
   };
 };
 
