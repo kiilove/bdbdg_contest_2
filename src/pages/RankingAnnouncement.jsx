@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { gsap } from "gsap";
 import "./RankingAnnouncement.css";
 import AwardVideo from "../assets/mov/award2.mp4";
@@ -34,6 +34,16 @@ const RankingAnnouncement = () => {
     contestId ? `currentStage/${contestId}` : null
   );
   const updateData = useFirebaseRealtimeUpdateData();
+  const updateDataRef = useRef(updateData);
+  const playStartRef = useRef(false);
+
+  useEffect(() => {
+    updateDataRef.current = updateData;
+  }, [updateData]);
+
+  useEffect(() => {
+    playStartRef.current = Boolean(realtimeData?.screen?.status?.playStart);
+  }, [realtimeData?.screen?.status?.playStart]);
 
   const [currentPage, setCurrentPage] = useState(0); // Final Ranking의 현재 페이지 인덱스
   const [scoreCurrentPage, setScoreCurrentPage] = useState(0); // Score Result의 현재 페이지 인덱스
@@ -75,12 +85,17 @@ const RankingAnnouncement = () => {
   // playStart 상태 확인 및 idle 페이지로 이동
   useEffect(() => {
     if (realtimeData?.screen) {
-      if (!realtimeData.screen.status.playStart) {
+      if (!realtimeData?.screen?.status?.playStart) {
         console.log("playStart 상태가 false입니다. /idle 페이지로 이동합니다.");
         navigate("/idle", { state: { contestId } });
       }
     }
-  }, [realtimeData, navigate, contestId]);
+  }, [
+    realtimeData?.screen,
+    realtimeData?.screen?.status?.playStart,
+    navigate,
+    contestId,
+  ]);
 
   // 랜덤 인덱스 생성 함수
   const generateShuffledIndexes = (numberOfJudges) => {
@@ -88,39 +103,57 @@ const RankingAnnouncement = () => {
     return indexes.sort(() => Math.random() - 0.5); // 배열을 랜덤하게 섞음
   };
 
+  const screenPlayersKey = JSON.stringify(realtimeData?.screen?.players || []);
+
   // 선수별 랜덤 인덱스 설정
   useEffect(() => {
-    if (realtimeData?.screen?.players) {
+    const players = realtimeData?.screen?.players;
+    if (Array.isArray(players)) {
       const newShuffledIndexes = {};
-      realtimeData.screen.players.forEach((player) => {
-        const numberOfJudges = player.score.length;
-        newShuffledIndexes[player.playerUid] =
+      players.forEach((player, idx) => {
+        const scores = player?.score || [];
+        const numberOfJudges = scores.length;
+        const playerKey = player?.playerUid || `${player?.playerNumber ?? idx}`;
+        newShuffledIndexes[playerKey] =
           generateShuffledIndexes(numberOfJudges);
       });
       setPlayerShuffledIndexes(newShuffledIndexes); // 선수별로 randomIndex 배열을 저장
       console.log("선수별 랜덤 인덱스 설정 완료:", newShuffledIndexes);
     }
-  }, [realtimeData?.screen?.players]);
+  }, [screenPlayersKey]);
 
   // 합산 점수 계산 (isMin, isMax가 아닌 점수들의 합산)
   const calculateTotalScore = (scoreArray) => {
-    return scoreArray
-      .filter((score) => !score.isMin && !score.isMax)
-      .reduce((total, score) => total + score.playerScore, 0);
+    return (scoreArray || [])
+      .filter((score) => score && !score.isMin && !score.isMax)
+      .reduce((total, score) => total + (Number(score.playerScore) || 0), 0);
   };
 
-  // 순위를 정렬하고 100위 이상의 선수는 제외
-  const sortedRankings =
-    realtimeData?.screen?.players
-      ?.filter((player) => player.playerRank <= 100)
-      ?.sort((a, b) => a.playerRank - b.playerRank) || [];
+  // 순위를 정렬하고 유효한 순위(1 ~ 100위)만 포함 (메모이제이션으로 불필요한 애니메이션 재시작 방지)
+  const sortedRankings = useMemo(() => {
+    const players = realtimeData?.screen?.players;
+    if (!Array.isArray(players)) return [];
+    return players
+      .filter(
+        (p) =>
+          p != null &&
+          p.playerRank != null &&
+          p.playerRank > 0 &&
+          p.playerRank <= 100
+      )
+      .slice()
+      .sort((a, b) => a.playerRank - b.playerRank);
+  }, [screenPlayersKey]);
 
-  // Step 1: Top 5 players from 5th to 1st place
-  const topRankings = sortedRankings.slice(0, playersToShow).reverse();
+  // Step 1: Top N players from Nth to 1st place
+  const topRankings = useMemo(
+    () => sortedRankings.slice(0, playersToShow).reverse(),
+    [sortedRankings, playersToShow]
+  );
 
   // 애니메이션 리셋 (애니메이션 1: Top Players Animation)
   useEffect(() => {
-    if (!realtimeData?.screen?.players || !topRankings.length) return;
+    if (!topRankings.length) return;
 
     const totalRanks = topRankings.length; // 최대 playersToShow명으로 제한
     const timelines = [];
@@ -158,7 +191,7 @@ const RankingAnnouncement = () => {
         )
         .add(() => {
           console.log(
-            `애니메이션 시작: 선수 ${i + 1} (${topRankings[i].playerName})`
+            `애니메이션 시작: 선수 ${i + 1} (${topRankings[i]?.playerName})`
           );
         });
 
@@ -177,7 +210,7 @@ const RankingAnnouncement = () => {
           .add(() => {
             console.log(
               `애니메이션 종료: 선수 ${i + 1} (${
-                topRankings[i].playerName
+                topRankings[i]?.playerName
               }) 사라짐`
             );
           });
@@ -208,14 +241,13 @@ const RankingAnnouncement = () => {
     );
     return () => {
       clearTimeout(timeoutId);
+      timelines.forEach((tl) => tl.kill());
+      if (finalRankingRef.current) {
+        gsap.killTweensOf(finalRankingRef.current);
+      }
       console.log("애니메이션 1: 타이머 해제됨");
     };
-  }, [
-    realtimeData?.screen?.players,
-    topRankings,
-    rankingDelay,
-    rankingFinalDelay,
-  ]);
+  }, [topRankings, rankingDelay, rankingFinalDelay]);
 
   // 애니메이션 2: Final Ranking with Pagination
   useEffect(() => {
@@ -307,6 +339,9 @@ const RankingAnnouncement = () => {
 
       return () => {
         clearTimeout(pageTimeoutId);
+        if (finalRankingRef.current) {
+          gsap.killTweensOf(finalRankingRef.current);
+        }
         console.log("Final Ranking: 타이머 해제됨");
       };
     }
@@ -363,10 +398,13 @@ const RankingAnnouncement = () => {
         // 마지막 페이지인 경우, scoreFinalDelay 후 애니메이션 종료
         const timeoutId = setTimeout(() => {
           console.log("Score Result: 마지막 페이지 도달. 애니메이션 종료");
-          if (realtimeData?.screen?.status?.playStart) {
-            updateData.updateData(`currentStage/${contestId}/screen/status`, {
-              playStart: false,
-            });
+          if (playStartRef.current && contestId) {
+            updateDataRef.current.updateData(
+              `currentStage/${contestId}/screen/status`,
+              {
+                playStart: false,
+              }
+            );
             console.log("Score Result: playStart 상태 업데이트 완료");
           }
         }, scoreFinalDelay * 1000);
@@ -385,8 +423,6 @@ const RankingAnnouncement = () => {
     scorePageDelay,
     scoreFinalDelay,
     contestId,
-    realtimeData,
-    updateData,
   ]);
 
   // Score Result 페이지 인덱스 변경 시 로그
@@ -451,7 +487,7 @@ const RankingAnnouncement = () => {
                       (currentPage + 1) * itemsPerPage
                     )
                     .map((player, i) => (
-                      <tr key={player.playerUid}>
+                      <tr key={player.playerUid || `${player.playerNumber}-${i}`}>
                         <td>{player.playerRank}위</td>
                         <td>
                           {player.playerNumber}번 {player.playerName}
@@ -479,7 +515,7 @@ const RankingAnnouncement = () => {
                   <th>선수</th>
                   {Array.from({
                     length:
-                      realtimeData?.screen?.players[0]?.score?.length || 0,
+                      realtimeData?.screen?.players?.[0]?.score?.length || 0,
                   }).map((_, index) => (
                     <th key={index}>{String.fromCharCode(65 + index)}</th> // A, B, C... 헤더
                   ))}
@@ -492,31 +528,36 @@ const RankingAnnouncement = () => {
                     scoreCurrentPage * itemsPerPage,
                     (scoreCurrentPage + 1) * itemsPerPage
                   )
-                  .map((player, i) => (
-                    <tr key={player.playerUid}>
-                      <td>
-                        {player.playerNumber}번 {player.playerName}
-                      </td>
-                      {/* 선수별로 생성된 randomIndex에 따라 점수를 표시 */}
-                      {playerShuffledIndexes[player.playerUid]?.map(
-                        (shuffledIndex, index) => (
-                          <td
-                            key={index}
-                            className={
-                              player.score[shuffledIndex]?.isMin
-                                ? "min-score"
-                                : player.score[shuffledIndex]?.isMax
-                                ? "max-score"
-                                : ""
-                            }
-                          >
-                            {player.score[shuffledIndex]?.playerScore}
-                          </td>
-                        )
-                      )}
-                      <td>{calculateTotalScore(player.score)}</td>
-                    </tr>
-                  ))}
+                  .map((player, i) => {
+                    const scores = player?.score || [];
+                    const playerKey =
+                      player?.playerUid || `${player?.playerNumber ?? i}`;
+                    return (
+                      <tr key={playerKey}>
+                        <td>
+                          {player.playerNumber}번 {player.playerName}
+                        </td>
+                        {/* 선수별로 생성된 randomIndex에 따라 점수를 표시 */}
+                        {(playerShuffledIndexes[playerKey] || []).map(
+                          (shuffledIndex, index) => (
+                            <td
+                              key={index}
+                              className={
+                                scores[shuffledIndex]?.isMin
+                                  ? "min-score"
+                                  : scores[shuffledIndex]?.isMax
+                                  ? "max-score"
+                                  : ""
+                              }
+                            >
+                              {scores[shuffledIndex]?.playerScore}
+                            </td>
+                          )
+                        )}
+                        <td>{calculateTotalScore(scores)}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
             {/* 안내 사항을 바닥 정렬 */}

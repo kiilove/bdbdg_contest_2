@@ -55,9 +55,11 @@ const PrintSummary = () => {
         condition
       );
       let sortedGrades = [];
-      if (gradesData[0]) {
-        sortedGrades = gradesData[0].grades.sort(
-          (a, b) => a.gradeIndex - b.gradeIndex
+      if (gradesData?.[0]?.grades) {
+        sortedGrades = [...gradesData[0].grades].sort(
+          (a, b) =>
+            (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
+            (b.contestGradeIndex ?? b.gradeIndex ?? 0)
         );
         setGradesArray(sortedGrades);
       }
@@ -110,7 +112,9 @@ const PrintSummary = () => {
         return {
           ...result,
           contestCategoryTitle: category ? category.contestCategoryTitle : "",
-          contestGradeTitle: grade ? grade.gradeTitle : "",
+          contestGradeTitle: grade
+            ? grade.contestGradeTitle || grade.gradeTitle || ""
+            : "",
         };
       });
 
@@ -127,21 +131,34 @@ const PrintSummary = () => {
 
   const handleSearch = () => {
     if (!currentContest?.contests?.id) {
-      setMessage({ text: "대회 정보가 없습니다." });
+      setMessage({
+        body: "대회 정보가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       setMsgOpen(true);
       return;
     }
 
     if (currentCategoryId === "all" || currentGradeId === "all") {
-      setMessage({ text: "종목과 체급을 선택해주세요." });
+      setMessage({
+        body: "종목과 체급을 선택해주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       setMsgOpen(true);
       return;
     }
+
+    const selectedCategory = categoriesArray.find(
+      (cat) => cat.contestCategoryId === currentCategoryId
+    );
 
     setSearchParams({
       contestId: currentContest.contests.id,
       categoryId: currentCategoryId,
       gradeId: currentGradeId,
+      categoryJudgeType: selectedCategory?.contestCategoryJudgeType,
     });
 
     fetchResultsData(
@@ -333,7 +350,7 @@ const PrintSummary = () => {
                       key={grade.contestGradeId}
                       value={grade.contestGradeId}
                     >
-                      {grade.contestGradeTitle}
+                      {grade.contestGradeTitle || grade.gradeTitle}
                     </option>
                   ))}
             </select>

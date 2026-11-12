@@ -28,30 +28,38 @@ const GymGroupPrint = () => {
 
   const fetchPool = async (contestId) => {
     const condition = [where("contestId", "==", contestId)];
+    setIsLoading(true);
     try {
       const result = await fetchResults.getDocuments(
         "contest_results_list",
         condition
       );
-      setResultArray(result);
+      setResultArray(result || []);
     } catch (error) {
       console.log(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const formatResultArray = (data) => {
-    return data.map((item) => ({
-      contestCategoryTitle: item.categoryTitle,
+    return (data || []).map((item) => ({
+      contestCategoryTitle: item?.categoryTitle || "",
       grades: [
         {
-          contestGradeTitle: item.gradeTitle,
-          players: item.result
-            .filter((f) => f.playerRank < 1000)
+          contestGradeTitle: item?.gradeTitle || "",
+          players: (item?.result || [])
+            .filter(
+              (f) =>
+                f?.playerRank != null &&
+                f.playerRank > 0 &&
+                f.playerRank < 1000
+            )
             .sort((a, b) => a.playerRank - b.playerRank)
             .map((player) => ({
               playerNumber: player.playerNumber,
-              playerName: player.playerName,
-              playerGym: player.playerGym,
+              playerName: player.playerName || "",
+              playerGym: player.playerGym || "",
               playerRank: player.playerRank,
               note: player.note || "",
             })),
@@ -61,21 +69,26 @@ const GymGroupPrint = () => {
   };
 
   const groupAndCountPlayersByGymAndRank = (data) => {
-    const playersFlat = data.flatMap((category) =>
-      category.grades.flatMap((grade) =>
-        grade.players.map((player) => ({
-          ...player,
-          contestCategoryTitle: category.contestCategoryTitle,
-          contestGradeTitle: grade.contestGradeTitle,
-          // 공백 제거된 playerGym 추가
-          cleanedPlayerGym: player.playerGym.replace(/\s+/g, ""),
-        }))
+    const playersFlat = (data || []).flatMap((category) =>
+      (category.grades || []).flatMap((grade) =>
+        (grade.players || []).map((player) => {
+          const rawGym = (player.playerGym || "").replace(/\s+/g, "");
+          return {
+            ...player,
+            contestCategoryTitle: category.contestCategoryTitle || "",
+            contestGradeTitle: grade.contestGradeTitle || "",
+            // 공백 제거된 playerGym 추가 (빈 문자열이면 무소속 처리)
+            cleanedPlayerGym: rawGym || "무소속",
+          };
+        })
       )
     );
 
     const maxRank =
       rankingLimit === "all"
-        ? Math.max(...playersFlat.map((player) => player.playerRank))
+        ? playersFlat.length > 0
+          ? Math.max(1, ...playersFlat.map((player) => player.playerRank || 0))
+          : 5
         : parseInt(rankingLimit.replace("top", ""), 10);
 
     const groupedData = playersFlat.reduce((acc, player) => {
@@ -83,28 +96,28 @@ const GymGroupPrint = () => {
 
       if (
         (!includeUnaffiliated && cleanedPlayerGym === "무소속") ||
-        (!includeGrandPrix && contestCategoryTitle.endsWith("그랑프리"))
+        (!includeGrandPrix && (contestCategoryTitle || "").endsWith("그랑프리"))
       ) {
         return acc;
       }
 
-      if (!acc[cleanedPlayerGym]) acc[cleanedPlayerGym] = {};
+      if (!(playerRank >= 1 && playerRank <= maxRank)) {
+        return acc;
+      }
 
-      for (let rank = 1; rank <= maxRank; rank++) {
-        const rankTitle = `rankTitle:${rank}`;
-        if (!acc[cleanedPlayerGym][rankTitle]) {
-          acc[cleanedPlayerGym][rankTitle] = {
+      if (!acc[cleanedPlayerGym]) {
+        acc[cleanedPlayerGym] = {};
+        for (let rank = 1; rank <= maxRank; rank++) {
+          acc[cleanedPlayerGym][`rankTitle:${rank}`] = {
             count: 0,
             players: [],
           };
         }
       }
 
-      if (playerRank <= maxRank) {
-        const rankTitle = `rankTitle:${playerRank}`;
-        acc[cleanedPlayerGym][rankTitle].players.push(player);
-        acc[cleanedPlayerGym][rankTitle].count += 1;
-      }
+      const rankTitle = `rankTitle:${playerRank}`;
+      acc[cleanedPlayerGym][rankTitle].players.push(player);
+      acc[cleanedPlayerGym][rankTitle].count += 1;
 
       return acc;
     }, {});
@@ -137,35 +150,40 @@ const GymGroupPrint = () => {
   const prepareDataForPrintTable = (sortedData) => {
     const maxRank =
       rankingLimit === "all"
-        ? Math.max(
-            ...sortedData.flatMap((gym) =>
-              gym.ranks.map((rank) => parseInt(rank.rankTitle))
+        ? sortedData.length > 0
+          ? Math.max(
+              1,
+              ...sortedData.flatMap((gym) =>
+                gym.ranks.map((rank) => parseInt(rank.rankTitle, 10) || 0)
+              )
             )
-          )
+          : 5
         : parseInt(rankingLimit.replace("top", ""), 10);
 
     let currentRank = 1;
-    let lastCountSum = null;
+    let prevRankSignature = null;
     return sortedData.map(({ gymName, ranks }, index) => {
       const rankCounts = ranks.reduce((acc, { rankTitle, count }) => {
-        if (parseInt(rankTitle) <= maxRank) {
-          acc[`rank${rankTitle}`] = count;
+        const parsedRank = parseInt(rankTitle, 10);
+        if (parsedRank >= 1 && parsedRank <= maxRank) {
+          acc[`rank${parsedRank}`] = count;
         }
         return acc;
       }, {});
 
-      const countSum = Object.values(rankCounts).reduce(
-        (sum, count) => sum + count,
-        0
-      );
+      const currentSignature = Array.from(
+        { length: maxRank },
+        (_, i) => rankCounts[`rank${i + 1}`] || 0
+      ).join(",");
 
-      if (countSum === lastCountSum) {
-        // 같은 순위
-        lastCountSum = countSum;
+      if (
+        prevRankSignature !== null &&
+        currentSignature === prevRankSignature
+      ) {
+        // 모든 순위별 메달(1위..N위) 개수가 동일할 때만 동순위 유지
       } else {
-        // 새로운 순위
         currentRank = index + 1;
-        lastCountSum = countSum;
+        prevRankSignature = currentSignature;
       }
 
       const row = { gymName, clubRank: currentRank };
@@ -186,13 +204,16 @@ const GymGroupPrint = () => {
   const columns = useMemo(() => {
     const maxRank =
       rankingLimit === "all"
-        ? Math.max(
-            ...topGroupedData.flatMap((row) =>
-              Object.keys(row)
-                .filter((key) => key.startsWith("rank"))
-                .map((key) => parseInt(key.replace("rank", "")))
+        ? topGroupedData.length > 0
+          ? Math.max(
+              1,
+              ...topGroupedData.flatMap((row) =>
+                Object.keys(row)
+                  .filter((key) => key.startsWith("rank"))
+                  .map((key) => parseInt(key.replace("rank", ""), 10) || 0)
+              )
             )
-          )
+          : 5
         : parseInt(rankingLimit.replace("top", ""), 10);
 
     return [
@@ -285,9 +306,9 @@ const GymGroupPrint = () => {
               }`}
             >
               {topGroupedData.length === 0 ? (
-                <p className="text-center text-gray-500">
+                <div className="text-center text-gray-500">
                   <Empty description="데이터가 없습니다." />
-                </p>
+                </div>
               ) : (
                 <div className="flex w-full h-full flex-col">
                   <div
@@ -336,7 +357,9 @@ const GymGroupPrint = () => {
                               className="p-2 border"
                               style={{ width: `${col.width}%` }}
                             >
-                              {row[col.key] || 0}
+                              {col.key === "gymName"
+                                ? row.gymName || "-"
+                                : row[col.key] ?? 0}
                             </td>
                           ))}
                         </tr>

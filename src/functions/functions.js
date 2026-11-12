@@ -14,13 +14,19 @@ export const generateToday = () => {
 export const matchingCategoriesWithGrades = (categories, grades) => {
   let dummy = [];
 
-  categories
-
-    .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+  (categories || [])
+    .sort(
+      (a, b) =>
+        (a.contestCategoryIndex ?? 0) - (b.contestCategoryIndex ?? 0)
+    )
     .map((category, cIdx) => {
-      const matchedGrades = grades
+      const matchedGrades = (grades || [])
         .filter((grade) => grade.refCategoryId === category.contestCategoryId)
-        .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex);
+        .sort(
+          (a, b) =>
+            (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
+            (b.contestGradeIndex ?? b.gradeIndex ?? 0)
+        );
       const newCategoryItem = { ...category, grades: [...matchedGrades] };
       dummy.push({ ...newCategoryItem });
     });
@@ -77,11 +83,40 @@ export const exportContestResultsToExcel = async (
     if (catA !== catB) return catA - catB;
 
     const grdA =
-      gradesMap[a.gradeId]?.contestGradeIndex ?? (a.contestGradeIndex ?? 999);
+      gradesMap[a.gradeId]?.contestGradeIndex ??
+      gradesMap[a.gradeId]?.gradeIndex ??
+      a.contestGradeIndex ??
+      999;
     const grdB =
-      gradesMap[b.gradeId]?.contestGradeIndex ?? (b.contestGradeIndex ?? 999);
+      gradesMap[b.gradeId]?.contestGradeIndex ??
+      gradesMap[b.gradeId]?.gradeIndex ??
+      b.contestGradeIndex ??
+      999;
     return grdA - grdB;
   });
+
+  // 최대 심판 좌석 수(maxSeat) 동적 계산 (기본 7심, 9심 이상도 자동 지원)
+  let detectedMaxSeat = 0;
+  sortedResults.forEach((res) => {
+    (res.result || []).forEach((p) => {
+      const scores = p.score || [];
+      if (scores.length > detectedMaxSeat) {
+        detectedMaxSeat = scores.length;
+      }
+      scores.forEach((s) => {
+        const seatNum = Number(s?.seatIndex);
+        if (Number.isFinite(seatNum) && seatNum > detectedMaxSeat) {
+          detectedMaxSeat = seatNum;
+        }
+      });
+    });
+  });
+  const maxSeat = Math.max(7, detectedMaxSeat > 7 ? Math.max(9, detectedMaxSeat) : 7);
+
+  const formatPlayerRank = (rank) => {
+    if (rank === undefined || rank === null || rank === "") return "";
+    return Number(rank) >= 1000 ? "순위제외" : rank;
+  };
 
   // 시트 1: 최종순위표 (편집 최적화 순수 테이블)
   const summaryRows = [
@@ -104,7 +139,7 @@ export const exportContestResultsToExcel = async (
     const gradeTitle =
       res.gradeTitle || res.contestGradeTitle || "미지정 체급";
     const players = [...(res.result || [])].sort(
-      (a, b) => (a.playerRank || 999) - (b.playerRank || 999)
+      (a, b) => (a.playerRank ?? 9999) - (b.playerRank ?? 9999)
     );
 
     players.forEach((p) => {
@@ -112,7 +147,7 @@ export const exportContestResultsToExcel = async (
         overallIndex++,
         categoryTitle,
         gradeTitle,
-        p.playerRank ?? "",
+        formatPlayerRank(p.playerRank),
         p.playerNumber ?? "",
         p.playerName || "",
         p.playerGym || "",
@@ -122,6 +157,10 @@ export const exportContestResultsToExcel = async (
   });
 
   // 시트 2: 심사위원_상세집계표
+  const judgeHeaders = Array.from(
+    { length: maxSeat },
+    (_, idx) => `심판${idx + 1}`
+  );
   const detailRows = [
     [
       "순번",
@@ -131,13 +170,7 @@ export const exportContestResultsToExcel = async (
       "배번호",
       "선수명",
       "소속",
-      "심판1",
-      "심판2",
-      "심판3",
-      "심판4",
-      "심판5",
-      "심판6",
-      "심판7",
+      ...judgeHeaders,
       "총점",
     ],
   ];
@@ -149,26 +182,30 @@ export const exportContestResultsToExcel = async (
     const gradeTitle =
       res.gradeTitle || res.contestGradeTitle || "미지정 체급";
     const players = [...(res.result || [])].sort(
-      (a, b) => (a.playerRank || 999) - (b.playerRank || 999)
+      (a, b) => (a.playerRank ?? 9999) - (b.playerRank ?? 9999)
     );
 
     players.forEach((p) => {
       const scores = p.score || [];
-      const judgeScores = [
-        scores[0]?.playerScore ?? "",
-        scores[1]?.playerScore ?? "",
-        scores[2]?.playerScore ?? "",
-        scores[3]?.playerScore ?? "",
-        scores[4]?.playerScore ?? "",
-        scores[5]?.playerScore ?? "",
-        scores[6]?.playerScore ?? "",
-      ];
+      const hasSeatIndex = scores.some(
+        (s) =>
+          s?.seatIndex !== undefined &&
+          s?.seatIndex !== null &&
+          !Number.isNaN(Number(s.seatIndex))
+      );
+      const judgeScores = Array.from({ length: maxSeat }, (_, idx) => {
+        const seat = idx + 1;
+        const matched = hasSeatIndex
+          ? scores.find((s) => Number(s?.seatIndex) === seat)
+          : scores[idx];
+        return matched?.playerScore ?? "";
+      });
 
       detailRows.push([
         detailIndex++,
         categoryTitle,
         gradeTitle,
-        p.playerRank ?? "",
+        formatPlayerRank(p.playerRank),
         p.playerNumber ?? "",
         p.playerName || "",
         p.playerGym || "",
@@ -185,7 +222,7 @@ export const exportContestResultsToExcel = async (
     { wch: 6 },  // 순번
     { wch: 25 }, // 종목명
     { wch: 18 }, // 체급명
-    { wch: 8 },  // 순위
+    { wch: 10 }, // 순위
     { wch: 8 },  // 배번호
     { wch: 14 }, // 선수명
     { wch: 24 }, // 소속
@@ -198,17 +235,11 @@ export const exportContestResultsToExcel = async (
     { wch: 6 },  // 순번
     { wch: 25 }, // 종목명
     { wch: 18 }, // 체급명
-    { wch: 8 },  // 순위
+    { wch: 10 }, // 순위
     { wch: 8 },  // 배번호
     { wch: 14 }, // 선수명
     { wch: 24 }, // 소속
-    { wch: 8 },  // 심판1
-    { wch: 8 },  // 심판2
-    { wch: 8 },  // 심판3
-    { wch: 8 },  // 심판4
-    { wch: 8 },  // 심판5
-    { wch: 8 },  // 심판6
-    { wch: 8 },  // 심판7
+    ...Array.from({ length: maxSeat }, () => ({ wch: 8 })),
     { wch: 8 },  // 총점
   ];
   XLSX.utils.book_append_sheet(wb, wsDetail, "심사위원_상세집계표");

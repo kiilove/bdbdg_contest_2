@@ -263,38 +263,39 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     await updateCurrentStage.updateData(collectionInfo, { ...newState });
   };
 
+  const effectiveCollectionName =
+    contestInfo?.contestCollectionName ||
+    currentContest?.contestInfo?.contestCollectionName ||
+    "";
+
   const fetchScoreTable = async (grades) => {
-    if (!grades || grades.length === 0) return;
+    if (!effectiveCollectionName || !grades || grades.length === 0) return;
 
     const allData = [];
 
     for (const grade of grades) {
-      const { gradeId } = grade;
+      const { gradeId } = grade || {};
+      if (!gradeId) continue;
       try {
         const condition = [where("gradeId", "==", gradeId)];
         const data = await fetchScoreCardQuery.getDocuments(
-          contestInfo.contestCollectionName,
+          effectiveCollectionName,
           condition
         );
-        allData.push(...data);
+        if (Array.isArray(data)) {
+          allData.push(...data);
+        }
       } catch (error) {
         console.log(error);
       }
     }
 
     setNormalScoreData(allData);
-    setIsLoading(false);
   };
 
   const handleForceScoreTableRefresh = (grades) => {
-    if (grades?.length <= 0) return;
+    if (!grades || grades.length <= 0) return;
     fetchScoreTable(grades);
-  };
-
-  const handleScoreTableByJudge = (grades) => {
-    if (!_.isEqual(realtimeData?.judges, prevRealtimeData?.judges)) {
-      fetchScoreTable(grades);
-    }
   };
 
   const handleGradeInfo = (grades) => {
@@ -438,7 +439,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       gradeTitle: gradeTitle || "",
       stageJudgeCount: targetJudgeCount,
       judges: judgeInitState,
-      resultSaved: false,
+      resultSaved: [],
       compares: {
         status: {
           compareStart: false,
@@ -491,10 +492,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  const handleJudgeIsEndValidated = (judgesArray) => {
-    if (judgesArray?.length <= 0) return;
-    handleScoreTableByJudge(currentStageInfo.grades);
-    const validate = judgesArray.some((s) => s.isEnd === false);
+  const handleJudgeIsEndValidated = (judgesList) => {
+    if (!Array.isArray(judgesList) || judgesList.length <= 0) return true;
+    const validate = judgesList.some((s) => s.isEnd === false);
     return validate;
   };
 
@@ -531,28 +531,72 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   }, [currentContest]);
 
   useEffect(() => {
-    setCurrentStageInfo({
-      ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
-    });
-    if (realtimeData?.judges?.length > 0) {
-      setJudgesIsEndValidated(() =>
-        handleJudgeIsEndValidated(realtimeData?.judges)
-      );
-    }
+    const foundStage = stagesArray.find(
+      (f) => f.stageId === realtimeData?.stageId
+    );
+    setCurrentStageInfo(foundStage ? { ...foundStage } : { stageId: null });
+    setJudgesIsEndValidated(
+      handleJudgeIsEndValidated(realtimeData?.judges)
+    );
   }, [realtimeData, stagesArray]);
+
+  // 무대 변경 시 이전 점수 초기화
+  useEffect(() => {
+    setNormalScoreData([]);
+  }, [realtimeData?.stageId]);
+
+  const judgesSignature = JSON.stringify(realtimeData?.judges || []);
+  const stageGradesSignature = JSON.stringify(
+    (currentStageInfo?.grades || []).map((g) => g?.gradeId)
+  );
 
   useEffect(() => {
     if (realtimeData?.judges) {
       setPrevRealtimeData(() => ({ ...realtimeData }));
     }
+  }, [realtimeData]);
+
+  // H5: contestCollectionName, stageId, judges 변경 시 안전하게 점수표 갱신
+  useEffect(() => {
     if (
-      realtimeData?.stageJudgeCount &&
-      currentStageInfo?.grades?.length > 0 &&
-      playersArray?.length > 0
+      !effectiveCollectionName ||
+      !currentStageInfo?.stageId ||
+      !currentStageInfo?.grades?.length
     ) {
-      handleScoreTableByJudge(currentStageInfo.grades);
+      return;
     }
-  }, [realtimeData, playersArray, currentStageInfo]);
+
+    let cancelled = false;
+    (async () => {
+      const allData = [];
+      for (const grade of currentStageInfo.grades) {
+        if (!grade?.gradeId) continue;
+        try {
+          const data = await fetchScoreCardQuery.getDocuments(
+            effectiveCollectionName,
+            [where("gradeId", "==", grade.gradeId)]
+          );
+          if (Array.isArray(data)) {
+            allData.push(...data);
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      }
+      if (!cancelled) {
+        setNormalScoreData(allData);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    effectiveCollectionName,
+    currentStageInfo?.stageId,
+    stageGradesSignature,
+    judgesSignature,
+  ]);
 
   const JudgeCardView = ({ judges }) => {
     return (
@@ -704,7 +748,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                   );
 
                   let scoreDisplay = "-";
-                  if (finded?.playerScore === 1000) {
+                  if (finded?.playerScore >= 1000) {
                     scoreDisplay = <Tag color="error">순위제외</Tag>;
                   } else if (
                     finded?.playerScore !== 0 &&
@@ -844,6 +888,21 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     if (idx === sectionsWithOrder.length - 1) return null;
     return sectionsWithOrder[idx + 1]?.section ?? null;
   }, [currentSectionKey, sectionsWithOrder]);
+
+  const currentStageIdx = useMemo(
+    () => stagesArray.findIndex((s) => s.stageId === realtimeData?.stageId),
+    [stagesArray, realtimeData?.stageId]
+  );
+
+  const hasNextStage =
+    currentStageIdx !== -1 && currentStageIdx + 1 < stagesArray.length;
+
+  const currentStageJudgeType =
+    (currentStageIdx !== -1
+      ? stagesArray[currentStageIdx]?.categoryJudgeType
+      : null) ||
+    currentStageInfo?.categoryJudgeType ||
+    realtimeData?.categoryJudgeType;
 
   const scrollToSectionTable = (section) => {
     const el = document.querySelector(`[data-section-anchor="${section}"]`);
@@ -991,14 +1050,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                         title={
                           <div className="flex justify-between items-center flex-wrap gap-2">
                             <Text strong>진행상황</Text>
-                            {!judgesIsEndValidated && (
+                            {!judgesIsEndValidated && hasNextStage && (
                               <Button
                                 type="primary"
                                 icon={<FastForwardOutlined />}
                                 onClick={() =>
-                                  handleUpdateCurrentStage(
-                                    realtimeData.stageNumber
-                                  )
+                                  handleUpdateCurrentStage(currentStageIdx + 1)
                                 }
                               >
                                 다음 진행
@@ -1016,16 +1073,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                             </Text>
                             <Tag
                               color={
-                                stagesArray[realtimeData?.stageNumber - 1]
-                                  ?.categoryJudgeType === "point"
+                                currentStageJudgeType === "point"
                                   ? "blue"
                                   : "green"
                               }
                             >
-                              {stagesArray[realtimeData?.stageNumber - 1]
-                                ?.categoryJudgeType === "point"
-                                ? "P"
-                                : "R"}
+                              {currentStageJudgeType === "point" ? "P" : "R"}
                             </Tag>
                           </div>
 
@@ -1195,13 +1248,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     if (
                                       finded?.playerScore !== 0 &&
                                       finded?.playerScore !== undefined &&
-                                      finded?.playerScore !== 1000
+                                      finded?.playerScore < 1000
                                     ) {
                                       return (
                                         <Text strong>{finded.playerScore}</Text>
                                       );
                                     }
-                                    if (finded?.playerScore === 1000) {
+                                    if (finded?.playerScore >= 1000) {
                                       return <Tag color="error">순위제외</Tag>;
                                     }
                                     return <Text type="secondary">-</Text>;
@@ -1224,9 +1277,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     <Text strong className="text-base">
                                       {categoryTitle} ({gradeTitle})
                                     </Text>
-                                    {(realtimeData?.resultSaved || []).includes(
-                                      gradeId
-                                    ) && <Tag color="error">순위표 확정</Tag>}
+                                    {Array.isArray(realtimeData?.resultSaved) &&
+                                      realtimeData.resultSaved.includes(
+                                        gradeId
+                                      ) && <Tag color="error">순위표 확정</Tag>}
                                   </div>
 
                                   <Space wrap size="small">

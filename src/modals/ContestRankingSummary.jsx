@@ -24,6 +24,9 @@ const ContestRankingSummary = ({
   const [scoreData, setScoreData] = useState([]);
   const [summaryTable, setSummaryTable] = useState([]);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaveSuccess, setIsSaveSuccess] = useState(false);
+  const isSavingRef = useRef(false);
   const modalContentRef = useRef(null);
 
   const { currentContest } = useContext(CurrentContestContext);
@@ -102,10 +105,22 @@ const ContestRankingSummary = ({
       }
     }
 
-    // 제외되지 않은 유효 5개 점수만 합산
-    group.totalScore = group.score
-      .filter((s) => !s.isMin && !s.isMax)
-      .reduce((acc, curr) => acc + curr.playerScore, 0);
+    // 제외되지 않은 유효 5개 점수만 합산 (심판이 순위제외(>=1000) 부여 시 제외 상태 반영)
+    const activeScores = group.score.filter((s) => !s.isMin && !s.isMax);
+    if (activeScores.some((s) => Number(s.playerScore) >= 1000)) {
+      group.totalScore = Math.max(
+        1000,
+        activeScores.reduce(
+          (acc, curr) => acc + Number(curr.playerScore || 0),
+          0
+        )
+      );
+    } else {
+      group.totalScore = activeScores.reduce(
+        (acc, curr) => acc + Number(curr.playerScore || 0),
+        0
+      );
+    }
   };
 
   const groupedByPlayerNumber = (arr, sortCriteria = "playerIndex") => {
@@ -147,35 +162,27 @@ const ContestRankingSummary = ({
     let rank = 0;
     let prevScore = null;
     let sameRankCount = 0;
-    let isAlertSet = false;
+    let lastValidIdx = -1;
 
     for (let i = 0; i < groupedObj.length; i++) {
       groupedObj[i].isAlert = false;
 
-      if (groupedObj[i].totalScore > 1000) {
+      if (groupedObj[i].totalScore >= 1000) {
         groupedObj[i].playerRank = 1000;
       } else {
         if (prevScore === null || groupedObj[i].totalScore !== prevScore) {
-          if (sameRankCount >= 1) {
-            for (let j = 0; j <= sameRankCount; j++) {
-              groupedObj[i - j - 1].isAlert = true;
-            }
-          }
           rank += sameRankCount + 1;
           sameRankCount = 0;
-          isAlertSet = false;
         } else {
           sameRankCount++;
           groupedObj[i].isAlert = true;
+          if (lastValidIdx >= 0) {
+            groupedObj[lastValidIdx].isAlert = true;
+          }
         }
         groupedObj[i].playerRank = rank;
         prevScore = groupedObj[i].totalScore;
-      }
-    }
-
-    if (sameRankCount >= 1) {
-      for (let j = 0; j <= sameRankCount; j++) {
-        groupedObj[groupedObj.length - 1 - j].isAlert = true;
+        lastValidIdx = i;
       }
     }
 
@@ -211,10 +218,13 @@ const ContestRankingSummary = ({
   };
 
   const handleSummaryTable = (dataArray, e, summaryIndex, playerIndex) => {
+    const rawValue = e.target.value;
+    const parsedRank = rawValue === "" ? null : Number(rawValue);
+
     const newDataArray = [...dataArray];
     const newRankInfo = {
       ...newDataArray[playerIndex],
-      playerRank: Number.parseInt(e.target.value),
+      playerRank: Number.isNaN(parsedRank) ? null : parsedRank,
     };
     newDataArray.splice(playerIndex, 1, newRankInfo);
     const newSummaryTable = [...summaryTable];
@@ -226,46 +236,45 @@ const ContestRankingSummary = ({
     setSummaryTable(() => [...newSummaryTable]);
   };
 
-  const handleDeleteResult = async (contestId, gradeId) => {
+  const handleDeleteResult = async (contestId, targetGradeId) => {
     const condition = [
       where("contestId", "==", contestId),
-      where("gradeId", "==", gradeId),
+      where("gradeId", "==", targetGradeId),
     ];
 
-    try {
-      const returnQuery = await resultQuery.getDocuments(
-        "contest_results_list",
-        condition
-      );
-      console.log(returnQuery);
+    const returnQuery = await resultQuery.getDocuments(
+      "contest_results_list",
+      condition
+    );
 
-      if (returnQuery?.length === 0) {
-        return;
-      }
+    if (!returnQuery || returnQuery.length === 0) {
+      return;
+    }
 
-      returnQuery.map(async (result, rIdx) => {
-        const { id } = result;
-        await resultDelete.deleteData(id).then((data) => console.log(data));
-      });
-    } catch (error) {
-      console.log(error);
+    const deleteResults = await Promise.all(
+      returnQuery.map((result) => resultDelete.deleteData(result.id))
+    );
+
+    if (deleteResults.some((ok) => !ok)) {
+      throw new Error("기존 순위 결과 삭제 중 오류가 발생했습니다.");
     }
   };
 
-  const handleRealtimeUpdate = async (contestId, gradeId) => {
+  const handleRealtimeUpdate = async (contestId, targetGradeId = gradeId) => {
     const collectionInfo = `currentStage/${contestId}`;
+    const base = Array.isArray(currentResultSaved) ? currentResultSaved : [];
+    const newResultSaved =
+      targetGradeId && !base.includes(targetGradeId)
+        ? [...base, targetGradeId]
+        : base;
 
-    const newResultSaved = currentResultSaved ? [...currentResultSaved] : [];
-
-    const gradeExists = newResultSaved.includes(gradeId);
-
-    if (!gradeExists) {
-      newResultSaved.push(gradeId);
-    }
-
-    await realtimeResultStateUpdate.updateData(collectionInfo, {
+    const updated = await realtimeResultStateUpdate.updateData(collectionInfo, {
       resultSaved: newResultSaved,
     });
+
+    if (!updated) {
+      throw new Error("실시간 순위 확정 상태 업데이트에 실패했습니다.");
+    }
 
     console.log("Updated resultSaved array:", newResultSaved);
   };
@@ -280,37 +289,54 @@ const ContestRankingSummary = ({
   };
 
   const handleSaveResult = async (resultData) => {
-    if (resultData?.length === 0) {
+    if (!resultData || resultData.length === 0) {
       return;
     }
-    try {
-      resultData.map(async (data, dIdx) => {
-        const { contestId, gradeId } = data;
+    if (isSavingRef.current) {
+      return;
+    }
 
-        await handleDeleteResult(contestId, gradeId);
-        try {
-          await resultAdd
-            .addData({ ...data })
-            .then((data) => console.log(data));
-        } catch (error) {
-          console.log(error);
-        }
-      });
-    } catch (error) {
-      console.log(error);
-    } finally {
-      await handleRealtimeUpdate(currentContest.contests.id, gradeId).then(
-        () => {
-          setMessage({
-            body: "저장되었습니다.",
-            body2: "확인 버튼을 누르시면 모니터링화면으로 돌아갑니다.",
-            isButton: true,
-            cancelButtonText: "되돌아가기",
-            confirmButtonText: "확인",
-          });
-          setMsgOpen(true);
-        }
+    isSavingRef.current = true;
+    setIsSaving(true);
+
+    try {
+      for (const data of resultData) {
+        const { contestId, gradeId: itemGradeId } = data;
+        await handleDeleteResult(contestId, itemGradeId);
+      }
+
+      const addedDocs = await Promise.all(
+        resultData.map((data) => resultAdd.addData({ ...data }))
       );
+
+      if (addedDocs.some((doc) => !doc)) {
+        throw new Error("순위 결과 저장 중 오류가 발생했습니다.");
+      }
+
+      await handleRealtimeUpdate(currentContest.contests.id, gradeId);
+
+      setIsSaveSuccess(true);
+      setMessage({
+        body: "저장되었습니다.",
+        body2: "확인 버튼을 누르시면 모니터링화면으로 돌아갑니다.",
+        isButton: true,
+        cancelButtonText: "되돌아가기",
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } catch (error) {
+      console.error(error);
+      setIsSaveSuccess(false);
+      setMessage({
+        body: "저장에 실패했습니다.",
+        body2: error?.message || "잠시 후 다시 시도해주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -338,9 +364,24 @@ const ContestRankingSummary = ({
     }
   };
 
-  const hasDuplicateRanks = (resultArray) => {
-    const ranks = resultArray
+  const isValidPlayerRank = (rank) =>
+    typeof rank === "number" &&
+    Number.isInteger(rank) &&
+    rank >= 1 &&
+    rank < 1000;
+
+  const hasInvalidRanks = (resultArray = []) => {
+    return resultArray
       .filter((player) => player.totalScore < 1000)
+      .some((player) => !isValidPlayerRank(player.playerRank));
+  };
+
+  const hasDuplicateRanks = (resultArray = []) => {
+    const ranks = resultArray
+      .filter(
+        (player) =>
+          player.totalScore < 1000 && isValidPlayerRank(player.playerRank)
+      )
       .map((player) => player.playerRank);
 
     const rankSet = new Set(ranks);
@@ -386,7 +427,12 @@ const ContestRankingSummary = ({
         isOpen={msgOpen}
         message={message}
         onCancel={() => setMsgOpen(false)}
-        onConfirm={() => setClose(false)}
+        onConfirm={() => {
+          setMsgOpen(false);
+          if (isSaveSuccess) {
+            setClose(false);
+          }
+        }}
       />
 
       {/* 🚨 1. 동점자 발생 강력 경고 모달 */}
@@ -483,13 +529,19 @@ const ContestRankingSummary = ({
                 </button>
 
                 <button
-                  className="w-full py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-colors cursor-pointer border-none opacity-90 hover:opacity-100 flex items-center justify-center gap-1.5"
+                  className="w-full py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm transition-colors cursor-pointer border-none opacity-90 hover:opacity-100 flex items-center justify-center gap-1.5"
+                  disabled={isSaving}
                   onClick={() => {
+                    if (isSaving) return;
                     setForceConfirmOpen(false);
                     handleSaveResult(summaryTable);
                   }}
                 >
-                  <span>⚠️ 위험을 감수하고 강제등록 진행</span>
+                  <span>
+                    {isSaving
+                      ? "저장 중..."
+                      : "⚠️ 위험을 감수하고 강제등록 진행"}
+                  </span>
                 </button>
               </div>
             </div>
@@ -525,8 +577,25 @@ const ContestRankingSummary = ({
           summaryTable.map((table, tIdx) => {
             const { categoryTitle, gradeTitle, result } = table;
             const hasDuplicates = hasDuplicateRanks(result);
+            const hasInvalid = hasInvalidRanks(result);
+            const hasAnyInvalid = summaryTable.some((t) =>
+              hasInvalidRanks(t.result)
+            );
+            const hasAnyDuplicates = summaryTable.some((t) =>
+              hasDuplicateRanks(t.result)
+            );
+            const cannotConfirm =
+              hasDuplicates ||
+              hasInvalid ||
+              hasAnyInvalid ||
+              hasAnyDuplicates ||
+              isSaving;
             const duplicateRanks = result
-              .filter((player) => player.totalScore < 1000)
+              .filter(
+                (player) =>
+                  player.totalScore < 1000 &&
+                  isValidPlayerRank(player.playerRank)
+              )
               .map((player) => player.playerRank)
               .filter((rank, index, self) => self.indexOf(rank) !== index);
 
@@ -584,10 +653,14 @@ const ContestRankingSummary = ({
                               if (totalScore >= 1000) {
                                 return null;
                               }
+                              const isRankInvalid =
+                                !isValidPlayerRank(playerRank);
                               const isRankDuplicated =
+                                !isRankInvalid &&
                                 duplicateRanks.includes(playerRank);
 
-                              const isHighlightRow = isRankDuplicated || isAlert;
+                              const isHighlightRow =
+                                isRankInvalid || isRankDuplicated || isAlert;
 
                               return (
                                 <tr
@@ -617,6 +690,8 @@ const ContestRankingSummary = ({
                                       <input
                                         type="number"
                                         name="playerRank"
+                                        min={1}
+                                        step={1}
                                         onFocus={(e) => e.target.select()}
                                         onChange={(e) =>
                                           handleSummaryTable(
@@ -627,15 +702,21 @@ const ContestRankingSummary = ({
                                           )
                                         }
                                         className={
-                                          isRankDuplicated
+                                          isRankInvalid || isRankDuplicated
                                             ? "w-11 sm:w-12 h-8 sm:h-9 bg-red-50 border-2 border-red-500 rounded text-center font-black text-red-600 text-sm outline-none ring-1 ring-red-200"
                                             : isAlert
                                             ? "w-11 sm:w-12 h-8 sm:h-9 bg-amber-50 border-2 border-amber-400 rounded text-center font-bold text-amber-900 text-sm outline-none"
                                             : "w-11 sm:w-12 h-8 sm:h-9 bg-slate-50 hover:bg-white border border-slate-300 focus:border-blue-500 focus:bg-white rounded text-center font-bold text-slate-800 text-sm outline-none transition-all"
                                         }
-                                        value={playerRank}
+                                        value={
+                                          playerRank === null ||
+                                          playerRank === undefined ||
+                                          Number.isNaN(playerRank)
+                                            ? ""
+                                            : playerRank
+                                        }
                                       />
-                                      {isRankDuplicated && (
+                                      {(isRankInvalid || isRankDuplicated) && (
                                         <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-black">
                                           !
                                         </span>
@@ -659,7 +740,7 @@ const ContestRankingSummary = ({
                                         {isMin && (
                                           <div className="inline-flex flex-col items-center justify-center px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 leading-none">
                                             <span className="font-bold text-xs line-through text-blue-400">
-                                              {playerScore >= 100
+                                              {playerScore >= 1000
                                                 ? "제외"
                                                 : playerScore}
                                             </span>
@@ -671,7 +752,7 @@ const ContestRankingSummary = ({
                                         {isMax && (
                                           <div className="inline-flex flex-col items-center justify-center px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700 leading-none">
                                             <span className="font-bold text-xs line-through text-rose-400">
-                                              {playerScore >= 100
+                                              {playerScore >= 1000
                                                 ? "제외"
                                                 : playerScore}
                                             </span>
@@ -682,7 +763,7 @@ const ContestRankingSummary = ({
                                         )}
                                         {!isMax && !isMin && (
                                           <span className="font-bold text-slate-800 text-sm sm:text-base">
-                                            {playerScore >= 100
+                                            {playerScore >= 1000
                                               ? "-"
                                               : playerScore}
                                           </span>
@@ -719,7 +800,14 @@ const ContestRankingSummary = ({
 
                 {/* 하단 확정 액션 바 */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
-                  {hasDuplicates ? (
+                  {hasInvalid || hasAnyInvalid ? (
+                    <div className="flex items-center gap-1.5 text-red-600 font-bold text-xs sm:text-sm">
+                      <span className="text-base">⚠️</span>
+                      <span>
+                        유효하지 않은 순위가 있습니다. 1 이상의 정수로 순위를 입력해 주세요.
+                      </span>
+                    </div>
+                  ) : hasDuplicates ? (
                     <div className="flex items-center gap-1.5 text-red-600 font-bold text-xs sm:text-sm">
                       <span className="text-base">⚠️</span>
                       <span>동점자가 존재합니다. 순위를 수정한 후 확정해 주세요.</span>
@@ -731,26 +819,27 @@ const ContestRankingSummary = ({
                   )}
 
                   <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-                    {hasDuplicates && (
+                    {hasDuplicates && !hasInvalid && !hasAnyInvalid && (
                       <button
-                        className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs sm:text-sm border border-red-200 transition-colors cursor-pointer"
-                        onClick={() => setForceConfirmOpen(true)}
+                        className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed text-red-700 font-bold text-xs sm:text-sm border border-red-200 transition-colors cursor-pointer"
+                        disabled={isSaving}
+                        onClick={() => !isSaving && setForceConfirmOpen(true)}
                       >
                         ⚠️ 강제등록 (위험)
                       </button>
                     )}
                     <button
                       className={
-                        hasDuplicates
+                        cannotConfirm
                           ? "px-6 py-2.5 rounded-lg bg-slate-200 text-slate-400 font-bold text-sm sm:text-base cursor-not-allowed border-none"
                           : "px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-black text-sm sm:text-base shadow-md shadow-blue-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer border-none"
                       }
                       onClick={() =>
-                        !hasDuplicates && handleSaveResult(summaryTable)
+                        !cannotConfirm && handleSaveResult(summaryTable)
                       }
-                      disabled={hasDuplicates}
+                      disabled={cannotConfirm}
                     >
-                      순위표 확정
+                      {isSaving ? "저장 중..." : "순위표 확정"}
                     </button>
                   </div>
                 </div>

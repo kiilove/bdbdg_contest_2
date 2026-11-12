@@ -175,7 +175,7 @@ const ContestMonitoringHost = ({ contestId }) => {
           return;
         }
 
-        const standingData = data[0].result.sort(
+        const standingData = [...(data[0]?.result || [])].sort(
           (a, b) => a.playerRank - b.playerRank
         );
         setRankingData(standingData);
@@ -198,6 +198,7 @@ const ContestMonitoringHost = ({ contestId }) => {
   };
 
   const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
+    if (!effectiveContestId) return;
     const condition = [where("gradeId", "==", gradeId)];
     try {
       const data = await fetchResultQuery.getDocuments(
@@ -205,15 +206,15 @@ const ContestMonitoringHost = ({ contestId }) => {
         condition
       );
 
-      if (data?.length === 0) {
+      if (!data || data.length === 0) {
         return;
       }
 
-      const standingData = data[0].result.sort(
+      const standingData = [...(data[0]?.result || [])].sort(
         (a, b) => a.playerRank - b.playerRank
       );
 
-      const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
+      const collectionInfo = `currentStage/${effectiveContestId}/screen`;
       const newState = {
         players: [...standingData],
         gradeTitle: gradeTitle,
@@ -619,7 +620,9 @@ const ContestMonitoringHost = ({ contestId }) => {
             {currentPlayersArray.length > 0 && (
               <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
                 {currentPlayersArray.map((current, cIdx) => {
-                  const isSaved = (realtimeData?.resultSaved || []).includes(current.gradeId);
+                  const isSaved =
+                    Array.isArray(realtimeData?.resultSaved) &&
+                    realtimeData.resultSaved.includes(current.gradeId);
                   return (
                     <div key={cIdx} className="flex items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60">
                       <span className="font-bold text-sm text-slate-200">{current.gradeTitle}</span>
@@ -673,7 +676,9 @@ const ContestMonitoringHost = ({ contestId }) => {
           {/* 🏆 순위확정 및 발표 버튼들 */}
           {currentPlayersArray.length > 0 &&
             currentPlayersArray.map((current, cIdx) => {
-              const isSaved = (realtimeData?.resultSaved || []).includes(current.gradeId);
+              const isSaved =
+                Array.isArray(realtimeData?.resultSaved) &&
+                realtimeData.resultSaved.includes(current.gradeId);
               return (
                 <div key={cIdx} className="bg-slate-800/80 rounded-2xl border border-slate-700 p-3 space-y-2">
                   <div className="text-xs text-slate-400 font-semibold px-1">

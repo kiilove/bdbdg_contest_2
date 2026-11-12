@@ -251,18 +251,37 @@ const CompareSetting = ({
     contestId,
     compareListId
   ) => {
+    const primaryGrade = stageInfo?.grades?.[0];
+    if (!primaryGrade?.gradeId) {
+      setMessage({
+        body: "체급 정보를 찾을 수 없어 비교심사 명단을 확정할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+      return;
+    }
+
+    const combinedGradeTitle =
+      stageInfo?.grades?.length > 1
+        ? `${stageInfo.grades
+            .map((g) => g?.gradeTitle || "")
+            .filter(Boolean)
+            .join(" ")} 통합`
+        : primaryGrade?.gradeTitle || "";
+
     const compareInfo = {
       contestId,
-      stageId: stageInfo.stageId,
-      categoryId: stageInfo.categoryId,
-      gradeId: stageInfo.grades[0].gradeId,
-      categoryTitle: stageInfo.categoryTitle,
-      gradeTitle: stageInfo.grades[0].gradeTitle,
+      stageId: stageInfo?.stageId || "",
+      categoryId: stageInfo?.categoryId || "",
+      gradeId: primaryGrade.gradeId,
+      categoryTitle: stageInfo?.categoryTitle || "",
+      gradeTitle: combinedGradeTitle,
       compareIndex: propCompareIndex,
       comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
       compareScoreMode: votedInfo.scoreMode,
-      players: [...playerTopResult],
-      votedResult: [...playerVoteResult],
+      players: [...(playerTopResult || [])],
+      votedResult: [...(playerVoteResult || [])],
     };
 
     try {
@@ -312,13 +331,17 @@ const CompareSetting = ({
 
   const handleGetTopPlayers = (players, playerLength) => {
     console.log(players, playerLength);
-    // if (!players || players.length === 0) return [];
-    // if (players.length !== playerLength) return []; // (네 로직 유지)
+    if (!Array.isArray(players) || !playerLength || playerLength <= 0) {
+      return [];
+    }
     const validPlayers = players.filter((p) => p?.votedCount !== undefined);
     if (validPlayers.length === 0) return [];
 
-    const sortedPlayers = players.sort((a, b) => b.votedCount - a.votedCount);
+    const sortedPlayers = [...validPlayers].sort(
+      (a, b) => b.votedCount - a.votedCount
+    );
     const topPlayers = sortedPlayers.slice(0, playerLength);
+    if (topPlayers.length === 0) return [];
 
     const lastVotedCount = topPlayers[topPlayers.length - 1].votedCount;
     let i = playerLength;
@@ -414,16 +437,14 @@ const CompareSetting = ({
 
   // ✅ Firestore 이력/필터
   useEffect(() => {
-    if (
-      stageInfo.grades[0].gradeId &&
-      currentContest.contests.contestComparesListId
-    ) {
-      fetchPool(
-        stageInfo.grades[0].gradeId,
-        currentContest.contests.contestComparesListId
-      );
+    const firstGradeId = stageInfo?.grades?.[0]?.gradeId;
+    const compareListId = currentContest?.contests?.contestComparesListId;
+    if (firstGradeId && compareListId) {
+      fetchPool(firstGradeId, compareListId);
+    } else if (stageInfo && currentContest?.contests) {
+      setIsLoading(false);
     }
-  }, [stageInfo.grades, currentContest.contests.contestComparesListId]);
+  }, [stageInfo?.grades, currentContest?.contests?.contestComparesListId]);
 
   useEffect(() => {
     if (realtimeData?.compares?.status?.compareStart) {
@@ -470,7 +491,7 @@ const CompareSetting = ({
   }, [realtimeData?.compares?.judges]);
 
   useEffect(() => {
-    if (votedResult?.length > 0) {
+    if (votedResult?.length > 0 && realtimeData?.compares?.playerLength) {
       setTopResult(
         handleGetTopPlayers(votedResult, realtimeData.compares.playerLength)
       );
@@ -485,11 +506,13 @@ const CompareSetting = ({
   // ✅ 닫기 시 롤백 처리
   const handleCloseWithRollback = async () => {
     try {
-      const path = `currentStage/${currentContest?.contests?.id}/compares`;
+      const contestId = currentContest?.contests?.id;
+      const path = `currentStage/${contestId}/compares`;
       const compares = realtimeData?.compares ?? {};
       const { compareIndex = 0, status = {} } = compares;
 
       const shouldRollback =
+        Boolean(contestId) &&
         startedInThisSession &&
         status.compareStart === true &&
         status.compareIng !== true;
@@ -502,8 +525,15 @@ const CompareSetting = ({
             JSON.parse(JSON.stringify(initialComparesRef.current))
           );
         } else {
-          // ✅ compareIndex === 1 → 완전 초기화 (compareIndex 포함 모든 데이터 삭제)
-          await updateRealtimeCompare.setData(path, {
+          // ✅ compareIndex === 1 → 완전 초기화 (compareIndex 포함 모든 데이터 리셋)
+          await updateRealtimeCompare.updateData(path, {
+            compareIndex: 0,
+            playerLength: 0,
+            scoreMode: null,
+            voteRange: null,
+            players: [],
+            confirmed: { count: 0, numbers: [] },
+            judges: [],
             status: {
               compareStart: false,
               compareIng: false,
@@ -561,8 +591,16 @@ const CompareSetting = ({
                   </div>
                   <div className="flex flex-col">
                     <div className="text-xl font-bold text-gray-800">
-                      {stageInfo?.categoryTitle}(
-                      {stageInfo?.grades[0]?.gradeTitle})
+                      {stageInfo?.categoryTitle || ""}
+                      {stageInfo?.grades?.length > 0 &&
+                        `(${
+                          stageInfo.grades.length > 1
+                            ? `${stageInfo.grades
+                                .map((g) => g?.gradeTitle || "")
+                                .filter(Boolean)
+                                .join(" ")} 통합`
+                            : stageInfo.grades[0]?.gradeTitle || ""
+                        })`}
                     </div>
                     <div className="text-base text-gray-600">
                       {propCompareIndex}차 비교심사 설정
@@ -924,7 +962,7 @@ const CompareSetting = ({
                             <th className="border border-gray-300 p-3 text-left font-semibold">
                               선수번호
                             </th>
-                            {matchedOriginalPlayers.map((player, pIdx) => (
+                            {(matchedOriginalPlayers || []).map((player, pIdx) => (
                               <th
                                 key={pIdx}
                                 className="border border-gray-300 p-3 text-center font-semibold"
@@ -941,7 +979,7 @@ const CompareSetting = ({
                             <td className="border border-gray-300 p-3 font-semibold bg-gray-50">
                               득표수
                             </td>
-                            {matchedOriginalPlayers.map((player, pIdx) => {
+                            {(matchedOriginalPlayers || []).map((player, pIdx) => {
                               const votes =
                                 votedResult?.find(
                                   (f) => f.playerNumber === player.playerNumber
@@ -976,7 +1014,7 @@ const CompareSetting = ({
                       size="middle"
                       className="w-full"
                     >
-                      {matchedOriginalPlayers.map((player, pIdx) => {
+                      {(matchedOriginalPlayers || []).map((player, pIdx) => {
                         const votes =
                           votedResult?.find(
                             (f) => f.playerNumber === player.playerNumber

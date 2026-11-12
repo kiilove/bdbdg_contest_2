@@ -34,15 +34,16 @@ const PrintPlayerStanding = () => {
 
     try {
       setIsLoading(true); // Start loading
-      let sortedCategories;
-      let sortedGrades;
+      let sortedCategories = [];
+      let sortedGrades = [];
       // Fetch and set categories
       await fetchCategories
         .getDocuments("contest_categorys_list", condition)
         .then((categoriesData) => {
-          if (categoriesData[0]) {
-            sortedCategories = categoriesData[0].categorys.sort(
-              (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+          if (categoriesData?.[0]?.categorys) {
+            sortedCategories = [...categoriesData[0].categorys].sort(
+              (a, b) =>
+                (a.contestCategoryIndex ?? 0) - (b.contestCategoryIndex ?? 0)
             );
             setCategoriesArray(sortedCategories);
           }
@@ -52,9 +53,11 @@ const PrintPlayerStanding = () => {
       await fetchGrades
         .getDocuments("contest_grades_list", condition)
         .then((gradesData) => {
-          if (gradesData[0]) {
-            sortedGrades = gradesData[0].grades.sort(
-              (a, b) => a.gradeIndex - b.gradeIndex
+          if (gradesData?.[0]?.grades) {
+            sortedGrades = [...gradesData[0].grades].sort(
+              (a, b) =>
+                (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
+                (b.contestGradeIndex ?? b.gradeIndex ?? 0)
             );
             setGradesArray(sortedGrades);
           }
@@ -64,7 +67,7 @@ const PrintPlayerStanding = () => {
       await fetchResults
         .getDocuments("contest_results_list", condition2)
         .then((resultsData) => {
-          const updatedResults = resultsData.map((result) => {
+          const updatedResults = (resultsData || []).map((result) => {
             const matchingCategory = sortedCategories.find(
               (category) => category.contestCategoryId === result.categoryId
             );
@@ -76,17 +79,19 @@ const PrintPlayerStanding = () => {
             return {
               ...result,
               contestCategoryIndex: matchingCategory
-                ? matchingCategory.contestCategoryIndex
-                : null,
+                ? matchingCategory.contestCategoryIndex ?? 0
+                : 0,
               contestCategoryTitle: matchingCategory
                 ? matchingCategory.contestCategoryTitle
-                : null,
+                : result.categoryTitle || "",
               contestCategorySection: matchingCategory
                 ? matchingCategory.contestCategorySection
-                : null,
+                : "",
               contestGradeIndex: matchingGrade
-                ? matchingGrade.contestGradeIndex
-                : null,
+                ? matchingGrade.contestGradeIndex ??
+                  matchingGrade.gradeIndex ??
+                  0
+                : 0,
             };
           });
 
@@ -178,12 +183,13 @@ const PrintPlayerStanding = () => {
     }
 
     return newResult;
-  }, [currentCategoryId, currentGradeId, currentSection]);
+  }, [resultArray, currentCategoryId, currentGradeId, currentSection]);
 
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExportExcel = async () => {
-    if (resultArray.length === 0) {
+    const flatResults = resultArray.flatMap((cat) => cat.matchedGrades || []);
+    if (flatResults.length === 0) {
       alert("다운로드할 집계 데이터가 없습니다.");
       return;
     }
@@ -206,7 +212,7 @@ const PrintPlayerStanding = () => {
 
       await exportContestResultsToExcel(
         contestTitle,
-        resultArray,
+        flatResults,
         categoriesMap,
         gradesMap
       );
@@ -259,6 +265,34 @@ const PrintPlayerStanding = () => {
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
       {isLoading && <LoadingPage />}
+      {!isLoading && resultArray.length === 0 && (
+        <>
+          <div className="flex w-full h-14">
+            <ConfirmationModal
+              isOpen={msgOpen}
+              message={message}
+              onCancel={() => setMsgOpen(false)}
+              onConfirm={() => setMsgOpen(false)}
+            />
+            <div className="flex w-full bg-gray-100 justify-between items-center rounded-lg px-3">
+              <div className="flex items-center">
+                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
+                  <HiUserGroup />
+                </span>
+                <h1
+                  className="font-sans text-lg font-semibold"
+                  style={{ letterSpacing: "2px" }}
+                >
+                  순위표 출력
+                </h1>
+              </div>
+            </div>
+          </div>
+          <div className="flex w-full flex-1 min-h-[240px] justify-center items-center bg-gray-50 rounded-lg border border-gray-200 text-gray-500 font-medium">
+            확정된 순위표 데이터가 없습니다.
+          </div>
+        </>
+      )}
       {!isLoading && resultArray.length > 0 && (
         <>
           <div className="flex w-full h-14">
@@ -308,10 +342,11 @@ const PrintPlayerStanding = () => {
                     전체
                   </button>
                   {sectionArray?.length > 0 &&
-                    sectionArray.map((section) => {
+                    sectionArray.map((section, sIdx) => {
                       const { contestCategorySection } = section;
                       return (
                         <button
+                          key={contestCategorySection || sIdx}
                           className="w-24 h-10 bg-white rounded-lg border border-blue-500"
                           onClick={() => {
                             setCurrentSection(contestCategorySection);
@@ -418,20 +453,21 @@ const PrintPlayerStanding = () => {
                           style={{ pageBreakAfter: "always" }}
                         >
                           {matchedGrades?.length > 0 &&
-                            matchedGrades
+                            [...matchedGrades]
                               .sort(
                                 (a, b) =>
-                                  a.contestGradeIndex - b.contestGradeIndex
+                                  (a.contestGradeIndex ?? 0) -
+                                  (b.contestGradeIndex ?? 0)
                               )
                               .map((grade, gIdx) => {
                                 const { gradeTitle, result } = grade;
 
                                 return (
-                                  <div className="flex flex-col">
-                                    <div
-                                      key={gIdx}
-                                      className="flex w-full h-14 border border-r-2 border-b-0  border-black justify-center items-center"
-                                    >
+                                  <div
+                                    key={grade.gradeId || gIdx}
+                                    className="flex flex-col"
+                                  >
+                                    <div className="flex w-full h-14 border border-r-2 border-b-0  border-black justify-center items-center">
                                       <span
                                         className="text-2xl font-semibold"
                                         style={{ letterSpacing: "0px" }}
@@ -455,12 +491,12 @@ const PrintPlayerStanding = () => {
                                         </div>
                                       </div>
                                       {result?.length > 0 &&
-                                        result
+                                        [...result]
                                           .sort(
                                             (a, b) =>
                                               a.playerRank - b.playerRank
                                           )
-                                          .map((player) => {
+                                          .map((player, pIdx) => {
                                             const {
                                               playerRank,
                                               playerName,
@@ -474,7 +510,10 @@ const PrintPlayerStanding = () => {
                                             }
 
                                             return (
-                                              <div className="flex w-full h-10 last:border-b-2 border-black ">
+                                              <div
+                                                key={`${playerNumber}-${pIdx}`}
+                                                className="flex w-full h-10 last:border-b-2 border-black "
+                                              >
                                                 <div className="flex w-1/12 justify-center items-center font-semibold border-b-0 border-black border-r border-t first:border-l">
                                                   <span>{playerRank}</span>
                                                 </div>

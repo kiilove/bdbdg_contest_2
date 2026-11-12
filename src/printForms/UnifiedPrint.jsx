@@ -90,8 +90,9 @@ const UnifiedPrint = () => {
           return {
             ...result,
             contestCategorySection: category?.contestCategorySection || "",
-            contestCategoryIndex: category?.contestCategoryIndex || 0,
-            contestGradeIndex: grade?.contestGradeIndex || 0,
+            contestCategoryIndex: category?.contestCategoryIndex ?? 0,
+            contestGradeIndex:
+              grade?.contestGradeIndex ?? grade?.gradeIndex ?? 0,
           };
         });
 
@@ -253,7 +254,11 @@ const UnifiedPrint = () => {
             .filter(
               (grade) => grade.refCategoryId === category.contestCategoryId
             )
-            .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
+            .sort(
+              (a, b) =>
+                (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
+                (b.contestGradeIndex ?? b.gradeIndex ?? 0)
+            )
             .map((grade) => {
               const players = playersArray
                 .filter((player) => {
@@ -287,7 +292,8 @@ const UnifiedPrint = () => {
                 });
 
               return {
-                contestGradeTitle: grade.contestGradeTitle,
+                contestGradeTitle:
+                  grade.contestGradeTitle || grade.gradeTitle || "",
                 players: players,
               };
             })
@@ -326,7 +332,7 @@ const UnifiedPrint = () => {
           width: 30,
           forcedValue: "/",
         },
-        { label: "비고", key: "notes", width: 25 },
+        { label: "비고", key: "note", width: 25 },
       ];
     } else if (printType === "final") {
       return [
@@ -571,7 +577,7 @@ const UnifiedPrint = () => {
                       key={grade.contestGradeId}
                       value={grade.contestGradeId}
                     >
-                      {grade.contestGradeTitle}
+                      {grade.contestGradeTitle || grade.gradeTitle}
                     </option>
                   ))}
                 </select>

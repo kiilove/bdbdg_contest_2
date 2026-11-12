@@ -1,16 +1,11 @@
-import React from "react";
+import React, { useState, useEffect, useContext } from "react";
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
-import { useState } from "react";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
 import { PiSpinner } from "react-icons/pi";
-import { useEffect } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useContext } from "react";
-import { debounce } from "lodash";
-import { useMemo } from "react";
 
 const ContestMonitoringStage = () => {
   const [stagesArray, setStagesArray] = useState([]);
@@ -20,6 +15,7 @@ const ContestMonitoringStage = () => {
   const [currentSubTab, setCurrentSubTab] = useState("0");
   const [autoCount, setAutoCount] = useState(0);
   const [autoInterval, setAutoInterval] = useState(3000);
+  const [allPlayersArray, setAllPlayersArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
@@ -29,8 +25,11 @@ const ContestMonitoringStage = () => {
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
   const { currentContest } = useContext(CurrentContestContext);
-  const { data: realtimeData, getDocument: currentStageFunction } =
-    useFirebaseRealtimeGetDocument();
+  const { data: realtimeData } = useFirebaseRealtimeGetDocument(
+    currentContest?.contests?.id
+      ? `currentStage/${currentContest.contests.id}`
+      : null
+  );
 
   const updatePlayerIntro = useFirebaseRealtimeUpdateData();
 
@@ -42,23 +41,13 @@ const ContestMonitoringStage = () => {
       );
 
       if (returnContestStage && returnPlayersFinal) {
-        const promises = [
-          setStagesArray(
-            returnContestStage.stages.sort(
-              (a, b) => a.stageNumber - b.stageNumber
-            )
-          ),
-          setPlayersArray(() => [...returnPlayersFinal.players]),
-
-          setIsLoading(false),
-        ];
-
-        Promise.all(promises);
-
-        // 1초 후에 setIsLoading을 false로 설정
-        // setTimeout(() => {
-        //   setIsLoading(false);
-        // }, 2000);
+        setStagesArray(
+          (returnContestStage.stages || []).sort(
+            (a, b) => a.stageNumber - b.stageNumber
+          )
+        );
+        setAllPlayersArray([...(returnPlayersFinal.players || [])]);
+        setIsLoading(false);
       }
     } catch (error) {
       setMessage({
@@ -71,11 +60,12 @@ const ContestMonitoringStage = () => {
   };
 
   useEffect(() => {
-    handlePlayerInfoUpdate(
-      currentContest?.contests.id,
-      playersArray[autoCount]
-    );
-  }, [autoCount]);
+    const contestId = currentContest?.contests?.id;
+    const playerInfo = playersArray[autoCount];
+    if (contestId && playerInfo) {
+      handlePlayerInfoUpdate(contestId, playerInfo);
+    }
+  }, [autoCount, currentContest?.contests?.id, playersArray]);
 
   useEffect(() => {
     let interval;
@@ -91,9 +81,10 @@ const ContestMonitoringStage = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [introAuto, autoCount, isHolding]);
+  }, [introAuto, autoCount, isHolding, playersArray.length, autoInterval]);
 
   const handlePlayerInfoUpdate = async (contestId, playerInfo) => {
+    if (!contestId || !playerInfo) return;
     const collectionInfo = `currentScreen/${contestId}/playerInfo`;
     try {
       await updatePlayerIntro.updateData(collectionInfo, { ...playerInfo });
@@ -103,13 +94,14 @@ const ContestMonitoringStage = () => {
   };
 
   const handlePlayerIntroUpdate = async (contestId, actionType) => {
+    if (!contestId) return;
     const collectionInfo = `currentStage/${contestId}/screen`;
     let status = {
       playerIntro: false,
       playerIntroAuto: false,
     };
 
-    let players = { ...playersArray[0] };
+    let players = playersArray[0] ? { ...playersArray[0] } : {};
     switch (actionType) {
       case "playerIntroStart":
         status = { playerIntro: true, playerIntroAuto: introAuto, players };
@@ -133,9 +125,13 @@ const ContestMonitoringStage = () => {
     let matchedJudgesCount = 0;
     let matchedPlayersCount = 0;
 
-    if (grades?.length === 0) {
-      gradeTitle = "오류발생";
-      gradeId = "";
+    if (!grades || grades.length === 0) {
+      return {
+        gradeTitle: "오류발생",
+        gradeId: "",
+        matchedJudgesCount: 0,
+        matchedPlayersCount: 0,
+      };
     }
     if (grades.length === 1) {
       gradeTitle = grades[0].gradeTitle;
@@ -143,12 +139,13 @@ const ContestMonitoringStage = () => {
       matchedJudgesCount = grades[0].categoryJudgeCount;
       matchedPlayersCount = grades[0].playerCount;
     } else if (grades.length > 1) {
-      const madeTitle = grades.map((grade, gIdx) => {
-        return grade.gradeTitle + " ";
-      });
+      const madeTitle = grades
+        .map((grade) => `${grade.gradeTitle || ""} `)
+        .join("");
       matchedJudgesCount = grades[0].categoryJudgeCount;
-      grades.map((grade, gIdx) => {
-        matchedPlayersCount = matchedPlayersCount + parseInt(grade.playerCount);
+      grades.forEach((grade) => {
+        matchedPlayersCount =
+          matchedPlayersCount + (parseInt(grade.playerCount, 10) || 0);
       });
       gradeId = grades[0].gradeId;
       gradeTitle = madeTitle + "통합";
@@ -156,12 +153,6 @@ const ContestMonitoringStage = () => {
 
     return { gradeTitle, gradeId, matchedJudgesCount, matchedPlayersCount };
   };
-
-  useEffect(() => {
-    console.log(stagesArray);
-    console.log(playersArray);
-    console.log(realtimeData);
-  }, [stagesArray, playersArray]);
 
   useEffect(() => {
     if (currentContest?.contests?.id) {
@@ -173,48 +164,35 @@ const ContestMonitoringStage = () => {
   }, [currentContest?.contests]);
 
   useEffect(() => {
-    if (currentContest?.contests?.id) {
-      const debouncedGetDocument = debounce(
-        () =>
-          currentStageFunction(
-            `currentStage/${currentContest.contests.id}`,
-            currentContest.contests.id
-          ),
-        2000
-      );
-      debouncedGetDocument();
-    }
-
-    return () => {};
-  }, [currentStageFunction]);
-
-  useEffect(() => {
-    let dummy = [];
     const filteredGrades = currentStageInfo?.grades;
     if (filteredGrades?.length > 0) {
-      setCurrentGradesInfo(() => [...filteredGrades]);
-      const flatted = filteredGrades.map((filter, fIdx) => {
-        const filterdPlayers = playersArray.filter(
-          (f) => f.contestGradeId === filter.gradeId
-        );
+      let dummy = [];
+      const flatted = filteredGrades.map((filter) => {
+        const filterdPlayers = allPlayersArray
+          .filter(
+            (f) =>
+              f.contestGradeId === filter.gradeId && f.playerNoShow !== true
+          )
+          .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0));
         dummy = [...dummy, ...filterdPlayers];
-        const newInfo = {
+        return {
           gradeId: filter.gradeId,
           players: [...filterdPlayers],
         };
-
-        return newInfo;
       });
       setCurrentGradesInfo(() => [...flatted]);
       setPlayersArray(() => [...dummy]);
+      setAutoCount(0);
+    } else {
+      setCurrentGradesInfo([]);
+      setPlayersArray([]);
     }
-  }, [currentStageInfo]);
+  }, [currentStageInfo, allPlayersArray]);
 
   useEffect(() => {
-    setCurrentStageInfo({
-      ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
-    });
-  }, [realtimeData]);
+    const found = stagesArray.find((f) => f.stageId === realtimeData?.stageId);
+    setCurrentStageInfo(found ? { ...found } : { stageId: null });
+  }, [realtimeData, stagesArray]);
 
   return (
     <div className="flex w-full h-auto flex-col justify-start items-center bg-blue-100 rounded-tr-lg rounded-b-lg p-2">
@@ -292,34 +270,38 @@ const ContestMonitoringStage = () => {
                   currentGradesInfo.map((grade, gIdx) => {
                     const { players } = grade;
                     return (
-                      <div className="flex w-full h-full  gap-2 flex-wrap">
+                      <div
+                        key={grade.gradeId || gIdx}
+                        className="flex w-full h-full  gap-2 flex-wrap"
+                      >
                         {players?.length > 0 &&
                           players.map((pInfo, pIdx) => {
                             return (
-                              <>
-                                <div
-                                  className={
-                                    autoCount === pIdx
-                                      ? "flex flex-col w-44 h-60 gap-y-1 bg-blue-700 p-5 rounded-lg text-white"
-                                      : "flex flex-col w-44 h-60 gap-y-1 bg-blue-200 p-5 rounded-lg"
-                                  }
-                                >
-                                  <div className="flex font-semibold">
-                                    <span>{pInfo.playerNumber}</span>
-                                    <span>.</span>
-                                    <span>{pInfo.playerName}</span>
-                                  </div>
-                                  <div className="flex font-semibold">
-                                    <span>{pInfo.playerGym}</span>
-                                  </div>
-                                  <div className="flex font-semibold">
-                                    <span>{pInfo.playerBirth}</span>
-                                  </div>
-                                  <div className="flex flex-wrap box-border overflow-auto font-normal">
-                                    <span>{pInfo.playerText}</span>
-                                  </div>
+                              <div
+                                key={
+                                  pInfo.playerUid || pInfo.playerNumber || pIdx
+                                }
+                                className={
+                                  autoCount === pIdx
+                                    ? "flex flex-col w-44 h-60 gap-y-1 bg-blue-700 p-5 rounded-lg text-white"
+                                    : "flex flex-col w-44 h-60 gap-y-1 bg-blue-200 p-5 rounded-lg"
+                                }
+                              >
+                                <div className="flex font-semibold">
+                                  <span>{pInfo.playerNumber}</span>
+                                  <span>.</span>
+                                  <span>{pInfo.playerName}</span>
                                 </div>
-                              </>
+                                <div className="flex font-semibold">
+                                  <span>{pInfo.playerGym}</span>
+                                </div>
+                                <div className="flex font-semibold">
+                                  <span>{pInfo.playerBirth}</span>
+                                </div>
+                                <div className="flex flex-wrap box-border overflow-auto font-normal">
+                                  <span>{pInfo.playerText}</span>
+                                </div>
+                              </div>
                             );
                           })}
                       </div>
@@ -360,6 +342,7 @@ const ContestMonitoringStage = () => {
                         handleGradeInfo(grades).matchedJudgesCount;
                       return (
                         <div
+                          key={stageId || sIdx}
                           className={`${
                             realtimeData.stageId === stageId
                               ? "flex w-full h-24 justify-start items-center px-5 bg-blue-400 rounded-lg text-gray-100"

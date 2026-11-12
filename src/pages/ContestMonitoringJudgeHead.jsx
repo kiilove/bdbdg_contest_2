@@ -243,10 +243,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
       if (returnCompareList) {
         setComparesList({ ...returnCompareList });
-        setComparesArray([...returnCompareList.compares]);
+        setComparesArray([...(returnCompareList.compares || [])]);
       }
 
-      if (returnCompareList?.compares?.length === 0) {
+      if (!returnCompareList?.compares?.length) {
         setCurrentCompareInfo({});
       }
 
@@ -301,27 +301,44 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  const fetchScoreTable = async (grades) => {
-    if (!grades || grades.length === 0) return;
+  const effectiveCollectionName =
+    contestInfo?.contestCollectionName ||
+    currentContest?.contestInfo?.contestCollectionName ||
+    "";
 
-    const allData = [];
-
-    for (const grade of grades) {
-      const { gradeId } = grade;
-      try {
-        const condition = [where("gradeId", "==", gradeId)];
-        const data = await fetchScoreCardQuery.getDocuments(
-          contestInfo.contestCollectionName,
-          condition
-        );
-        allData.push(...data);
-      } catch (error) {
-        console.log(error);
+  const fetchScoreTable = useCallback(
+    async (grades) => {
+      if (
+        !effectiveCollectionName ||
+        !Array.isArray(grades) ||
+        grades.length === 0
+      ) {
+        return;
       }
-    }
 
-    setNormalScoreData(allData);
-  };
+      const allData = [];
+
+      for (const grade of grades) {
+        const { gradeId } = grade || {};
+        if (!gradeId) continue;
+        try {
+          const condition = [where("gradeId", "==", gradeId)];
+          const data = await fetchScoreCardQuery.getDocuments(
+            effectiveCollectionName,
+            condition
+          );
+          if (Array.isArray(data)) {
+            allData.push(...data);
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      }
+
+      setNormalScoreData(allData);
+    },
+    [effectiveCollectionName]
+  );
 
   const handleJudgeIsLoginedValidated = (judgesArray) => {
     if (judgesArray?.length <= 0) {
@@ -331,17 +348,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     return validate;
   };
   const handleForceScoreTableRefresh = (grades) => {
-    if (grades?.length <= 0) {
+    if (!grades || grades.length <= 0) {
       return;
     }
 
     fetchScoreTable(grades);
-  };
-
-  const handleScoreTableByJudge = (grades) => {
-    if (!_.isEqual(realtimeData?.judges, prevRealtimeData?.judges)) {
-      fetchScoreTable(grades);
-    }
   };
 
   const handleGradeInfo = (grades) => {
@@ -412,10 +423,19 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   };
 
   const handleCompareCancel = async (contestId, compareIndex) => {
+    if (!contestId || compareIndex === undefined || compareIndex < 0) return;
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
     const newCompareArray = [...comparesArray];
     newCompareArray.splice(compareIndex, 1);
+
     let newRealtimeInfo = {
+      compareIndex: 0,
+      playerLength: 0,
+      scoreMode: null,
+      voteRange: null,
+      players: [],
+      confirmed: { count: 0, numbers: [] },
+      judges: [],
       status: {
         compareStart: false,
         compareEnd: false,
@@ -424,20 +444,38 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       },
     };
 
-    if (compareIndex > 0) {
+    if (compareIndex > 0 && newCompareArray.length > 0) {
+      const prevCompare = newCompareArray[newCompareArray.length - 1];
+      const prevPlayers = Array.isArray(prevCompare?.players)
+        ? [...prevCompare.players]
+        : [];
+      const prevConfirmedNumbers = prevPlayers
+        .map((p) => Number(p.playerNumber))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+
       newRealtimeInfo = {
-        compareIndex: comparesArray[compareIndex - 1].compareIndex,
+        compareIndex: prevCompare.compareIndex,
         status: {
           compareStart: false,
           compareEnd: false,
           compareCancel: false,
           compareIng: true,
         },
-        playerLength: comparesArray[compareIndex - 1].comparePlayerLength,
-        scoreMode: comparesArray[compareIndex - 1].compareScoreMode,
-        players: [...comparesArray[compareIndex - 1].players],
+        playerLength: prevCompare.comparePlayerLength,
+        scoreMode: prevCompare.compareScoreMode,
+        players: prevPlayers,
+        confirmed: {
+          count: prevConfirmedNumbers.length,
+          numbers: prevConfirmedNumbers,
+        },
       };
     }
+
+    const otherStageCompares = (comparesList?.compares || []).filter(
+      (c) => c.stageId !== realtimeData?.stageId
+    );
+    const mergedCompares = [...otherStageCompares, ...newCompareArray];
 
     try {
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
@@ -449,13 +487,15 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         compareCancel: true,
         compareIng: false,
       }));
-      await updateCompare.updateData(comparesList.id, {
-        ...comparesList,
-        compares: [...newCompareArray],
-      });
-      setComparesList(() => ({
-        ...comparesList,
-        compares: [...newCompareArray],
+      if (comparesList?.id) {
+        await updateCompare.updateData(comparesList.id, {
+          ...comparesList,
+          compares: mergedCompares,
+        });
+      }
+      setComparesList((prev) => ({
+        ...(prev || {}),
+        compares: mergedCompares,
       }));
       setComparesArray(() => [...newCompareArray]);
       setParentRefresh(true);
@@ -495,10 +535,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   }, [parentRefresh]);
 
   useEffect(() => {
-    setCurrentStageInfo({
-      ...stagesArray.find((f) => f.stageId === realtimeData?.stageId),
-    });
-  }, [realtimeData, stagesArray]);
+    const foundStage = stagesArray.find(
+      (f) => f.stageId === realtimeData?.stageId
+    );
+    setCurrentStageInfo(foundStage ? { ...foundStage } : { stageId: null });
+  }, [realtimeData?.stageId, stagesArray]);
 
   useEffect(() => {
     if (realtimeData?.judges) {
@@ -510,11 +551,17 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentStageInfo?.grades?.length > 0 &&
       playersArray?.length > 0
     ) {
+      const stageGradeIds = new Set(
+        currentStageInfo.grades.map((g) => g?.gradeId).filter(Boolean)
+      );
       const rawStagePlayers = playersArray
-        .filter(
-          (f) => f.contestGradeId === currentStageInfo.grades[0].gradeId
-        )
-        .sort((a, b) => a.playerIndex - b.playerIndex);
+        .filter((f) => stageGradeIds.has(f.contestGradeId))
+        .sort(
+          (a, b) =>
+            (a.playerIndex ?? Number(a.playerNumber) ?? 0) -
+              (b.playerIndex ?? Number(b.playerNumber) ?? 0) ||
+            (Number(a.playerNumber) || 0) - (Number(b.playerNumber) || 0)
+        );
 
       const seenStagePlayerKeys = new Set();
       const dedupedStagePlayers = [];
@@ -527,8 +574,61 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       });
 
       setMatchedOriginalPlayers(dedupedStagePlayers);
+    } else {
+      setMatchedOriginalPlayers([]);
     }
   }, [realtimeData, currentStageInfo, playersArray]);
+
+  // C5: 스테이지 변경 시 이전 점수 초기화 & 심판 점수 변경/무대 준비 시 자동 갱신
+  useEffect(() => {
+    setNormalScoreData([]);
+  }, [realtimeData?.stageId]);
+
+  const judgesSignature = JSON.stringify(realtimeData?.judges || []);
+  const stageGradesSignature = JSON.stringify(
+    (currentStageInfo?.grades || []).map((g) => g?.gradeId)
+  );
+
+  useEffect(() => {
+    if (
+      !effectiveCollectionName ||
+      !currentStageInfo?.stageId ||
+      !currentStageInfo?.grades?.length
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const allData = [];
+      for (const grade of currentStageInfo.grades) {
+        if (!grade?.gradeId) continue;
+        try {
+          const data = await fetchScoreCardQuery.getDocuments(
+            effectiveCollectionName,
+            [where("gradeId", "==", grade.gradeId)]
+          );
+          if (Array.isArray(data)) {
+            allData.push(...data);
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      }
+      if (!cancelled) {
+        setNormalScoreData(allData);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    effectiveCollectionName,
+    currentStageInfo?.stageId,
+    stageGradesSignature,
+    judgesSignature,
+  ]);
 
   useEffect(() => {
     if (compareMode.compareStart) {
@@ -673,8 +773,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
+    const savedGrades = Array.isArray(realtimeData?.resultSaved)
+      ? realtimeData.resultSaved
+      : [];
     const unconfirmedGrades = currentStageInfo.grades.filter(
-      (g) => !(realtimeData?.resultSaved || []).includes(g.gradeId)
+      (g) => !savedGrades.includes(g.gradeId)
     );
 
     if (unconfirmedGrades.length === 0) {
@@ -958,6 +1061,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       type="primary"
                       size="large"
                       icon={<PlayCircleOutlined />}
+                      disabled={!currentStageInfo?.grades?.length}
                       onClick={() =>
                         setCompareMode((prev) => ({
                           ...prev,
@@ -971,6 +1075,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                     <Button
                       size="large"
                       icon={<SettingOutlined />}
+                      disabled={!currentStageInfo?.grades?.length}
                       onClick={() => setCompareOpen(true)}
                       className={isMobile ? "w-full" : ""}
                     >
@@ -1129,7 +1234,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                             f.seatIndex === judge.seatIndex
                         );
 
-                        if (finded?.playerScore === 1000) {
+                        if (finded?.playerScore >= 1000) {
                           return <Tag color="red">순위제외</Tag>;
                         }
                         if (
@@ -1210,153 +1315,108 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                           >
                             캡처
                           </Button>
-                          {categoryJudgeType === "point" ? (
-                            <Button
-                              type={
-                                (realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? "default"
-                                  : "primary"
-                              }
-                              danger={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                              }
-                              size="large"
-                              icon={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                ) ? (
-                                  <span className="animate-bounce">🚨</span>
-                                ) : (
-                                  <CheckCircleOutlined />
-                                )
-                              }
-                              className={
-                                (realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? "font-medium text-slate-400"
-                                  : isAllScored
-                                  ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
-                                  : "font-semibold shadow-sm"
-                              }
-                              style={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? {
-                                      backgroundColor: "#dc2626",
-                                      borderColor: "#dc2626",
-                                      color: "#ffffff",
-                                    }
-                                  : {}
-                              }
-                              onClick={() => {
-                                if (
-                                  !(realtimeData?.resultSaved || []).includes(
-                                    gradeId
+                          {(() => {
+                            const savedGrades = Array.isArray(
+                              realtimeData?.resultSaved
+                            )
+                              ? realtimeData.resultSaved
+                              : [];
+                            const isGradeConfirmed =
+                              savedGrades.includes(gradeId);
+                            return categoryJudgeType === "point" ? (
+                              <Button
+                                type={isGradeConfirmed ? "default" : "primary"}
+                                danger={isAllScored && !isGradeConfirmed}
+                                size="large"
+                                icon={
+                                  isAllScored && !isGradeConfirmed ? (
+                                    <span className="animate-bounce">🚨</span>
+                                  ) : (
+                                    <CheckCircleOutlined />
                                   )
-                                ) {
-                                  setPointSummaryProp({
-                                    categoryId,
-                                    gradeId,
-                                    categoryJudgeType,
-                                  });
-                                  setPointSummaryOpen(true);
                                 }
-                              }}
-                              disabled={(
-                                realtimeData?.resultSaved || []
-                              ).includes(gradeId)}
-                            >
-                              {(realtimeData?.resultSaved || []).includes(
-                                gradeId
-                              )
-                                ? "✅ 순위표 확정됨"
-                                : isAllScored
-                                ? "🚨 점수형 순위확정 (채점완료 - 클릭!)"
-                                : "점수형 집계 및 순위확인"}
-                            </Button>
-                          ) : (
-                            <Button
-                              type={
-                                (realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? "default"
-                                  : "primary"
-                              }
-                              size="large"
-                              danger={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                              }
-                              icon={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                ) ? (
-                                  <span className="animate-bounce">🚨</span>
-                                ) : (
-                                  <CheckCircleOutlined />
-                                )
-                              }
-                              className={
-                                (realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? "font-medium text-slate-400"
+                                className={
+                                  isGradeConfirmed
+                                    ? "font-medium text-slate-400"
+                                    : isAllScored
+                                    ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
+                                    : "font-semibold shadow-sm"
+                                }
+                                style={
+                                  isAllScored && !isGradeConfirmed
+                                    ? {
+                                        backgroundColor: "#dc2626",
+                                        borderColor: "#dc2626",
+                                        color: "#ffffff",
+                                      }
+                                    : {}
+                                }
+                                onClick={() => {
+                                  if (!isGradeConfirmed) {
+                                    setPointSummaryProp({
+                                      categoryId,
+                                      gradeId,
+                                      categoryJudgeType,
+                                    });
+                                    setPointSummaryOpen(true);
+                                  }
+                                }}
+                                disabled={isGradeConfirmed}
+                              >
+                                {isGradeConfirmed
+                                  ? "✅ 순위표 확정됨"
                                   : isAllScored
-                                  ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
-                                  : "font-semibold shadow-sm"
-                              }
-                              style={
-                                isAllScored &&
-                                !(realtimeData?.resultSaved || []).includes(
-                                  gradeId
-                                )
-                                  ? {
-                                      backgroundColor: "#dc2626",
-                                      borderColor: "#dc2626",
-                                      color: "#ffffff",
-                                    }
-                                  : {}
-                              }
-                              onClick={() => {
-                                if (
-                                  !(realtimeData?.resultSaved || []).includes(
-                                    gradeId
+                                  ? "🚨 점수형 순위확정 (채점완료 - 클릭!)"
+                                  : "점수형 집계 및 순위확인"}
+                              </Button>
+                            ) : (
+                              <Button
+                                type={isGradeConfirmed ? "default" : "primary"}
+                                size="large"
+                                danger={isAllScored && !isGradeConfirmed}
+                                icon={
+                                  isAllScored && !isGradeConfirmed ? (
+                                    <span className="animate-bounce">🚨</span>
+                                  ) : (
+                                    <CheckCircleOutlined />
                                   )
-                                ) {
-                                  setRankingSummaryProp({
-                                    categoryId,
-                                    gradeId,
-                                    categoryJudgeType,
-                                  });
-                                  setRankingSummaryOpen(true);
                                 }
-                              }}
-                              disabled={(
-                                realtimeData?.resultSaved || []
-                              ).includes(gradeId)}
-                            >
-                              {(realtimeData?.resultSaved || []).includes(
-                                gradeId
-                              )
-                                ? "✅ 순위표 확정됨"
-                                : isAllScored
-                                ? "🚨 랭킹형 순위확정 (채점완료 - 클릭!)"
-                                : "랭킹형 집계 및 순위확인"}
-                            </Button>
-                          )}
+                                className={
+                                  isGradeConfirmed
+                                    ? "font-medium text-slate-400"
+                                    : isAllScored
+                                    ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
+                                    : "font-semibold shadow-sm"
+                                }
+                                style={
+                                  isAllScored && !isGradeConfirmed
+                                    ? {
+                                        backgroundColor: "#dc2626",
+                                        borderColor: "#dc2626",
+                                        color: "#ffffff",
+                                      }
+                                    : {}
+                                }
+                                onClick={() => {
+                                  if (!isGradeConfirmed) {
+                                    setRankingSummaryProp({
+                                      categoryId,
+                                      gradeId,
+                                      categoryJudgeType,
+                                    });
+                                    setRankingSummaryOpen(true);
+                                  }
+                                }}
+                                disabled={isGradeConfirmed}
+                              >
+                                {isGradeConfirmed
+                                  ? "✅ 순위표 확정됨"
+                                  : isAllScored
+                                  ? "🚨 랭킹형 순위확정 (채점완료 - 클릭!)"
+                                  : "랭킹형 집계 및 순위확인"}
+                              </Button>
+                            );
+                          })()}
                         </Space>
                       </div>
 

@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useContext, useEffect, useState } from "react";
-import { ref, get, child } from "firebase/database";
-import { database } from "../firebase";
 import LoadingPage from "./LoadingPage";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
@@ -52,24 +50,6 @@ const POSES_GUIDE = [
   "호명된 선수들은 제자리로 복귀해 주시기 바랍니다.",
 ];
 
-// 필요한 필드값을 가져오는 함수
-const fetchSpecificFields = async (path, fields) => {
-  const dbRef = ref(database);
-  const result = {};
-  for (const field of fields) {
-    const fieldPath = `${path}/${field}`;
-    try {
-      const snapshot = await get(child(dbRef, fieldPath));
-      if (snapshot.exists()) {
-        result[field] = snapshot.val();
-      }
-    } catch (error) {
-      console.error(`데이터 로드 오류: ${field}`, error);
-    }
-  }
-  return result;
-};
-
 const ContestMonitoringMC = () => {
   const { currentContest } = useContext(CurrentContestContext);
   const contestId = currentContest?.contests?.id || "";
@@ -85,6 +65,11 @@ const ContestMonitoringMC = () => {
   const fetchPlayers = useFirestoreQuery();
   const fetchRankingsQuery = useFirestoreQuery();
 
+  // 📡 실시간 무대 진행 상태 구독 (무대 변경 시 실시간 자동 반영)
+  const { data: currentStageRealtime } = useFirebaseRealtimeGetDocument(
+    contestId ? `currentStage/${contestId}` : null
+  );
+
   // 📡 실시간 전광판 송출 상태 구독 및 제어
   const { data: broadcastData } = useFirebaseRealtimeGetDocument(
     contestId ? `currentBroadcast/${contestId}` : null
@@ -93,21 +78,54 @@ const ContestMonitoringMC = () => {
 
   const currentMode = broadcastData?.mode || "STANDBY";
 
-  // 1. 현재 무대 종목/체급 로드
+  // 1. 현재 무대 종목/체급 로드 (단일 체급 및 통합 체급 모두 지원)
   const loadStageData = async (cId, sId) => {
     if (!cId || !sId) return;
     try {
       const condition = [where("contestId", "==", cId)];
-      const data = await fetchStagesQuery.getDocuments("contest_stages_assign", condition);
+      const data = await fetchStagesQuery.getDocuments(
+        "contest_stages_assign",
+        condition
+      );
       if (data?.length > 0) {
         setStageInfo({ ...data[0] });
         const currentStage = data[0].stages?.find((s) => s.stageId === sId);
-        if (currentStage?.grades?.length === 1) {
-          const g = currentStage.grades[0];
-          setVarStageTitle(`${g.categoryTitle} ${g.gradeTitle}`);
-          fetchPlayersList(cId, g.gradeId);
+        if (currentStage?.grades?.length > 0) {
+          if (currentStage.grades.length === 1) {
+            const g = currentStage.grades[0];
+            setVarStageTitle(
+              `${g.categoryTitle || currentStage.categoryTitle || ""} ${
+                g.gradeTitle || ""
+              }`.trim()
+            );
+          } else {
+            const catTitle =
+              currentStage.categoryTitle ||
+              currentStage.grades[0]?.categoryTitle ||
+              "";
+            const joinedGrades = currentStage.grades
+              .map((g) => g?.gradeTitle || "")
+              .filter(Boolean)
+              .join(" · ");
+            setVarStageTitle(
+              currentStage.stageTitle ||
+                `${catTitle} (${joinedGrades} 통합)`.trim()
+            );
+          }
+          const gradeIds = currentStage.grades
+            .map((g) => g?.gradeId)
+            .filter(Boolean);
+          await fetchPlayersList(cId, gradeIds);
         } else {
-          setVarStageTitle(currentStage?.stageTitle || "통합 체급 경기");
+          setVarStageTitle(
+            currentStage?.stageTitle ||
+              (currentStageRealtime?.categoryTitle
+                ? `${currentStageRealtime.categoryTitle} ${
+                    currentStageRealtime.gradeTitle || ""
+                  }`.trim()
+                : "진행 종목 대기중")
+          );
+          setPlayersArray([]);
         }
       }
     } catch (error) {
@@ -115,16 +133,42 @@ const ContestMonitoringMC = () => {
     }
   };
 
-  // 2. 출전 선수 목록 로드
-  const fetchPlayersList = async (cId, gradeId) => {
+  // 2. 출전 선수 목록 로드 (단일/통합 체급 다중 gradeId 지원)
+  const fetchPlayersList = async (cId, gradeIds) => {
+    const ids = (Array.isArray(gradeIds) ? gradeIds : [gradeIds]).filter(
+      Boolean
+    );
+    if (!cId || ids.length === 0) {
+      setPlayersArray([]);
+      return;
+    }
     try {
-      const condition = [
-        where("contestId", "==", cId),
-        where("contestGradeId", "==", gradeId),
-      ];
-      const players = await fetchPlayers.getDocuments("contest_entrys_list", condition);
+      const perGradePlayers = await Promise.all(
+        ids.map((gId) =>
+          fetchPlayers.getDocuments("contest_entrys_list", [
+            where("contestId", "==", cId),
+            where("contestGradeId", "==", gId),
+          ])
+        )
+      );
+      const merged = perGradePlayers
+        .flat()
+        .filter((p) => p && p.playerNoShow !== true);
+      const seen = new Set();
+      const deduped = merged.filter((p) => {
+        const key = String(
+          p.playerUid || p.id || `${p.contestGradeId}-${p.playerNumber}`
+        );
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       setPlayersArray(
-        players.sort((a, b) => (Number(a.playerNumber) || 0) - (Number(b.playerNumber) || 0))
+        deduped.sort(
+          (a, b) =>
+            (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
+            (Number(b.playerIndex) || Number(b.playerNumber) || 0)
+        )
       );
     } catch (error) {
       console.error("선수 목록 로드 실패:", error);
@@ -133,16 +177,24 @@ const ContestMonitoringMC = () => {
   };
 
   useEffect(() => {
-    if (contestId) {
+    if (contestId || currentContest !== undefined) {
       setIsLoading(false);
-      const path = `currentStage/${contestId}`;
-      fetchSpecificFields(path, ["stageId"]).then((data) => {
-        if (data.stageId) {
-          setCurrentStageId(data.stageId);
-        }
-      });
     }
-  }, [contestId]);
+  }, [contestId, currentContest]);
+
+  useEffect(() => {
+    const nextStageId = currentStageRealtime?.stageId || "";
+    setCurrentStageId((prev) => {
+      if (prev !== nextStageId) {
+        setSelectedCalloutPlayers([]);
+      }
+      return nextStageId;
+    });
+    if (!nextStageId) {
+      setVarStageTitle("");
+      setPlayersArray([]);
+    }
+  }, [currentStageRealtime?.stageId]);
 
   useEffect(() => {
     if (contestId && currentStageId) {

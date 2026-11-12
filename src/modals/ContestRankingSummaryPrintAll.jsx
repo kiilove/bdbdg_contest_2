@@ -172,19 +172,20 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
   }, [resultTable]);
 
   useEffect(() => {
-    if (
-      !props?.contestId ||
-      !props?.gradeId ||
-      !currentContest?.contestInfo?.contestCollectionName
-    ) {
+    const scoreCollectionName =
+      currentContest?.contestInfo?.contestCollectionName ||
+      currentContest?.contests?.collectionName;
+    if (!props?.contestId || !props?.gradeId || !scoreCollectionName) {
+      setIsLoading(false);
       return;
     }
-    fetchPool(
-      props.contestId,
-      props.gradeId,
-      currentContest?.contestInfo?.contestCollectionName
-    );
-  }, [props, currentContest?.contestInfo]);
+    setIsLoading(true);
+    fetchPool(props.contestId, props.gradeId, scoreCollectionName);
+  }, [
+    props,
+    currentContest?.contestInfo?.contestCollectionName,
+    currentContest?.contests?.collectionName,
+  ]);
 
   useEffect(() => {
     if (
@@ -235,6 +236,7 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
 
               return (
                 <div
+                  key={table.id || rIdx}
                   className="flex shadow bg-white"
                   ref={printRef}
                   style={{ width: "210mm", height: "297mm" }}
@@ -253,7 +255,7 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                     </div>
                     <div className="flex w-full h-auto flex-col">
                       {scoreCardPrintArray?.length > 0 &&
-                        scoreCardPrintArray
+                        [...scoreCardPrintArray]
                           .sort((a, b) => a.seatIndex - b.seatIndex)
                           .map((card, cIdx) => {
                             const {
@@ -265,9 +267,12 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                               judgePromoter,
                               players,
                             } = card;
+                            const isPointType =
+                              (props?.categoryJudgeType || table?.scoreType) ===
+                              "point";
                             return (
-                              <>
-                                {props.categoryJudgeType === "point" ? (
+                              <React.Fragment key={seatIndex ?? cIdx}>
+                                {isPointType ? (
                                   <div className="flex w-full h-auto justify-center items-start break-after-page">
                                     <ScoreCardPointForm
                                       contestInfo={currentContest.contestInfo}
@@ -294,7 +299,7 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                                     />
                                   </div>
                                 )}
-                              </>
+                              </React.Fragment>
                             );
                           })}
                     </div>
