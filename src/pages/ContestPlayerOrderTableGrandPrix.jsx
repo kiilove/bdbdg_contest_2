@@ -40,7 +40,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
   const fetchResultQuery = useFirestoreQuery();
 
   const fetchPool = async (categoriesListId, gradesListId, playersFinalId) => {
-    const contestId = currentContest.contests.id;
+    const contestId = currentContest?.contests?.id;
+    if (!contestId) return;
+
     const condition = [where("contestId", "==", contestId)];
     if (
       categoriesListId === undefined ||
@@ -53,26 +55,27 @@ const ContestPlayerOrderTableGrandPrix = () => {
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+      return;
     }
     try {
       await fetchCategoryDocument.getDocument(categoriesListId).then((data) => {
-        console.log(data);
-        setCategoriesArray(() => [...data.categorys]);
+        setCategoriesArray(() => [...(data?.categorys || [])]);
       });
       await fetchGradeDocument.getDocument(gradesListId).then((data) => {
-        setGradesArray(() => [...data.grades]);
+        setGradesArray(() => [...(data?.grades || [])]);
       });
       await fetchPlayerFinal.getDocument(playersFinalId).then((data) => {
-        setPlayersFinalArray(() => [...data.players]);
-        setPlayersFinalList(() => ({ ...data }));
+        setPlayersFinalArray(() => [...(data?.players || [])]);
+        setPlayersFinalList(() => ({ ...(data || {}) }));
       });
       await fetchResultQuery
         .getDocuments("contest_results_list", condition)
         .then((data) => {
-          setResultFinalArray(() => [...data]);
+          setResultFinalArray(() => [...(data || [])]);
         });
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
 
@@ -228,45 +231,89 @@ const ContestPlayerOrderTableGrandPrix = () => {
     setMessage({ body: "저장중...", isButton: false });
     setMsgOpen(true);
 
-    // 1. data(그랑프리 선수들) 자체에서 동일 체급 내 중복 완벽 제거
-    const dedupedGrandPrixData = [];
-    const seenGrandPrixKeys = new Set();
-    (data || []).forEach((p) => {
-      const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber}`;
-      if (!seenGrandPrixKeys.has(k)) {
-        seenGrandPrixKeys.add(k);
-        dedupedGrandPrixData.push(p);
-      }
-    });
-
-    if (dedupedGrandPrixData.length === 0) {
-      setMessage({
-        body: "추가할 그랑프리 명단이 없습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setMsgOpen(true);
-      return;
-    }
-
-    // 2. 기존 playersFinalArray에서 그랑프리 체급에 속한 기존 선수들 교체 (단, 강제 등록된 선수 createdBy === 'force'는 보존)
-    const nonGrandPrixPlayers = playersFinalArray.filter(
-      (p) => !grandPrixGradeIds.has(p.contestGradeId) || p.createdBy === "force"
-    );
-
-    // 3. 전체 선수 목록 병합 후 중복 검증 (수기 강제 등록 선수 + 전자 집계 우승자)
-    const finalPlayersMap = new Map();
-    [...nonGrandPrixPlayers, ...dedupedGrandPrixData].forEach((p) => {
-      const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber}`;
-      if (!finalPlayersMap.has(k)) {
-        finalPlayersMap.set(k, p);
-      }
-    });
-    const finalPlayers = Array.from(finalPlayersMap.values());
-
     try {
+      if (!playersFinalId) {
+        setMessage({
+          body: "최종 명단 문서 정보를 확인할 수 없습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
+        return;
+      }
+
+      // 1. data(그랑프리 선수들) 자체에서 동일 체급 내 중복 완벽 제거
+      const dedupedGrandPrixData = [];
+      const seenGrandPrixKeys = new Set();
+      (data || []).forEach((p) => {
+        if (!p) return;
+        const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber || p.playerName}`;
+        if (!seenGrandPrixKeys.has(k)) {
+          seenGrandPrixKeys.add(k);
+          dedupedGrandPrixData.push(p);
+        }
+      });
+
+      if (dedupedGrandPrixData.length === 0) {
+        setMessage({
+          body: "추가할 그랑프리 명단이 없습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
+        return;
+      }
+
+      // 최신 contest_players_final 문서를 다시 읽어 동시 계측/강제등록 데이터 손실 방지
+      const latestFinalDoc = await fetchPlayerFinal.getDocument(playersFinalId);
+      const baseFinalList = latestFinalDoc || playersFinalList || {};
+      const baseFinalPlayers = Array.isArray(latestFinalDoc?.players)
+        ? latestFinalDoc.players
+        : playersFinalArray || [];
+
+      // 그랑프리 종목에 속한 체급 ID 집합 계산
+      const grandPrixCategoryIds = new Set(
+        (categoriesArray || [])
+          .filter((c) => c?.contestCategorySection === "그랑프리")
+          .map((c) => c.contestCategoryId)
+          .filter(Boolean)
+      );
+      const grandPrixGradeIds = new Set(
+        [
+          ...(gradesArray || [])
+            .filter((g) => grandPrixCategoryIds.has(g?.refCategoryId))
+            .map((g) => g.contestGradeId),
+          ...dedupedGrandPrixData.map((p) => p?.contestGradeId),
+        ].filter(Boolean)
+      );
+
+      // 2. 기존 baseFinalPlayers에서 그랑프리 체급에 속한 기존 선수들 교체 (단, 강제 등록된 선수 createdBy === 'force'는 보존)
+      const nonGrandPrixPlayers = baseFinalPlayers.filter(
+        (p) =>
+          !grandPrixGradeIds.has(p?.contestGradeId) ||
+          p?.createdBy === "force" ||
+          p?.createBy === "force"
+      );
+
+      // 3. 전체 선수 목록 병합 후 중복 검증 (수기 강제 등록 선수 + 전자 집계 우승자)
+      const finalPlayersMap = new Map();
+      [...nonGrandPrixPlayers, ...dedupedGrandPrixData].forEach((p) => {
+        if (!p) return;
+        const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber || p.playerName}`;
+        if (!finalPlayersMap.has(k)) {
+          finalPlayersMap.set(k, p);
+        }
+      });
+      const finalPlayers = Array.from(finalPlayersMap.values());
+
       await updatePlayerFinal.updateData(playersFinalId, {
-        ...playersFinalList,
+        ...baseFinalList,
+        ...(contestId ? { contestId } : {}),
+        players: finalPlayers,
+      });
+      setPlayersFinalList({
+        ...baseFinalList,
+        ...(contestId ? { contestId } : {}),
         players: finalPlayers,
       });
       setPlayersFinalArray(finalPlayers);
@@ -275,6 +322,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
     } catch (error) {
       console.error("그랑프리 명단 저장 실패:", error);
       setMessage({
@@ -282,11 +330,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
     }
   };
 
   useEffect(() => {
-    if (!currentContest?.contests) {
+    if (!currentContest?.contests?.id) {
       return;
     }
     fetchPool(
@@ -294,13 +343,20 @@ const ContestPlayerOrderTableGrandPrix = () => {
       currentContest.contests.contestGradesListId,
       currentContest.contests.contestPlayersFinalId
     );
-  }, [currentContest?.contests]);
+  }, [
+    currentContest?.contests?.id,
+    currentContest?.contests?.contestCategorysListId,
+    currentContest?.contests?.contestGradesListId,
+    currentContest?.contests?.contestPlayersFinalId,
+  ]);
 
   useEffect(() => {
-    if (playersFinalArray.length > 0 && grandPrixArray.length > 0) {
+    if (grandPrixArray.length > 0) {
       initPlayersFinalList(categoriesArray, gradesArray, grandPrixArray);
+    } else {
+      setMatchedArray([]);
     }
-  }, [playersFinalArray, grandPrixArray]);
+  }, [playersFinalArray, grandPrixArray, categoriesArray, gradesArray]);
 
   useEffect(() => {
     console.log(resultPlayersArray);
@@ -354,8 +410,8 @@ const ContestPlayerOrderTableGrandPrix = () => {
                       className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-200 rounded-lg"
                       onClick={() =>
                         handleUpdatePlayersFinal(
-                          currentContest.contests.id,
-                          currentContest.contests.contestPlayersFinalId,
+                          currentContest?.contests?.id,
+                          currentContest?.contests?.contestPlayersFinalId,
                           grandPrixArray
                         )
                       }
@@ -428,7 +484,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
                                         } = player;
 
                                         return (
-                                          <div className="flex w-full h-10 border-b border-gray-300 items-center text-sm lg:px-2">
+                                          <div
+                                            key={`${gradeId}_${playerUid || playerNumber}_${pIdx}`}
+                                            className="flex w-full h-10 border-b border-gray-300 items-center text-sm lg:px-2"
+                                          >
                                             <div
                                               className={`${
                                                 !playerNoShow

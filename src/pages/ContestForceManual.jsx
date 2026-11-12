@@ -1,17 +1,32 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useContext, useEffect } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useContext } from "react";
-import { useEffect } from "react";
 import {
   useFirestoreAddData,
   useFirestoreGetDocument,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
+import { doc, runTransaction } from "firebase/firestore";
+import { db } from "../firebase";
 import { BsCheckAll } from "react-icons/bs";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateUUID } from "../functions/functions";
+
+const isSamePlayerEntry = (a, b) => {
+  if (!a || !b) return false;
+  const gradeA = a.contestGradeId || "";
+  const gradeB = b.contestGradeId || "";
+  if (gradeA !== gradeB) return false;
+  if (a.playerUid && b.playerUid && a.playerUid === b.playerUid) {
+    return true;
+  }
+  return (
+    Number(a.playerNumber) === Number(b.playerNumber) &&
+    (a.playerName || "").trim() !== "" &&
+    (a.playerName || "").trim() === (b.playerName || "").trim()
+  );
+};
 
 const ContestForceManual = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -45,47 +60,58 @@ const ContestForceManual = () => {
   const updatePlayersFinal = useFirestoreUpdateData("contest_players_final");
 
   const fetchPool = async () => {
-    if (currentContest.contests.contestCategorysListId) {
-      const returnCategorys = await fetchCategoryDocument.getDocument(
-        currentContest.contests.contestCategorysListId
-      );
-      setCategorysList({ ...returnCategorys });
-      setCategorysArray([
-        ...returnCategorys?.categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
-      ]);
+    if (!currentContest?.contests?.id) return;
 
-      const returnGrades = await fetchGradeDocument.getDocument(
-        currentContest.contests.contestGradesListId
-      );
-
-      setGradesArray([...returnGrades?.grades]);
-
-      const returnPlayersFinal = await fetchPlayersFinal.getDocument(
-        currentContest.contests.contestPlayersFinalId
-      );
-
-      setPlayerFinalInfo(() => ({ ...returnPlayersFinal }));
-      console.log(returnPlayersFinal);
-
-      if (returnPlayersFinal) {
-        setMessage({
-          body: "선수번호를 갱신합니다.",
-          isButton: true,
-          confirmButtonText: "확인",
-        });
-        setPlayerNumber(returnPlayersFinal?.players?.length + 1 || 0);
-        setInvoiceInfo((prev) => ({
-          ...prev,
-          playerNumber: returnPlayersFinal?.players?.length + 1 || 0,
-        }));
-        console.log({
-          ...invoiceInfo,
-          playerNumber: returnPlayersFinal?.players?.length + 1 || 0,
-        });
-        setErrorMsgOpen(true);
+    try {
+      if (currentContest.contests.contestCategorysListId) {
+        const returnCategorys = await fetchCategoryDocument.getDocument(
+          currentContest.contests.contestCategorysListId
+        );
+        setCategorysList({ ...(returnCategorys || {}) });
+        setCategorysArray([
+          ...(returnCategorys?.categorys || [])
+            .slice()
+            .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex),
+        ]);
       }
+
+      if (currentContest.contests.contestGradesListId) {
+        const returnGrades = await fetchGradeDocument.getDocument(
+          currentContest.contests.contestGradesListId
+        );
+        setGradesArray([...(returnGrades?.grades || [])]);
+      }
+
+      if (currentContest.contests.contestPlayersFinalId) {
+        const returnPlayersFinal = await fetchPlayersFinal.getDocument(
+          currentContest.contests.contestPlayersFinalId
+        );
+
+        setPlayerFinalInfo(() => ({ ...(returnPlayersFinal || {}) }));
+
+        if (returnPlayersFinal) {
+          const existingPlayers = returnPlayersFinal?.players || [];
+          const maxNum = existingPlayers.reduce(
+            (acc, p) => Math.max(acc, Number(p?.playerNumber) || 0),
+            existingPlayers.length
+          );
+          const nextNum = maxNum + 1;
+
+          setMessage({
+            body: "선수번호를 갱신합니다.",
+            isButton: true,
+            confirmButtonText: "확인",
+          });
+          setPlayerNumber(nextNum);
+          setInvoiceInfo((prev) => ({
+            ...prev,
+            playerNumber: nextNum,
+          }));
+          setErrorMsgOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error("강제등록 초기 데이터 로드 실패:", error);
     }
   };
 
@@ -154,23 +180,17 @@ const ContestForceManual = () => {
     }
   };
 
-  const initInvoiceInfo = () => {
-    const {
-      invoicesPoolId: invoicePoolId,
-      contestCategorysListId: categoryListId,
-      contestGradesListId: gradeListId,
-      contestNoticeId: noticeId,
-      id: contestId,
-    } = currentContest.contests;
+  const initInvoiceInfo = (overrideNumber) => {
+    if (!currentContest?.contests?.id) return {};
+
+    const { id: contestId } = currentContest.contests;
 
     const initInfo = {
-      //invoicePoolId: invoicePoolId,
-
       contestId: contestId,
       createdBy: "force",
       contestPriceSum: 0,
       playerUid: generateUUID(),
-      playerNumber: playerNumber,
+      playerNumber: overrideNumber !== undefined ? overrideNumber : playerNumber,
       playerName: "",
       playerTel: "",
       playerEmail: "force@force.com",
@@ -184,34 +204,121 @@ const ContestForceManual = () => {
       joins: [],
     };
 
-    console.log(initInfo);
     return initInfo;
   };
 
   const handleAddInvoice = async (propData) => {
-    if (propData?.joins?.length > 0) {
+    if (!currentContest?.contests?.id) return;
+
+    if (!propData?.joins?.length) {
+      setMessage({
+        body: "참가신청종목을 선택해주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setErrorMsgOpen(true);
+      return;
+    }
+
+    const finalId = currentContest.contests.contestPlayersFinalId;
+    const assignId = currentContest.contests.contestPlayersAssignId;
+    const contestId = currentContest.contests.id;
+
+    if (!finalId) {
+      setMessage({
+        body: "최종명단 문서를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setErrorMsgOpen(true);
+      return;
+    }
+
+    try {
       const newData = { ...propData };
       delete newData.joins;
 
-      const startNumber = Number.parseInt(propData.playerNumber) || 0;
-      const newFinal = playerFinalInfo?.players || [];
+      const startNumber = Number.parseInt(propData.playerNumber, 10) || 0;
+      const entriesToAdd = propData.joins.map((join, idx) => ({
+        ...newData,
+        ...join,
+        contestId: newData.contestId || contestId,
+        createdBy: "force",
+        playerNoShow: Boolean(newData.playerNoShow),
+        playerNumber: startNumber + idx,
+        playerIndex: startNumber + idx,
+      }));
 
-      propData.joins.forEach((join, idx) => {
-        newFinal.push({
-          ...newData,
-          ...join,
-          playerNumber: startNumber + idx,
-          playerIndex: startNumber + idx,
+      let updatedFinalDocState = null;
+
+      await runTransaction(db, async (transaction) => {
+        const finalRef = doc(db, "contest_players_final", finalId);
+        const assignRef = assignId
+          ? doc(db, "contest_players_assign", assignId)
+          : null;
+
+        const finalSnap = await transaction.get(finalRef);
+        const assignSnap = assignRef ? await transaction.get(assignRef) : null;
+
+        const existingFinalData = finalSnap.exists()
+          ? finalSnap.data()
+          : { ...(playerFinalInfo || {}), contestId, players: [] };
+        const mergedFinalPlayers = [...(existingFinalData?.players || [])];
+
+        entriesToAdd.forEach((entry) => {
+          if (!mergedFinalPlayers.some((p) => isSamePlayerEntry(p, entry))) {
+            mergedFinalPlayers.push(entry);
+          }
         });
+
+        const nextFinalDoc = {
+          ...existingFinalData,
+          contestId,
+          players: mergedFinalPlayers,
+          updatedAt: new Date().toISOString(),
+        };
+        updatedFinalDocState = nextFinalDoc;
+
+        if (finalSnap.exists()) {
+          transaction.update(finalRef, nextFinalDoc);
+        } else {
+          transaction.set(finalRef, nextFinalDoc);
+        }
+
+        if (assignRef && assignSnap?.exists()) {
+          const existingAssignData = assignSnap.data() || {};
+          const mergedAssignPlayers = [...(existingAssignData.players || [])];
+
+          entriesToAdd.forEach((entry) => {
+            if (!mergedAssignPlayers.some((p) => isSamePlayerEntry(p, entry))) {
+              mergedAssignPlayers.push(entry);
+            }
+          });
+
+          transaction.update(assignRef, {
+            ...existingAssignData,
+            contestId: existingAssignData.contestId || contestId,
+            players: mergedAssignPlayers,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       });
 
-      const newPlayersFinal = { ...playerFinalInfo, players: newFinal };
-      await updatePlayersFinal.updateData(
-        currentContest.contests.contestPlayersFinalId,
-        { ...newPlayersFinal }
-      );
+      const nextNumber = startNumber + entriesToAdd.length;
+      if (updatedFinalDocState) {
+        setPlayerFinalInfo(updatedFinalDocState);
+      }
+      setPlayerNumber(nextNumber);
       setMessage({
         body: "최종명단에 강제추가했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setAddMsgOpen(true);
+    } catch (error) {
+      console.error("강제등록 저장 오류:", error);
+      setMessage({
+        body: "강제추가 저장 중 오류가 발생했습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -222,26 +329,10 @@ const ContestForceManual = () => {
   useEffect(() => {
     if (currentContest?.contests?.id) {
       const initInfo = initInvoiceInfo();
-      console.log("초기화 정보:", initInfo); // 초기화 값이 제대로 나오는지 확인
-      setInvoiceInfo(initInfo); // 초기화 정보를 상태로 설정
+      setInvoiceInfo(initInfo);
+      fetchPool();
     }
   }, [currentContest?.contests?.id]);
-
-  useEffect(() => {
-    fetchPool();
-  }, [currentContest?.contests?.id]);
-
-  useEffect(() => {
-    console.log(invoiceInfo);
-  }, [invoiceInfo]);
-
-  useEffect(() => {
-    console.log({ categorysArray, gradesArray });
-  }, [categorysArray, gradesArray]);
-
-  useEffect(() => {
-    initInvoiceInfo();
-  }, []);
 
   return (
     <>

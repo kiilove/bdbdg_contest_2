@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import LoadingPage from "./LoadingPage";
 import { TfiWrite } from "react-icons/tfi";
 import {
@@ -9,7 +9,8 @@ import {
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { doc, runTransaction, where } from "firebase/firestore";
+import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { TbWorldWww } from "react-icons/tb";
@@ -29,6 +30,30 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 
+let orderRowCounter = 0;
+const createOrderRowId = () =>
+  `ord_${++orderRowCounter}_${Math.random().toString(36).slice(2, 7)}`;
+
+const stripInternalPlayerProps = (player) => {
+  if (!player || typeof player !== "object") return player;
+  const { _rowId, ...rest } = player;
+  return rest;
+};
+
+const sanitizeForFirestore = (data) => {
+  if (data === undefined) return null;
+  return JSON.parse(
+    JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
+  );
+};
+
+const getPlayerRowEntryKey = (player, fallbackIdx = 0) => {
+  if (player?._rowId) return player._rowId;
+  return `${player?.contestGradeId || "g"}:${player?.playerUid || "u"}:${
+    player?.playerNumber ?? fallbackIdx
+  }`;
+};
+
 const ContestPlayerOrderTable = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -43,9 +68,10 @@ const ContestPlayerOrderTable = () => {
   const [playersAssign, setPlayersAssign] = useState({}); // assign만 관리
   const [startPlayerNumber, setStartPlayerNumber] = useState(1);
 
-  // ✅ 개별 항목 선택 상태 (행 단위: mIdx:pIdx:playerUid)
+  // ✅ 개별 항목 선택 상태 (고유 행 key 기준)
   const [selectedEntries, setSelectedEntries] = useState(new Set());
   const [healthModalOpen, setHealthModalOpen] = useState(false);
+  const deletedSignaturesRef = useRef(new Set());
 
   const { currentContest } = useContext(CurrentContestContext);
 
@@ -67,19 +93,37 @@ const ContestPlayerOrderTable = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // 공통 재배정 유틸: 전체 일련번호/표시순서를 startBase+1부터 부여
+  // 공통 재배정 유틸: 전체 일련번호/표시순서를 startBase+1부터 부여 (항상 정렬 및 고유 _rowId 보장)
   const renumberAll = (arr, startBase) => {
-    const allPlayers = arr.flatMap((m) => m.matchedPlayers || []);
-    allPlayers.forEach((p, i) => {
-      const num = i + startBase + 1;
-      p.playerNumber = num;
-      p.playerIndex = num;
+    const sortedGroups = [...arr]
+      .sort(
+        (a, b) =>
+          (a.contestCategoryIndex ?? 9999) - (b.contestCategoryIndex ?? 9999) ||
+          (a.contestGradeIndex ?? 9999) - (b.contestGradeIndex ?? 9999)
+      )
+      .map((m) => ({
+        ...m,
+        matchedPlayers: (m.matchedPlayers || []).map((p) => ({
+          ...p,
+          _rowId: p._rowId || createOrderRowId(),
+        })),
+      }));
+
+    let seq = 0;
+    sortedGroups.forEach((group) => {
+      group.matchedPlayers.forEach((p) => {
+        const num = seq + startBase + 1;
+        p.playerNumber = num;
+        p.playerIndex = num;
+        seq++;
+      });
     });
-    return arr;
+
+    return sortedGroups;
   };
 
   const fetchPool = async () => {
-    if (!currentContest?.contests) return;
+    if (!currentContest?.contests?.id) return;
     setIsLoading(true);
 
     try {
@@ -159,6 +203,7 @@ const ContestPlayerOrderTable = () => {
           playerNumber++;
           return {
             ...player,
+            _rowId: createOrderRowId(),
             playerNumber: playerNumber,
             playerNoShow: false,
             playerIndex: playerNumber,
@@ -175,6 +220,7 @@ const ContestPlayerOrderTable = () => {
       });
     });
 
+    deletedSignaturesRef.current = new Set();
     setMatchedArray(renumberAll(dummy, startPlayerNumber));
     setSelectedEntries(new Set());
   };
@@ -195,23 +241,42 @@ const ContestPlayerOrderTable = () => {
         grouped[key] = {
           ...cat,
           ...grd,
+          contestCategoryId: cat.contestCategoryId || p.contestCategoryId,
+          contestCategoryTitle:
+            cat.contestCategoryTitle || p.contestCategoryTitle,
+          contestGradeId: grd.contestGradeId || p.contestGradeId,
+          contestGradeTitle: grd.contestGradeTitle || p.contestGradeTitle,
           matchedPlayers: [],
           matchedGradesLength: 1,
         };
       }
-      grouped[key].matchedPlayers.push({ ...p });
+      grouped[key].matchedPlayers.push({
+        ...p,
+        _rowId: p._rowId || createOrderRowId(),
+      });
     });
 
-    const rebuilt = Object.values(grouped);
+    const rebuilt = Object.values(grouped).map((group) => ({
+      ...group,
+      matchedPlayers: [...group.matchedPlayers].sort(
+        (a, b) =>
+          (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
+          (Number(b.playerIndex) || Number(b.playerNumber) || 0)
+      ),
+    }));
+
+    deletedSignaturesRef.current = new Set();
     setMatchedArray(renumberAll(rebuilt, startPlayerNumber));
     setSelectedEntries(new Set());
   };
 
   // 초기 데이터 로드
   useEffect(() => {
-    fetchPool();
+    if (currentContest?.contests?.id) {
+      fetchPool();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentContest]);
+  }, [currentContest?.contests?.id]);
 
   // 카테고리/그레이드/엔트리/assign이 준비되면 화면 데이터 구성
   useEffect(() => {
@@ -232,7 +297,7 @@ const ContestPlayerOrderTable = () => {
     startPlayerNumber,
   ]);
 
-  // ✅ 중복 계산 (그룹: contestGradeId__playerUid, 항목: entryKey = mIdx:pIdx:playerUid)
+  // ✅ 중복 계산 (그룹: contestGradeId__playerUid, 항목: 고유 entryKey = _rowId)
   const duplicatesMap = useMemo(() => {
     const groups = {};
     matchedArray.forEach((m, mIdx) => {
@@ -241,8 +306,10 @@ const ContestPlayerOrderTable = () => {
       const gradeTitle = m.contestGradeTitle;
 
       (m.matchedPlayers || []).forEach((p, pIdx) => {
-        const groupKey = `${gradeId}__${p.playerUid}`;
-        const entryKey = `${mIdx}:${pIdx}:${p.playerUid}`;
+        const uidOrIdentity =
+          p.playerUid || `${(p.playerName || "").trim()}_${p.playerTel || ""}`;
+        const groupKey = `${gradeId}__${uidOrIdentity}`;
+        const entryKey = getPlayerRowEntryKey(p, pIdx);
 
         if (!groups[groupKey]) {
           groups[groupKey] = {
@@ -286,28 +353,18 @@ const ContestPlayerOrderTable = () => {
 
     const newMatched = matchedArray.map((m) => ({
       ...m,
-      matchedPlayers: [...(m.matchedPlayers || [])],
-    }));
-
-    const toDeleteByGroup = {};
-    selectedEntries.forEach((entryKey) => {
-      const [mIdxStr, pIdxStr] = entryKey.split(":");
-      const mIdx = parseInt(mIdxStr, 10);
-      const pIdx = parseInt(pIdxStr, 10);
-      if (Number.isNaN(mIdx) || Number.isNaN(pIdx)) return;
-      if (!toDeleteByGroup[mIdx]) toDeleteByGroup[mIdx] = [];
-      toDeleteByGroup[mIdx].push(pIdx);
-    });
-
-    Object.entries(toDeleteByGroup).forEach(([mIdxStr, list]) => {
-      const mIdx = parseInt(mIdxStr, 10);
-      const sortedDesc = [...list].sort((a, b) => b - a);
-      sortedDesc.forEach((pIdx) => {
-        if (newMatched[mIdx]?.matchedPlayers?.[pIdx]) {
-          newMatched[mIdx].matchedPlayers.splice(pIdx, 1);
+      matchedPlayers: (m.matchedPlayers || []).filter((p, pIdx) => {
+        const key = getPlayerRowEntryKey(p, pIdx);
+        if (selectedEntries.has(key)) {
+          const sig = `${p.contestGradeId || ""}__${p.playerUid || ""}__${
+            p.playerNumber ?? ""
+          }`;
+          deletedSignaturesRef.current.add(sig);
+          return false;
         }
-      });
-    });
+        return true;
+      }),
+    }));
 
     setMatchedArray(renumberAll(newMatched, startPlayerNumber));
     setSelectedEntries(new Set());
@@ -365,10 +422,12 @@ const ContestPlayerOrderTable = () => {
     }
   };
 
-  // 저장은 assign + final 동기화
+  // 저장은 assign + final 동기화 (계측 필드 및 그랑프리/강제등록 선수 안전 보존)
   const handleUpdatePlayersAssign = async (assignId) => {
     const targetAssignId =
       assignId || currentContest?.contests?.contestPlayersAssignId;
+    const targetFinalId = currentContest?.contests?.contestPlayersFinalId;
+    const contestId = currentContest?.contests?.id;
 
     if (!targetAssignId) {
       setMessage({
@@ -380,27 +439,251 @@ const ContestPlayerOrderTable = () => {
       return;
     }
 
-    const allPlayers = matchedArray.flatMap((m) => m.matchedPlayers || []);
-    const newPlayersAssign = {
-      contestId: currentContest?.contests?.id,
-      ...playersAssign,
-      players: [...allPlayers],
+    const allPlayers = matchedArray.flatMap((m) =>
+      (m.matchedPlayers || []).map(stripInternalPlayerProps)
+    );
+
+    const grandPrixCategoryIds = new Set(
+      (categorysArray || [])
+        .filter((c) => c?.contestCategorySection === "그랑프리")
+        .map((c) => c.contestCategoryId)
+        .filter(Boolean)
+    );
+    const grandPrixGradeIds = new Set(
+      (gradesArray || [])
+        .filter((g) => grandPrixCategoryIds.has(g?.refCategoryId))
+        .map((g) => g.contestGradeId)
+        .filter(Boolean)
+    );
+
+    const isGrandPrixEntry = (p) =>
+      Boolean(
+        p &&
+          (p.contestCategoryTitle === "그랑프리" ||
+            grandPrixCategoryIds.has(p.contestCategoryId) ||
+            grandPrixGradeIds.has(p.contestGradeId))
+      );
+
+    const isForceEntry = (p) =>
+      Boolean(p && (p.createdBy === "force" || p.createBy === "force"));
+
+    const mergePlayerPreservingWeighIn = (ap, existingPool, usedIdxSet) => {
+      const apOrigGrade = ap.originalGradeId || ap.contestGradeId;
+      let matchIdx = existingPool.findIndex((efp, idx) => {
+        if (usedIdxSet.has(idx) || !efp) return false;
+        const efpOrigGrade = efp.originalGradeId || efp.contestGradeId;
+        if (ap.playerUid && efp.playerUid) {
+          return (
+            efp.playerUid === ap.playerUid &&
+            efp.contestCategoryId === ap.contestCategoryId &&
+            efpOrigGrade === apOrigGrade
+          );
+        }
+        return (
+          (efp.playerName || "").trim() === (ap.playerName || "").trim() &&
+          efp.contestCategoryId === ap.contestCategoryId &&
+          efpOrigGrade === apOrigGrade
+        );
+      });
+
+      if (matchIdx === -1 && ap.playerUid) {
+        matchIdx = existingPool.findIndex((efp, idx) => {
+          if (usedIdxSet.has(idx) || !efp || isGrandPrixEntry(efp)) {
+            return false;
+          }
+          return (
+            efp.isGradeChanged &&
+            efp.playerUid === ap.playerUid &&
+            efp.contestCategoryId === ap.contestCategoryId
+          );
+        });
+      }
+
+      if (matchIdx === -1) {
+        return {
+          ...ap,
+          originalGradeId: apOrigGrade,
+          originalGradeTitle: ap.originalGradeTitle || ap.contestGradeTitle,
+        };
+      }
+
+      usedIdxSet.add(matchIdx);
+      const efp = existingPool[matchIdx];
+      const preservedGradeChanged =
+        efp.isGradeChanged !== undefined
+          ? Boolean(efp.isGradeChanged)
+          : Boolean(ap.isGradeChanged);
+
+      return {
+        ...efp,
+        ...ap,
+        originalGradeId: apOrigGrade,
+        originalGradeTitle: ap.originalGradeTitle || ap.contestGradeTitle,
+        isGradeChanged: preservedGradeChanged,
+        contestGradeId: preservedGradeChanged
+          ? efp.contestGradeId || ap.contestGradeId
+          : ap.contestGradeId,
+        contestGradeTitle: preservedGradeChanged
+          ? efp.contestGradeTitle || ap.contestGradeTitle
+          : ap.contestGradeTitle,
+        playerNumber: ap.playerNumber,
+        playerIndex:
+          preservedGradeChanged && Number(ap.playerIndex) < 1000
+            ? Number(ap.playerIndex) + 1000
+            : ap.playerIndex,
+        playerNoShow:
+          efp.playerNoShow !== undefined
+            ? Boolean(efp.playerNoShow)
+            : Boolean(ap.playerNoShow),
+        isWeighedIn:
+          efp.isWeighedIn !== undefined ? efp.isWeighedIn : ap.isWeighedIn,
+        isMeasurement:
+          efp.isMeasurement !== undefined
+            ? efp.isMeasurement
+            : ap.isMeasurement,
+        measuredHeight:
+          efp.measuredHeight !== undefined
+            ? efp.measuredHeight
+            : ap.measuredHeight,
+        measuredWeight:
+          efp.measuredWeight !== undefined
+            ? efp.measuredWeight
+            : ap.measuredWeight,
+        heightWeight: efp.heightWeight || ap.heightWeight || "",
+        playerHeight: efp.playerHeight || ap.playerHeight || "",
+        playerWeight: efp.playerWeight || ap.playerWeight || "",
+        height: efp.height || ap.height || "",
+        weight: efp.weight || ap.weight || "",
+        stagePhoto1: efp.stagePhoto1 || ap.stagePhoto1 || "",
+        stagePhoto2: efp.stagePhoto2 || ap.stagePhoto2 || "",
+        stagePhotoUrl1: efp.stagePhotoUrl1 || ap.stagePhotoUrl1 || "",
+        stagePhotoUrl2: efp.stagePhotoUrl2 || ap.stagePhotoUrl2 || "",
+        stagePhotoUrl: efp.stagePhotoUrl || ap.stagePhotoUrl || "",
+        profileImageUrl: efp.profileImageUrl || ap.profileImageUrl || "",
+        photoUrl: efp.photoUrl || ap.photoUrl || "",
+        playerPhoto: efp.playerPhoto || ap.playerPhoto || "",
+        photos:
+          (Array.isArray(efp.photos) && efp.photos.length > 0
+            ? efp.photos
+            : ap.photos) || [],
+        ...(efp.createdBy ? { createdBy: efp.createdBy } : {}),
+      };
     };
 
     try {
       setIsLoading(true);
-      await updatePlayersAssign.updateData(targetAssignId, newPlayersAssign);
+      let savedAssignDoc = null;
 
-      // 계측 명단 contest_players_final도 함께 동기화
-      const targetFinalId = currentContest?.contests?.contestPlayersFinalId;
-      if (targetFinalId) {
-        await updatePlayersFinal.updateData(targetFinalId, {
-          contestId: currentContest?.contests?.id,
-          players: [...allPlayers],
+      await runTransaction(db, async (transaction) => {
+        const assignRef = doc(db, "contest_players_assign", targetAssignId);
+        const finalRef = targetFinalId
+          ? doc(db, "contest_players_final", targetFinalId)
+          : null;
+
+        const assignSnap = await transaction.get(assignRef);
+        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+
+        const existingAssignData = assignSnap.exists()
+          ? assignSnap.data()
+          : playersAssign || {};
+        const existingAssignPlayers = existingAssignData?.players || [];
+        const existingFinalData = finalSnap?.exists()
+          ? finalSnap.data()
+          : { contestId, players: [] };
+        const existingFinalPlayers = existingFinalData?.players || [];
+
+        const referencePool =
+          existingFinalPlayers.length > 0
+            ? existingFinalPlayers
+            : existingAssignPlayers;
+
+        const usedAssignIdx = new Set();
+        const mergedAssignPlayers = allPlayers.map((ap) =>
+          mergePlayerPreservingWeighIn(ap, existingAssignPlayers, usedAssignIdx)
+        );
+
+        // 강제등록(createdBy: "force") 선수가 신청서 기준 재계산 등으로 누락된 경우 보존 (사용자가 명시적으로 삭제한 중복은 제외)
+        const isExplicitlyDeleted = (p) => {
+          const sig = `${p?.contestGradeId || ""}__${p?.playerUid || ""}__${
+            p?.playerNumber ?? ""
+          }`;
+          return deletedSignaturesRef.current.has(sig);
+        };
+
+        referencePool.forEach((ep) => {
+          if (!isForceEntry(ep) || isExplicitlyDeleted(ep)) return;
+          const alreadyExists = mergedAssignPlayers.some(
+            (mp) =>
+              mp.contestGradeId === ep.contestGradeId &&
+              ((mp.playerUid && ep.playerUid && mp.playerUid === ep.playerUid) ||
+                (Number(mp.playerNumber) === Number(ep.playerNumber) &&
+                  (mp.playerName || "").trim() === (ep.playerName || "").trim()))
+          );
+          if (!alreadyExists) {
+            mergedAssignPlayers.push(stripInternalPlayerProps(ep));
+          }
         });
-      }
 
-      setPlayersAssign({ ...newPlayersAssign, id: targetAssignId });
+        const usedFinalIdx = new Set();
+        const mergedFinalPlayers = allPlayers.map((ap) =>
+          mergePlayerPreservingWeighIn(ap, referencePool, usedFinalIdx)
+        );
+
+        existingFinalPlayers.forEach((efp, idx) => {
+          if (usedFinalIdx.has(idx) || !efp) return;
+          if (
+            (isGrandPrixEntry(efp) || isForceEntry(efp)) &&
+            !isExplicitlyDeleted(efp)
+          ) {
+            const alreadyInFinal = mergedFinalPlayers.some(
+              (mp) =>
+                mp.contestGradeId === efp.contestGradeId &&
+                ((mp.playerUid &&
+                  efp.playerUid &&
+                  mp.playerUid === efp.playerUid) ||
+                  (Number(mp.playerNumber) === Number(efp.playerNumber) &&
+                    (mp.playerName || "").trim() ===
+                      (efp.playerName || "").trim()))
+            );
+            if (!alreadyInFinal) {
+              mergedFinalPlayers.push(stripInternalPlayerProps(efp));
+            }
+          }
+        });
+
+        const nextAssignDoc = sanitizeForFirestore({
+          ...existingAssignData,
+          contestId,
+          players: mergedAssignPlayers,
+          updatedAt: new Date().toISOString(),
+        });
+        savedAssignDoc = nextAssignDoc;
+
+        if (assignSnap.exists()) {
+          transaction.update(assignRef, nextAssignDoc);
+        } else {
+          transaction.set(assignRef, nextAssignDoc);
+        }
+
+        if (finalRef) {
+          const nextFinalDoc = sanitizeForFirestore({
+            ...existingFinalData,
+            contestId,
+            players: mergedFinalPlayers,
+            updatedAt: new Date().toISOString(),
+          });
+          if (finalSnap?.exists()) {
+            transaction.update(finalRef, nextFinalDoc);
+          } else {
+            transaction.set(finalRef, nextFinalDoc);
+          }
+        }
+      });
+
+      deletedSignaturesRef.current = new Set();
+      if (savedAssignDoc) {
+        setPlayersAssign({ ...savedAssignDoc, id: targetAssignId });
+      }
 
       const hasDup = Object.keys(duplicatesMap).length > 0;
       setMessage({
@@ -739,7 +1022,7 @@ const ContestPlayerOrderTable = () => {
                 className="w-full sm:w-auto font-black bg-blue-600 hover:bg-blue-500"
                 onClick={() =>
                   handleUpdatePlayersAssign(
-                    currentContest.contests.contestPlayersAssignId
+                    currentContest?.contests?.contestPlayersAssignId
                   )
                 }
               >
@@ -750,212 +1033,223 @@ const ContestPlayerOrderTable = () => {
 
           <div className="flex flex-col gap-4">
             {matchedArray.length > 0 &&
-              [...matchedArray]
-                .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
-                .map((matched, mIdx) => {
-                  const {
-                    contestCategoryTitle: categoryTitle,
-                    contestGradeTitle: gradeTitle,
-                    contestGradeId,
-                    matchedPlayers = [],
-                  } = matched;
+              matchedArray.map((matched, mIdx) => {
+                const {
+                  contestCategoryTitle: categoryTitle,
+                  contestGradeTitle: gradeTitle,
+                  contestGradeId,
+                  matchedPlayers = [],
+                } = matched;
 
-                  if (matchedPlayers.length === 0) return null;
+                if (matchedPlayers.length === 0) return null;
 
-                  return (
-                    <Card
-                      key={`${contestGradeId}_${mIdx}`}
-                      title={
-                        <span className="text-lg font-semibold">
-                          {categoryTitle} / {gradeTitle}
-                        </span>
-                      }
-                      className="shadow-sm"
-                    >
-                      <DragDropContext onDragEnd={onDragPlayerEnd}>
-                        <Droppable droppableId={`players_${contestGradeId}`}>
-                          {(provided) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.droppableProps}
-                            >
-                              {/* 데스크톱 테이블 */}
-                              {!isMobile && (
-                                <div className="flex flex-col w-full">
-                                  <div className="flex w-full border-b-2 border-gray-200 h-12 items-center font-semibold bg-gray-50 px-4 rounded-t-lg">
-                                    <div className="flex w-1/12">
-                                      <DragOutlined />
-                                    </div>
-                                    <div className="flex w-1/12">순번</div>
-                                    <div className="flex w-2/12">선수번호</div>
-                                    <div className="flex w-[30%]">이름</div>
-                                    <div className="flex w-3/12">소속</div>
-                                    <div className="flex w-3/12">신청일</div>
+                return (
+                  <Card
+                    key={`${contestGradeId}_${mIdx}`}
+                    title={
+                      <span className="text-lg font-semibold">
+                        {categoryTitle} / {gradeTitle}
+                      </span>
+                    }
+                    className="shadow-sm"
+                  >
+                    <DragDropContext onDragEnd={onDragPlayerEnd}>
+                      <Droppable droppableId={`players_${contestGradeId}`}>
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                          >
+                            {/* 데스크톱 테이블 */}
+                            {!isMobile && (
+                              <div className="flex flex-col w-full">
+                                <div className="flex w-full border-b-2 border-gray-200 h-12 items-center font-semibold bg-gray-50 px-4 rounded-t-lg">
+                                  <div className="flex w-1/12">
+                                    <DragOutlined />
                                   </div>
+                                  <div className="flex w-1/12">순번</div>
+                                  <div className="flex w-2/12">선수번호</div>
+                                  <div className="flex w-[30%]">이름</div>
+                                  <div className="flex w-3/12">소속</div>
+                                  <div className="flex w-3/12">신청일</div>
+                                </div>
 
-                                  {[...matchedPlayers]
-                                    .sort(
-                                      (a, b) => a.playerIndex - b.playerIndex
-                                    )
-                                    .map((player, pIdx) => {
-                                      const {
-                                        playerName,
-                                        playerGym,
-                                        playerUid,
-                                        playerNumber,
-                                        createBy,
-                                        invoiceCreateAt,
-                                      } = player;
+                                {matchedPlayers.map((player, pIdx) => {
+                                  const {
+                                    playerName,
+                                    playerGym,
+                                    playerUid,
+                                    playerNumber,
+                                    createBy,
+                                    invoiceCreateAt,
+                                  } = player;
 
-                                      const dupGroupKey = `${contestGradeId}__${playerUid}`;
-                                      const isDuplicate =
-                                        duplicateGroupKeys.has(dupGroupKey);
-                                      const entryKey = `${mIdx}:${pIdx}:${playerUid}`;
-                                      const checked =
-                                        selectedEntries.has(entryKey);
+                                  const uidOrIdentity =
+                                    playerUid ||
+                                    `${(playerName || "").trim()}_${
+                                      player.playerTel || ""
+                                    }`;
+                                  const dupGroupKey = `${contestGradeId}__${uidOrIdentity}`;
+                                  const isDuplicate =
+                                    duplicateGroupKeys.has(dupGroupKey);
+                                  const entryKey = getPlayerRowEntryKey(
+                                    player,
+                                    pIdx
+                                  );
+                                  const checked = selectedEntries.has(entryKey);
+                                  const uniqueDraggableId = `${
+                                    contestGradeId || "g"
+                                  }-${playerUid || "u"}-${
+                                    player._rowId || `${playerNumber}-${pIdx}`
+                                  }`;
 
-                                      return (
-                                        <Draggable
-                                          draggableId={`${contestGradeId}::${playerUid}`}
-                                          index={pIdx} // 숫자만
-                                          key={`${playerUid}_${mIdx}_${pIdx}`}
+                                  return (
+                                    <Draggable
+                                      draggableId={uniqueDraggableId}
+                                      index={pIdx}
+                                      key={uniqueDraggableId}
+                                    >
+                                      {(provided, snapshot) => (
+                                        <div
+                                          className={`flex w-full h-14 border-b items-center px-4 hover:bg-gray-50 transition-colors ${
+                                            snapshot.isDragging
+                                              ? "bg-blue-50 shadow-lg"
+                                              : ""
+                                          } ${
+                                            isDuplicate
+                                              ? "border-red-400 bg-red-50/20"
+                                              : "border-gray-200"
+                                          }`}
+                                          ref={provided.innerRef}
+                                          {...provided.dragHandleProps}
+                                          {...provided.draggableProps}
                                         >
-                                          {(provided, snapshot) => (
-                                            <div
-                                              className={`flex w-full h-14 border-b items-center px-4 hover:bg-gray-50 transition-colors ${
-                                                snapshot.isDragging
-                                                  ? "bg-blue-50 shadow-lg"
-                                                  : ""
-                                              } ${
-                                                isDuplicate
-                                                  ? "border-red-400 bg-red-50/20"
-                                                  : "border-gray-200"
-                                              }`}
-                                              ref={provided.innerRef}
-                                              {...provided.dragHandleProps}
-                                              {...provided.draggableProps}
+                                          <div className="flex w-1/12 text-gray-400">
+                                            <DragOutlined />
+                                          </div>
+                                          <div className="flex w-1/12">
+                                            {pIdx + 1}
+                                          </div>
+                                          <div className="flex w-2/12">
+                                            <Tag
+                                              color="gold"
+                                              className="text-base font-semibold px-2 py-0.5"
                                             >
-                                              <div className="flex w-1/12 text-gray-400">
-                                                <DragOutlined />
-                                              </div>
-                                              <div className="flex w-1/12">
-                                                {pIdx + 1}
-                                              </div>
-                                              <div className="flex w-2/12">
-                                                <Tag
-                                                  color="gold"
-                                                  className="text-base font-semibold px-2 py-0.5"
-                                                >
-                                                  {playerNumber}
-                                                </Tag>
-                                              </div>
-                                              <div className="flex w-[30%] items-center gap-2">
-                                                {playerName}
-                                                {createBy === "manual" && (
-                                                  <Tag
-                                                    color="green"
-                                                    className="flex items-center justify-center gap-1 min-w-[60px]"
-                                                  >
-                                                    <TfiWrite />
-                                                    <span>수기</span>
-                                                  </Tag>
-                                                )}
-                                                {(createBy === undefined ||
-                                                  createBy === "web") && (
-                                                  <Tag
-                                                    color="blue"
-                                                    className="flex items-center justify-center gap-1 min-w-[60px]"
-                                                  >
-                                                    <TbWorldWww />
-                                                    <span>웹</span>
-                                                  </Tag>
-                                                )}
-                                                {isDuplicate && (
-                                                  <>
-                                                    <Tag color="red">중복</Tag>
-                                                    <Checkbox
-                                                      checked={checked}
-                                                      onChange={(e) => {
-                                                        setSelectedEntries(
-                                                          (prev) => {
-                                                            const next =
-                                                              new Set(prev);
-                                                            if (
-                                                              e.target.checked
-                                                            )
-                                                              next.add(
-                                                                entryKey
-                                                              );
-                                                            else
-                                                              next.delete(
-                                                                entryKey
-                                                              );
-                                                            return next;
-                                                          }
+                                              {playerNumber}
+                                            </Tag>
+                                          </div>
+                                          <div className="flex w-[30%] items-center gap-2">
+                                            {playerName}
+                                            {createBy === "manual" && (
+                                              <Tag
+                                                color="green"
+                                                className="flex items-center justify-center gap-1 min-w-[60px]"
+                                              >
+                                                <TfiWrite />
+                                                <span>수기</span>
+                                              </Tag>
+                                            )}
+                                            {(createBy === undefined ||
+                                              createBy === "web") && (
+                                              <Tag
+                                                color="blue"
+                                                className="flex items-center justify-center gap-1 min-w-[60px]"
+                                              >
+                                                <TbWorldWww />
+                                                <span>웹</span>
+                                              </Tag>
+                                            )}
+                                            {isDuplicate && (
+                                              <>
+                                                <Tag color="red">중복</Tag>
+                                                <Checkbox
+                                                  checked={checked}
+                                                  onChange={(e) => {
+                                                    setSelectedEntries(
+                                                      (prev) => {
+                                                        const next = new Set(
+                                                          prev
                                                         );
-                                                      }}
-                                                    >
-                                                      삭제 대상
-                                                    </Checkbox>
-                                                  </>
-                                                )}
-                                              </div>
-                                              <div className="flex w-3/12">
-                                                {playerGym}
-                                              </div>
-                                              <div className="flex w-3/12 text-gray-600">
-                                                {invoiceCreateAt}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </Draggable>
-                                      );
-                                    })}
-                                </div>
-                              )}
+                                                        if (e.target.checked)
+                                                          next.add(entryKey);
+                                                        else
+                                                          next.delete(entryKey);
+                                                        return next;
+                                                      }
+                                                    );
+                                                  }}
+                                                >
+                                                  삭제 대상
+                                                </Checkbox>
+                                              </>
+                                            )}
+                                          </div>
+                                          <div className="flex w-3/12">
+                                            {playerGym}
+                                          </div>
+                                          <div className="flex w-3/12 text-gray-600">
+                                            {invoiceCreateAt}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  );
+                                })}
+                              </div>
+                            )}
 
-                              {/* 모바일 카드 */}
-                              {isMobile && (
-                                <div className="flex flex-col w-full gap-2">
-                                  {[...matchedPlayers]
-                                    .sort(
-                                      (a, b) => a.playerIndex - b.playerIndex
-                                    )
-                                    .map((player, pIdx) => {
-                                      const dupGroupKey = `${contestGradeId}__${player.playerUid}`;
-                                      const isDuplicate =
-                                        duplicateGroupKeys.has(dupGroupKey);
-                                      const entryKey = `${mIdx}:${pIdx}:${player.playerUid}`;
+                            {/* 모바일 카드 */}
+                            {isMobile && (
+                              <div className="flex flex-col w-full gap-2">
+                                {matchedPlayers.map((player, pIdx) => {
+                                  const uidOrIdentity =
+                                    player.playerUid ||
+                                    `${(player.playerName || "").trim()}_${
+                                      player.playerTel || ""
+                                    }`;
+                                  const dupGroupKey = `${contestGradeId}__${uidOrIdentity}`;
+                                  const isDuplicate =
+                                    duplicateGroupKeys.has(dupGroupKey);
+                                  const entryKey = getPlayerRowEntryKey(
+                                    player,
+                                    pIdx
+                                  );
+                                  const uniqueDraggableId = `${
+                                    contestGradeId || "g"
+                                  }-${player.playerUid || "u"}-${
+                                    player._rowId ||
+                                    `${player.playerNumber}-${pIdx}`
+                                  }`;
 
-                                      return (
-                                        <Draggable
-                                          draggableId={`${contestGradeId}::${player.playerUid}`}
+                                  return (
+                                    <Draggable
+                                      draggableId={uniqueDraggableId}
+                                      index={pIdx}
+                                      key={uniqueDraggableId}
+                                    >
+                                      {(provided, snapshot) => (
+                                        <PlayerCardView
+                                          player={player}
                                           index={pIdx}
-                                          key={`${player.playerUid}_${mIdx}_${pIdx}`}
-                                        >
-                                          {(provided, snapshot) => (
-                                            <PlayerCardView
-                                              player={player}
-                                              index={pIdx}
-                                              provided={provided}
-                                              snapshot={snapshot}
-                                              isDuplicate={isDuplicate}
-                                              entryKey={entryKey}
-                                            />
-                                          )}
-                                        </Draggable>
-                                      );
-                                    })}
-                                </div>
-                              )}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      </DragDropContext>
-                    </Card>
-                  );
-                })}
+                                          provided={provided}
+                                          snapshot={snapshot}
+                                          isDuplicate={isDuplicate}
+                                          entryKey={entryKey}
+                                        />
+                                      )}
+                                    </Draggable>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
+                  </Card>
+                );
+              })}
           </div>
         </>
       )}

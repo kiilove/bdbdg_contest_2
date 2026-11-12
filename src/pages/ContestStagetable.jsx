@@ -41,42 +41,62 @@ const ContestStagetable = () => {
   const updateStages = useFirestoreUpdateData("contest_stages_assign");
 
   const fetchPool = async () => {
-    const returnCategoies = await fetchCategoies.getDocument(
-      currentContest.contests.contestCategorysListId
-    );
-    const returnGrades = await fetchGrades.getDocument(
-      currentContest.contests.contestGradesListId
-    );
-    const returnPlayersFinal = await fetchPlayersFinal.getDocument(
-      currentContest.contests.contestPlayersFinalId
-    );
+    if (!currentContest?.contests?.id) return;
 
-    const returnStagesAssign = await fetchStagesAssign.getDocument(
-      currentContest.contests.contestStagesAssignId
-    );
-
-    if (returnCategoies) {
-      setCategoriesArray([
-        ...returnCategoies.categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
+    setIsLoading(true);
+    try {
+      const [
+        returnCategoies,
+        returnGrades,
+        returnPlayersFinal,
+        returnStagesAssign,
+      ] = await Promise.all([
+        currentContest.contests.contestCategorysListId
+          ? fetchCategoies.getDocument(
+              currentContest.contests.contestCategorysListId
+            )
+          : Promise.resolve(null),
+        currentContest.contests.contestGradesListId
+          ? fetchGrades.getDocument(currentContest.contests.contestGradesListId)
+          : Promise.resolve(null),
+        currentContest.contests.contestPlayersFinalId
+          ? fetchPlayersFinal.getDocument(
+              currentContest.contests.contestPlayersFinalId
+            )
+          : Promise.resolve(null),
+        currentContest.contests.contestStagesAssignId
+          ? fetchStagesAssign.getDocument(
+              currentContest.contests.contestStagesAssignId
+            )
+          : Promise.resolve(null),
       ]);
-    }
 
-    if (returnGrades) {
-      setGradesArray([...returnGrades.grades]);
-    }
+      const loadedCategories = returnCategoies?.categorys
+        ? [...returnCategoies.categorys].sort(
+            (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+          )
+        : [];
+      const loadedGrades = returnGrades?.grades ? [...returnGrades.grades] : [];
+      const loadedPlayers = returnPlayersFinal?.players
+        ? [...returnPlayersFinal.players]
+        : [];
 
-    if (returnPlayersFinal) {
-      setPlayersArray([...returnPlayersFinal.players]);
-      console.log(returnPlayersFinal.players);
-    }
+      setCategoriesArray(loadedCategories);
+      setGradesArray(loadedGrades);
+      setPlayersArray(loadedPlayers);
 
-    if (returnStagesAssign) {
-      setStagesInfo({ ...returnStagesAssign });
-      if (returnStagesAssign.stages.length > 0) {
-        fetchStages([...returnStagesAssign.stages]);
+      if (returnStagesAssign) {
+        setStagesInfo({ ...returnStagesAssign });
+        if (returnStagesAssign.stages?.length > 0) {
+          fetchStages([...returnStagesAssign.stages]);
+        }
+      } else {
+        setStagesInfo({});
       }
+    } catch (error) {
+      console.error("무대설정 데이터 로드 실패:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -159,47 +179,118 @@ const ContestStagetable = () => {
   };
 
   const handleUpdateStages = async (id, propData) => {
-    console.log(id);
-    try {
-      await updateStages.updateData(id, { ...propData }).then((data) => {
-        console.log(propData);
-        console.log(data);
-        setMessage({
-          body: "저장되었습니다.",
-          isButton: true,
-          confirmButtonText: "확인",
-        });
-        setMsgOpen(true);
+    if (!id) {
+      setMessage({
+        body: "무대 배정 문서를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+      return;
+    }
+    try {
+      await updateStages.updateData(id, { ...propData });
+      setMessage({
+        body: "저장되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } catch (error) {
-      console.log(error);
+      console.error("무대 설정 저장 오류:", error);
+      setMessage({
+        body: "저장 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 
+  const buildStageWithMetadata = (baseStage, primaryGrade) => {
+    const matchedCat = (categoriesArray || []).find(
+      (c) => c?.contestCategoryId === primaryGrade?.categoryId
+    );
+    const resolvedSection =
+      matchedCat?.contestCategorySection ??
+      primaryGrade?.categorySection ??
+      baseStage?.categorySection ??
+      baseStage?.section;
+
+    return {
+      ...baseStage,
+      categoryId:
+        matchedCat?.contestCategoryId ??
+        primaryGrade?.categoryId ??
+        baseStage?.categoryId,
+      categoryTitle:
+        matchedCat?.contestCategoryTitle ??
+        primaryGrade?.categoryTitle ??
+        baseStage?.categoryTitle,
+      categoryJudgeCount:
+        matchedCat?.contestCategoryJudgeCount ??
+        primaryGrade?.categoryJudgeCount ??
+        baseStage?.categoryJudgeCount,
+      categoryIsOverall:
+        matchedCat?.contestCategoryIsOverall ??
+        primaryGrade?.categoryIsOverall ??
+        baseStage?.categoryIsOverall,
+      categoryJudgeType:
+        matchedCat?.contestCategoryJudgeType ??
+        primaryGrade?.categoryJudgeType ??
+        baseStage?.categoryJudgeType,
+      categorySection: resolvedSection,
+      ...(baseStage?.section !== undefined || resolvedSection !== undefined
+        ? { section: baseStage?.section ?? resolvedSection }
+        : {}),
+    };
+  };
+
   const splitStage = (stageId, gradeIndex) => {
-    let updatedStagesArray = [...stagesArray];
-    const stageIndex = updatedStagesArray.findIndex(
+    const stageIndex = stagesArray.findIndex(
       (stage) => stage.stageId === stageId
     );
 
     if (stageIndex === -1) return;
 
-    const [removedGrade] = updatedStagesArray[stageIndex].grades.splice(
-      gradeIndex,
-      1
-    );
+    const parentStage = stagesArray[stageIndex];
+    if (
+      !parentStage ||
+      !Array.isArray(parentStage.grades) ||
+      parentStage.grades.length <= 1
+    ) {
+      return;
+    }
+
+    if (gradeIndex < 0 || gradeIndex >= parentStage.grades.length) {
+      return;
+    }
+
+    const remainingGrades = [...parentStage.grades];
+    const [removedGrade] = remainingGrades.splice(gradeIndex, 1);
+    if (!removedGrade || remainingGrades.length === 0) return;
+
+    const updatedParentStage = {
+      ...buildStageWithMetadata(parentStage, remainingGrades[0]),
+      stageId: parentStage.stageId,
+      grades: remainingGrades,
+    };
 
     const newStage = {
+      ...buildStageWithMetadata(parentStage, removedGrade),
       stageId: uuidv4(),
       grades: [removedGrade],
     };
 
-    updatedStagesArray.splice(stageIndex + 1, 0, newStage);
+    let updatedStagesArray = [...stagesArray];
+    updatedStagesArray.splice(stageIndex, 1, updatedParentStage, newStage);
 
-    updatedStagesArray = updatedStagesArray.map((stage, index) => ({
-      ...stage,
-      stageNumber: index + 1,
-    }));
+    updatedStagesArray = updatedStagesArray
+      .filter((stage) => Array.isArray(stage.grades) && stage.grades.length > 0)
+      .map((stage, index) => ({
+        ...stage,
+        stageNumber: index + 1,
+      }));
 
     setStagesArray(updatedStagesArray);
   };
@@ -292,11 +383,12 @@ const ContestStagetable = () => {
       const [removed] = newStagesArray.splice(source.index, 1);
       newStagesArray.splice(destination.index, 0, removed);
 
-      newStagesArray.forEach((stage, idx) => {
-        stage.stageNumber = idx + 1;
-      });
-
-      setStagesArray(newStagesArray);
+      setStagesArray(
+        newStagesArray.map((stage, idx) => ({
+          ...stage,
+          stageNumber: idx + 1,
+        }))
+      );
       return;
     }
 
@@ -307,8 +399,10 @@ const ContestStagetable = () => {
       (stage) => stage.stageId === destination.droppableId
     );
 
+    if (!start || !finish) return;
+
     if (start === finish) {
-      const newGradeIds = Array.from(start.grades);
+      const newGradeIds = Array.from(start.grades || []);
       const [removed] = newGradeIds.splice(source.index, 1);
       newGradeIds.splice(destination.index, 0, removed);
 
@@ -317,70 +411,68 @@ const ContestStagetable = () => {
         grades: newGradeIds,
       };
 
-      let newStagesArray = stagesArray.map((stage) =>
-        stage.stageId === start.stageId ? newStage : stage
-      );
-
-      newStagesArray = newStagesArray.filter(
-        (stage) => stage.grades.length !== 0
-      );
-
-      newStagesArray.forEach((stage, idx) => {
-        stage.stageNumber = idx + 1;
-      });
+      const newStagesArray = stagesArray
+        .map((stage) => (stage.stageId === start.stageId ? newStage : stage))
+        .filter((stage) => (stage.grades || []).length !== 0)
+        .map((stage, idx) => ({
+          ...stage,
+          stageNumber: idx + 1,
+        }));
 
       setStagesArray(newStagesArray);
       return;
     }
 
-    const startGradeIds = Array.from(start.grades);
+    const startGradeIds = Array.from(start.grades || []);
     const [removed] = startGradeIds.splice(source.index, 1);
     const newStart = {
       ...start,
       grades: startGradeIds,
     };
 
-    const finishGradeIds = Array.from(finish.grades);
+    const finishGradeIds = Array.from(finish.grades || []);
     finishGradeIds.splice(destination.index, 0, removed);
     const newFinish = {
       ...finish,
       grades: finishGradeIds,
     };
 
-    let newStagesArray = stagesArray.map((stage) => {
-      if (stage.stageId === start.stageId) {
-        return newStart;
-      }
-      if (stage.stageId === finish.stageId) {
-        return newFinish;
-      }
-      return stage;
-    });
-
-    newStagesArray = newStagesArray.filter(
-      (stage) => stage.grades.length !== 0
-    );
-
-    newStagesArray.forEach((stage, idx) => {
-      stage.stageNumber = idx + 1;
-    });
+    const newStagesArray = stagesArray
+      .map((stage) => {
+        if (stage.stageId === start.stageId) {
+          return newStart;
+        }
+        if (stage.stageId === finish.stageId) {
+          return newFinish;
+        }
+        return stage;
+      })
+      .filter((stage) => (stage.grades || []).length !== 0)
+      .map((stage, idx) => ({
+        ...stage,
+        stageNumber: idx + 1,
+      }));
 
     setStagesArray(newStagesArray);
   };
 
   useEffect(() => {
-    if (stagesInfo.stages?.length > 0) {
+    if (!currentContest?.contests?.id) return;
+    if (stagesInfo?.stages?.length > 0) {
       fetchStages([...stagesInfo.stages]);
-    } else {
+    } else if (categoriesArray.length > 0 && gradesArray.length > 0) {
       handleInitStages(currentContest.contests.id);
     }
-  }, [stagesInfo]);
+  }, [stagesInfo, currentContest?.contests?.id, categoriesArray, gradesArray]);
 
   useEffect(() => {
-    if (currentContest?.contests?.contestCategorysListId) {
+    if (
+      currentContest?.contests?.id &&
+      currentContest?.contests?.contestCategorysListId
+    ) {
       fetchPool();
     }
-  }, [currentContest]);
+  }, [currentContest?.contests?.id, currentContest?.contests?.contestCategorysListId]);
 
   return (
     <div className="flex flex-col w-full h-full bg-white rounded-lg p-4 gap-y-4">
@@ -413,7 +505,9 @@ const ContestStagetable = () => {
                   type="default"
                   icon={<ReloadOutlined />}
                   size="large"
-                  onClick={() => handleInitStages(currentContest.contests.id)}
+                  onClick={() =>
+                    handleInitStages(currentContest?.contests?.id)
+                  }
                   className="flex-1 min-w-[200px]"
                 >
                   초기화(계측명단 변동이 있는경우)
@@ -424,7 +518,7 @@ const ContestStagetable = () => {
                   size="large"
                   onClick={() => {
                     handleUpdateStages(
-                      currentContest.contests.contestStagesAssignId,
+                      currentContest?.contests?.contestStagesAssignId,
                       {
                         ...stagesInfo,
                         stages: [...stagesArray],
@@ -500,7 +594,7 @@ const ContestStagetable = () => {
                                       ref={provided.innerRef}
                                       {...provided.droppableProps}
                                     >
-                                      {grades.map((grade, gIdx) => {
+                                      {(grades || []).map((grade, gIdx) => {
                                         const {
                                           categoryId,
                                           categoryTitle,
@@ -546,6 +640,9 @@ const ContestStagetable = () => {
                                                     <Button
                                                       type="primary"
                                                       size="small"
+                                                      disabled={
+                                                        (grades?.length || 0) <= 1
+                                                      }
                                                       icon={
                                                         <SplitCellsOutlined />
                                                       }

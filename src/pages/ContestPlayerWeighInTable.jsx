@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useMemo } from "react";
+import { useContext, useEffect, useState, useMemo, useRef } from "react";
 import LoadingPage from "./LoadingPage";
 import {
   useFirestoreGetDocument,
@@ -10,6 +10,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  runTransaction,
   collection,
   query,
   where,
@@ -64,10 +65,79 @@ const sanitizeDataForFirestore = (data) => {
 /** 🔑 다종목 출전 선수를 완벽하게 구분하기 위한 고유 엔트리 키 생성 */
 const getPlayerEntryKey = (p) => {
   if (!p) return "";
-  const uid = p.playerUid || "";
+  const idPart =
+    p.playerUid ||
+    `num:${p.playerNumber ?? ""}_name:${(p.playerName || "").trim()}`;
   const catId = p.contestCategoryId || "";
   const gradeId = p.originalGradeId || p.contestGradeId || "";
-  return `${uid}_${catId}_${gradeId}`;
+  return `${idPart}_${catId}_${gradeId}`;
+};
+
+/** 🔑 최종명단 보존 판별용 (contestGradeId, playerNumber, playerUid) 엄격 튜플 키 */
+const getPlayerTupleKey = (p) => {
+  if (!p) return "";
+  return `${p.contestGradeId || ""}__${p.playerNumber ?? ""}__${p.playerUid || ""}`;
+};
+
+/** 🛡️ 그랑프리 자동생성 엔트리 여부 판별 (강제등록 createdBy === 'force' 제외) */
+const isAutoGrandPrixEntry = (p) => {
+  if (!p) return false;
+  if (p.createdBy === "force" || p.createBy === "force") return false;
+  return p.contestCategoryTitle === "그랑프리";
+};
+
+/** 🛡️ contest_players_final 저장 시 assign에 없는 그랑프리/강제등록 선수 완벽 보존 */
+const mergePreservingUnmatchedFinalEntries = (
+  targetFinalPlayers = [],
+  existingFinalPlayers = []
+) => {
+  if (!Array.isArray(existingFinalPlayers) || existingFinalPlayers.length === 0) {
+    return targetFinalPlayers;
+  }
+
+  const entryKeySet = new Set(
+    targetFinalPlayers.map((p) => getPlayerEntryKey(p)).filter(Boolean)
+  );
+  const tupleKeySet = new Set(
+    targetFinalPlayers.map((p) => getPlayerTupleKey(p)).filter(Boolean)
+  );
+  const regularUidCatSet = new Set(
+    targetFinalPlayers
+      .filter(
+        (p) =>
+          p?.playerUid &&
+          p?.contestCategoryId &&
+          p?.contestCategoryTitle !== "그랑프리"
+      )
+      .map((p) => `${p.playerUid}__${p.contestCategoryId}`)
+  );
+
+  const preserved = [...targetFinalPlayers];
+  existingFinalPlayers.forEach((fp) => {
+    if (!fp) return;
+    const eKey = getPlayerEntryKey(fp);
+    const tKey = getPlayerTupleKey(fp);
+    if ((eKey && entryKeySet.has(eKey)) || (tKey && tupleKeySet.has(tKey))) {
+      return;
+    }
+    const isForce = fp.createdBy === "force" || fp.createBy === "force";
+    const isGrandPrix = fp.contestCategoryTitle === "그랑프리";
+    if (
+      !isForce &&
+      !isGrandPrix &&
+      fp.isGradeChanged &&
+      fp.playerUid &&
+      fp.contestCategoryId &&
+      regularUidCatSet.has(`${fp.playerUid}__${fp.contestCategoryId}`)
+    ) {
+      return;
+    }
+    if (eKey) entryKeySet.add(eKey);
+    if (tKey) tupleKeySet.add(tKey);
+    preserved.push(fp);
+  });
+
+  return preserved;
 };
 
 /** 📏 신장 / 체중 파싱 유틸 함수 */
@@ -375,6 +445,12 @@ const ContestPlayerWeighInTable = () => {
     height: "",
     weight: "",
   });
+
+  // 🛡️ 다중 계측대 입력 보호용 포커스 / 로컬 미저장 행 추적 Ref
+  const focusedPlayerKeyRef = useRef(null);
+  const dirtyPlayerKeysRef = useRef(new Set());
+  const editTargetKeyRef = useRef(null);
+  editTargetKeyRef.current = editTargetKey;
 
   const { currentContest } = useContext(CurrentContestContext);
   const navigate = useNavigate();
@@ -687,6 +763,82 @@ const ContestPlayerWeighInTable = () => {
         return baseObj;
       });
 
+      // 🛡️ contest_players_final에만 존재하는 선수(강제등록 createdBy === 'force' 및 그랑프리 선수 등) 누락 없이 병합 보존
+      const hydratedEntryKeys = new Set(
+        mergedLoadedPlayers.map((p) => getPlayerEntryKey(p)).filter(Boolean)
+      );
+      const hydratedTupleKeys = new Set(
+        mergedLoadedPlayers.map((p) => getPlayerTupleKey(p)).filter(Boolean)
+      );
+
+      finalPlayers.forEach((fp) => {
+        if (!fp) return;
+        const eKey = getPlayerEntryKey(fp);
+        const tKey = getPlayerTupleKey(fp);
+        if (
+          (eKey && hydratedEntryKeys.has(eKey)) ||
+          (tKey && hydratedTupleKeys.has(tKey))
+        ) {
+          return;
+        }
+        const trimmedName = (fp.playerName || "").trim();
+        const telPart = (fp.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
+        const nameKey = `${trimmedName}_${telPart}`;
+        const allPlayerPhotos = Array.from(
+          new Set([
+            ...((fp.playerUid && uidPhotoMap.get(fp.playerUid)) || []),
+            ...((fp.playerUid && invoicePhotosMap.get(fp.playerUid)) || []),
+            ...(namePhonePhotoMap.get(nameKey) || []),
+            ...((trimmedName && nameOnlyPhotoMap.get(trimmedName)) || []),
+            ...extractPlayerPhotos(fp),
+          ])
+        );
+        const stage1 =
+          filterValid(fp.stagePhoto1) ||
+          filterValid(fp.stagePhotoUrl1) ||
+          (fp.playerUid && invoiceStage1Map.get(fp.playerUid)) ||
+          invoiceStage1Map.get(nameKey) ||
+          (trimmedName && invoiceStage1Map.get(trimmedName)) ||
+          "";
+        const stage2 =
+          filterValid(fp.stagePhoto2) ||
+          filterValid(fp.stagePhotoUrl2) ||
+          (fp.playerUid && invoiceStage2Map.get(fp.playerUid)) ||
+          invoiceStage2Map.get(nameKey) ||
+          (trimmedName && invoiceStage2Map.get(trimmedName)) ||
+          "";
+        const designatedStagePhoto =
+          stage1 ||
+          stage2 ||
+          filterValid(fp.stagePhotoUrl) ||
+          filterValid(fp.profileImageUrl) ||
+          allPlayerPhotos[0] ||
+          "";
+
+        if (eKey) hydratedEntryKeys.add(eKey);
+        if (tKey) hydratedTupleKeys.add(tKey);
+
+        mergedLoadedPlayers.push({
+          ...fp,
+          originalGradeId: fp.originalGradeId || fp.contestGradeId,
+          originalGradeTitle: fp.originalGradeTitle || fp.contestGradeTitle,
+          isGradeChanged: !!fp.isGradeChanged,
+          playerNoShow: !!fp.playerNoShow,
+          isWeighedIn: !!fp.isWeighedIn,
+          heightWeight: fp.heightWeight || "",
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          stagePhotoUrl1: stage1,
+          stagePhotoUrl2: stage2,
+          stagePhotoUrl: designatedStagePhoto,
+          profileImageUrl: designatedStagePhoto,
+          photoUrl: designatedStagePhoto,
+          playerPhoto: designatedStagePhoto,
+          photos: allPlayerPhotos,
+        });
+      });
+
+      dirtyPlayerKeysRef.current.clear();
       setPlayersArray(mergedLoadedPlayers);
     } catch (error) {
       console.error("계측 데이터 불러오기 오류:", error);
@@ -697,6 +849,7 @@ const ContestPlayerWeighInTable = () => {
 
   // 📡 [다중 계측대 실시간 Live-Sync 리스너]
   // 계측대 1에서 저장 시, 계측대 2 및 모든 화면에서 자동으로 신장/체중/월체/불참/무대사진이 실시간 자동 업데이트!
+  // 단, 현재 운영자가 직접 포커스하거나 타이핑 중인 행(focusedPlayerKeyRef / dirtyPlayerKeysRef / editTargetKeyRef)은 덮어쓰지 않음!
   useEffect(() => {
     const assignDocId = currentContest?.contests?.contestPlayersAssignId;
     if (!assignDocId) return;
@@ -721,36 +874,90 @@ const ContestPlayerWeighInTable = () => {
                 if (k) remoteMap.set(k, rp);
               });
 
-              return prevLocal.map((localP) => {
+              const seenKeys = new Set();
+              const updatedLocal = prevLocal.map((localP) => {
                 const k = getPlayerEntryKey(localP);
+                if (k) seenKeys.add(k);
+
                 if (remoteMap.has(k)) {
                   const rp = remoteMap.get(k);
-                  // 현재 모달에서 직접 입력 중인 대상이 아니면 원격 최신 데이터로 즉시 실시간 동기화
-                  if (k !== editTargetKey) {
+                  const isProtectedRow =
+                    k === editTargetKeyRef.current ||
+                    k === focusedPlayerKeyRef.current ||
+                    dirtyPlayerKeysRef.current.has(k);
+
+                  // 현재 모달/인라인 입력 포커스 또는 미저장 타이핑 중인 행은 입력값을 절대 덮어쓰지 않음!
+                  if (isProtectedRow) {
                     return {
                       ...localP,
-                      heightWeight: rp.heightWeight || "",
-                      playerNoShow: !!rp.playerNoShow,
-                      isGradeChanged: !!rp.isGradeChanged,
-                      isWeighedIn: !!rp.isWeighedIn,
-                      contestGradeId: rp.contestGradeId || localP.contestGradeId,
-                      contestGradeTitle: rp.contestGradeTitle || localP.contestGradeTitle,
-                      playerNumber: Number(rp.playerNumber) || localP.playerNumber,
-                      playerIndex: Number(rp.playerIndex) || localP.playerIndex,
-                      stagePhoto1: rp.stagePhoto1 !== undefined ? rp.stagePhoto1 : localP.stagePhoto1,
-                      stagePhoto2: rp.stagePhoto2 !== undefined ? rp.stagePhoto2 : localP.stagePhoto2,
-                      stagePhotoUrl1: rp.stagePhotoUrl1 !== undefined ? rp.stagePhotoUrl1 : localP.stagePhotoUrl1,
-                      stagePhotoUrl2: rp.stagePhotoUrl2 !== undefined ? rp.stagePhotoUrl2 : localP.stagePhotoUrl2,
-                      stagePhotoUrl: rp.stagePhotoUrl || localP.stagePhotoUrl,
-                      profileImageUrl: rp.profileImageUrl || localP.profileImageUrl,
-                      photoUrl: rp.photoUrl || localP.photoUrl,
-                      playerPhoto: rp.playerPhoto || localP.playerPhoto,
-                      photos: rp.photos && rp.photos.length > 0 ? rp.photos : localP.photos,
+                      photos:
+                        localP.photos && localP.photos.length > 0
+                          ? localP.photos
+                          : rp.photos || [],
                     };
                   }
+
+                  return {
+                    ...localP,
+                    heightWeight: rp.heightWeight || "",
+                    playerHeight: rp.playerHeight ?? localP.playerHeight,
+                    playerWeight: rp.playerWeight ?? localP.playerWeight,
+                    height: rp.height ?? localP.height,
+                    weight: rp.weight ?? localP.weight,
+                    playerNoShow: !!rp.playerNoShow,
+                    isGradeChanged: !!rp.isGradeChanged,
+                    isWeighedIn: !!rp.isWeighedIn,
+                    originalGradeId:
+                      rp.originalGradeId || localP.originalGradeId,
+                    originalGradeTitle:
+                      rp.originalGradeTitle || localP.originalGradeTitle,
+                    contestGradeId:
+                      rp.contestGradeId || localP.contestGradeId,
+                    contestGradeTitle:
+                      rp.contestGradeTitle || localP.contestGradeTitle,
+                    playerNumber:
+                      Number(rp.playerNumber) || localP.playerNumber,
+                    playerIndex: Number(rp.playerIndex) || localP.playerIndex,
+                    stagePhoto1:
+                      rp.stagePhoto1 !== undefined
+                        ? rp.stagePhoto1
+                        : localP.stagePhoto1,
+                    stagePhoto2:
+                      rp.stagePhoto2 !== undefined
+                        ? rp.stagePhoto2
+                        : localP.stagePhoto2,
+                    stagePhotoUrl1:
+                      rp.stagePhotoUrl1 !== undefined
+                        ? rp.stagePhotoUrl1
+                        : localP.stagePhotoUrl1,
+                    stagePhotoUrl2:
+                      rp.stagePhotoUrl2 !== undefined
+                        ? rp.stagePhotoUrl2
+                        : localP.stagePhotoUrl2,
+                    stagePhotoUrl: rp.stagePhotoUrl || localP.stagePhotoUrl,
+                    profileImageUrl:
+                      rp.profileImageUrl || localP.profileImageUrl,
+                    photoUrl: rp.photoUrl || localP.photoUrl,
+                    playerPhoto: rp.playerPhoto || localP.playerPhoto,
+                    photos:
+                      rp.photos && rp.photos.length > 0
+                        ? rp.photos
+                        : localP.photos,
+                  };
                 }
                 return localP;
               });
+
+              // 타 계측대/강제등록에서 새로 추가된 선수가 있으면 추가 반영
+              remotePlayers.forEach((rp) => {
+                const k = getPlayerEntryKey(rp);
+                if (k && !seenKeys.has(k)) {
+                  seenKeys.add(k);
+                  updatedLocal.push(rp);
+                }
+              });
+
+              return updatedLocal;
             });
           }
         }
@@ -761,7 +968,7 @@ const ContestPlayerWeighInTable = () => {
     );
 
     return () => unsub();
-  }, [currentContest?.contests?.contestPlayersAssignId, editTargetKey]);
+  }, [currentContest?.contests?.contestPlayersAssignId]);
 
   const initEntryList = () => {
     const dummy = [];
@@ -819,7 +1026,7 @@ const ContestPlayerWeighInTable = () => {
     setMatchedArray([...dummy]);
   };
 
-  /** 🛡️ 다중 데스크 '스마트 병합(Smart Merge)' 저장 엔진 */
+  /** 🛡️ 다중 데스크 '스마트 병합(Smart Merge)' 저장 엔진 (Firestore 트랜잭션 + 그랑프리/강제등록 보존) */
   const handleUpdatePlayersFinal = async (
     contestId,
     playerAssignId,
@@ -830,79 +1037,211 @@ const ContestPlayerWeighInTable = () => {
     setMsgOpen(true);
 
     try {
-      // 1. 저장 직전 Firestore에서 최신 assign & final 문서를 실시간 fetch
-      const [latestAssignDoc, latestFinalDoc] = await Promise.all([
-        fetchPlayersAssignDocument.getDocument(playerAssignId),
-        fetchPlayersFinalDocument.getDocument(playersFinalId),
-      ]);
-
-      const latestAssignPlayers = latestAssignDoc?.players || [];
-
-      // 2. 현재 로컬에서 수정한 선수 목록을 복합키 맵으로 변환
       const localPlayersMap = new Map();
-      currentLocalPlayers.forEach((p) => {
+      (currentLocalPlayers || []).forEach((p) => {
         const key = getPlayerEntryKey(p);
         if (key) localPlayersMap.set(key, p);
       });
 
-      // 📸 playerUid 기반 사진 통합 맵 (다종목 출전 시 모든 체급에 동일 선수의 사진 100% 물림 보장)
-      const saveUidPhotoMap = new Map();
-      [...latestAssignPlayers, ...currentLocalPlayers].forEach((p) => {
-        if (p?.playerUid) {
-          const photos = extractPlayerPhotos(p);
-          if (photos.length > 0) {
-            const existing = saveUidPhotoMap.get(p.playerUid) || [];
-            saveUidPhotoMap.set(p.playerUid, Array.from(new Set([...existing, ...photos])));
+      const dirtySet = new Set(dirtyPlayerKeysRef.current);
+      let committedPlayersForState = [];
+
+      await runTransaction(db, async (transaction) => {
+        const assignRef = playerAssignId
+          ? doc(db, "contest_players_assign", playerAssignId)
+          : null;
+        const finalRef = playersFinalId
+          ? doc(db, "contest_players_final", playersFinalId)
+          : null;
+
+        const assignSnap = assignRef ? await transaction.get(assignRef) : null;
+        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+
+        const latestAssignDoc = assignSnap?.exists()
+          ? assignSnap.data()
+          : playersAssign || {};
+        const latestAssignPlayers = latestAssignDoc?.players || [];
+        const latestFinalDoc = finalSnap?.exists() ? finalSnap.data() : {};
+        const latestFinalPlayers = latestFinalDoc?.players || [];
+
+        // 📸 playerUid 기반 사진 통합 맵 (다종목 출전 시 모든 체급에 동일 선수의 사진 100% 물림 보장)
+        const saveUidPhotoMap = new Map();
+        [
+          ...latestAssignPlayers,
+          ...latestFinalPlayers,
+          ...(currentLocalPlayers || []),
+        ].forEach((p) => {
+          if (p?.playerUid) {
+            const photos = extractPlayerPhotos(p);
+            if (photos.length > 0) {
+              const existing = saveUidPhotoMap.get(p.playerUid) || [];
+              saveUidPhotoMap.set(
+                p.playerUid,
+                Array.from(new Set([...existing, ...photos]))
+              );
+            }
           }
-        }
-      });
+        });
 
-      // 3. 최신 DB 선수 목록에 로컬 변경사항(신장/체중, 월체, 불참, 계측통과 등)을 복합키로 병합
-      const mergedAssignPlayers = latestAssignPlayers.map((dbPlayer) => {
-        const key = getPlayerEntryKey(dbPlayer);
-        const pUidPhotos = (dbPlayer.playerUid && saveUidPhotoMap.get(dbPlayer.playerUid)) || extractPlayerPhotos(dbPlayer);
-        const pUidPrimary = pUidPhotos[0] || dbPlayer.profileImageUrl || dbPlayer.photoUrl || dbPlayer.playerPhoto || "";
+        // 3. 최신 DB 선수 목록에 로컬 변경사항을 복합키로 안전 병합 (수정하지 않은 행은 타 데스크 원격 저장값 우선 보존)
+        const mergedAssignPlayers = latestAssignPlayers.map((dbPlayer) => {
+          const key = getPlayerEntryKey(dbPlayer);
+          const pUidPhotos =
+            (dbPlayer.playerUid && saveUidPhotoMap.get(dbPlayer.playerUid)) ||
+            extractPlayerPhotos(dbPlayer);
+          const pUidPrimary =
+            pUidPhotos[0] ||
+            dbPlayer.profileImageUrl ||
+            dbPlayer.photoUrl ||
+            dbPlayer.playerPhoto ||
+            "";
 
-        if (localPlayersMap.has(key)) {
-          const lp = localPlayersMap.get(key);
-          const lpPhotos = extractPlayerPhotos(lp);
-          const combinedPhotos = Array.from(new Set([...pUidPhotos, ...lpPhotos]));
-          const stage1 = (!isNonPlayerUrl(lp?.stagePhoto1) && lp?.stagePhoto1) || (!isNonPlayerUrl(dbPlayer?.stagePhoto1) && dbPlayer?.stagePhoto1) || "";
-          const stage2 = (!isNonPlayerUrl(lp?.stagePhoto2) && lp?.stagePhoto2) || (!isNonPlayerUrl(dbPlayer?.stagePhoto2) && dbPlayer?.stagePhoto2) || "";
+          if (localPlayersMap.has(key)) {
+            const lp = localPlayersMap.get(key);
+            const isLocalDirty = dirtySet.has(key);
+            const lpPhotos = extractPlayerPhotos(lp);
+            const combinedPhotos = Array.from(
+              new Set([...pUidPhotos, ...lpPhotos])
+            );
+            const stage1 =
+              (!isNonPlayerUrl(lp?.stagePhoto1) && lp?.stagePhoto1) ||
+              (!isNonPlayerUrl(dbPlayer?.stagePhoto1) &&
+                dbPlayer?.stagePhoto1) ||
+              "";
+            const stage2 =
+              (!isNonPlayerUrl(lp?.stagePhoto2) && lp?.stagePhoto2) ||
+              (!isNonPlayerUrl(dbPlayer?.stagePhoto2) &&
+                dbPlayer?.stagePhoto2) ||
+              "";
+            const designatedStagePhoto =
+              stage1 ||
+              stage2 ||
+              lp.stagePhotoUrl ||
+              dbPlayer.stagePhotoUrl ||
+              lp.profileImageUrl ||
+              dbPlayer.profileImageUrl ||
+              combinedPhotos[0] ||
+              "";
+
+            const effectiveHWSource = isLocalDirty
+              ? lp.heightWeight
+              : lp.heightWeight || dbPlayer.heightWeight || "";
+            const { height: parsedH, weight: parsedW } =
+              parseHeightWeight(effectiveHWSource);
+            const safeHeight = isLocalDirty
+              ? parsedH
+              : parsedH ||
+                lp.playerHeight ||
+                lp.height ||
+                dbPlayer.playerHeight ||
+                dbPlayer.height ||
+                "";
+            const safeWeight = isLocalDirty
+              ? parsedW
+              : parsedW ||
+                lp.playerWeight ||
+                lp.weight ||
+                dbPlayer.playerWeight ||
+                dbPlayer.weight ||
+                "";
+            const safeHW =
+              (isLocalDirty ? lp.heightWeight : effectiveHWSource) ||
+              formatHeightWeight(safeHeight, safeWeight) ||
+              "";
+
+            const resolvedGradeChanged = isLocalDirty
+              ? !!lp.isGradeChanged
+              : dbPlayer.isGradeChanged !== undefined
+              ? !!dbPlayer.isGradeChanged
+              : !!lp.isGradeChanged;
+
+            return {
+              ...dbPlayer,
+              heightWeight: safeHW,
+              playerHeight: safeHeight,
+              playerWeight: safeWeight,
+              height: safeHeight,
+              weight: safeWeight,
+              playerNoShow: isLocalDirty
+                ? !!lp.playerNoShow
+                : dbPlayer.playerNoShow !== undefined
+                ? !!dbPlayer.playerNoShow
+                : !!lp.playerNoShow,
+              isWeighedIn: isLocalDirty
+                ? !!lp.isWeighedIn
+                : Boolean(dbPlayer.isWeighedIn || lp.isWeighedIn),
+              isGradeChanged: resolvedGradeChanged,
+              originalGradeId:
+                dbPlayer.originalGradeId ||
+                lp.originalGradeId ||
+                dbPlayer.contestGradeId,
+              originalGradeTitle:
+                dbPlayer.originalGradeTitle ||
+                lp.originalGradeTitle ||
+                dbPlayer.contestGradeTitle,
+              contestGradeId: resolvedGradeChanged
+                ? lp.contestGradeId || dbPlayer.contestGradeId
+                : dbPlayer.originalGradeId || dbPlayer.contestGradeId,
+              contestGradeTitle: resolvedGradeChanged
+                ? lp.contestGradeTitle || dbPlayer.contestGradeTitle
+                : dbPlayer.originalGradeTitle || dbPlayer.contestGradeTitle,
+              playerNumber:
+                lp.playerNumber !== undefined &&
+                lp.playerNumber !== null &&
+                Number(lp.playerNumber) > 0
+                  ? Number(lp.playerNumber)
+                  : dbPlayer.playerNumber !== undefined
+                  ? dbPlayer.playerNumber
+                  : Number(lp.playerNumber) || 0,
+              playerIndex:
+                lp.playerIndex !== undefined &&
+                lp.playerIndex !== null &&
+                Number(lp.playerIndex) > 0
+                  ? Number(lp.playerIndex)
+                  : dbPlayer.playerIndex !== undefined
+                  ? dbPlayer.playerIndex
+                  : Number(lp.playerIndex) || 0,
+              stagePhoto1: stage1,
+              stagePhoto2: stage2,
+              stagePhotoUrl1: stage1,
+              stagePhotoUrl2: stage2,
+              stagePhotoUrl: designatedStagePhoto,
+              profileImageUrl: designatedStagePhoto,
+              photoUrl: designatedStagePhoto,
+              playerPhoto: designatedStagePhoto,
+              photos: combinedPhotos,
+            };
+          }
+
+          const stage1 =
+            (!isNonPlayerUrl(dbPlayer?.stagePhoto1) && dbPlayer?.stagePhoto1) ||
+            "";
+          const stage2 =
+            (!isNonPlayerUrl(dbPlayer?.stagePhoto2) && dbPlayer?.stagePhoto2) ||
+            "";
           const designatedStagePhoto =
             stage1 ||
             stage2 ||
-            lp.stagePhotoUrl ||
             dbPlayer.stagePhotoUrl ||
-            lp.profileImageUrl ||
             dbPlayer.profileImageUrl ||
-            combinedPhotos[0] ||
-            "";
+            pUidPrimary;
 
-          const { height: lpParsedH, weight: lpParsedW } = parseHeightWeight(lp.heightWeight);
-          const safeHeight = lpParsedH || lp.playerHeight || lp.height || dbPlayer.playerHeight || dbPlayer.height || "";
-          const safeWeight = lpParsedW || lp.playerWeight || lp.weight || dbPlayer.playerWeight || dbPlayer.weight || "";
-          const safeHW = lp.heightWeight || formatHeightWeight(safeHeight, safeWeight) || "";
+          const { height: dbH, weight: dbW } = parseHeightWeight(
+            dbPlayer.heightWeight
+          );
+          const safeDbH = dbH || dbPlayer.playerHeight || dbPlayer.height || "";
+          const safeDbW = dbW || dbPlayer.playerWeight || dbPlayer.weight || "";
 
           return {
             ...dbPlayer,
-            heightWeight: safeHW,
-            playerHeight: safeHeight,
-            playerWeight: safeWeight,
-            height: safeHeight,
-            weight: safeWeight,
-            playerNoShow: !!lp.playerNoShow,
-            isGradeChanged: !!lp.isGradeChanged,
-            contestGradeId: lp.isGradeChanged ? (lp.contestGradeId || dbPlayer.contestGradeId) : dbPlayer.contestGradeId,
-            contestGradeTitle: lp.isGradeChanged ? (lp.contestGradeTitle || dbPlayer.contestGradeTitle) : dbPlayer.contestGradeTitle,
-            playerNumber:
-              lp.playerNumber !== undefined && lp.playerNumber !== null && Number(lp.playerNumber) > 0
-                ? Number(lp.playerNumber)
-                : (dbPlayer.playerNumber !== undefined ? dbPlayer.playerNumber : (Number(lp.playerNumber) || 0)),
-            playerIndex:
-              lp.playerIndex !== undefined && lp.playerIndex !== null && Number(lp.playerIndex) > 0
-                ? Number(lp.playerIndex)
-                : (dbPlayer.playerIndex !== undefined ? dbPlayer.playerIndex : (Number(lp.playerIndex) || 0)),
+            heightWeight:
+              dbPlayer.heightWeight ||
+              formatHeightWeight(safeDbH, safeDbW) ||
+              "",
+            playerHeight: safeDbH,
+            playerWeight: safeDbW,
+            height: safeDbH,
+            weight: safeDbW,
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
@@ -911,138 +1250,172 @@ const ContestPlayerWeighInTable = () => {
             profileImageUrl: designatedStagePhoto,
             photoUrl: designatedStagePhoto,
             playerPhoto: designatedStagePhoto,
-            photos: combinedPhotos,
+            photos: pUidPhotos,
           };
-        }
+        });
 
-        const stage1 = (!isNonPlayerUrl(dbPlayer?.stagePhoto1) && dbPlayer?.stagePhoto1) || "";
-        const stage2 = (!isNonPlayerUrl(dbPlayer?.stagePhoto2) && dbPlayer?.stagePhoto2) || "";
-        const designatedStagePhoto =
-          stage1 ||
-          stage2 ||
-          dbPlayer.stagePhotoUrl ||
-          dbPlayer.profileImageUrl ||
-          pUidPrimary;
+        // 로컬에 새로 추가된 엔트리 병합 (자동 생성된 그랑프리 엔트리는 assign에서 제외하되 final에는 포함)
+        const extraFinalFromLocal = [];
+        localPlayersMap.forEach((localPlayer, key) => {
+          if (!mergedAssignPlayers.some((p) => getPlayerEntryKey(p) === key)) {
+            const pUidPhotos =
+              (localPlayer.playerUid &&
+                saveUidPhotoMap.get(localPlayer.playerUid)) ||
+              extractPlayerPhotos(localPlayer);
+            const stage1 =
+              (!isNonPlayerUrl(localPlayer.stagePhoto1) &&
+                localPlayer.stagePhoto1) ||
+              "";
+            const stage2 =
+              (!isNonPlayerUrl(localPlayer.stagePhoto2) &&
+                localPlayer.stagePhoto2) ||
+              "";
+            const pUidPrimary =
+              stage1 ||
+              stage2 ||
+              localPlayer.stagePhotoUrl ||
+              pUidPhotos[0] ||
+              localPlayer.profileImageUrl ||
+              "";
+            const { height: lH, weight: lW } = parseHeightWeight(
+              localPlayer.heightWeight
+            );
+            const safeLH =
+              lH || localPlayer.playerHeight || localPlayer.height || "";
+            const safeLW =
+              lW || localPlayer.playerWeight || localPlayer.weight || "";
 
-        const { height: dbH, weight: dbW } = parseHeightWeight(dbPlayer.heightWeight);
-        const safeDbH = dbH || dbPlayer.playerHeight || dbPlayer.height || "";
-        const safeDbW = dbW || dbPlayer.playerWeight || dbPlayer.weight || "";
+            const normalizedLocal = {
+              ...localPlayer,
+              heightWeight:
+                localPlayer.heightWeight ||
+                formatHeightWeight(safeLH, safeLW) ||
+                "",
+              playerHeight: safeLH,
+              playerWeight: safeLW,
+              height: safeLH,
+              weight: safeLW,
+              stagePhoto1: stage1,
+              stagePhoto2: stage2,
+              stagePhotoUrl1: stage1,
+              stagePhotoUrl2: stage2,
+              stagePhotoUrl: pUidPrimary,
+              profileImageUrl: pUidPrimary,
+              photoUrl: pUidPrimary,
+              playerPhoto: pUidPrimary,
+              photos: pUidPhotos,
+            };
 
-        return {
-          ...dbPlayer,
-          heightWeight: dbPlayer.heightWeight || formatHeightWeight(safeDbH, safeDbW) || "",
-          playerHeight: safeDbH,
-          playerWeight: safeDbW,
-          height: safeDbH,
-          weight: safeDbW,
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: designatedStagePhoto,
-          profileImageUrl: designatedStagePhoto,
-          photoUrl: designatedStagePhoto,
-          playerPhoto: designatedStagePhoto,
-          photos: pUidPhotos,
-        };
-      });
+            if (isAutoGrandPrixEntry(normalizedLocal)) {
+              extraFinalFromLocal.push(normalizedLocal);
+            } else {
+              mergedAssignPlayers.push(normalizedLocal);
+            }
+          }
+        });
 
-      // 만약 로컬에 새로 추가된 엔트리가 있다면 추가
-      localPlayersMap.forEach((localPlayer, key) => {
-        if (!mergedAssignPlayers.some((p) => getPlayerEntryKey(p) === key)) {
-          const pUidPhotos = (localPlayer.playerUid && saveUidPhotoMap.get(localPlayer.playerUid)) || extractPlayerPhotos(localPlayer);
-          const stage1 = (!isNonPlayerUrl(localPlayer.stagePhoto1) && localPlayer.stagePhoto1) || "";
-          const stage2 = (!isNonPlayerUrl(localPlayer.stagePhoto2) && localPlayer.stagePhoto2) || "";
-          const pUidPrimary = stage1 || stage2 || localPlayer.stagePhotoUrl || pUidPhotos[0] || localPlayer.profileImageUrl || "";
-          const { height: lH, weight: lW } = parseHeightWeight(localPlayer.heightWeight);
-          const safeLH = lH || localPlayer.playerHeight || localPlayer.height || "";
-          const safeLW = lW || localPlayer.playerWeight || localPlayer.weight || "";
+        // 4. 최종 명단 (Final) 데이터 구성 + 기존 contest_players_final의 그랑프리/강제등록 선수 100% 보존
+        const baseFinalPlayers = [
+          ...mergedAssignPlayers,
+          ...extraFinalFromLocal,
+        ].map((player) => {
+          const pUidPhotos =
+            (player.playerUid && saveUidPhotoMap.get(player.playerUid)) ||
+            extractPlayerPhotos(player);
+          const stage1 =
+            (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) || "";
+          const stage2 =
+            (!isNonPlayerUrl(player.stagePhoto2) && player.stagePhoto2) || "";
+          const stagePhoto =
+            stage1 ||
+            stage2 ||
+            player.stagePhotoUrl ||
+            player.profileImageUrl ||
+            pUidPhotos[0] ||
+            "";
 
-          mergedAssignPlayers.push({
-            ...localPlayer,
-            heightWeight: localPlayer.heightWeight || formatHeightWeight(safeLH, safeLW) || "",
-            playerHeight: safeLH,
-            playerWeight: safeLW,
-            height: safeLH,
-            weight: safeLW,
+          const { height: fH, weight: fW } = parseHeightWeight(
+            player.heightWeight
+          );
+          const safeFH = fH || player.playerHeight || player.height || "";
+          const safeFW = fW || player.playerWeight || player.weight || "";
+
+          return {
+            ...player,
+            contestCategoryId: player.contestCategoryId,
+            contestGradeId: player.contestGradeId,
+            contestId: player.contestId || contestId,
+            playerNumber: Number(player.playerNumber) || 0,
+            playerUid: player.playerUid,
+            playerName: player.playerName,
+            playerGym: player.playerGym || "",
+            playerIndex:
+              Number(player.playerIndex) || Number(player.playerNumber) || 0,
+            playerNoShow: !!player.playerNoShow,
+            playerText: player.playerText || "",
+            isGradeChanged: !!player.isGradeChanged,
+            heightWeight:
+              player.heightWeight || formatHeightWeight(safeFH, safeFW) || "",
+            playerHeight: safeFH,
+            playerWeight: safeFW,
+            height: safeFH,
+            weight: safeFW,
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
             stagePhotoUrl2: stage2,
-            stagePhotoUrl: pUidPrimary,
-            profileImageUrl: pUidPrimary,
-            photoUrl: pUidPrimary,
-            playerPhoto: pUidPrimary,
+            stagePhotoUrl: stagePhoto,
+            profileImageUrl: stagePhoto,
+            photoUrl: stagePhoto,
+            playerPhoto: stagePhoto,
             photos: pUidPhotos,
+          };
+        });
+
+        const mergedFinalPlayers = mergePreservingUnmatchedFinalEntries(
+          baseFinalPlayers,
+          latestFinalPlayers
+        );
+
+        const nowIso = new Date().toISOString();
+        const sanitizedAssign = sanitizeDataForFirestore(mergedAssignPlayers);
+        const sanitizedFinal = sanitizeDataForFirestore(mergedFinalPlayers);
+
+        if (assignRef && assignSnap?.exists()) {
+          transaction.update(assignRef, {
+            ...latestAssignDoc,
+            players: sanitizedAssign,
+            updatedAt: nowIso,
+          });
+        } else if (assignRef) {
+          transaction.set(assignRef, {
+            ...latestAssignDoc,
+            contestId,
+            players: sanitizedAssign,
+            updatedAt: nowIso,
           });
         }
+
+        if (finalRef && finalSnap?.exists()) {
+          transaction.update(finalRef, {
+            ...latestFinalDoc,
+            contestId: latestFinalDoc.contestId || contestId,
+            players: sanitizedFinal,
+            updatedAt: nowIso,
+          });
+        } else if (finalRef) {
+          transaction.set(finalRef, {
+            contestId,
+            players: sanitizedFinal,
+            updatedAt: nowIso,
+          });
+        }
+
+        committedPlayersForState = mergedFinalPlayers;
       });
 
-      // 4. 최종 명단 (Final) 데이터 구성 (선수 사진 필드 및 신장/체중 데이터 100% 온전히 보존)
-      const mergedFinalPlayers = mergedAssignPlayers.map((player) => {
-        const pUidPhotos = (player.playerUid && saveUidPhotoMap.get(player.playerUid)) || extractPlayerPhotos(player);
-        const stage1 = (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) || "";
-        const stage2 = (!isNonPlayerUrl(player.stagePhoto2) && player.stagePhoto2) || "";
-        const stagePhoto =
-          stage1 ||
-          stage2 ||
-          player.stagePhotoUrl ||
-          player.profileImageUrl ||
-          pUidPhotos[0] ||
-          "";
-
-        const { height: fH, weight: fW } = parseHeightWeight(player.heightWeight);
-        const safeFH = fH || player.playerHeight || player.height || "";
-        const safeFW = fW || player.playerWeight || player.weight || "";
-
-        return {
-          ...player,
-          contestCategoryId: player.contestCategoryId,
-          contestGradeId: player.contestGradeId,
-          contestId: player.contestId || contestId,
-          playerNumber: Number(player.playerNumber) || 0,
-          playerUid: player.playerUid,
-          playerName: player.playerName,
-          playerGym: player.playerGym || "",
-          playerIndex: Number(player.playerIndex) || Number(player.playerNumber) || 0,
-          playerNoShow: !!player.playerNoShow,
-          playerText: player.playerText || "",
-          isGradeChanged: !!player.isGradeChanged,
-          heightWeight: player.heightWeight || formatHeightWeight(safeFH, safeFW) || "",
-          playerHeight: safeFH,
-          playerWeight: safeFW,
-          height: safeFH,
-          weight: safeFW,
-          // 📸 선수 사진 및 무대 송출 슬롯(1, 2) 완벽 보존
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: stagePhoto,
-          profileImageUrl: stagePhoto,
-          photoUrl: stagePhoto,
-          playerPhoto: stagePhoto,
-          photos: pUidPhotos,
-        };
-      });
-
-      // 5. Firestore에 안전 병합된 전체 데이터 저장 (Assign & Final 동시 영구 저장)
-      const sanitizedAssign = sanitizeDataForFirestore(mergedAssignPlayers);
-      const sanitizedFinal = sanitizeDataForFirestore(mergedFinalPlayers);
-
-      await updateDoc(doc(db, "contest_players_assign", playerAssignId), {
-        ...(latestAssignDoc || playersAssign),
-        players: sanitizedAssign,
-        updatedAt: new Date().toISOString(),
-      });
-
-      await updateDoc(doc(db, "contest_players_final", playersFinalId), {
-        contestId,
-        players: sanitizedFinal,
-        updatedAt: new Date().toISOString(),
-      });
-
-      setPlayersArray([...mergedAssignPlayers]);
+      dirtyPlayerKeysRef.current.clear();
+      setPlayersArray([...committedPlayersForState]);
       setMessage({
         body: "계측 최종명단이 안전하게 저장되었습니다! (모든 출전 체급 완벽 보존)",
         isButton: true,
@@ -1058,7 +1431,7 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 📸 선수 무대 송출 사진 슬롯(1, 2) 갱신 및 Firestore 즉시 영구 저장 */
+  /** 📸 선수 무대 송출 사진 슬롯(1, 2) 갱신 및 Firestore 트랜잭션 즉시 영구 저장 */
   const persistPlayerStageSlots = async (targetPlayer, newStage1 = "", newStage2 = "") => {
     const stage1 = (!isNonPlayerUrl(newStage1) && newStage1) || "";
     const stage2 = (!isNonPlayerUrl(newStage2) && newStage2) || "";
@@ -1072,85 +1445,126 @@ const ContestPlayerWeighInTable = () => {
       currentContest?.id ||
       "";
 
-    // 1. playersArray 업데이트 (동일 선수의 모든 출전 체급에 슬롯1, 2 동기화)
-    const updatedList = playersArray.map((p) => {
-      const isMatch =
-        (targetKey && getPlayerEntryKey(p) === targetKey) ||
-        (targetPlayer.playerUid && p.playerUid === targetPlayer.playerUid) ||
-        (p.playerName === targetPlayer.playerName &&
-          (p.playerNumber === targetPlayer.playerNumber || !p.playerNumber));
-
-      if (isMatch) {
-        return {
-          ...p,
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: primaryStage,
-          profileImageUrl: primaryStage,
-          photoUrl: primaryStage,
-          playerPhoto: primaryStage,
-          photos: currentPhotos,
-        };
+    const isSamePhotoOwner = (p) => {
+      if (!p) return false;
+      if (targetKey && getPlayerEntryKey(p) === targetKey) return true;
+      if (targetPlayer.playerUid && p.playerUid === targetPlayer.playerUid) {
+        return true;
       }
-      return p;
-    });
+      return (
+        p.playerName === targetPlayer.playerName &&
+        (p.playerNumber === targetPlayer.playerNumber || !p.playerNumber)
+      );
+    };
 
-    setPlayersArray(updatedList);
+    const applyStageSlotsToPlayer = (p) => {
+      const mergedPhotos = Array.from(
+        new Set([...extractPlayerPhotos(p), ...currentPhotos])
+      );
+      return {
+        ...p,
+        stagePhoto1: stage1,
+        stagePhoto2: stage2,
+        stagePhotoUrl1: stage1,
+        stagePhotoUrl2: stage2,
+        stagePhotoUrl: primaryStage,
+        profileImageUrl: primaryStage,
+        photoUrl: primaryStage,
+        playerPhoto: primaryStage,
+        photos: mergedPhotos,
+      };
+    };
+
+    // 1. 로컬 상태 함수형 업데이트 (동일 선수의 모든 출전 체급에 슬롯1, 2 동기화)
+    setPlayersArray((prev) =>
+      prev.map((p) => (isSamePhotoOwner(p) ? applyStageSlotsToPlayer(p) : p))
+    );
     setPhotoModalPlayer((prev) =>
-      prev
-        ? {
-            ...prev,
-            stagePhoto1: stage1,
-            stagePhoto2: stage2,
-            stagePhotoUrl1: stage1,
-            stagePhotoUrl2: stage2,
-            stagePhotoUrl: primaryStage,
-            profileImageUrl: primaryStage,
-            photoUrl: primaryStage,
-            playerPhoto: primaryStage,
-            photos: currentPhotos,
-          }
-        : null
+      prev ? applyStageSlotsToPlayer(prev) : null
     );
 
-    // 2. Firestore 직접 updateDoc으로 final, assign, contest_entrys_list, invoices_pool에 즉시 영구 저장!
+    // 2. Firestore runTransaction으로 타 데스크 동시 계측 덮어쓰기 방지 + 그랑프리/강제등록 보존
     try {
       const assignId = currentContest?.contests?.contestPlayersAssignId;
       const finalId = currentContest?.contests?.contestPlayersFinalId;
-      const sanitizedList = sanitizeDataForFirestore(updatedList);
-      const updatePromises = [];
 
-      // final 문서 업데이트
-      if (finalId) {
-        updatePromises.push(
-          updateDoc(doc(db, "contest_players_final", finalId), {
-            players: sanitizedList,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-      }
-      // assign 문서 업데이트
-      if (assignId) {
-        updatePromises.push(
-          updateDoc(doc(db, "contest_players_assign", assignId), {
-            players: sanitizedList,
-            updatedAt: new Date().toISOString(),
-          })
-        );
+      if (assignId || finalId) {
+        await runTransaction(db, async (transaction) => {
+          const assignRef = assignId
+            ? doc(db, "contest_players_assign", assignId)
+            : null;
+          const finalRef = finalId
+            ? doc(db, "contest_players_final", finalId)
+            : null;
+
+          const assignSnap = assignRef
+            ? await transaction.get(assignRef)
+            : null;
+          const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+
+          const nowIso = new Date().toISOString();
+          const remoteAssignPlayers = assignSnap?.exists()
+            ? assignSnap.data()?.players || []
+            : [];
+          const nextAssignPlayers = remoteAssignPlayers.map((p) =>
+            isSamePhotoOwner(p) ? applyStageSlotsToPlayer(p) : p
+          );
+
+          const remoteFinalPlayers = finalSnap?.exists()
+            ? finalSnap.data()?.players || []
+            : [];
+          const baseFinalSource =
+            remoteFinalPlayers.length > 0
+              ? remoteFinalPlayers
+              : nextAssignPlayers;
+          const patchedFinalPlayers = baseFinalSource.map((p) =>
+            isSamePhotoOwner(p) ? applyStageSlotsToPlayer(p) : p
+          );
+          const nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
+            patchedFinalPlayers,
+            remoteFinalPlayers
+          );
+
+          if (assignRef && assignSnap?.exists()) {
+            transaction.update(assignRef, {
+              players: sanitizeDataForFirestore(nextAssignPlayers),
+              updatedAt: nowIso,
+            });
+          }
+          if (finalRef && finalSnap?.exists()) {
+            transaction.update(finalRef, {
+              players: sanitizeDataForFirestore(nextFinalPlayers),
+              updatedAt: nowIso,
+            });
+          } else if (finalRef && nextFinalPlayers.length > 0) {
+            transaction.set(finalRef, {
+              contestId,
+              players: sanitizeDataForFirestore(nextFinalPlayers),
+              updatedAt: nowIso,
+            });
+          }
+        });
       }
 
       // 3. 참가신청서 원본(contest_entrys_list & invoices_pool)에도 stagePhoto1, stagePhoto2 영구 동기화
       if (contestId && targetPlayer.playerName) {
         try {
           const entryQueryCondition = targetPlayer.playerUid
-            ? [where("contestId", "==", contestId), where("playerUid", "==", targetPlayer.playerUid)]
-            : [where("contestId", "==", contestId), where("playerName", "==", targetPlayer.playerName)];
-          
-          const entrySnap = await getDocs(query(collection(db, "contest_entrys_list"), ...entryQueryCondition));
+            ? [
+                where("contestId", "==", contestId),
+                where("playerUid", "==", targetPlayer.playerUid),
+              ]
+            : [
+                where("contestId", "==", contestId),
+                where("playerName", "==", targetPlayer.playerName),
+              ];
+
+          const entryUpdatePromises = [];
+          const entrySnap = await getDocs(
+            query(collection(db, "contest_entrys_list"), ...entryQueryCondition)
+          );
           entrySnap.forEach((entryDoc) => {
-            updatePromises.push(
+            entryUpdatePromises.push(
               updateDoc(doc(db, "contest_entrys_list", entryDoc.id), {
                 stagePhoto1: stage1,
                 stagePhoto2: stage2,
@@ -1164,10 +1578,11 @@ const ContestPlayerWeighInTable = () => {
             );
           });
 
-          // invoices_pool도 함께 동기화
-          const invSnap = await getDocs(query(collection(db, "invoices_pool"), ...entryQueryCondition));
+          const invSnap = await getDocs(
+            query(collection(db, "invoices_pool"), ...entryQueryCondition)
+          );
           invSnap.forEach((invDoc) => {
-            updatePromises.push(
+            entryUpdatePromises.push(
               updateDoc(doc(db, "invoices_pool", invDoc.id), {
                 stagePhoto1: stage1,
                 stagePhoto2: stage2,
@@ -1180,12 +1595,13 @@ const ContestPlayerWeighInTable = () => {
               })
             );
           });
+
+          await Promise.all(entryUpdatePromises);
         } catch (entryErr) {
           console.warn("신청서 원본 사진 동기화 실패(무시가능):", entryErr);
         }
       }
 
-      await Promise.all(updatePromises);
       console.log("무대 사진 슬롯 전체 DB 영구 저장 완료:", { stage1, stage2 });
     } catch (e) {
       console.error("무대 사진 슬롯 DB 저장 실패:", e);
@@ -1538,22 +1954,49 @@ const ContestPlayerWeighInTable = () => {
       // 4. 로컬 상태 업데이트
       setPlayersArray(cleanedPlayers);
 
-      // 5. Firestore DB 즉시 직접 안전 저장 (undefined 완벽 정제)
-      const sanitizedPlayers = sanitizeDataForFirestore(cleanedPlayers);
+      // 5. Firestore 트랜잭션으로 그랑프리/강제등록 선수 손실 없이 안전 저장
+      await runTransaction(db, async (transaction) => {
+        const assignRef = assignId
+          ? doc(db, "contest_players_assign", assignId)
+          : null;
+        const finalRef = finalId
+          ? doc(db, "contest_players_final", finalId)
+          : null;
+        const assignSnap = assignRef ? await transaction.get(assignRef) : null;
+        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
 
-      if (assignId) {
-        await updateDoc(doc(db, "contest_players_assign", assignId), {
-          players: sanitizedPlayers,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-      if (finalId) {
-        await updateDoc(doc(db, "contest_players_final", finalId), {
-          contestId,
-          players: sanitizedPlayers,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        const nowIso = new Date().toISOString();
+        const assignCleanList = cleanedPlayers.filter(
+          (p) => !isAutoGrandPrixEntry(p)
+        );
+        const existingFinalPlayers = finalSnap?.exists()
+          ? finalSnap.data()?.players || []
+          : [];
+        const finalCleanList = mergePreservingUnmatchedFinalEntries(
+          cleanedPlayers,
+          existingFinalPlayers
+        );
+
+        if (assignRef && assignSnap?.exists()) {
+          transaction.update(assignRef, {
+            players: sanitizeDataForFirestore(assignCleanList),
+            updatedAt: nowIso,
+          });
+        }
+        if (finalRef && finalSnap?.exists()) {
+          transaction.update(finalRef, {
+            contestId,
+            players: sanitizeDataForFirestore(finalCleanList),
+            updatedAt: nowIso,
+          });
+        } else if (finalRef) {
+          transaction.set(finalRef, {
+            contestId,
+            players: sanitizeDataForFirestore(finalCleanList),
+            updatedAt: nowIso,
+          });
+        }
+      });
 
       // 화면 다시 그리기
       await fetchPool();
@@ -1667,27 +2110,58 @@ const ContestPlayerWeighInTable = () => {
         };
       });
 
-      const sanitizedList = sanitizeDataForFirestore(cleanResetPlayers);
+      const sanitizedAssignList = sanitizeDataForFirestore(cleanResetPlayers);
 
-      // 3. assign 문서 및 final 문서를 순수 원본 배정본으로 완전 덮어쓰기!
-      const updatePromises = [
-        updateDoc(doc(db, "contest_players_assign", assignId), {
-          players: sanitizedList,
-          updatedAt: new Date().toISOString(),
-        }),
-      ];
+      // 3. assign 문서 및 final 문서를 순수 원본 배정본으로 덮어쓰되, final 전용 그랑프리/강제등록 선수는 안전 보존!
+      await runTransaction(db, async (transaction) => {
+        const assignRef = doc(db, "contest_players_assign", assignId);
+        const finalRef = finalId
+          ? doc(db, "contest_players_final", finalId)
+          : null;
+        const assignSnap = await transaction.get(assignRef);
+        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+        const nowIso = new Date().toISOString();
 
-      if (finalId) {
-        updatePromises.push(
-          updateDoc(doc(db, "contest_players_final", finalId), {
-            contestId,
-            players: sanitizedList,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-      }
+        if (assignSnap.exists()) {
+          transaction.update(assignRef, {
+            players: sanitizedAssignList,
+            updatedAt: nowIso,
+          });
+        }
 
-      await Promise.all(updatePromises);
+        if (finalRef) {
+          const existingFinalPlayers = finalSnap?.exists()
+            ? finalSnap.data()?.players || []
+            : [];
+          const preservedSpecialFinal = existingFinalPlayers.filter(
+            (fp) =>
+              fp &&
+              (fp.createdBy === "force" ||
+                fp.createBy === "force" ||
+                fp.contestCategoryTitle === "그랑프리")
+          );
+          const nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
+            cleanResetPlayers,
+            preservedSpecialFinal
+          );
+          const sanitizedFinalList =
+            sanitizeDataForFirestore(nextFinalPlayers);
+
+          if (finalSnap?.exists()) {
+            transaction.update(finalRef, {
+              contestId,
+              players: sanitizedFinalList,
+              updatedAt: nowIso,
+            });
+          } else {
+            transaction.set(finalRef, {
+              contestId,
+              players: sanitizedFinalList,
+              updatedAt: nowIso,
+            });
+          }
+        }
+      });
 
       // 4. 화면 로컬 상태 즉시 갱신
       await fetchPool();
@@ -1703,7 +2177,7 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 🎯 핀셋 개별 선수 계측 확인 및 DB 즉시 저장 함수 (상단 저장 버튼 누를 필요 없이 즉시 저장!) */
+  /** 🎯 핀셋 개별 선수 계측 확인 및 DB 트랜잭션 즉시 저장 함수 (다중 데스크 동시성 및 그랑프리/강제등록 보존) */
   const persistSinglePlayerWeighIn = async (targetEntryKey, updatedFields) => {
     const assignId = currentContest?.contests?.contestPlayersAssignId;
     const finalId = currentContest?.contests?.contestPlayersFinalId;
@@ -1713,69 +2187,181 @@ const ContestPlayerWeighInTable = () => {
       currentContest?.id ||
       "";
 
-    let updatedTargetPlayer = null;
-    const updatedList = playersArray.map((p) => {
+    const isTargetMatch = (p) => {
+      if (!p) return false;
       const pKey = getPlayerEntryKey(p);
-      const isMatch =
-        pKey === targetEntryKey ||
-        (p.playerUid && updatedFields.playerUid && p.playerUid === updatedFields.playerUid && p.contestCategoryId === (updatedFields.contestCategoryId || p.contestCategoryId));
+      if (pKey === targetEntryKey) return true;
+      return Boolean(
+        p.playerUid &&
+          updatedFields.playerUid &&
+          p.playerUid === updatedFields.playerUid &&
+          p.contestCategoryId ===
+            (updatedFields.contestCategoryId || p.contestCategoryId)
+      );
+    };
 
-      if (isMatch) {
-        const { height, weight } = parseHeightWeight(updatedFields.heightWeight || p.heightWeight);
-        const safeH = height || updatedFields.playerHeight || p.playerHeight || p.height || "";
-        const safeW = weight || updatedFields.playerWeight || p.playerWeight || p.weight || "";
-        const origGId = updatedFields.originalGradeId || p.originalGradeId || p.contestGradeId;
-        const origGTitle = updatedFields.originalGradeTitle || p.originalGradeTitle || p.contestGradeTitle;
-        const isGradeChanged = updatedFields.isGradeChanged !== undefined ? !!updatedFields.isGradeChanged : !!p.isGradeChanged;
+    const applyPatchToPlayer = (p) => {
+      const hwCandidate =
+        updatedFields.heightWeight !== undefined
+          ? updatedFields.heightWeight
+          : p.heightWeight;
+      const { height, weight } = parseHeightWeight(hwCandidate);
+      const safeH =
+        updatedFields.heightWeight !== undefined
+          ? height
+          : height ||
+            updatedFields.playerHeight ||
+            p.playerHeight ||
+            p.height ||
+            "";
+      const safeW =
+        updatedFields.heightWeight !== undefined
+          ? weight
+          : weight ||
+            updatedFields.playerWeight ||
+            p.playerWeight ||
+            p.weight ||
+            "";
+      const origGId =
+        updatedFields.originalGradeId || p.originalGradeId || p.contestGradeId;
+      const origGTitle =
+        updatedFields.originalGradeTitle ||
+        p.originalGradeTitle ||
+        p.contestGradeTitle;
+      const isGradeChanged =
+        updatedFields.isGradeChanged !== undefined
+          ? !!updatedFields.isGradeChanged
+          : !!p.isGradeChanged;
 
-        const newObj = {
-          ...p,
-          ...updatedFields,
-          originalGradeId: origGId,
-          originalGradeTitle: origGTitle,
-          isGradeChanged: isGradeChanged,
-          contestGradeId: isGradeChanged ? (updatedFields.contestGradeId || p.contestGradeId || origGId) : origGId,
-          contestGradeTitle: isGradeChanged ? (updatedFields.contestGradeTitle || p.contestGradeTitle || origGTitle) : origGTitle,
-          playerHeight: safeH,
-          playerWeight: safeW,
-          height: safeH,
-          weight: safeW,
-          heightWeight: updatedFields.heightWeight || formatHeightWeight(safeH, safeW) || p.heightWeight || "",
-        };
-        updatedTargetPlayer = newObj;
-        return newObj;
-      }
-      return p;
-    });
+      return {
+        ...p,
+        ...updatedFields,
+        originalGradeId: origGId,
+        originalGradeTitle: origGTitle,
+        isGradeChanged: isGradeChanged,
+        contestGradeId: isGradeChanged
+          ? updatedFields.contestGradeId || p.contestGradeId || origGId
+          : origGId,
+        contestGradeTitle: isGradeChanged
+          ? updatedFields.contestGradeTitle || p.contestGradeTitle || origGTitle
+          : origGTitle,
+        playerHeight: safeH,
+        playerWeight: safeW,
+        height: safeH,
+        weight: safeW,
+        heightWeight:
+          updatedFields.heightWeight !== undefined
+            ? updatedFields.heightWeight
+            : formatHeightWeight(safeH, safeW) || p.heightWeight || "",
+      };
+    };
 
-    setPlayersArray(updatedList);
+    const currentMatchedLocal = playersArray.find((p) => isTargetMatch(p));
+    let updatedTargetPlayer = currentMatchedLocal
+      ? applyPatchToPlayer(currentMatchedLocal)
+      : null;
+
+    setPlayersArray((prev) =>
+      prev.map((p) => {
+        if (isTargetMatch(p)) {
+          const nextObj = applyPatchToPlayer(p);
+          updatedTargetPlayer = nextObj;
+          return nextObj;
+        }
+        return p;
+      })
+    );
 
     if (!updatedTargetPlayer) return;
 
-    // Firestore에 즉시 영구 저장
+    // Firestore runTransaction으로 해당 선수 엔트리만 원자적(Atomic)으로 핀셋 갱신!
     try {
-      const sanitizedList = sanitizeDataForFirestore(updatedList);
-      const updatePromises = [];
+      await runTransaction(db, async (transaction) => {
+        const assignRef = assignId
+          ? doc(db, "contest_players_assign", assignId)
+          : null;
+        const finalRef = finalId
+          ? doc(db, "contest_players_final", finalId)
+          : null;
 
-      if (assignId) {
-        updatePromises.push(
-          updateDoc(doc(db, "contest_players_assign", assignId), {
-            players: sanitizedList,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-      }
-      if (finalId) {
-        updatePromises.push(
-          updateDoc(doc(db, "contest_players_final", finalId), {
+        const assignSnap = assignRef ? await transaction.get(assignRef) : null;
+        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+        const nowIso = new Date().toISOString();
+
+        const remoteAssignPlayers = assignSnap?.exists()
+          ? assignSnap.data()?.players || []
+          : [];
+        let matchedInAssign = false;
+        const nextAssignPlayers = remoteAssignPlayers.map((rp) => {
+          if (isTargetMatch(rp)) {
+            matchedInAssign = true;
+            return applyPatchToPlayer(rp);
+          }
+          return rp;
+        });
+
+        if (!matchedInAssign && !isAutoGrandPrixEntry(updatedTargetPlayer)) {
+          nextAssignPlayers.push(updatedTargetPlayer);
+        }
+
+        const remoteFinalPlayers = finalSnap?.exists()
+          ? finalSnap.data()?.players || []
+          : [];
+
+        let nextFinalPlayers = [];
+        if (remoteFinalPlayers.length > 0) {
+          let matchedInFinal = false;
+          const patchedFinal = remoteFinalPlayers.map((fp) => {
+            if (isTargetMatch(fp)) {
+              matchedInFinal = true;
+              return applyPatchToPlayer(fp);
+            }
+            return fp;
+          });
+          if (!matchedInFinal) {
+            patchedFinal.push(updatedTargetPlayer);
+          }
+          // assign에만 있고 final에 없던 선수도 누락 없이 병합하며, final 전용(그랑프리/강제등록) 선수는 100% 유지
+          nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
+            patchedFinal,
+            nextAssignPlayers
+          );
+        } else {
+          const seedFinal = [...nextAssignPlayers];
+          if (
+            !seedFinal.some((p) => isTargetMatch(p)) &&
+            updatedTargetPlayer
+          ) {
+            seedFinal.push(updatedTargetPlayer);
+          }
+          nextFinalPlayers = seedFinal;
+        }
+
+        if (assignRef && assignSnap?.exists()) {
+          transaction.update(assignRef, {
+            players: sanitizeDataForFirestore(nextAssignPlayers),
+            updatedAt: nowIso,
+          });
+        }
+
+        if (finalRef && finalSnap?.exists()) {
+          transaction.update(finalRef, {
             contestId,
-            players: sanitizedList,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-      }
+            players: sanitizeDataForFirestore(nextFinalPlayers),
+            updatedAt: nowIso,
+          });
+        } else if (finalRef) {
+          transaction.set(finalRef, {
+            contestId,
+            players: sanitizeDataForFirestore(nextFinalPlayers),
+            updatedAt: nowIso,
+          });
+        }
+      });
 
-      await Promise.all(updatePromises);
+      if (focusedPlayerKeyRef.current !== targetEntryKey) {
+        dirtyPlayerKeysRef.current.delete(targetEntryKey);
+      }
 
       if (updatedFields.isWeighedIn === true) {
         antMessage.success(
@@ -1785,7 +2371,10 @@ const ContestPlayerWeighInTable = () => {
         antMessage.info(
           `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인이 해제되었습니다.`
         );
-      } else if (updatedFields.playerNumber !== undefined || updatedFields.playerIndex !== undefined) {
+      } else if (
+        updatedFields.playerNumber !== undefined ||
+        updatedFields.playerIndex !== undefined
+      ) {
         antMessage.success(
           `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 선수 번호/표시순서가 저장되었습니다! (DB 즉시 저장됨 ✓)`
         );
@@ -1934,30 +2523,38 @@ const ContestPlayerWeighInTable = () => {
     await persistSinglePlayerWeighIn(playerEntryKey, gradeUpdate);
   };
 
-  /** 📏 신장(height) 개별 수정 */
+  /** 📏 신장(height) 개별 수정 (로컬 dirty 등록으로 onSnapshot 입력 증발 방지) */
   const handleHeightChange = (playerEntryKey, newHeight) => {
-    const newPlayersArray = playersArray.map((p) => {
-      if (getPlayerEntryKey(p) === playerEntryKey) {
-        const { weight } = parseHeightWeight(p.heightWeight);
-        const combined = formatHeightWeight(newHeight, weight);
-        return { ...p, heightWeight: combined };
-      }
-      return p;
-    });
-    setPlayersArray(newPlayersArray);
+    if (playerEntryKey) {
+      dirtyPlayerKeysRef.current.add(playerEntryKey);
+    }
+    setPlayersArray((prev) =>
+      prev.map((p) => {
+        if (getPlayerEntryKey(p) === playerEntryKey) {
+          const { weight } = parseHeightWeight(p.heightWeight);
+          const combined = formatHeightWeight(newHeight, weight);
+          return { ...p, heightWeight: combined };
+        }
+        return p;
+      })
+    );
   };
 
-  /** 📏 체중(weight) 개별 수정 */
+  /** 📏 체중(weight) 개별 수정 (로컬 dirty 등록으로 onSnapshot 입력 증발 방지) */
   const handleWeightChange = (playerEntryKey, newWeight) => {
-    const newPlayersArray = playersArray.map((p) => {
-      if (getPlayerEntryKey(p) === playerEntryKey) {
-        const { height } = parseHeightWeight(p.heightWeight);
-        const combined = formatHeightWeight(height, newWeight);
-        return { ...p, heightWeight: combined };
-      }
-      return p;
-    });
-    setPlayersArray(newPlayersArray);
+    if (playerEntryKey) {
+      dirtyPlayerKeysRef.current.add(playerEntryKey);
+    }
+    setPlayersArray((prev) =>
+      prev.map((p) => {
+        if (getPlayerEntryKey(p) === playerEntryKey) {
+          const { height } = parseHeightWeight(p.heightWeight);
+          const combined = formatHeightWeight(height, newWeight);
+          return { ...p, heightWeight: combined };
+        }
+        return p;
+      })
+    );
   };
 
   // ✅ 번호/인덱스/신장체중 수정 모달 열기
@@ -2001,10 +2598,10 @@ const ContestPlayerWeighInTable = () => {
   };
 
   useEffect(() => {
-    if (currentContest?.contests) {
+    if (currentContest?.contests?.id) {
       fetchPool();
     }
-  }, [currentContest]);
+  }, [currentContest?.contests?.id]);
 
   useEffect(() => {
     if (categorysArray.length > 0) {
@@ -2554,9 +3151,9 @@ const ContestPlayerWeighInTable = () => {
                   <button
                     onClick={() =>
                       handleUpdatePlayersFinal(
-                        currentContest.contests.id,
-                        currentContest.contests.contestPlayersAssignId,
-                        currentContest.contests.contestPlayersFinalId,
+                        currentContest?.contests?.id,
+                        currentContest?.contests?.contestPlayersAssignId,
+                        currentContest?.contests?.contestPlayersFinalId,
                         playersArray
                       )
                     }
@@ -2854,6 +3451,14 @@ const ContestPlayerWeighInTable = () => {
                                             value={height}
                                             disabled={playerNoShow}
                                             placeholder="신장"
+                                            onFocus={() => {
+                                              focusedPlayerKeyRef.current = entryKey;
+                                            }}
+                                            onBlur={() => {
+                                              if (focusedPlayerKeyRef.current === entryKey) {
+                                                focusedPlayerKeyRef.current = null;
+                                              }
+                                            }}
                                             onChange={(e) =>
                                               handleHeightChange(entryKey, e.target.value)
                                             }
@@ -2876,6 +3481,14 @@ const ContestPlayerWeighInTable = () => {
                                             value={weight}
                                             disabled={playerNoShow}
                                             placeholder="체중"
+                                            onFocus={() => {
+                                              focusedPlayerKeyRef.current = entryKey;
+                                            }}
+                                            onBlur={() => {
+                                              if (focusedPlayerKeyRef.current === entryKey) {
+                                                focusedPlayerKeyRef.current = null;
+                                              }
+                                            }}
                                             onChange={(e) =>
                                               handleWeightChange(entryKey, e.target.value)
                                             }
@@ -3069,6 +3682,14 @@ const ContestPlayerWeighInTable = () => {
                                       value={height}
                                       disabled={playerNoShow}
                                       placeholder="신장"
+                                      onFocus={() => {
+                                        focusedPlayerKeyRef.current = entryKey;
+                                      }}
+                                      onBlur={() => {
+                                        if (focusedPlayerKeyRef.current === entryKey) {
+                                          focusedPlayerKeyRef.current = null;
+                                        }
+                                      }}
                                       onChange={(e) =>
                                         handleHeightChange(entryKey, e.target.value)
                                       }
@@ -3084,6 +3705,14 @@ const ContestPlayerWeighInTable = () => {
                                       value={weight}
                                       disabled={playerNoShow}
                                       placeholder="체중"
+                                      onFocus={() => {
+                                        focusedPlayerKeyRef.current = entryKey;
+                                      }}
+                                      onBlur={() => {
+                                        if (focusedPlayerKeyRef.current === entryKey) {
+                                          focusedPlayerKeyRef.current = null;
+                                        }
+                                      }}
                                       onChange={(e) =>
                                         handleWeightChange(entryKey, e.target.value)
                                       }
