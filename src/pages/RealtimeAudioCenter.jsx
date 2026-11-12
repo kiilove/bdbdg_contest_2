@@ -30,7 +30,7 @@ const { Sider, Content } = Layout;
 export default function RealtimeAudioCenter() {
   const { currentContest } = useContext(CurrentContestContext);
 
-  const [contestPlayList, setContestPlayList] = useState([]);
+  const [contestPlayList, setContestPlayList] = useState(null);
   const [trackPlayList, setTrackPlayList] = useState([]);
   const [tracks, setTracks] = useState([]);
 
@@ -70,7 +70,11 @@ export default function RealtimeAudioCenter() {
   const categoryQuery = useFirestoreQuery();
   const trackPlayListQuery = useFirestoreQuery();
 
-  const contestId = currentContest?.contests?.id;
+  const contestId =
+    currentContest?.contests?.id ||
+    currentContest?.contestInfo?.id ||
+    currentContest?.id ||
+    "";
 
   const {
     data: realtimeData,
@@ -144,7 +148,7 @@ export default function RealtimeAudioCenter() {
 
   // ✅ Remote Control 업데이트 함수
   const updateRemoteControl = (track, status) => {
-    if (!isRemoteSync) return;
+    if (!isRemoteSync || !track) return;
     const timestamp = Date.now();
     setLastProcessedSelectedAt(timestamp);
 
@@ -162,9 +166,22 @@ export default function RealtimeAudioCenter() {
   // Firestore 데이터 로드
   // =============================
   useEffect(() => {
+    let isCancelled = false;
+
     async function fetchData() {
-      if (!contestId) return;
-      setIsDataLoading(true);
+      if (!contestId) {
+        if (!isCancelled) {
+          setContestPlayList(null);
+          setDataError(null);
+          setIsDataLoading(false);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setIsDataLoading(true);
+        setDataError(null);
+      }
 
       try {
         const playListData = await categoryQuery.getDocuments(
@@ -175,8 +192,12 @@ export default function RealtimeAudioCenter() {
           "track_play_list"
         );
 
+        const safePlaylists = Array.isArray(trackPlayListData)
+          ? trackPlayListData
+          : [];
         const allTracks = [];
-        for (const playlist of trackPlayListData) {
+        for (const playlist of safePlaylists) {
+          if (!playlist?.id) continue;
           const subRef = collection(
             db,
             "track_play_list",
@@ -195,22 +216,44 @@ export default function RealtimeAudioCenter() {
           });
         }
 
-        setContestPlayList(playListData[0]);
-        setTrackPlayList(trackPlayListData);
-        setTracks(allTracks);
+        const sortedSettings = [...(playListData || [])].sort((a, b) => {
+          const tA = new Date(a?.updatedAt || a?.createdAt || 0).getTime() || 0;
+          const tB = new Date(b?.updatedAt || b?.createdAt || 0).getTime() || 0;
+          return tB - tA;
+        });
+
+        if (!isCancelled) {
+          setContestPlayList(sortedSettings[0] || null);
+          setTrackPlayList(safePlaylists);
+          setTracks(allTracks);
+        }
       } catch (err) {
-        setDataError(err);
+        if (!isCancelled) {
+          setDataError(err);
+        }
       } finally {
-        setIsDataLoading(false);
+        if (!isCancelled) {
+          setIsDataLoading(false);
+        }
       }
     }
 
     fetchData();
+    return () => {
+      isCancelled = true;
+    };
   }, [contestId]);
 
   // ✅ 음악 분류 (공통)
   useEffect(() => {
-    if (!contestPlayList?.id || !tracks.length) return;
+    if (!contestPlayList?.id || !tracks.length) {
+      setAwardsMusic([]);
+      setResultAnnouncementTracks([]);
+      setWaitingTracks([]);
+      return;
+    }
+
+    const commonMusic = contestPlayList?.commonMusic || {};
 
     const setList = (id, setter) => {
       if (!id) return setter([]);
@@ -221,21 +264,34 @@ export default function RealtimeAudioCenter() {
       );
     };
 
-    setList(contestPlayList?.commonMusic?.awardsMusic, setAwardsMusic);
+    setList(commonMusic.awardsMusic, setAwardsMusic);
     setList(
-      contestPlayList?.commonMusic?.resultAnnouncementMusic,
+      commonMusic.resultAnnouncementMusic,
       setResultAnnouncementTracks
     );
-    setList(contestPlayList?.commonMusic?.waitingMusic, setWaitingTracks);
+    setList(commonMusic.waitingMusic, setWaitingTracks);
   }, [contestPlayList, tracks]);
 
   // ✅ 음악 분류 (카테고리별)
   useEffect(() => {
-    if (!categoryId || !contestPlayList?.id || !tracks.length) return;
-    const cfg = contestPlayList.categoryMusic.find(
-      (f) => f.contestCategoryId === categoryId
-    );
-    if (!cfg) return;
+    if (!categoryId || !contestPlayList?.id || !tracks.length) {
+      setEntryTracks([]);
+      setLineupTracks([]);
+      setPoseDownTracks([]);
+      return;
+    }
+
+    const rawCategoryMusic = contestPlayList?.categoryMusic || {};
+    const cfg = Array.isArray(rawCategoryMusic)
+      ? rawCategoryMusic.find((f) => f?.contestCategoryId === categoryId)
+      : rawCategoryMusic?.[categoryId] || null;
+
+    if (!cfg) {
+      setEntryTracks([]);
+      setLineupTracks([]);
+      setPoseDownTracks([]);
+      return;
+    }
 
     const setList = (id, setter) => {
       if (!id) return setter([]);
@@ -246,9 +302,9 @@ export default function RealtimeAudioCenter() {
       );
     };
 
-    setList(cfg.entryPlaylistId, setEntryTracks);
-    setList(cfg.lineupPlaylistId, setLineupTracks);
-    setList(cfg.poseDownPlaylistId, setPoseDownTracks);
+    setList(cfg.entryPlaylistId || cfg.entryMusic, setEntryTracks);
+    setList(cfg.lineupPlaylistId || cfg.lineupMusic, setLineupTracks);
+    setList(cfg.poseDownPlaylistId || cfg.poseDownMusic, setPoseDownTracks);
   }, [categoryId, contestPlayList, tracks]);
 
   // =============================
@@ -338,13 +394,18 @@ export default function RealtimeAudioCenter() {
         set(ref(database, "nowPlaying/status"), "pause");
       }
     } else {
-      audioRef.current.play().then(() => {
-        setIsPlaying(true);
-        startTracking();
-        if (isRemoteSync && nowPlaying) {
-          set(ref(database, "nowPlaying/status"), "play");
-        }
-      });
+      audioRef.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          startTracking();
+          if (isRemoteSync && nowPlaying) {
+            set(ref(database, "nowPlaying/status"), "play");
+          }
+        })
+        .catch(() =>
+          message.warning("재생이 차단되었습니다. 수동으로 재생을 눌러주세요.")
+        );
     }
   };
 
@@ -367,47 +428,47 @@ export default function RealtimeAudioCenter() {
   };
 
   useEffect(() => {
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
   }, []);
 
-  if (realtimeLoading || isDataLoading) return <Spin tip="Loading..." />;
-  if (realtimeError || dataError)
-    return (
-      <Alert
-        message="Error"
-        description={(realtimeError || dataError).message}
-        type="error"
-        showIcon
-      />
-    );
-
-  return (
-    <Layout style={{ height: "100vh" }}>
-      {/* ─────────────────────────────────────────────── */}
-      {/* LEFT: Audio Player */}
-      {/* ─────────────────────────────────────────────── */}
-
-      <Sider
-        width="30%"
-        style={{
-          backgroundColor: "#1a1a1a",
-          padding: "20px",
-          color: "white",
-        }}
-      >
-        <audio
-          ref={audioRef}
-          onEnded={handleNextTrack}
-          onLoadedMetadata={() => {
-            setTrackDuration(audioRef.current.duration || 0);
-            setCurrentTime(0);
-          }}
-          controls={false}
+  const renderMainView = () => {
+    if (realtimeLoading || isDataLoading) return <Spin tip="Loading..." />;
+    if (realtimeError || dataError) {
+      return (
+        <Alert
+          message="Error"
+          description={
+            (realtimeError || dataError)?.message ||
+            "데이터 로드 중 오류가 발생했습니다."
+          }
+          type="error"
+          showIcon
         />
+      );
+    }
 
-        <Title level={4} style={{ color: "#fff", marginBottom: 16 }}>
-          🎧 Audio Player
-        </Title>
+    return (
+      <Layout style={{ height: "100vh" }}>
+        {/* ─────────────────────────────────────────────── */}
+        {/* LEFT: Audio Player */}
+        {/* ─────────────────────────────────────────────── */}
+
+        <Sider
+          width="30%"
+          style={{
+            backgroundColor: "#1a1a1a",
+            padding: "20px",
+            color: "white",
+          }}
+        >
+          <Title level={4} style={{ color: "#fff", marginBottom: 16 }}>
+            🎧 Audio Player
+          </Title>
 
         {/* ✅ Remote Sync Toggle */}
         <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -531,6 +592,15 @@ export default function RealtimeAudioCenter() {
       {/* ─────────────────────────────────────────────── */}
 
       <Content style={{ padding: 20, overflowY: "auto" }}>
+        {!contestId && (
+          <Alert
+            style={{ marginBottom: 16 }}
+            message="선택된 대회가 없습니다"
+            description="대회를 선택하면 종목별/공통 음악 목록이 표시됩니다."
+            type="warning"
+            showIcon
+          />
+        )}
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12}>
             <Card
@@ -618,7 +688,7 @@ export default function RealtimeAudioCenter() {
 
           <Col xs={24} sm={12}>
             <Card
-              title={`${categoryTitle} - 입장 음악`}
+              title={`${categoryTitle || "현재 종목"} - 입장 음악`}
               extra={
                 <Space>
                   <Button
@@ -715,5 +785,23 @@ export default function RealtimeAudioCenter() {
         </Row>
       </Content>
     </Layout>
+    );
+  };
+
+  return (
+    <>
+      <audio
+        ref={audioRef}
+        onEnded={handleNextTrack}
+        onLoadedMetadata={() => {
+          if (audioRef.current) {
+            setTrackDuration(audioRef.current.duration || 0);
+            setCurrentTime(0);
+          }
+        }}
+        controls={false}
+      />
+      {renderMainView()}
+    </>
   );
 }

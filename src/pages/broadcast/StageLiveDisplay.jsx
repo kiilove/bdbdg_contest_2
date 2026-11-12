@@ -333,11 +333,15 @@ const StageLiveDisplay = () => {
     setIsAudioEnabled(nextState);
     try {
       localStorage.setItem("screen_audio_enabled", String(nextState));
+      const payload = {
+        isAudioEnabled: nextState,
+        updatedAt: Date.now(),
+      };
       if (contestId) {
-        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-          isAudioEnabled: nextState,
-          updatedAt: Date.now(),
-        });
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
       }
       message.success(nextState ? "전광판 사운드 [ON - 음향 출력]" : "전광판 사운드 [OFF - 음소거]");
     } catch {}
@@ -369,6 +373,8 @@ const StageLiveDisplay = () => {
   if (!broadcastData?.mode && legacyStageData?.screen?.status?.playStart) {
     currentMode = "RANKING";
   }
+  const isSpecialVideoMode =
+    currentMode === "SPECIAL_VIDEO" || currentMode === "SPECIAL_SCREEN";
 
   useEffect(() => {
     console.log("%c[STAGE LIVE DISPLAY (16:9)] 📡 수신 상태 변경 감지!", "background:#f59e0b;color:black;font-weight:bold;font-size:14px;", {
@@ -399,9 +405,15 @@ const StageLiveDisplay = () => {
     legacyStageData?.stageId ||
     broadcastData?.stageInfo?.stageNumber ||
     "";
+  const activePlayers =
+    broadcastData?.stageInfo?.players ||
+    legacyStageData?.players ||
+    legacyStageData?.screen?.players ||
+    [];
   const activePlayerCount =
     legacyStageData?.players?.length ||
     legacyStageData?.playerCount ||
+    broadcastData?.stageInfo?.players?.length ||
     broadcastData?.stageInfo?.playerCount ||
     0;
 
@@ -411,6 +423,7 @@ const StageLiveDisplay = () => {
     gradeId: activeGradeId,
     stageNumber: activeStageNumber,
     playerCount: activePlayerCount,
+    players: activePlayers,
   };
 
   // 2. 실시간 선수 소개 정보
@@ -430,15 +443,21 @@ const StageLiveDisplay = () => {
 
   // 🏁 순위 발표 종료 시 다음 종목 대기 화면으로 복귀 핸들러
   const handleFinishCeremony = async () => {
-    if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      const payload = {
         mode: "STANDBY",
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
-      });
+      };
+      if (contestId) {
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
+      }
     } catch (error) {
       console.error("대기 화면 복귀 오류:", error);
     }
@@ -446,12 +465,17 @@ const StageLiveDisplay = () => {
 
   // 📋 순위표로 다시 돌아가기 핸들러
   const handleBackToRanking = async () => {
-    if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      const payload = {
         mode: "RANKING",
         updatedAt: Date.now(),
-      });
+      };
+      if (contestId) {
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
+      }
     } catch (error) {
       console.error("순위표 복귀 오류:", error);
     }
@@ -543,7 +567,8 @@ const StageLiveDisplay = () => {
         fallbackSrc={activeBackgroundVideo.fallback}
         overlayGradient={activeBackgroundVideo.overlay}
         gradientDirection={activeBackgroundVideo.direction}
-        isMuted={!isAudioEnabled}
+        isMuted={!isAudioEnabled || isSpecialVideoMode}
+        muted={!isAudioEnabled || isSpecialVideoMode}
       />
 
       {/* ========================================================================================= */}
@@ -729,6 +754,8 @@ const StageLiveDisplay = () => {
           videoUrl={broadcastData?.specialVideoData?.videoUrl || broadcastData?.specialVideoUrl || videoSettings.standbyVideoUrl}
           videoCommand={broadcastData?.videoCommand}
           isAudioEnabled={isAudioEnabled}
+          loop={broadcastData?.specialVideo?.loop ?? broadcastData?.specialVideoData?.loop}
+          broadcastData={broadcastData}
           onEnded={handleFinishCeremony}
         />
       )}

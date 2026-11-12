@@ -285,16 +285,27 @@ const StageLiveDisplaySquare = () => {
     }
   });
 
+  // Firebase Realtime DB 사운드 설정 실시간 동기화
+  useEffect(() => {
+    if (broadcastData?.isAudioEnabled !== undefined) {
+      setIsAudioEnabled(Boolean(broadcastData.isAudioEnabled));
+    }
+  }, [broadcastData?.isAudioEnabled]);
+
   const toggleAudio = async () => {
     const nextState = !isAudioEnabled;
     setIsAudioEnabled(nextState);
     try {
       localStorage.setItem("screen_audio_enabled", String(nextState));
+      const payload = {
+        isAudioEnabled: nextState,
+        updatedAt: Date.now(),
+      };
       if (contestId) {
-        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
-          isAudioEnabled: nextState,
-          updatedAt: Date.now(),
-        });
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
       }
       message.success(nextState ? "전광판 사운드 [ON]" : "전광판 사운드 [OFF]");
     } catch {}
@@ -320,6 +331,8 @@ const StageLiveDisplaySquare = () => {
   if (!broadcastData?.mode && legacyStageData?.screen?.status?.playStart) {
     currentMode = "RANKING";
   }
+  const isSpecialVideoMode =
+    currentMode === "SPECIAL_VIDEO" || currentMode === "SPECIAL_SCREEN";
 
   useEffect(() => {
     console.log("%c[STAGE LIVE DISPLAY SQUARE (1:1)] 📡 수신 상태 변경 감지!", "background:#a855f7;color:white;font-weight:bold;font-size:14px;", {
@@ -349,9 +362,15 @@ const StageLiveDisplaySquare = () => {
     legacyStageData?.stageId ||
     broadcastData?.stageInfo?.stageNumber ||
     "";
+  const activePlayers =
+    broadcastData?.stageInfo?.players ||
+    legacyStageData?.players ||
+    legacyStageData?.screen?.players ||
+    [];
   const activePlayerCount =
     legacyStageData?.players?.length ||
     legacyStageData?.playerCount ||
+    broadcastData?.stageInfo?.players?.length ||
     broadcastData?.stageInfo?.playerCount ||
     0;
 
@@ -361,6 +380,7 @@ const StageLiveDisplaySquare = () => {
     gradeId: activeGradeId,
     stageNumber: activeStageNumber,
     playerCount: activePlayerCount,
+    players: activePlayers,
   };
 
   const activePlayer = broadcastData?.activePlayer || broadcastData?.player || null;
@@ -371,27 +391,38 @@ const StageLiveDisplaySquare = () => {
     (rankingData.length > 0 ? rankingData[0] : null);
 
   const handleFinishCeremony = async () => {
-    if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      const payload = {
         mode: "STANDBY",
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
-      });
+      };
+      if (contestId) {
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
+      }
     } catch (error) {
       console.error("대기 화면 복귀 오류:", error);
     }
   };
 
   const handleBackToRanking = async () => {
-    if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      const payload = {
         mode: "RANKING",
         updatedAt: Date.now(),
-      });
+      };
+      if (contestId) {
+        await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
+      }
+      if (!contestId || !globalActiveBroadcast?.targetContestId || globalActiveBroadcast?.targetContestId === contestId) {
+        await updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", payload);
+      }
     } catch (error) {
       console.error("순위표 복귀 오류:", error);
     }
@@ -470,7 +501,8 @@ const StageLiveDisplaySquare = () => {
         fallbackSrc={defaultStandbyVideo}
         overlayGradient="from-black/75 via-transparent to-black/65"
         gradientDirection="bg-gradient-to-t"
-        isMuted={!isAudioEnabled}
+        isMuted={!isAudioEnabled || isSpecialVideoMode}
+        muted={!isAudioEnabled || isSpecialVideoMode}
       />
 
       {/* ========================================================================================= */}
@@ -561,6 +593,8 @@ const StageLiveDisplaySquare = () => {
           videoUrl={broadcastData?.specialVideoData?.videoUrl || broadcastData?.specialVideoUrl || videoSettings.standbyVideoUrl}
           videoCommand={broadcastData?.videoCommand}
           isAudioEnabled={isAudioEnabled}
+          loop={broadcastData?.specialVideo?.loop ?? broadcastData?.specialVideoData?.loop}
+          broadcastData={broadcastData}
           onEnded={handleFinishCeremony}
         />
       )}
@@ -624,4 +658,107 @@ const StageLiveDisplaySquare = () => {
   );
 };
 
-export default StageLiveDisplaySquare;
+class StageDisplaySquareErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("[StageLiveDisplaySquare Error Boundary]:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  handleReload = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    window.location.reload();
+  };
+
+  handleCopyError = () => {
+    const errorText = [
+      "=== StageLiveDisplaySquare Error ===",
+      this.state.error?.toString() || "",
+      "\n=== Stack Trace ===",
+      this.state.error?.stack || "",
+      "\n=== Component Stack ===",
+      this.state.errorInfo?.componentStack || "",
+    ].join("\n");
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(errorText);
+      alert("✅ 에러 내용이 클립보드에 복사되었습니다! 채팅창에 붙여넣기(Ctrl+V) 해주세요.");
+    } else {
+      alert("직접 아래 텍스트 상자에서 Ctrl+A, Ctrl+C로 복사해 주세요.");
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      const errorFullText = [
+        this.state.error?.toString() || "",
+        this.state.error?.stack || "",
+        this.state.errorInfo?.componentStack || "",
+      ].filter(Boolean).join("\n\n");
+
+      return (
+        <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center select-text overflow-auto" style={{ userSelect: "text" }}>
+          <div className="max-w-3xl w-full space-y-4 bg-slate-900/95 p-8 rounded-3xl border-2 border-red-500/40 shadow-2xl select-text" style={{ userSelect: "text" }}>
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-red-500/20 border border-red-400/40 flex items-center justify-center text-red-400 text-3xl animate-pulse">
+              <DatabaseOutlined />
+            </div>
+            <h2 className="text-2xl font-black text-white m-0 select-text">무대 송출 화면 오류 감지 및 디버깅</h2>
+
+            <div className="space-y-2 text-left select-text">
+              <div className="flex justify-between items-center text-xs font-mono text-red-300">
+                <span className="font-bold">❌ 에러 상세 내용:</span>
+                <button
+                  onClick={this.handleCopyError}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs cursor-pointer border-none shadow transition-all"
+                >
+                  📋 에러 내용 1초 복사하기
+                </button>
+              </div>
+
+              <textarea
+                readOnly
+                value={errorFullText}
+                rows={8}
+                onClick={(e) => e.target.select()}
+                className="w-full bg-black/90 p-3 rounded-xl border border-red-500/40 text-[11px] font-mono text-red-300 select-text focus:outline-none focus:border-red-400"
+                style={{ userSelect: "text" }}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={this.handleCopyError}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-base shadow-xl transition-all cursor-pointer border-none"
+              >
+                📋 에러 내용 복사하기
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-base shadow-xl hover:opacity-90 transition-all cursor-pointer border-none"
+              >
+                화면 새로고침 (F5)
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SafeStageLiveDisplaySquare = () => (
+  <StageDisplaySquareErrorBoundary>
+    <StageLiveDisplaySquare />
+  </StageDisplaySquareErrorBoundary>
+);
+
+export default SafeStageLiveDisplaySquare;

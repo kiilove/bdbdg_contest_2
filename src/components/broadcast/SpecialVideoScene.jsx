@@ -16,18 +16,29 @@ const SpecialVideoScene = ({
   videoUrl,
   videoCommand = null,
   isAudioEnabled = false,
+  loop,
+  broadcastData = null,
   onEnded,
 }) => {
   const videoRef = useRef(null);
   const [playableSrc, setPlayableSrc] = useState(videoUrl || "");
   const lastCommandTimeRef = useRef(null);
 
+  const explicitLoop =
+    loop !== undefined
+      ? loop
+      : broadcastData?.specialVideo?.loop ?? broadcastData?.specialVideoData?.loop;
+  const shouldLoop = explicitLoop !== false;
+
   // IndexedDB 캐시된 로컬 Blob URL 우선 조회
   useEffect(() => {
     let isCancelled = false;
 
     const resolveVideoSource = async () => {
-      if (!videoUrl) return;
+      if (!videoUrl) {
+        if (!isCancelled) setPlayableSrc("");
+        return;
+      }
       try {
         const cachedBlobUrl = await getStoredVideoBlobUrl(videoUrl);
         if (!isCancelled) {
@@ -74,7 +85,9 @@ const SpecialVideoScene = ({
 
     try {
       if (action === "PLAY") {
-        video.play().catch((err) => console.warn("[SpecialVideoScene] 재생 실패:", err));
+        if (video.paused) {
+          video.play().catch((err) => console.warn("[SpecialVideoScene] 재생 실패:", err));
+        }
       } else if (action === "PAUSE") {
         video.pause();
       } else if (action === "STOP") {
@@ -99,9 +112,9 @@ const SpecialVideoScene = ({
           src={playableSrc}
           autoPlay
           playsInline
-          loop
+          loop={shouldLoop}
           muted={!isAudioEnabled}
-          onEnded={onEnded}
+          onEnded={shouldLoop ? undefined : onEnded}
           className="w-full h-full object-cover bg-black"
         />
       ) : (

@@ -18,6 +18,7 @@ import {
   useFirestoreUpdateData,
   useFirestoreDeleteData,
 } from "../hooks/useFirestores";
+import { where } from "firebase/firestore";
 import dayjs from "dayjs";
 
 const { Title } = Typography;
@@ -81,7 +82,10 @@ const ContestMusicSetting = () => {
             poseDownMusic: "",
           };
         });
-        setCategoryMusic(initialCategoryMusic);
+        setCategoryMusic((prev) => ({
+          ...initialCategoryMusic,
+          ...prev,
+        }));
       }
     } catch (error) {
       console.log("Error fetching categories:", error);
@@ -100,58 +104,109 @@ const ContestMusicSetting = () => {
   };
 
   const fetchPools = async () => {
+    if (!currentContest?.contests?.contestCategorysListId) return;
     setIsLoading(true);
-    await Promise.all([
-      fetchCategories(currentContest.contests.contestCategorysListId),
-      fetchPlayList(),
-    ]);
-    setIsLoading(false);
+    try {
+      await Promise.all([
+        fetchCategories(currentContest.contests.contestCategorysListId),
+        fetchPlayList(),
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sortDocsByLatest = (docs = []) => {
+    return [...docs].sort((a, b) => {
+      const timeA = dayjs(a?.updatedAt || a?.createdAt || 0).valueOf() || 0;
+      const timeB = dayjs(b?.updatedAt || b?.createdAt || 0).valueOf() || 0;
+      return timeB - timeA;
+    });
   };
 
   useEffect(() => {
-    if (currentContest?.contests) {
-      fetchPools();
-      checkDocumentStatus();
-    }
-  }, [currentContest]);
+    let isCancelled = false;
+    const init = async () => {
+      if (!currentContest?.contests?.id) return;
+      setCurrentDocId(null);
+      setDuplicateDocs([]);
+      await fetchPools();
+      if (!isCancelled) {
+        await checkDocumentStatus();
+      }
+    };
+    init();
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentContest?.contests?.id]);
 
   const checkDocumentStatus = async () => {
-    const contestId = currentContest.contests.id;
+    const contestId = currentContest?.contests?.id;
+    if (!contestId) return;
+
     const docs = await musicSettingsQuery.getDocuments(
       "contest_music_settings",
-      [["contestId", "==", contestId]]
+      [where("contestId", "==", contestId)]
     );
 
     if (!docs || docs.length === 0) {
       console.log("No document found. Adding new document is required.");
+      setCurrentDocId(null);
       setCreatedAt(dayjs().format("YYYY-MM-DD HH:mm:ss"));
     } else if (docs.length === 1) {
       console.log("Single document found. Proceed with update.");
       setCurrentDocId(docs[0].id);
-      setCreatedAt(docs[0].createdAt); // 기존 문서의 createdAt을 저장
+      setCreatedAt(docs[0].createdAt);
       loadDocumentData(docs[0]);
     } else {
-      console.log("Multiple documents found. Showing modal for selection.");
-      setDuplicateDocs(docs);
+      console.log("Multiple documents found. Selecting latest and showing cleanup modal.");
+      const sortedDocs = sortDocsByLatest(docs);
+      const latestDoc = sortedDocs[0];
+      setCurrentDocId(latestDoc.id);
+      setCreatedAt(latestDoc.createdAt || dayjs().format("YYYY-MM-DD HH:mm:ss"));
+      loadDocumentData(latestDoc);
+      setDuplicateDocs(
+        sortedDocs.map((d, idx) => ({
+          ...d,
+          delete: idx > 0,
+        }))
+      );
       setIsModalVisible(true);
     }
   };
 
   const loadDocumentData = (doc) => {
+    if (!doc) return;
     setCommonMusic({
       waitingMusic: doc.commonMusic?.waitingMusic || "",
       resultAnnouncementMusic: doc.commonMusic?.resultAnnouncementMusic || "",
       awardsMusic: doc.commonMusic?.awardsMusic || "",
     });
     const loadedCategoryMusic = {};
-    (doc.categoryMusic || []).forEach((category) => {
-      loadedCategoryMusic[category.contestCategoryId] = {
-        entryMusic: category.entryPlaylistId || "",
-        lineupMusic: category.lineupPlaylistId || "",
-        poseDownMusic: category.poseDownPlaylistId || "",
-      };
-    });
-    setCategoryMusic(loadedCategoryMusic);
+    const rawCatMusic = doc.categoryMusic;
+    if (Array.isArray(rawCatMusic)) {
+      rawCatMusic.forEach((category) => {
+        if (!category?.contestCategoryId) return;
+        loadedCategoryMusic[category.contestCategoryId] = {
+          entryMusic: category.entryPlaylistId || category.entryMusic || "",
+          lineupMusic: category.lineupPlaylistId || category.lineupMusic || "",
+          poseDownMusic: category.poseDownPlaylistId || category.poseDownMusic || "",
+        };
+      });
+    } else if (rawCatMusic && typeof rawCatMusic === "object") {
+      Object.entries(rawCatMusic).forEach(([catId, category]) => {
+        loadedCategoryMusic[catId] = {
+          entryMusic: category?.entryPlaylistId || category?.entryMusic || "",
+          lineupMusic: category?.lineupPlaylistId || category?.lineupMusic || "",
+          poseDownMusic: category?.poseDownPlaylistId || category?.poseDownMusic || "",
+        };
+      });
+    }
+    setCategoryMusic((prev) => ({
+      ...prev,
+      ...loadedCategoryMusic,
+    }));
   };
 
   const handleCommonMusicChange = (field, value) => {
@@ -172,8 +227,15 @@ const ContestMusicSetting = () => {
   };
 
   const handleSave = async () => {
+    const contestId = currentContest?.contests?.id;
+    if (!contestId) {
+      message.warning("선택된 대회가 없습니다.");
+      return;
+    }
+
+    const nowFormatted = dayjs().format("YYYY-MM-DD HH:mm:ss");
     const saveData = {
-      contestId: currentContest.contests.id,
+      contestId,
       commonMusic: {
         waitingMusic: commonMusic.waitingMusic || "",
         resultAnnouncementMusic: commonMusic.resultAnnouncementMusic || "",
@@ -182,23 +244,39 @@ const ContestMusicSetting = () => {
       categoryMusic: Object.entries(categoryMusic).map(
         ([categoryId, music]) => ({
           contestCategoryId: categoryId,
-          entryPlaylistId: music.entryMusic || "",
-          lineupPlaylistId: music.lineupMusic || "",
-          poseDownPlaylistId: music.poseDownMusic || "",
+          entryPlaylistId: music?.entryMusic || "",
+          lineupPlaylistId: music?.lineupMusic || "",
+          poseDownPlaylistId: music?.poseDownMusic || "",
         })
       ),
-      // 기존 createdAt 값이 null일 경우 현재 시간을 사용
-      createdAt: createdAt || dayjs().format("YYYY-MM-DD HH:mm:ss"),
-      updatedAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
+      createdAt: createdAt || nowFormatted,
+      updatedAt: nowFormatted,
     };
 
     try {
-      if (!currentDocId) {
-        await addMusicSetting.addData(saveData);
+      let targetDocId = currentDocId;
+
+      if (!targetDocId) {
+        const existingDocs = await musicSettingsQuery.getDocuments(
+          "contest_music_settings",
+          [where("contestId", "==", contestId)]
+        );
+        if (existingDocs && existingDocs.length > 0) {
+          const latest = sortDocsByLatest(existingDocs)[0];
+          targetDocId = latest.id;
+          setCurrentDocId(latest.id);
+        }
+      }
+
+      if (!targetDocId) {
+        const added = await addMusicSetting.addData(saveData);
+        if (added?.id) {
+          setCurrentDocId(added.id);
+        }
         console.log("Document added:", saveData);
         message.success("새 문서가 추가되었습니다.");
       } else {
-        await updateMusicSetting.updateData(currentDocId, saveData);
+        await updateMusicSetting.updateData(targetDocId, saveData);
         console.log("Document updated:", saveData);
         message.success("문서가 업데이트되었습니다.");
       }
@@ -210,12 +288,22 @@ const ContestMusicSetting = () => {
 
   const handleModalOk = async () => {
     const remainingDocs = duplicateDocs.filter((doc) => !doc.delete);
-    for (let doc of duplicateDocs) {
-      if (doc.delete) await deleteMusicSetting.deleteData(doc.id);
+    for (const docItem of duplicateDocs) {
+      if (docItem.delete) {
+        await deleteMusicSetting.deleteData(docItem.id);
+      }
     }
     setDuplicateDocs(remainingDocs);
+    if (remainingDocs.length > 0) {
+      const latestRemaining = sortDocsByLatest(remainingDocs)[0];
+      setCurrentDocId(latestRemaining.id);
+      setCreatedAt(latestRemaining.createdAt || dayjs().format("YYYY-MM-DD HH:mm:ss"));
+      loadDocumentData(latestRemaining);
+    } else {
+      setCurrentDocId(null);
+    }
     setIsModalVisible(false);
-    message.success("선택된 문서가 삭제되었습니다.");
+    message.success("선택된 중복 문서가 정리되었습니다.");
   };
 
   const handleModalCancel = () => {
@@ -403,7 +491,7 @@ const ContestMusicSetting = () => {
 
       <Modal
         title="중복 문서 관리"
-        visible={isModalVisible}
+        open={isModalVisible}
         onOk={handleModalOk}
         onCancel={handleModalCancel}
         okText="삭제 확인"
@@ -415,12 +503,12 @@ const ContestMusicSetting = () => {
             {
               title: "생성 날짜",
               dataIndex: "createdAt",
-              render: (value) => dayjs(value).format("YYYY-MM-DD HH:mm:ss"),
+              render: (value) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"),
             },
             {
               title: "수정 날짜",
               dataIndex: "updatedAt",
-              render: (value) => dayjs(value).format("YYYY-MM-DD HH:mm:ss"),
+              render: (value) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"),
             },
             {
               title: "삭제 선택",
@@ -431,8 +519,14 @@ const ContestMusicSetting = () => {
                     { label: "삭제", value: true },
                     { label: "유지", value: false },
                   ]}
-                  onChange={(value) => (record.delete = value)}
-                  defaultValue={false}
+                  value={Boolean(record.delete)}
+                  onChange={(value) =>
+                    setDuplicateDocs((prev) =>
+                      prev.map((item) =>
+                        item.id === record.id ? { ...item, delete: value } : item
+                      )
+                    )
+                  }
                 />
               ),
             },

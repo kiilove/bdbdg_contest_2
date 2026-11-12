@@ -169,25 +169,103 @@ export const VibeFlowAudioCenter = () => {
   const isCrossfadingRef = useRef(false);
   const isFadingRef = useRef(false);
   const fadeAnimationRef = useRef(null);
+  const fadeTimeoutsRef = useRef([]);
+  const playRequestIdRef = useRef(0);
+  const deckRequestIdRef = useRef({ A: 0, B: 0 });
+  const stageAutoPlayTimeoutRef = useRef(null);
   const masterVolumeRef = useRef(volume);
   const rafRef = useRef(null);
+
+  const registerFadeTimeout = (callback, delayMs) => {
+    const timeoutId = setTimeout(() => {
+      fadeTimeoutsRef.current = fadeTimeoutsRef.current.filter((id) => id !== timeoutId);
+      callback();
+    }, delayMs);
+    fadeTimeoutsRef.current.push(timeoutId);
+    return timeoutId;
+  };
 
   const stopAllFades = () => {
     if (fadeAnimationRef.current) {
       cancelAnimationFrame(fadeAnimationRef.current);
       fadeAnimationRef.current = null;
     }
+    if (fadeTimeoutsRef.current.length > 0) {
+      fadeTimeoutsRef.current.forEach((id) => clearTimeout(id));
+      fadeTimeoutsRef.current = [];
+    }
     isFadingRef.current = false;
     isCrossfadingRef.current = false;
   };
 
-  // 🎧 [사전 로드 & 재생 추적 Refs]
+  // 🎧 [사전 로드 & 재생 추적 Refs — 스테일 클로저 완벽 방지]
   const preCuedTrackRef = useRef(null);
   const isPreCuedRef = useRef(false);
   const playedTrackIdsRef = useRef(playedTrackIds);
   const isAutoPlayRef = useRef(isAutoPlayOnStageChange);
+  const currentTrackRef = useRef(currentTrack);
+  const selectedCategoryTabRef = useRef(selectedCategoryTab);
+  const tabConfigsRef = useRef(tabConfigs);
+  const tracksRef = useRef(tracks);
+  const customTracksRef = useRef(customTracks);
+  const allAvailableTracksRef = useRef([]);
+  const filteredTracksRef = useRef([]);
+  const seed1PoolRef = useRef([]);
+  const seed2PoolRef = useRef([]);
+  const matchedVibeCategoryRef = useRef(null);
+  const isRemoteSyncRef = useRef(isRemoteSync);
   const getNextSeedTrackRef = useRef(null);
   const playNextSeedTrackRef = useRef(null);
+
+  currentTrackRef.current = currentTrack;
+  selectedCategoryTabRef.current = selectedCategoryTab;
+  tabConfigsRef.current = tabConfigs;
+  tracksRef.current = tracks;
+  customTracksRef.current = customTracks;
+  isRemoteSyncRef.current = isRemoteSync;
+
+  // 현재 재생 중인 트랙의 카테고리 기준 탭 설정 반환 (탭 이동과 무관하게 재생 중인 곡 설정 유지)
+  const getEffectiveTabConfig = (track = currentTrackRef.current) => {
+    const configs = tabConfigsRef.current || DEFAULT_TAB_CONFIGS;
+    const trackCat = String(
+      track?.contest_category_kr || track?.category || track?.folder || ""
+    ).trim();
+
+    if (trackCat && configs[trackCat]) {
+      return configs[trackCat];
+    }
+    if (track && isCustomTrack(track)) {
+      const matchedCustom = CUSTOM_CATEGORIES.find((c) =>
+        isMatchingCustomTab(track, c.name)
+      );
+      if (matchedCustom && configs[matchedCustom.name]) {
+        return configs[matchedCustom.name];
+      }
+    }
+    if (trackCat) {
+      return configs.DEFAULT_CONTEST || { fadeDuration: 2.0, autoNext: true };
+    }
+    return (
+      configs[selectedCategoryTabRef.current] ||
+      configs.DEFAULT_CONTEST ||
+      { fadeDuration: 2.0, autoNext: true }
+    );
+  };
+
+  // 의전/시상/개회식 등 무대 변경 시 자동 중단하면 안 되는 특별 이벤트 음원 판별
+  const isProtectedCeremonyTrack = (track) => {
+    if (!track) return false;
+    if (isNationalCeremonyTrack(track)) return true;
+    const cat = String(
+      track.contest_category_kr || track.category || track.folder || ""
+    ).trim();
+    const title = String(track.title || track.name || "").trim();
+    const ceremonyPattern =
+      /(국민의례|애국가|묵념|의전|시상식|시상|내빈소개|내빈|귀빈|오프닝|opening|개회식|개회|폐회식|폐회|쉬는시간|휴식|인터미션|intermission|특별|이벤트|축하|찬조)/i;
+    if (ceremonyPattern.test(cat) || ceremonyPattern.test(title)) return true;
+    if (isCustomTrack(track) && !/(대기|wait)/i.test(cat)) return true;
+    return false;
+  };
 
   useEffect(() => {
     playedTrackIdsRef.current = playedTrackIds;
@@ -213,8 +291,15 @@ export const VibeFlowAudioCenter = () => {
     }
 
     return () => {
+      playRequestIdRef.current += 1;
+      deckRequestIdRef.current = { A: 0, B: 0 };
+      isPlayingRef.current = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (volumeRampRef.current) cancelAnimationFrame(volumeRampRef.current);
+      if (stageAutoPlayTimeoutRef.current) {
+        clearTimeout(stageAutoPlayTimeoutRef.current);
+        stageAutoPlayTimeoutRef.current = null;
+      }
       stopAllFades();
       if (deckARef.current) {
         deckARef.current.pause();
@@ -335,11 +420,18 @@ export const VibeFlowAudioCenter = () => {
         if (!isNaN(curTime)) setCurrentTime(curTime);
         if (!isNaN(dur) && dur > 0) setTrackDuration(dur);
 
-        // 🎧 [연속 재생 모드] 곡 재생 시작 10초 후 비어있는 대기 데크에 다음 곡 자동 프리로드(Pre-Cue)
-        const autoNextEnabled = currentTabConfig.autoNext;
-        if (autoNextEnabled && curTime >= 10.0 && !isPreCuedRef.current) {
+        // 🎧 [연속 재생 모드] 현재 재생 중인 트랙의 카테고리 기준 autoNext 설정을 조회하여 대기 데크 프리로드(Pre-Cue)
+        const autoNextEnabled = getEffectiveTabConfig(currentTrackRef.current).autoNext;
+        const remaining = dur > 0 ? dur - curTime : Infinity;
+        if (
+          autoNextEnabled &&
+          (curTime >= 10.0 || (dur > 0 && remaining <= 10.0)) &&
+          !isPreCuedRef.current
+        ) {
           const nextInfo = getNextSeedTrackRef.current
-            ? getNextSeedTrackRef.current(playedTrackIdsRef.current)
+            ? getNextSeedTrackRef.current(playedTrackIdsRef.current, {
+                isStageTransition: false,
+              })
             : null;
 
           if (nextInfo && nextInfo.track) {
@@ -597,17 +689,23 @@ export const VibeFlowAudioCenter = () => {
   const handleDeleteCustomMusic = async (track) => {
     if (!track || !track.id) return;
     try {
-      if (isTrackEqual(currentTrack, track)) {
-        if (activeDeckRef.current === "A" && deckARef.current) {
+      if (isTrackEqual(currentTrackRef.current, track)) {
+        playRequestIdRef.current += 1;
+        deckRequestIdRef.current = { A: 0, B: 0 };
+        stopAllFades();
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setCurrentTrack(null);
+        currentTrackRef.current = null;
+        stopTracking();
+        if (deckARef.current) {
           deckARef.current.pause();
           deckARef.current.src = "";
-        } else if (activeDeckRef.current === "B" && deckBRef.current) {
+        }
+        if (deckBRef.current) {
           deckBRef.current.pause();
           deckBRef.current.src = "";
         }
-        setIsPlaying(false);
-        setCurrentTrack(null);
-        stopTracking();
       }
 
       if (track.storagePath) {
@@ -718,7 +816,7 @@ export const VibeFlowAudioCenter = () => {
 
   // 📡 nowPlaying 원격 브로드캐스트
   const updateRemoteNowPlaying = (track, status) => {
-    if (!isRemoteSync) return;
+    if (!isRemoteSyncRef.current || !track) return;
     const timestamp = Date.now();
     setLastProcessedSelectedAt(timestamp);
 
@@ -736,13 +834,12 @@ export const VibeFlowAudioCenter = () => {
   };
 
   // 🎚️ 탭 설정 기반 페이드 지속 시간 (ms 반환)
-  const getFadeDuration = (targetTrack, currentTrk = currentTrack) => {
-    const trackTab = targetTrack?.contest_category_kr || targetTrack?.category || targetTrack?.folder || selectedCategoryTab;
-    const config = tabConfigs[trackTab] || tabConfigs[selectedCategoryTab] || tabConfigs.DEFAULT_CONTEST || { fadeDuration: 2.0 };
+  const getFadeDuration = (targetTrack, currentTrk = currentTrackRef.current) => {
+    const config = getEffectiveTabConfig(targetTrack || currentTrk);
     return Math.round((config.fadeDuration || 0) * 1000);
   };
 
-  // 🎛️ 듀얼 데크 지능형 크로스페이드 (탭별 설정된 페이드 시간 적용)
+  // 🎛️ 듀얼 데크 지능형 크로스페이드 (탭별 설정된 페이드 시간 적용 + Promise 경쟁/타이머 누수 방지)
   const crossfadeToTrack = (track, customDuration) => {
     const playableUrl = getTrackAudioUrl(track);
     if (!track || !playableUrl) {
@@ -750,24 +847,29 @@ export const VibeFlowAudioCenter = () => {
       return;
     }
 
-    const isCurrentCustom = isCustomTrack(currentTrack);
+    const prevTrack = currentTrackRef.current;
+    const isCurrentCustom = isCustomTrack(prevTrack);
     const isTargetCustom = isCustomTrack(track);
-    const isModeSwitching = !currentTrack || isCurrentCustom !== isTargetCustom;
+    const isModeSwitching = !prevTrack || isCurrentCustom !== isTargetCustom;
 
     const crossfadeDuration =
       customDuration !== undefined
         ? customDuration
-        : getFadeDuration(track, currentTrack);
+        : getFadeDuration(track, prevTrack);
 
     if (!deckARef.current) deckARef.current = new Audio();
     if (!deckBRef.current) deckBRef.current = new Audio();
 
+    const requestId = ++playRequestIdRef.current;
     stopAllFades();
 
     const targetVol = masterVolumeRef.current;
 
     // 🌟 [원칙 1: 대회 음원 ⇄ 자체 음원 영역 전환 시 무조건 Deck A 전담 리셋]
     if (isModeSwitching) {
+      deckRequestIdRef.current.A = requestId;
+      deckRequestIdRef.current.B = 0;
+
       if (deckBRef.current) {
         try {
           deckBRef.current.pause();
@@ -798,19 +900,31 @@ export const VibeFlowAudioCenter = () => {
       deckA.volume = crossfadeDuration <= 0 ? targetVol : 0;
 
       setCurrentTrack(track);
+      currentTrackRef.current = track;
 
       deckA
         .play()
         .then(() => {
+          if (requestId !== playRequestIdRef.current) {
+            if (deckRequestIdRef.current.A !== playRequestIdRef.current || !isPlayingRef.current) {
+              try {
+                deckA.pause();
+                deckA.volume = 0;
+              } catch (e) {}
+            }
+            return;
+          }
+
           setIsPlaying(true);
           isPlayingRef.current = true;
           updateRemoteNowPlaying(track, "play");
           startTracking();
 
           if (crossfadeDuration <= 0) {
-            deckA.volume = targetVol;
+            const latestVol = masterVolumeRef.current;
+            deckA.volume = latestVol;
             if (deckBRef.current) deckBRef.current.volume = 0;
-            setDeckAVolume(Math.round(targetVol * 100));
+            setDeckAVolume(Math.round(latestVol * 100));
             setDeckBVolume(0);
             return;
           }
@@ -821,19 +935,23 @@ export const VibeFlowAudioCenter = () => {
           isCrossfadingRef.current = true;
 
           const finalizeFadeIn = () => {
+            if (requestId !== playRequestIdRef.current) return;
             stopAllFades();
-            if (deckA) deckA.volume = targetVol;
+            const latestVol = masterVolumeRef.current;
+            if (deckA) deckA.volume = latestVol;
             if (deckBRef.current) deckBRef.current.volume = 0;
-            setDeckAVolume(Math.round(targetVol * 100));
+            setDeckAVolume(Math.round(latestVol * 100));
             setDeckBVolume(0);
           };
 
           const step = (now) => {
+            if (requestId !== playRequestIdRef.current) return;
             const elapsed = now - startTime;
             const progress = Math.min(elapsed / fadeInDuration, 1);
-            const inVol = targetVol * (progress < 1 ? Math.sin((progress * Math.PI) / 2) : 1);
+            const latestVol = masterVolumeRef.current;
+            const inVol = latestVol * (progress < 1 ? Math.sin((progress * Math.PI) / 2) : 1);
 
-            if (deckA) deckA.volume = Math.max(0, Math.min(targetVol, inVol));
+            if (deckA) deckA.volume = Math.max(0, Math.min(latestVol, inVol));
             if (deckBRef.current) deckBRef.current.volume = 0;
 
             setDeckAVolume(Math.round((deckA?.volume || 0) * 100));
@@ -847,9 +965,10 @@ export const VibeFlowAudioCenter = () => {
           };
 
           fadeAnimationRef.current = requestAnimationFrame(step);
-          setTimeout(finalizeFadeIn, fadeInDuration + 80);
+          registerFadeTimeout(finalizeFadeIn, fadeInDuration + 80);
         })
         .catch((err) => {
+          if (requestId !== playRequestIdRef.current) return;
           if (err.name === "AbortError") return;
           console.warn("[Mode Switch Play Error]:", err);
           message.warning("음원 재생 실패: " + err.message);
@@ -867,6 +986,18 @@ export const VibeFlowAudioCenter = () => {
 
     const isCurrentlyActive = currentAudio && !currentAudio.paused && isPlayingRef.current;
 
+    deckRequestIdRef.current[nextDeckName] = requestId;
+    if (!isCurrentlyActive) {
+      deckRequestIdRef.current[currentDeckName] = 0;
+    }
+
+    // 이전 미완료 전환에서 nextAudio가 아직 재생 중이었다면 즉시 안전 정지 후 새 소스 로드
+    if (nextAudio && !nextAudio.paused) {
+      try {
+        nextAudio.pause();
+      } catch (e) {}
+    }
+
     if (nextAudio.src !== playableUrl) {
       nextAudio.src = playableUrl;
       nextAudio.preload = "auto";
@@ -878,11 +1009,23 @@ export const VibeFlowAudioCenter = () => {
     nextAudio
       .play()
       .then(() => {
+        if (requestId !== playRequestIdRef.current) {
+          if (deckRequestIdRef.current[nextDeckName] !== playRequestIdRef.current || !isPlayingRef.current) {
+            try {
+              nextAudio.pause();
+              nextAudio.volume = 0;
+            } catch (e) {}
+          }
+          return;
+        }
+
         setIsPlaying(true);
         isPlayingRef.current = true;
         setActiveDeck(nextDeckName);
         activeDeckRef.current = nextDeckName;
+        deckRequestIdRef.current[currentDeckName] = 0;
         setCurrentTrack(track);
+        currentTrackRef.current = track;
         setPreCuedTrack(null);
         isPreCuedRef.current = false;
         preCuedTrackRef.current = null;
@@ -896,8 +1039,9 @@ export const VibeFlowAudioCenter = () => {
           isCrossfadingRef.current = true;
 
           const finalizeCrossfade = () => {
+            if (requestId !== playRequestIdRef.current) return;
             stopAllFades();
-            if (currentAudio) {
+            if (currentAudio && activeDeckRef.current !== currentDeckName) {
               try {
                 currentAudio.pause();
                 currentAudio.currentTime = 0;
@@ -912,13 +1056,15 @@ export const VibeFlowAudioCenter = () => {
           };
 
           const step = (now) => {
+            if (requestId !== playRequestIdRef.current) return;
             const elapsed = now - startTime;
             const progress = Math.min(elapsed / crossfadeDuration, 1);
-            
-            const inVol = targetVol * (progress < 1 ? Math.sin((progress * Math.PI) / 2) : 1);
+            const latestVol = masterVolumeRef.current;
+
+            const inVol = latestVol * (progress < 1 ? Math.sin((progress * Math.PI) / 2) : 1);
             const outVol = startOutVol * Math.cos((progress * Math.PI) / 2);
 
-            if (nextAudio) nextAudio.volume = Math.max(0, Math.min(targetVol, inVol));
+            if (nextAudio) nextAudio.volume = Math.max(0, Math.min(latestVol, inVol));
             if (currentAudio && !currentAudio.paused) {
               currentAudio.volume = Math.max(0, Math.min(startOutVol, outVol));
             }
@@ -934,7 +1080,7 @@ export const VibeFlowAudioCenter = () => {
           };
 
           fadeAnimationRef.current = requestAnimationFrame(step);
-          setTimeout(finalizeCrossfade, crossfadeDuration + 80);
+          registerFadeTimeout(finalizeCrossfade, crossfadeDuration + 80);
         } else {
           if (currentAudio) {
             try {
@@ -943,12 +1089,13 @@ export const VibeFlowAudioCenter = () => {
               currentAudio.volume = 0;
             } catch (e) {}
           }
-          if (nextAudio) nextAudio.volume = targetVol;
+          if (nextAudio) nextAudio.volume = masterVolumeRef.current;
           setDeckAVolume(Math.round((deckARef.current?.volume || 0) * 100));
           setDeckBVolume(Math.round((deckBRef.current?.volume || 0) * 100));
         }
       })
       .catch((err) => {
+        if (requestId !== playRequestIdRef.current) return;
         if (err.name === "AbortError") return;
         console.warn("[Dual-Deck Crossfade Error]:", err);
         message.warning("음원 재생 실패: " + err.message);
@@ -963,13 +1110,17 @@ export const VibeFlowAudioCenter = () => {
       return;
     }
 
-    const isSameTrack = isTrackEqual(currentTrack, track);
-    const curAudio = activeDeckRef.current === "A" ? deckARef.current : deckBRef.current;
-    const otherAudio = activeDeckRef.current === "A" ? deckBRef.current : deckARef.current;
+    const isSameTrack = isTrackEqual(currentTrackRef.current, track);
+    const curDeckName = activeDeckRef.current;
+    const curAudio = curDeckName === "A" ? deckARef.current : deckBRef.current;
+    const otherAudio = curDeckName === "A" ? deckBRef.current : deckARef.current;
 
     // 🛑 동일 트랙 토글: 일시정지 (2초 안전 감쇄 후 완전정지) ⇄ 다시재생 (2초 안전 페이드인)
     if (isSameTrack && curAudio) {
-      if (isPlaying) {
+      if (isPlayingRef.current) {
+        const requestId = ++playRequestIdRef.current;
+        deckRequestIdRef.current = { A: 0, B: 0 };
+
         // 🔒 [일시정지] 1단계: 즉시 상태 잠금 및 모든 백그라운드 프리로드/타이머 차단
         setIsPlaying(false);
         isPlayingRef.current = false;
@@ -995,6 +1146,7 @@ export const VibeFlowAudioCenter = () => {
         isFadingRef.current = true;
 
         const finalizePause = () => {
+          if (requestId !== playRequestIdRef.current) return;
           stopAllFades();
           if (curAudio) {
             try {
@@ -1007,7 +1159,13 @@ export const VibeFlowAudioCenter = () => {
           setDeckBVolume(activeDeckRef.current === "B" ? Math.round(masterVolumeRef.current * 100) : 0);
         };
 
+        if (curAudio.paused) {
+          finalizePause();
+          return;
+        }
+
         const fadeOutStep = (now) => {
+          if (requestId !== playRequestIdRef.current) return;
           const elapsed = now - startTime;
           const progress = Math.min(elapsed / fadeOutDuration, 1);
           const newVol = startVol * Math.cos((progress * Math.PI) / 2);
@@ -1027,8 +1185,13 @@ export const VibeFlowAudioCenter = () => {
         };
 
         fadeAnimationRef.current = requestAnimationFrame(fadeOutStep);
+        registerFadeTimeout(finalizePause, fadeOutDuration + 80);
         return;
       } else {
+        const requestId = ++playRequestIdRef.current;
+        deckRequestIdRef.current[curDeckName] = requestId;
+        deckRequestIdRef.current[curDeckName === "A" ? "B" : "A"] = 0;
+
         // 🔊 [다시재생] 1단계: 모든 잔여 페이드 정리 & 대기 데크 정지
         stopAllFades();
         if (otherAudio) {
@@ -1044,30 +1207,43 @@ export const VibeFlowAudioCenter = () => {
         curAudio
           .play()
           .then(() => {
+            if (requestId !== playRequestIdRef.current) {
+              if (deckRequestIdRef.current[curDeckName] !== playRequestIdRef.current || !isPlayingRef.current) {
+                try {
+                  curAudio.pause();
+                  curAudio.volume = 0;
+                } catch (e) {}
+              }
+              return;
+            }
+
             setIsPlaying(true);
             isPlayingRef.current = true;
             startTracking();
             updateRemoteNowPlaying(track, "play");
 
-            const targetVol = masterVolumeRef.current;
             const startTime = performance.now();
             const fadeInDuration = 2000; // 2.0초 고정
             isFadingRef.current = true;
 
             const finalizeResume = () => {
+              if (requestId !== playRequestIdRef.current) return;
               stopAllFades();
-              if (curAudio) curAudio.volume = targetVol;
-              setDeckAVolume(activeDeckRef.current === "A" ? Math.round(targetVol * 100) : 0);
-              setDeckBVolume(activeDeckRef.current === "B" ? Math.round(targetVol * 100) : 0);
+              const latestVol = masterVolumeRef.current;
+              if (curAudio) curAudio.volume = latestVol;
+              setDeckAVolume(activeDeckRef.current === "A" ? Math.round(latestVol * 100) : 0);
+              setDeckBVolume(activeDeckRef.current === "B" ? Math.round(latestVol * 100) : 0);
             };
 
             const fadeInStep = (now) => {
+              if (requestId !== playRequestIdRef.current) return;
               const elapsed = now - startTime;
               const progress = Math.min(elapsed / fadeInDuration, 1);
-              const newVol = targetVol * Math.sin((progress * Math.PI) / 2);
+              const latestVol = masterVolumeRef.current;
+              const newVol = latestVol * Math.sin((progress * Math.PI) / 2);
 
               if (curAudio) {
-                curAudio.volume = Math.max(0, Math.min(targetVol, newVol));
+                curAudio.volume = Math.max(0, Math.min(latestVol, newVol));
               }
 
               setDeckAVolume(activeDeckRef.current === "A" ? Math.round((curAudio?.volume || 0) * 100) : 0);
@@ -1081,8 +1257,10 @@ export const VibeFlowAudioCenter = () => {
             };
 
             fadeAnimationRef.current = requestAnimationFrame(fadeInStep);
+            registerFadeTimeout(finalizeResume, fadeInDuration + 80);
           })
           .catch((err) => {
+            if (requestId !== playRequestIdRef.current) return;
             if (err.name === "AbortError") return;
             message.error("음원 재생 실패: " + err.message);
           });
@@ -1123,6 +1301,7 @@ export const VibeFlowAudioCenter = () => {
   const allAvailableTracks = useMemo(() => {
     return [...tracks, ...customTracks];
   }, [tracks, customTracks]);
+  allAvailableTracksRef.current = allAvailableTracks;
 
   // 📂 카테고리 탭 목록 생성 (공식 대표 종목 + 현재 대회 종목 + 로드된 트랙 + 특별 연출 통합)
   const categoryTabs = useMemo(() => {
@@ -1205,6 +1384,7 @@ export const VibeFlowAudioCenter = () => {
     );
     return partial ? partial.name : null;
   }, [categoryTabs, currentStageCategory, currentStageGender]);
+  matchedVibeCategoryRef.current = matchedVibeCategory;
 
   // 🎯 현재 무대 탭 자동 전환 필터
   const handleFilterCurrentStage = () => {
@@ -1315,6 +1495,7 @@ export const VibeFlowAudioCenter = () => {
 
     return list;
   }, [categoryBaseTracks, selectedDivision, searchText, allAvailableTracks]);
+  filteredTracksRef.current = filteredTracks;
 
   // ⏪ 이전 곡 재생
   const handlePrevTrack = () => {
@@ -1419,6 +1600,7 @@ export const VibeFlowAudioCenter = () => {
       return true;
     });
   }, [tracks, currentStageCategory, currentStageGrade, currentStageGender]);
+  seed1PoolRef.current = seed1Pool;
 
   // 🌿 [시드 2] 2순위 확장 매칭 풀
   const seed2Pool = useMemo(() => {
@@ -1431,19 +1613,46 @@ export const VibeFlowAudioCenter = () => {
       return key ? !seed1Ids.has(key) : true;
     });
   }, [tracks, currentStageCategory, currentStageGender, seed1Pool]);
+  seed2PoolRef.current = seed2Pool;
 
-  // 🎲 다음 시드 음원 추출 알고리즘
-  const getNextSeedTrack = (currentPlayed = playedTrackIds) => {
-    const isViewingCustomTab = CUSTOM_CATEGORIES.some((c) => c.name === selectedCategoryTab);
+  // 🎲 다음 시드 음원 추출 알고리즘 (재생 중인 트랙 카테고리 우선 유지 + 최신 Ref 기반)
+  const getNextSeedTrack = (
+    currentPlayed = playedTrackIdsRef.current,
+    options = {}
+  ) => {
+    const { isStageTransition = false } = options;
+    const activeTrack = isStageTransition ? null : currentTrackRef.current;
+    const playingCategory = String(
+      activeTrack?.contest_category_kr ||
+        activeTrack?.category ||
+        activeTrack?.folder ||
+        ""
+    ).trim();
+    const effectiveCategory = playingCategory || selectedCategoryTabRef.current;
 
-    if (isViewingCustomTab) {
+    const customPool = customTracksRef.current;
+    const standardPool = tracksRef.current;
+    const s1Pool = seed1PoolRef.current;
+    const s2Pool = seed2PoolRef.current;
+
+    // 1. 자체 커스텀 음원 재생 중이거나(비-무대전환), 무재생 상태에서 커스텀 탭 선택 중인 경우
+    const isPlayingCustom = !isStageTransition && activeTrack && isCustomTrack(activeTrack);
+    const isIdleOnCustomTab =
+      !isStageTransition &&
+      !activeTrack &&
+      CUSTOM_CATEGORIES.some((c) => c.name === effectiveCategory);
+
+    if (isPlayingCustom || isIdleOnCustomTab) {
+      const matchedCustomCat = activeTrack
+        ? CUSTOM_CATEGORIES.find((c) => isMatchingCustomTab(activeTrack, c.name))?.name
+        : null;
       const targetFolder = (
-        selectedCategoryTab ||
-        currentTrack?.contest_category_kr ||
+        matchedCustomCat ||
+        effectiveCategory ||
         "시상식때의 음악"
       ).trim();
 
-      const folderTracks = customTracks.filter((t) =>
+      const folderTracks = customPool.filter((t) =>
         isMatchingCustomTab(t, targetFolder)
       );
 
@@ -1463,7 +1672,7 @@ export const VibeFlowAudioCenter = () => {
         }
 
         const otherTracks = folderTracks.filter(
-          (t) => getTrackKey(t) !== getTrackKey(currentTrack)
+          (t) => getTrackKey(t) !== getTrackKey(activeTrack)
         );
         const pool = otherTracks.length > 0 ? otherTracks : folderTracks;
         const randomIndex = Math.floor(Math.random() * pool.length);
@@ -1477,8 +1686,43 @@ export const VibeFlowAudioCenter = () => {
       }
     }
 
-    if (seed1Pool.length > 0) {
-      const unplayedSeed1 = seed1Pool.filter(
+    // 2. 현재 재생 중인 경기 음원의 카테고리가 현재 무대 종목과 다를 경우, 재생 중인 카테고리 풀에서 우선 선곡
+    if (
+      !isStageTransition &&
+      activeTrack &&
+      playingCategory &&
+      (!currentStageCategory ||
+        !isCategoryMatched(playingCategory, currentStageCategory, currentStageGender))
+    ) {
+      const playingCategoryTracks = standardPool.filter((t) => {
+        const cat = (t.contest_category_kr || t.category || t.folder || "").trim();
+        return (
+          isCategoryMatched(cat, playingCategory) ||
+          cat === playingCategory ||
+          (cat && (cat.includes(playingCategory) || playingCategory.includes(cat)))
+        );
+      });
+
+      if (playingCategoryTracks.length > 0) {
+        const unplayed = playingCategoryTracks.filter(
+          (t) => !currentPlayed.includes(getTrackKey(t))
+        );
+        if (unplayed.length > 0) {
+          const randomIndex = Math.floor(Math.random() * unplayed.length);
+          return { track: unplayed[randomIndex], seedLevel: 2, isExhausted: false };
+        }
+        const otherTracks = playingCategoryTracks.filter(
+          (t) => getTrackKey(t) !== getTrackKey(activeTrack)
+        );
+        const pool = otherTracks.length > 0 ? otherTracks : playingCategoryTracks;
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        return { track: pool[randomIndex], seedLevel: 2, isReset: true };
+      }
+    }
+
+    // 3. 시드 1 & 시드 2 정밀 매칭 풀
+    if (s1Pool.length > 0) {
+      const unplayedSeed1 = s1Pool.filter(
         (t) => !currentPlayed.includes(getTrackKey(t))
       );
       if (unplayedSeed1.length > 0) {
@@ -1487,8 +1731,8 @@ export const VibeFlowAudioCenter = () => {
       }
     }
 
-    if (seed2Pool.length > 0) {
-      const unplayedSeed2 = seed2Pool.filter(
+    if (s2Pool.length > 0) {
+      const unplayedSeed2 = s2Pool.filter(
         (t) => !currentPlayed.includes(getTrackKey(t))
       );
       if (unplayedSeed2.length > 0) {
@@ -1497,23 +1741,55 @@ export const VibeFlowAudioCenter = () => {
       }
     }
 
-    if (seed1Pool.length > 0) {
-      const randomIndex = Math.floor(Math.random() * seed1Pool.length);
-      return { track: seed1Pool[randomIndex], seedLevel: 1, isReset: true };
-    } else if (seed2Pool.length > 0) {
-      const randomIndex = Math.floor(Math.random() * seed2Pool.length);
-      return { track: seed2Pool[randomIndex], seedLevel: 2, isReset: true };
+    if (s1Pool.length > 0) {
+      const otherS1 = activeTrack
+        ? s1Pool.filter((t) => getTrackKey(t) !== getTrackKey(activeTrack))
+        : s1Pool;
+      const pool = otherS1.length > 0 ? otherS1 : s1Pool;
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      return { track: pool[randomIndex], seedLevel: 1, isReset: true };
+    } else if (s2Pool.length > 0) {
+      const otherS2 = activeTrack
+        ? s2Pool.filter((t) => getTrackKey(t) !== getTrackKey(activeTrack))
+        : s2Pool;
+      const pool = otherS2.length > 0 ? otherS2 : s2Pool;
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      return { track: pool[randomIndex], seedLevel: 2, isReset: true };
     }
 
-    const activeTabList = filteredTracks.length > 0 ? filteredTracks : tracks;
+    // 4. 시드 3 폴백 (현재 재생 중인 트랙 카테고리 우선 → 필터링 목록 → 전체 트랙)
+    let activeTabList = [];
+    if (!isStageTransition && playingCategory) {
+      activeTabList = standardPool.filter((t) => {
+        const cat = (t.contest_category_kr || t.category || t.folder || "").trim();
+        return (
+          isCategoryMatched(cat, playingCategory) ||
+          cat === playingCategory ||
+          (cat && (cat.includes(playingCategory) || playingCategory.includes(cat)))
+        );
+      });
+    }
+    if (activeTabList.length === 0) {
+      activeTabList =
+        filteredTracksRef.current.length > 0
+          ? filteredTracksRef.current
+          : standardPool;
+    }
+
     if (activeTabList.length > 0) {
-      const unplayed = activeTabList.filter((t) => !currentPlayed.includes(getTrackKey(t)));
+      const unplayed = activeTabList.filter(
+        (t) => !currentPlayed.includes(getTrackKey(t))
+      );
       if (unplayed.length > 0) {
         const randomIndex = Math.floor(Math.random() * unplayed.length);
-        return { track: activeTabList[randomIndex], seedLevel: 3, isFallback: true };
+        return { track: unplayed[randomIndex], seedLevel: 3, isFallback: true };
       }
-      const randomIndex = Math.floor(Math.random() * activeTabList.length);
-      return { track: activeTabList[randomIndex], seedLevel: 3, isReset: true };
+      const otherPool = activeTrack
+        ? activeTabList.filter((t) => getTrackKey(t) !== getTrackKey(activeTrack))
+        : activeTabList;
+      const fallbackPool = otherPool.length > 0 ? otherPool : activeTabList;
+      const randomIndex = Math.floor(Math.random() * fallbackPool.length);
+      return { track: fallbackPool[randomIndex], seedLevel: 3, isReset: true };
     }
 
     return { track: null, seedLevel: null };
@@ -1521,12 +1797,15 @@ export const VibeFlowAudioCenter = () => {
 
   // 🎵 다음 시드 음원 재생 트리거
   const playNextSeedTrack = (isStageTransition = false, silent = false, customDuration) => {
+    const latestPlayed = playedTrackIdsRef.current;
     let nextTrackInfo = null;
     if (!isStageTransition && preCuedTrackRef.current && preCuedTrackRef.current.track) {
       nextTrackInfo = preCuedTrackRef.current;
       preCuedTrackRef.current = null;
     } else {
-      nextTrackInfo = getNextSeedTrack(isStageTransition ? [] : playedTrackIds);
+      nextTrackInfo = getNextSeedTrack(isStageTransition ? [] : latestPlayed, {
+        isStageTransition,
+      });
     }
 
     const { track, seedLevel, isReset } = nextTrackInfo || {};
@@ -1539,15 +1818,16 @@ export const VibeFlowAudioCenter = () => {
     const trackKey = getTrackKey(track);
     const nextPlayed = isStageTransition || isReset
       ? (trackKey ? [trackKey] : [])
-      : (trackKey ? [...playedTrackIds, trackKey] : playedTrackIds);
+      : (trackKey ? [...latestPlayed, trackKey] : latestPlayed);
 
+    playedTrackIdsRef.current = nextPlayed;
     setPlayedTrackIds(nextPlayed);
     setActiveSeedLevel(seedLevel);
 
     const effectiveDuration =
       customDuration !== undefined
         ? customDuration
-        : getFadeDuration(track, currentTrack);
+        : getFadeDuration(track, currentTrackRef.current);
 
     crossfadeToTrack(track, effectiveDuration);
   };
@@ -1556,56 +1836,83 @@ export const VibeFlowAudioCenter = () => {
   playNextSeedTrackRef.current = playNextSeedTrack;
 
   // 🔄 [무대/종목 변경 감지 시] 스마트 오토파일럿 단일 트리거 엔진
-  const lastTriggeredStageKeyRef = useRef("");
+  // 오직 실제 무대 식별자(stageId / categoryTitle + gradeTitle)가 변경되었을 때만 반응하며,
+  // 의전/시상/개회식 등 특별 연출 음원 재생 중에는 절대 자동 중단하거나 탭을 강제 이동하지 않음
+  const prevStageKeyRef = useRef("");
   const isInitialStageLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (!currentStageCategory || tracks.length === 0) return;
+    if (!currentStageCategory) return;
 
+    const stageIdPart = realtimeStage?.stageId || "";
     const stageNumber = realtimeStage?.stageNumber || realtimeStage?.contestStageNumber || 0;
-    const stageKey = `${realtimeStage?.categoryId || ""}_${realtimeStage?.gradeId || ""}_${stageNumber}_${currentStageCategory}_${currentStageGrade}`;
-
-    const targetCat = matchedVibeCategory || "CURRENT_STAGE";
-    setSelectedCategoryTab(targetCat);
-    setSelectedDivision("ALL");
+    const stageKey = `${stageIdPart}_${realtimeStage?.categoryId || ""}_${realtimeStage?.gradeId || ""}_${stageNumber}_${currentStageCategory}_${currentStageGrade}`;
 
     if (!isInitialStageLoadedRef.current) {
       isInitialStageLoadedRef.current = true;
-      lastTriggeredStageKeyRef.current = stageKey;
+      prevStageKeyRef.current = stageKey;
+      if (!isPlayingRef.current) {
+        const initialTargetCat = matchedVibeCategoryRef.current || "CURRENT_STAGE";
+        setSelectedCategoryTab(initialTargetCat);
+        setSelectedDivision("ALL");
+      }
       return;
     }
 
-    if (stageKey === lastTriggeredStageKeyRef.current) return;
-    lastTriggeredStageKeyRef.current = stageKey;
+    // 무대 식별자가 실제로 바뀌지 않았다면 탭 스냅 및 자동 재생 절대 금지
+    if (stageKey === prevStageKeyRef.current) return;
+    prevStageKeyRef.current = stageKey;
 
+    // 국민의례/시상식/내빈소개/오프닝/개회식 등 특별 연출 음원이 재생 중이면 음악 끊김 및 탭 전환 차단
+    if (isPlayingRef.current && isProtectedCeremonyTrack(currentTrackRef.current)) {
+      return;
+    }
+
+    const targetCat = matchedVibeCategoryRef.current || "CURRENT_STAGE";
+    setSelectedCategoryTab(targetCat);
+    setSelectedDivision("ALL");
+
+    playedTrackIdsRef.current = [];
     setPlayedTrackIds([]);
     isPreCuedRef.current = false;
     preCuedTrackRef.current = null;
     setPreCuedTrack(null);
-    if (isCustomTrack(currentTrack)) {
-      setCurrentTrack(null);
+
+    if (stageAutoPlayTimeoutRef.current) {
+      clearTimeout(stageAutoPlayTimeoutRef.current);
+      stageAutoPlayTimeoutRef.current = null;
     }
 
-    if (isAutoPlayOnStageChange) {
-      const timer = setTimeout(() => {
-        playNextSeedTrack(true);
+    if (isAutoPlayRef.current) {
+      stageAutoPlayTimeoutRef.current = setTimeout(() => {
+        stageAutoPlayTimeoutRef.current = null;
+        if (!isAutoPlayRef.current) return;
+        if (isPlayingRef.current && isProtectedCeremonyTrack(currentTrackRef.current)) {
+          return;
+        }
+        if (tracksRef.current.length > 0 && playNextSeedTrackRef.current) {
+          playNextSeedTrackRef.current(true, true);
+        }
       }, 50);
-      return () => clearTimeout(timer);
     }
+
+    return () => {
+      if (stageAutoPlayTimeoutRef.current) {
+        clearTimeout(stageAutoPlayTimeoutRef.current);
+        stageAutoPlayTimeoutRef.current = null;
+      }
+    };
   }, [
-    currentStageCategory,
-    currentStageGrade,
-    currentStageGender,
+    realtimeStage?.stageId,
     realtimeStage?.stageNumber,
     realtimeStage?.contestStageNumber,
     realtimeStage?.categoryId,
     realtimeStage?.gradeId,
-    tracks.length,
-    matchedVibeCategory,
-    isAutoPlayOnStageChange,
+    currentStageCategory,
+    currentStageGrade,
   ]);
 
-  // 🔁 [곡 완주 시 다음 곡 자동 트리거 리스너]
+  // 🔁 [곡 완주 시 다음 곡 자동 트리거 리스너 — 최신 Ref 참조로 스테일 클로저 완벽 차단]
   useEffect(() => {
     const a = deckARef.current;
     const b = deckBRef.current;
@@ -1617,13 +1924,16 @@ export const VibeFlowAudioCenter = () => {
       if (audio !== activeAudio) return;
       if (!isPlayingRef.current) return;
 
-      if (currentTabConfig.autoNext) {
-        playNextSeedTrack(false);
+      const activeCfg = getEffectiveTabConfig(currentTrackRef.current);
+      if (activeCfg.autoNext && playNextSeedTrackRef.current) {
+        playNextSeedTrackRef.current(false);
       } else {
+        playRequestIdRef.current += 1;
+        deckRequestIdRef.current = { A: 0, B: 0 };
         setIsPlaying(false);
         isPlayingRef.current = false;
         stopTracking();
-        updateRemoteNowPlaying(currentTrack, "stop");
+        updateRemoteNowPlaying(currentTrackRef.current, "stop");
       }
     };
 
@@ -1634,7 +1944,7 @@ export const VibeFlowAudioCenter = () => {
       if (a) a.removeEventListener("ended", handleEnded);
       if (b) b.removeEventListener("ended", handleEnded);
     };
-  }, [currentTabConfig, playedTrackIds, seed1Pool, seed2Pool, tracks, customTracks, currentTrack]);
+  }, []);
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen text-slate-800 space-y-6">

@@ -260,11 +260,23 @@ const StageBroadcastController = ({
     currentStage?.contestTitle ||
     "";
 
+  // 📡 대회별 슬롯(currentBroadcast/${contestId})과 전역 백업 슬롯(ACTIVE_STAGE) 동시 동기화 헬퍼
+  const syncBroadcastPayload = async (payload) => {
+    if (!contestId) return;
+    await Promise.all([
+      updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload),
+      updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", {
+        ...payload,
+        targetContestId: contestId,
+      }),
+    ]);
+  };
+
   // 테마 색상 변경 핸들러
   const handleSelectTheme = async (themeKey) => {
     if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         colorTheme: themeKey,
         contestTitle: realContestTitle,
         updatedAt: Date.now(),
@@ -281,7 +293,7 @@ const StageBroadcastController = ({
     if (!contestId) return;
     try {
       const nextState = !isAudioEnabled;
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         isAudioEnabled: nextState,
         updatedAt: Date.now(),
       });
@@ -311,7 +323,7 @@ const StageBroadcastController = ({
     lastBroadcastStageKeyRef.current = currentKey;
 
     // 🎯 종목이나 체급이 바뀌면 무조건 전광판을 [대기 및 종목/체급 안내 씬(STANDBY)]으로 즉각 강제 전환!
-    updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+    syncBroadcastPayload({
       mode: "STANDBY",
       contestTitle: realContestTitle,
       stageInfo: {
@@ -323,6 +335,7 @@ const StageBroadcastController = ({
       },
       activePlayer: null,
       specialScreenData: null,
+      videoCommand: null,
       calloutData: null,
       updatedAt: Date.now(),
     }).catch((err) => {
@@ -342,7 +355,7 @@ const StageBroadcastController = ({
   const handleSetStandby = async () => {
     if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "STANDBY",
         contestTitle: realContestTitle,
         stageInfo: {
@@ -354,6 +367,7 @@ const StageBroadcastController = ({
         },
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
       });
@@ -438,15 +452,12 @@ const StageBroadcastController = ({
           gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
         },
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
       };
 
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       message.success(`${latestPlayer.playerNumber}번 ${latestPlayer.playerName} 선수 전체화면 소개 송출!`);
     } catch (error) {
       console.error("선수 소개 송출 오류:", error);
@@ -471,7 +482,7 @@ const StageBroadcastController = ({
       }));
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "COMPARISON_CALLOUT",
         contestTitle: realContestTitle,
         stageInfo: {
@@ -487,6 +498,7 @@ const StageBroadcastController = ({
         },
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         updatedAt: Date.now(),
       });
       message.success(`전광판: [${calloutRound}] ${calloutList.length}명 비교심사 화면 송출!`);
@@ -500,7 +512,7 @@ const StageBroadcastController = ({
   const handleSendPosedown = async () => {
     if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "POSEDOWN",
         contestTitle: realContestTitle,
         stageInfo: {
@@ -512,6 +524,7 @@ const StageBroadcastController = ({
         },
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
       });
@@ -550,7 +563,7 @@ const StageBroadcastController = ({
     let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "COMMERCIAL",
         contestTitle: realContestTitle,
         stageInfo: {
@@ -562,6 +575,7 @@ const StageBroadcastController = ({
         rankingData: finalRanks,
         activePlayer: null,
         specialScreenData: null,
+        videoCommand: null,
         calloutData: null,
         updatedAt: Date.now(),
       });
@@ -650,6 +664,7 @@ const StageBroadcastController = ({
       rankingData: enrichedRanks,
       activePlayer: null,
       specialScreenData: null,
+      videoCommand: null,
       calloutData: null,
       updatedAt: Date.now(),
     };
@@ -660,12 +675,7 @@ const StageBroadcastController = ({
     });
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      // 전역 fallback 슬롯에도 동시 업데이트 (전광판 화면 contestId 불일치 자동 방어)
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       console.log("%c[CONTROLLER] ✅ [전체 순위 동시발표] Firebase 전송 완료!", "background:#10b981;color:black;font-weight:bold;font-size:14px;");
       message.success(`전광판: [${activeGradeTitle}] 순위 발표 화면 송출!`);
     } catch (error) {
@@ -724,16 +734,13 @@ const StageBroadcastController = ({
       rankingData: enrichedRanks,
       activePlayer: null,
       specialScreenData: null,
+      videoCommand: null,
       calloutData: null,
       updatedAt: Date.now(),
     };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       message.success(`전광판: [${activeGradeTitle}] 공식 시상식 (포디움) 화면 송출 시작!`);
     } catch (error) {
       console.error("공식 시상식 송출 오류:", error);
@@ -794,16 +801,13 @@ const StageBroadcastController = ({
       activePlayer: top1 || null,
       topPlayer: top1 || null,
       specialScreenData: null,
+      videoCommand: null,
       calloutData: null,
       updatedAt: Date.now(),
     };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       message.success(
         top1 ? `1위 [${top1.playerName}] (${activeGradeTitle}) 챔피언 단독 전체화면 송출!` : `[${activeGradeTitle}] 1위 챔피언 단독 송출!`
       );
@@ -864,16 +868,13 @@ const StageBroadcastController = ({
       rankingData: enrichedRanks,
       activePlayer: null,
       specialScreenData: null,
+      videoCommand: null,
       calloutData: null,
       updatedAt: Date.now(),
     };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       message.success("전광판: [2~10위 발표 ➜ 1위 단독 시상식] 송출 시작!");
     } catch (error) {
       console.error("순위발표 송출 오류:", error);
@@ -884,7 +885,7 @@ const StageBroadcastController = ({
   const handleSquareChampionSolo = async () => {
     if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "SQUARE_RANKING",
         rankingPhase: "CHAMPION_SOLO",
         updatedAt: Date.now(),
@@ -899,7 +900,7 @@ const StageBroadcastController = ({
   const handleSquareBackToFullRanking = async () => {
     if (!contestId) return;
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, {
+      await syncBroadcastPayload({
         mode: "SQUARE_RANKING",
         rankingPhase: "FULL_RANKING",
         updatedAt: Date.now(),
@@ -910,30 +911,35 @@ const StageBroadcastController = ({
     }
   };
 
-  // 8. 🎬 특별영상 전체화면 즉시 송출 핸들러
+  // 8. 🎬 특별영상 전체화면 즉시 송출 핸들러 (잔여 PAUSE/STOP 명령 즉시 초기화)
   const handleSendSpecialVideo = async (video) => {
     if (!contestId || !video) return;
+    const now = Date.now();
+    const shouldLoop = video.loop !== false;
+    const videoMeta = {
+      id: video.id,
+      title: video.title,
+      videoUrl: video.videoUrl,
+      loop: shouldLoop,
+    };
     const payload = {
       mode: "SPECIAL_VIDEO",
       contestTitle: realContestTitle,
-      specialVideoData: {
-        id: video.id,
-        title: video.title,
-        videoUrl: video.videoUrl,
-      },
+      specialVideo: videoMeta,
+      specialVideoData: videoMeta,
       specialVideoUrl: video.videoUrl,
       specialVideoTitle: video.title,
+      videoCommand: {
+        action: "PLAY",
+        timestamp: now,
+      },
       activePlayer: null,
       calloutData: null,
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
 
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}`, payload);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE`, {
-        ...payload,
-        targetContestId: contestId,
-      });
+      await syncBroadcastPayload(payload);
       message.success(`전광판: 특별영상 [${video.title}] 전체화면 즉시 송출!`);
     } catch (error) {
       console.error("특별영상 송출 오류:", error);
@@ -948,8 +954,10 @@ const StageBroadcastController = ({
       timestamp: Date.now(),
     };
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${contestId}/videoCommand`, cmd);
-      await updateBroadcast.updateData(`currentBroadcast/ACTIVE_STAGE/videoCommand`, cmd);
+      await Promise.all([
+        updateBroadcast.updateData(`currentBroadcast/${contestId}/videoCommand`, cmd),
+        updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE/videoCommand", cmd),
+      ]);
 
       if (action === "PLAY") message.success("특별영상: ▶️ 재생 시작");
       else if (action === "PAUSE") message.info("특별영상: ⏸️ 일시정지");
