@@ -19,7 +19,8 @@ export const AudioCategoryTabs = ({
   setSelectedDivision,
   searchText,
   setSearchText,
-  tracks,
+  tracks = [],
+  allAvailableTracks = [],
   currentStageCategory,
   currentStageGrade,
   currentStageGender,
@@ -31,11 +32,31 @@ export const AudioCategoryTabs = ({
   uploadProgress,
   handleUploadCustomMusic,
 }) => {
+  const totalCount = allAvailableTracks.length || tracks.length;
+
   return (
     <div className="space-y-3">
-      {/* 검색 및 필터 헤더 */}
+      {/* 검색 및 필터 헤더 (전체 음원 퀵 전환 바) */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
+          {/* 🎵 전체 음원 상시 보기 퀵 버튼 */}
+          <Button
+            size="small"
+            type={selectedCategoryTab === "ALL" && selectedDivision === "ALL" && !searchText ? "primary" : "default"}
+            onClick={() => {
+              setSelectedCategoryTab("ALL");
+              setSelectedDivision("ALL");
+              setSearchText("");
+            }}
+            className={`rounded-lg text-xs font-bold ${
+              selectedCategoryTab === "ALL" && selectedDivision === "ALL" && !searchText
+                ? "bg-slate-900 font-black text-white"
+                : "border-slate-300 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            🎵 전체 음원 목록 ({totalCount}곡)
+          </Button>
+
           {currentStageCategory && (
             <Button
               size="small"
@@ -57,6 +78,7 @@ export const AudioCategoryTabs = ({
               {currentStageGrade ? ` • ${currentStageGrade}` : ""}] 자동 매칭
             </Button>
           )}
+
           {(selectedCategoryTab !== "ALL" ||
             selectedDivision !== "ALL" ||
             searchText) && (
@@ -67,9 +89,9 @@ export const AudioCategoryTabs = ({
                 setSelectedDivision("ALL");
                 setSearchText("");
               }}
-              className="rounded-lg text-xs text-slate-500 hover:text-slate-700 border-slate-200"
+              className="rounded-lg text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200"
             >
-              필터 초기화
+              🔄 필터 해제 (전체 보기)
             </Button>
           )}
         </div>
@@ -84,8 +106,8 @@ export const AudioCategoryTabs = ({
               <TrophyOutlined className="text-indigo-600" />
               <span>1단계: 대회 공식 경기 종목 (VibeFlows)</span>
             </span>
-            <span className="text-[11px] text-slate-400 font-normal">
-              총 {tracks.length}곡 등록됨
+            <span className="text-[11px] text-slate-500 font-medium">
+              전체 음원 총 <strong className="text-indigo-600 font-mono">{totalCount}</strong>곡 보유
             </span>
           </div>
 

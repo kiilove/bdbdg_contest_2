@@ -3,9 +3,11 @@ import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { HiUserGroup } from "react-icons/hi";
+import { FaFileExcel } from "react-icons/fa";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
+import { exportContestResultsToExcel } from "../functions/functions";
 
 const PrintPlayerStanding = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -178,6 +180,44 @@ const PrintPlayerStanding = () => {
     return newResult;
   }, [currentCategoryId, currentGradeId, currentSection]);
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (resultArray.length === 0) {
+      alert("다운로드할 집계 데이터가 없습니다.");
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const contestTitle =
+        currentContest?.contestInfo?.contestTitle ||
+        currentContest?.contests?.contestTitle ||
+        "제2회 DMZ한반도평화통일기원보디빌딩대회";
+
+      const categoriesMap = {};
+      categoriesArray.forEach((c) => {
+        categoriesMap[c.contestCategoryId] = c;
+      });
+
+      const gradesMap = {};
+      gradesArray.forEach((g) => {
+        gradesMap[g.contestGradeId] = g;
+      });
+
+      await exportContestResultsToExcel(
+        contestTitle,
+        resultArray,
+        categoriesMap,
+        gradesMap
+      );
+    } catch (e) {
+      console.error(e);
+      alert("엑셀 다운로드 중 오류 발생: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const clearDeafult = () => {
     setCurrentCategoryId("all");
     setCurrentGradeId("all");
@@ -228,16 +268,26 @@ const PrintPlayerStanding = () => {
               onCancel={() => setMsgOpen(false)}
               onConfirm={() => setMsgOpen(false)}
             />
-            <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-              <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                <HiUserGroup />
-              </span>
-              <h1
-                className="font-sans text-lg font-semibold"
-                style={{ letterSpacing: "2px" }}
+            <div className="flex w-full bg-gray-100 justify-between items-center rounded-lg px-3">
+              <div className="flex items-center">
+                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
+                  <HiUserGroup />
+                </span>
+                <h1
+                  className="font-sans text-lg font-semibold"
+                  style={{ letterSpacing: "2px" }}
+                >
+                  순위표 출력
+                </h1>
+              </div>
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all text-white font-bold px-4 py-2 rounded-lg shadow-md cursor-pointer text-sm"
               >
-                순위표 출력
-              </h1>
+                <FaFileExcel className="w-4 h-4" />
+                <span>{isExporting ? "엑셀 생성중..." : "전체 최종순위표 엑셀 다운로드"}</span>
+              </button>
             </div>
           </div>{" "}
           <div
@@ -306,10 +356,9 @@ const PrintPlayerStanding = () => {
                       })}
                   </select>
                   {/* Print Button */}
-
                   <ReactToPrint
                     trigger={() => (
-                      <button className="w-28 h-10 bg-blue-300 rounded-lg">
+                      <button className="w-28 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium">
                         출력
                       </button>
                     )}
@@ -345,6 +394,14 @@ const PrintPlayerStanding = () => {
     }
                     `}
                   />
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={isExporting}
+                    className="flex items-center justify-center gap-1.5 px-4 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm transition-all"
+                  >
+                    <FaFileExcel className="w-4 h-4" />
+                    <span>{isExporting ? "생성중..." : "엑셀 다운로드"}</span>
+                  </button>
                 </div>
                 <div
                   className="flex w-full h-full p-5 flex-col gap-y-2"

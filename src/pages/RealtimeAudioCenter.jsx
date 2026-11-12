@@ -432,42 +432,34 @@ export default function RealtimeAudioCenter() {
             tooltipVisible={false}
           />
 
-          <Space
+          <div
             style={{
               marginTop: 8,
               width: "100%",
-              justifyContent: "space-between",
+              display: "grid",
+              gridTemplateColumns: "repeat(6, 1fr)",
+              gap: 4,
             }}
           >
-            <Button style={{ width: "30%" }} onClick={() => setQuickVolume(0)}>
-              0%
+            <Button size="small" onClick={() => setQuickVolume(0)}>
+              0
             </Button>
-            <Button
-              style={{ width: "30%" }}
-              onClick={() => setQuickVolume(0.1)}
-            >
-              10%
+            <Button size="small" onClick={() => setQuickVolume(0.1)}>
+              10
             </Button>
-            <Button
-              style={{ width: "30%" }}
-              onClick={() => setQuickVolume(0.2)}
-            >
-              20%
+            <Button size="small" type="dashed" onClick={() => setQuickVolume(0.2)}>
+              20
             </Button>
-            <Button
-              style={{ width: "30%" }}
-              onClick={() => setQuickVolume(0.3)}
-            >
-              30%
+            <Button size="small" onClick={() => setQuickVolume(0.5)}>
+              50
             </Button>
-            <Button
-              type="primary"
-              style={{ width: "30%" }}
-              onClick={() => setQuickVolume(1)}
-            >
-              100%
+            <Button size="small" onClick={() => setQuickVolume(0.8)}>
+              80
             </Button>
-          </Space>
+            <Button size="small" type="primary" onClick={() => setQuickVolume(1)}>
+              100
+            </Button>
+          </div>
         </div>
 
         {/* ✅ Playlist (현재 재생 목록) */}

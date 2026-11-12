@@ -18,23 +18,34 @@ import {
 } from "./constants";
 
 export const AudioTrackTable = ({
-  filteredTracks,
+  filteredTracks = [],
+  allAvailableTracks = [],
   isLoadingTracks,
   searchText,
   setSearchText,
   selectedCategoryTab,
+  setSelectedCategoryTab,
   selectedDivision,
   setSelectedDivision,
   currentTrack,
   isPlaying,
   handlePlayTrack,
   handleDeleteCustomMusic,
-  seed1Pool,
-  seed2Pool,
+  seed1Pool = [],
+  seed2Pool = [],
   token,
 }) => {
   const seed1Set = new Set(seed1Pool.map((t) => getTrackKey(t)).filter(Boolean));
   const seed2Set = new Set(seed2Pool.map((t) => getTrackKey(t)).filter(Boolean));
+
+  const totalAllCount = allAvailableTracks.length;
+  const isFiltered = selectedCategoryTab !== "ALL" || selectedDivision !== "ALL" || !!searchText;
+
+  const handleResetFilters = () => {
+    if (setSelectedCategoryTab) setSelectedCategoryTab("ALL");
+    if (setSelectedDivision) setSelectedDivision("ALL");
+    if (setSearchText) setSearchText("");
+  };
 
   const columns = [
     {
@@ -85,7 +96,7 @@ export const AudioTrackTable = ({
         const isThisTrackActive = isTrackEqual(currentTrack, record);
         return (
           <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span
                 className={`text-xs font-bold ${
                   isThisTrackActive ? "text-indigo-600" : "text-slate-800"
@@ -112,13 +123,13 @@ export const AudioTrackTable = ({
       key: "category",
       width: 170,
       render: (cat, record) => {
-        if (!cat) return <span className="text-slate-400 text-xs">-</span>;
+        const categoryName = cat || record.category || record.folder || "";
         if (record.is_custom) {
           const customObj = CUSTOM_CATEGORIES.find((c) =>
             isMatchingCustomTab(record, c.name)
           );
           return (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-sm">{customObj?.icon || "🎵"}</span>
               <Tag
                 color={customObj?.tagColor || "geekblue"}
@@ -127,14 +138,15 @@ export const AudioTrackTable = ({
                 자체음원
               </Tag>
               <span className="font-bold text-xs text-slate-800">
-                {cat || customObj?.name || "특별 연출"}
+                {categoryName || customObj?.name || "특별 연출"}
               </span>
             </div>
           );
         }
-        const g = extractGender(cat);
+        if (!categoryName) return <span className="text-slate-400 text-xs">-</span>;
+        const g = extractGender(categoryName);
         return (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {g === "FEMALE" ? (
               <Tag
                 color="magenta"
@@ -150,7 +162,7 @@ export const AudioTrackTable = ({
                 ♂️ 남성
               </Tag>
             ) : null}
-            <span className="font-bold text-xs text-slate-800">{cat}</span>
+            <span className="font-bold text-xs text-slate-800">{categoryName}</span>
           </div>
         );
       },
@@ -166,7 +178,7 @@ export const AudioTrackTable = ({
             <Tag
               color="purple"
               className="font-bold rounded-md cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setSelectedDivision(div)}
+              onClick={() => setSelectedDivision && setSelectedDivision(div)}
             >
               {div}
             </Tag>
@@ -188,9 +200,9 @@ export const AudioTrackTable = ({
       ),
     },
     {
-      title: "재생 제어",
+      title: "재생 제어 (수동 선곡)",
       key: "action",
-      width: 130,
+      width: 140,
       align: "center",
       render: (_, record) => {
         const isThisTrackActive = isTrackEqual(currentTrack, record);
@@ -237,18 +249,32 @@ export const AudioTrackTable = ({
 
   return (
     <div className="space-y-3">
-      {/* 상단 검색 바 */}
-      <div className="flex items-center justify-between gap-3">
-        <Input
-          prefix={<SearchOutlined className="text-slate-400" />}
-          placeholder="곡 제목, 아티스트, 종목명, 체급 검색..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          allowClear
-          className="max-w-md rounded-xl"
-        />
-        <div className="text-xs text-slate-500 font-medium">
-          검색 결과 <span className="font-bold text-indigo-600 font-mono">{filteredTracks.length}</span>곡
+      {/* 상단 검색 및 퀵 선곡 툴바 */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex-1 min-w-[240px] max-w-md">
+          <Input
+            prefix={<SearchOutlined className="text-slate-400" />}
+            placeholder="곡 제목, 아티스트, 종목명, 체급 검색..."
+            value={searchText}
+            onChange={(e) => setSearchText && setSearchText(e.target.value)}
+            allowClear
+            className="rounded-xl"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isFiltered && (
+            <Button
+              size="small"
+              onClick={handleResetFilters}
+              className="rounded-lg text-xs font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+            >
+              전체 목록 보기 ({totalAllCount}곡)
+            </Button>
+          )}
+          <div className="text-xs text-slate-500 font-medium">
+            표시 중 <strong className="text-indigo-600 font-mono text-sm">{filteredTracks.length}</strong> / 전체 {totalAllCount}곡
+          </div>
         </div>
       </div>
 
@@ -268,13 +294,20 @@ export const AudioTrackTable = ({
           emptyText: (
             <div className="py-12 text-center text-slate-400 space-y-3">
               <CustomerServiceOutlined className="text-4xl text-slate-300" />
-              <div>
-                {CUSTOM_CATEGORIES.some((c) => c.name === selectedCategoryTab)
-                  ? `등록된 '${selectedCategoryTab}' 음원이 없습니다. 위의 [+ 파일 업로드] 버튼을 눌러 음원을 등록해보세요!`
-                  : token
-                  ? "불러온 VibeFlows 음원이 없거나 검색 결과가 없습니다."
-                  : "VibeFlows 계정으로 로그인하여 음원 목록을 불러와주세요."}
+              <div className="text-sm font-medium text-slate-600">
+                선택하신 조건에 일치하는 음원이 없습니다.
               </div>
+              {totalAllCount > 0 && (
+                <div>
+                  <Button
+                    type="primary"
+                    onClick={handleResetFilters}
+                    className="bg-indigo-600 hover:bg-indigo-500 font-bold rounded-xl"
+                  >
+                    🎵 전체 음원 목록 ({totalAllCount}곡) 모두 보기
+                  </Button>
+                </div>
+              )}
             </div>
           ),
         }}

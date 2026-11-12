@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef, useContext } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { HiUserGroup } from "react-icons/hi";
+import { FaFileExcel } from "react-icons/fa";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { exportContestResultsToExcel } from "../functions/functions";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
 import { useDevice } from "../contexts/DeviceContext";
 
@@ -149,6 +152,57 @@ const PrintSummary = () => {
     setShowContestRankingSummary(true);
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    const contestId = currentContest?.contests?.id;
+    if (!contestId) {
+      alert("대회 정보가 없습니다.");
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const q = query(
+        collection(db, "contest_results_list"),
+        where("contestId", "==", contestId)
+      );
+      const snap = await getDocs(q);
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      if (rows.length === 0) {
+        alert("집계된 최종 결과 데이터가 없습니다.");
+        return;
+      }
+
+      const contestTitle =
+        currentContest?.contestInfo?.contestTitle ||
+        currentContest?.contests?.contestTitle ||
+        "제2회 DMZ한반도평화통일기원보디빌딩대회";
+
+      const categoriesMap = {};
+      categoriesArray.forEach((c) => {
+        categoriesMap[c.contestCategoryId] = c;
+      });
+
+      const gradesMap = {};
+      gradesArray.forEach((g) => {
+        gradesMap[g.contestGradeId] = g;
+      });
+
+      await exportContestResultsToExcel(
+        contestTitle,
+        rows,
+        categoriesMap,
+        gradesMap
+      );
+    } catch (e) {
+      console.error(e);
+      alert("엑셀 다운로드 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const clearDefault = () => {
     setCurrentCategoryId("all");
     setCurrentGradeId("all");
@@ -179,21 +233,31 @@ const PrintSummary = () => {
           <div
             className={`flex w-full h-14 mb-4 ${
               isTabletOrMobile ? "bg-gray-200" : "bg-gray-100"
-            } justify-start items-center rounded-lg px-3`}
+            } justify-between items-center rounded-lg px-3`}
           >
-            <span
-              className={`font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl ${
-                isTabletOrMobile ? "bg-blue-300" : "bg-blue-400"
-              } text-white mr-3`}
+            <div className="flex items-center">
+              <span
+                className={`font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl ${
+                  isTabletOrMobile ? "bg-blue-300" : "bg-blue-400"
+                } text-white mr-3`}
+              >
+                <HiUserGroup />
+              </span>
+              <h1
+                className="font-sans text-lg font-semibold"
+                style={{ letterSpacing: "2px" }}
+              >
+                집계표 출력
+              </h1>
+            </div>
+            <button
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all text-white font-bold px-4 py-2 rounded-lg shadow-md cursor-pointer"
             >
-              <HiUserGroup />
-            </span>
-            <h1
-              className="font-sans text-lg font-semibold"
-              style={{ letterSpacing: "2px" }}
-            >
-              집계표 출력
-            </h1>
+              <FaFileExcel className="w-4 h-4" />
+              <span>{isExporting ? "엑셀 생성중..." : "전체 최종순위표 엑셀 다운로드"}</span>
+            </button>
           </div>
           <div className="flex flex-wrap w-full mb-4 gap-2 px-3">
             <button
@@ -278,6 +342,14 @@ const PrintSummary = () => {
               onClick={handleSearch}
             >
               검색
+            </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg ml-auto font-medium text-sm shadow-sm"
+            >
+              <FaFileExcel className="w-4 h-4" />
+              <span>{isExporting ? "생성중..." : "엑셀 다운로드"}</span>
             </button>
           </div>
           <div className="flex w-full h-full bg-white overflow-y-auto p-4 justify-center">

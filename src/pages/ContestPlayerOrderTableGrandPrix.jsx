@@ -97,102 +97,117 @@ const ContestPlayerOrderTableGrandPrix = () => {
 
     console.log(filteredGrades);
 
-    const flattenedWinner = resultInfo.map((infoItem, rIdx) => {
-      const {
-        result: playerResult,
-        contestId,
-        categoryId,
-        gradeId,
-        categoryTitle,
-        gradeTitle,
-      } = infoItem;
+    const flattenedWinner = resultInfo
+      .map((infoItem, rIdx) => {
+        const {
+          result: playerResult,
+          contestId,
+          categoryId,
+          gradeId,
+          categoryTitle,
+          gradeTitle,
+        } = infoItem;
 
-      const findWinner = playerResult.find((f) => f.playerRank === 1);
-      const newResult = {
-        contestId,
-        originalCategoryId: categoryId,
-        originalGradeId: gradeId,
-        originalcategoryTitle: categoryTitle,
-        originalgradeTitle: gradeTitle,
-        playerName: findWinner.playerName,
-        playerNumber: findWinner.playerNumber,
-        playerGym: findWinner.playerGym,
-        playerIndex: findWinner.playerIndex,
-        playerUid: findWinner.playerUid,
-        totalScore: findWinner.totalScore,
-        isGradeChange: false,
-        createBy: "web",
-        id: "",
-        invoiceCreateAt: generateToday(),
-        invoiceId: "",
-        playerTel: "",
-        playerText: "",
-        playerNoShow: false,
-      };
-      return newResult;
-    });
+        const findWinner = playerResult?.find((f) => f.playerRank === 1);
+        if (!findWinner) return null;
 
-    console.log(flattenedWinner);
+        const newResult = {
+          contestId,
+          originalCategoryId: categoryId,
+          originalGradeId: gradeId,
+          originalcategoryTitle: categoryTitle,
+          originalgradeTitle: gradeTitle,
+          playerName: findWinner.playerName,
+          playerNumber: findWinner.playerNumber,
+          playerGym: findWinner.playerGym,
+          playerIndex: findWinner.playerIndex,
+          playerUid: findWinner.playerUid,
+          totalScore: findWinner.totalScore,
+          isGradeChange: false,
+          createBy: "web",
+          id: "",
+          invoiceCreateAt: generateToday(),
+          invoiceId: "",
+          playerTel: "",
+          playerText: "",
+          playerNoShow: false,
+        };
+        return newResult;
+      })
+      .filter(Boolean);
 
-    const matchingGradeWithWinner = filteredGrades.map((grade, gIdx) => {
-      console.log(grade);
+    console.log("Flattened winners:", flattenedWinner);
+
+    filteredGrades.forEach((grade) => {
       const filteredMatching = flattenedWinner.filter(
         (f) => f.originalCategoryId === grade.originalRefCategoryId
       );
 
-      console.log(filteredMatching);
+      // 🚨 동일 그랑프리 체급 내 선수 중복 방지 (선수번호 또는 UID 기준)
+      const seenPlayers = new Set();
+      const renewMatching = [];
 
-      const renewMatching = filteredMatching.map((match, mIdx) => {
-        const { contestGradeId, contestGradeTitle, refCategoryId } = grade;
-        const newMatched = {
-          ...match,
-          contestCategoryId: refCategoryId,
-          contestCategoryTitle: "그랑프리",
-          contestGradeId,
-          contestGradeTitle,
-        };
-        return newMatched;
+      filteredMatching.forEach((match) => {
+        const playerKey = String(match.playerUid || match.playerNumber || match.playerName);
+        if (!seenPlayers.has(playerKey)) {
+          seenPlayers.add(playerKey);
+          const { contestGradeId, contestGradeTitle, refCategoryId } = grade;
+          const newMatched = {
+            ...match,
+            contestCategoryId: refCategoryId,
+            contestCategoryTitle: "그랑프리",
+            contestGradeId,
+            contestGradeTitle,
+          };
+          renewMatching.push(newMatched);
+        }
       });
-      dummy = [...dummy, ...renewMatching];
 
-      return filteredMatching;
+      dummy = [...dummy, ...renewMatching];
     });
 
-    console.log(flattenedWinner);
-    console.log(matchingGradeWithWinner);
+    // 전체 dummy에서도 체급별 중복 완벽 제거
+    const uniqueMap = new Map();
+    dummy.forEach((p) => {
+      const uniqueKey = `${p.contestGradeId}_${p.playerUid || p.playerNumber}`;
+      if (!uniqueMap.has(uniqueKey)) {
+        uniqueMap.set(uniqueKey, p);
+      }
+    });
 
-    console.log(dummy);
-    return dummy;
+    return Array.from(uniqueMap.values());
   };
 
   const initPlayersFinalList = (categories, grades, players) => {
     setIsLoading(true);
 
-    console.log(categories);
     let dummy = [];
-    console.log(
-      categories.filter((f) => f.contestCategorySection === "그랑프리")
-    );
-    //53754e7a-410c-41d0-8391-9c0dec5a04fc
     categories
       .filter((f) => f.contestCategorySection === "그랑프리")
       .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
-      .map((category, cIdx) => {
-        console.log(category);
-        console.log(grades);
+      .forEach((category) => {
         const matchedGrades = grades.filter(
           (grade) => grade.refCategoryId === category.contestCategoryId
         );
         const matchedGradesLength = matchedGrades.length;
-        console.log(matchedGrades);
+
         matchedGrades
           .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
-          .map((grade, gIdx) => {
-            console.log(players);
-            const matchedPlayerWithPlayerNumber = [];
-            const matchedPlayers = players.filter(
+          .forEach((grade) => {
+            const rawMatched = players.filter(
               (player) => player.contestGradeId === grade.contestGradeId
             );
+
+            // 🚨 화면 렌더링 시 동일 체급 내 선수 번호 중복 방지
+            const seen = new Set();
+            const matchedPlayers = [];
+            rawMatched.forEach((player) => {
+              const k = String(player.playerUid || player.playerNumber || player.playerName);
+              if (!seen.has(k)) {
+                seen.add(k);
+                matchedPlayers.push(player);
+              }
+            });
 
             const matchedInfo = {
               ...category,
@@ -204,31 +219,29 @@ const ContestPlayerOrderTableGrandPrix = () => {
           });
       });
 
-    console.log(dummy);
-
+    console.log("Deduplicated matched Grand Prix array:", dummy);
     setMatchedArray([...dummy]);
     setIsLoading(false);
   };
 
   const handleUpdatePlayersFinal = async (contestId, playersFinalId, data) => {
-    setMessage({ body: "저장중", isButton: false });
+    setMessage({ body: "저장중...", isButton: false });
     setMsgOpen(true);
 
-    console.log(data);
-    console.log(playersFinalArray);
-    // 기존 선수 목록에서 중복되지 않은 선수들만 추가하도록 필터링
-    const uniqueNewPlayers = data.filter(
-      (newPlayer) =>
-        !playersFinalArray.some(
-          (existingPlayer) =>
-            existingPlayer.playerUid === newPlayer.playerUid &&
-            existingPlayer.contestCategoryId === newPlayer?.contestCategoryId
-        )
-    );
+    // 1. data(그랑프리 선수들) 자체에서 동일 체급 내 중복 완벽 제거
+    const dedupedGrandPrixData = [];
+    const seenGrandPrixKeys = new Set();
+    (data || []).forEach((p) => {
+      const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber}`;
+      if (!seenGrandPrixKeys.has(k)) {
+        seenGrandPrixKeys.add(k);
+        dedupedGrandPrixData.push(p);
+      }
+    });
 
-    if (uniqueNewPlayers.length === 0) {
+    if (dedupedGrandPrixData.length === 0) {
       setMessage({
-        body: "추가된 명단이 없습니다.",
+        body: "추가할 그랑프리 명단이 없습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -236,28 +249,40 @@ const ContestPlayerOrderTableGrandPrix = () => {
       return;
     }
 
-    const finalPlayers = [...playersFinalArray, ...uniqueNewPlayers];
+    // 2. 기존 playersFinalArray에서 그랑프리 체급에 속한 기존 선수들 교체 (단, 강제 등록된 선수 createdBy === 'force'는 보존)
+    const nonGrandPrixPlayers = playersFinalArray.filter(
+      (p) => !grandPrixGradeIds.has(p.contestGradeId) || p.createdBy === "force"
+    );
+
+    // 3. 전체 선수 목록 병합 후 중복 검증 (수기 강제 등록 선수 + 전자 집계 우승자)
+    const finalPlayersMap = new Map();
+    [...nonGrandPrixPlayers, ...dedupedGrandPrixData].forEach((p) => {
+      const k = `${p.contestGradeId}_${p.playerUid || p.playerNumber}`;
+      if (!finalPlayersMap.has(k)) {
+        finalPlayersMap.set(k, p);
+      }
+    });
+    const finalPlayers = Array.from(finalPlayersMap.values());
 
     try {
-      await updatePlayerFinal
-        .updateData(playersFinalId, {
-          ...playersFinalList,
-          players: finalPlayers,
-        })
-        .then(() =>
-          setMessage({
-            body: "저장되었습니다.",
-            isButton: true,
-            confirmButtonText: "확인",
-          })
-        );
+      await updatePlayerFinal.updateData(playersFinalId, {
+        ...playersFinalList,
+        players: finalPlayers,
+      });
+      setPlayersFinalArray(finalPlayers);
+      setMessage({
+        body: "그랑프리 명단이 중복 없이 성공적으로 저장되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (error) {
-      console.log(error);
+      console.error("그랑프리 명단 저장 실패:", error);
+      setMessage({
+        body: "저장 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
-    console.log({
-      ...playersFinalList,
-      players: finalPlayers,
-    });
   };
 
   useEffect(() => {

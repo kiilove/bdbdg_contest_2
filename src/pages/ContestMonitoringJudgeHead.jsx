@@ -510,14 +510,23 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentStageInfo?.grades?.length > 0 &&
       playersArray?.length > 0
     ) {
-      handleScoreTableByJudge(currentStageInfo.grades);
-      setMatchedOriginalPlayers(
-        playersArray
-          .filter(
-            (f) => f.contestGradeId === currentStageInfo.grades[0].gradeId
-          )
-          .sort((a, b) => a.playerIndex - b.playerIndex)
-      );
+      const rawStagePlayers = playersArray
+        .filter(
+          (f) => f.contestGradeId === currentStageInfo.grades[0].gradeId
+        )
+        .sort((a, b) => a.playerIndex - b.playerIndex);
+
+      const seenStagePlayerKeys = new Set();
+      const dedupedStagePlayers = [];
+      rawStagePlayers.forEach((p) => {
+        const k = String(p.playerUid || p.playerNumber || p.playerName);
+        if (!seenStagePlayerKeys.has(k)) {
+          seenStagePlayerKeys.add(k);
+          dedupedStagePlayers.push(p);
+        }
+      });
+
+      setMatchedOriginalPlayers(dedupedStagePlayers);
     }
   }, [realtimeData, currentStageInfo, playersArray]);
 

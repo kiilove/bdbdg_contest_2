@@ -20,6 +20,8 @@ import {
   Popconfirm,
   message,
 } from "antd";
+import { FileExcelOutlined, ReloadOutlined, DeleteOutlined } from "@ant-design/icons";
+import { exportContestResultsToExcel } from "../functions/functions";
 
 const { Title, Text } = Typography;
 
@@ -112,6 +114,30 @@ const ContestResultManager = () => {
     fetchDocs();
   }, [contestId]);
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (docs.length === 0) {
+      message.warning("다운로드할 최종 결과 데이터가 없습니다.");
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const contestTitle =
+        currentContest?.contestInfo?.contestTitle ||
+        currentContest?.contests?.contestTitle ||
+        "제2회 DMZ한반도평화통일기원보디빌딩대회";
+
+      await exportContestResultsToExcel(contestTitle, docs);
+      message.success("엑셀 파일이 다운로드되었습니다.");
+    } catch (e) {
+      console.error(e);
+      message.error("엑셀 다운로드 중 오류 발생: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col w-full gap-4 p-4">
       <Card className="shadow-md">
@@ -120,6 +146,16 @@ const ContestResultManager = () => {
             최종 결과(집계) 관리
           </Title>
           <Space>
+            <Button
+              type="primary"
+              style={{ backgroundColor: "#059669", borderColor: "#059669" }}
+              icon={<FileExcelOutlined />}
+              onClick={handleExportExcel}
+              loading={isExporting}
+              disabled={docs.length === 0}
+            >
+              엑셀 다운로드
+            </Button>
             <Popconfirm
               title="이 대회의 모든 결과를 삭제할까요?"
               okText="삭제"
@@ -131,7 +167,7 @@ const ContestResultManager = () => {
                 전체 삭제
               </Button>
             </Popconfirm>
-            <Button onClick={fetchDocs} loading={loading} type="primary">
+            <Button onClick={fetchDocs} loading={loading} type="default" icon={<ReloadOutlined />}>
               새로고침
             </Button>
           </Space>

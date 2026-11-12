@@ -214,6 +214,7 @@ export const VibeFlowAudioCenter = () => {
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (volumeRampRef.current) cancelAnimationFrame(volumeRampRef.current);
       stopAllFades();
       if (deckARef.current) {
         deckARef.current.pause();
@@ -225,6 +226,8 @@ export const VibeFlowAudioCenter = () => {
       }
     };
   }, []);
+
+  const volumeRampRef = useRef(null);
 
   const handleVolumeChange = (val) => {
     setVolume(val);
@@ -238,6 +241,43 @@ export const VibeFlowAudioCenter = () => {
         setDeckBVolume(Math.round(val * 100));
       }
     }
+  };
+
+  // 🎚️ 부드러운 볼륨 이동 (사회자 마이크 연동 간이 믹싱 / 더킹)
+  const handleSmoothVolumeChange = (targetVal, durationMs = 250) => {
+    if (volumeRampRef.current) {
+      cancelAnimationFrame(volumeRampRef.current);
+      volumeRampRef.current = null;
+    }
+
+    const clampedTarget = Math.max(0, Math.min(1, targetVal));
+    const startVol = masterVolumeRef.current;
+
+    if (Math.abs(startVol - clampedTarget) < 0.005 || durationMs <= 0) {
+      handleVolumeChange(clampedTarget);
+      return;
+    }
+
+    const startTime = performance.now();
+
+    const ramp = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      // Ease out cubic
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const currentVol = startVol + (clampedTarget - startVol) * ease;
+
+      handleVolumeChange(currentVol);
+
+      if (progress < 1) {
+        volumeRampRef.current = requestAnimationFrame(ramp);
+      } else {
+        handleVolumeChange(clampedTarget);
+        volumeRampRef.current = null;
+      }
+    };
+
+    volumeRampRef.current = requestAnimationFrame(ramp);
   };
 
   // 📡 1. Firebase Realtime DB 무대 모니터링
@@ -1084,19 +1124,46 @@ export const VibeFlowAudioCenter = () => {
     return [...tracks, ...customTracks];
   }, [tracks, customTracks]);
 
-  // 📂 카테고리 탭 목록 생성
+  // 📂 카테고리 탭 목록 생성 (공식 대표 종목 + 현재 대회 종목 + 로드된 트랙 + 특별 연출 통합)
   const categoryTabs = useMemo(() => {
-    const counts = {};
-    tracks.forEach((t) => {
-      const cat = (t.contest_category_kr || "").trim();
-      if (cat) counts[cat] = (counts[cat] || 0) + 1;
-    });
+    // 1. 기본 공식 대표 경기 종목 목록
+    const defaultCategories = [
+      "보디빌딩",
+      "클래식보디빌딩",
+      "클래식피지크",
+      "피지크",
+      "비키니",
+      "스포츠모델",
+      "피트니스모델",
+      "피규어",
+    ];
 
-    const standardTabs = Object.entries(counts).map(([name, count]) => ({
-      name,
-      count,
-      isCustom: false,
-    }));
+    // 2. 현재 대회 무대 진행표의 종목 목록 수집
+    const stageCategories = contestStagesList
+      .map((s) => s.categoryTitle || s.contestCategoryTitle || s.categoryName)
+      .filter(Boolean);
+
+    // 3. 실제 로드된 트랙의 종목 목록 수집
+    const trackCategories = tracks
+      .map((t) => (t.contest_category_kr || "").trim())
+      .filter(Boolean);
+
+    const allStandardCategoryNames = Array.from(
+      new Set([...trackCategories, ...stageCategories, ...defaultCategories])
+    ).filter(Boolean);
+
+    const standardTabs = allStandardCategoryNames.map((name) => {
+      const count = allAvailableTracks.filter((t) => {
+        const cat = (t.contest_category_kr || t.category || t.folder || "").trim();
+        return isCategoryMatched(cat, name) || cat === name || cat.includes(name) || name.includes(cat);
+      }).length;
+
+      return {
+        name,
+        count,
+        isCustom: false,
+      };
+    });
 
     const customTabs = CUSTOM_CATEGORIES.map((cat) => {
       const count = customTracks.filter((t) =>
@@ -1113,11 +1180,11 @@ export const VibeFlowAudioCenter = () => {
     });
 
     return [
-      { name: "ALL", count: tracks.length + customTracks.length, isCustom: false },
+      { name: "ALL", count: allAvailableTracks.length, isCustom: false },
       ...standardTabs,
       ...customTabs,
     ];
-  }, [tracks, customTracks]);
+  }, [tracks, customTracks, allAvailableTracks, contestStagesList]);
 
   // 🎯 현재 무대와 가장 잘 매칭되는 VibeFlow 종목 탭 찾기
   const matchedVibeCategory = useMemo(() => {
@@ -1157,19 +1224,30 @@ export const VibeFlowAudioCenter = () => {
     }
 
     if (CUSTOM_CATEGORIES.some((c) => c.name === selectedCategoryTab)) {
-      return customTracks.filter((t) =>
+      const matchedCustom = customTracks.filter((t) =>
         isMatchingCustomTab(t, selectedCategoryTab)
       );
+      // 특별 연출 탭에 곡이 있으면 해당 곡 반환, 없더라도 전체에서 검색 가능하게 지원
+      return matchedCustom.length > 0 ? matchedCustom : allAvailableTracks;
     }
 
     if (selectedCategoryTab === "CURRENT_STAGE") {
-      if (!currentStageCategory) return tracks;
-      return tracks.filter((t) =>
-        isCategoryMatched(t.contest_category_kr, currentStageCategory, currentStageGender)
-      );
+      if (!currentStageCategory) return allAvailableTracks;
+      const matched = allAvailableTracks.filter((t) => {
+        const cat = t.contest_category_kr || t.category || t.folder || "";
+        return isCategoryMatched(cat, currentStageCategory, currentStageGender);
+      });
+      // 🌟 현재 무대 맞춤 곡이 있으면 우선 표시하되, 0곡이면 사람이 수동으로 틀 수 있도록 전체 음원 풀 반환
+      return matched.length > 0 ? matched : allAvailableTracks;
     }
 
-    return tracks.filter((t) => (t.contest_category_kr || "").trim() === selectedCategoryTab);
+    const matched = allAvailableTracks.filter((t) => {
+      const cat = (t.contest_category_kr || t.category || t.folder || "").trim();
+      return isCategoryMatched(cat, selectedCategoryTab) || cat === selectedCategoryTab || cat.includes(selectedCategoryTab) || selectedCategoryTab.includes(cat);
+    });
+
+    // 🌟 선택된 종목에 곡이 없으면 전체 음원 목록을 보여주어 수동 선곡 가능하게 보장
+    return matched.length > 0 ? matched : allAvailableTracks;
   }, [
     allAvailableTracks,
     tracks,
@@ -1210,9 +1288,9 @@ export const VibeFlowAudioCenter = () => {
     return list;
   }, [categoryBaseTracks, currentStageGrade]);
 
-  // 📋 최종 렌더링용 필터링된 음원 리스트
+  // 📋 최종 렌더링용 필터링된 음원 리스트 (수동 선곡을 위해 전체 풀 상시 접근 가능)
   const filteredTracks = useMemo(() => {
-    return categoryBaseTracks.filter((t) => {
+    let list = categoryBaseTracks.filter((t) => {
       if (selectedDivision !== "ALL") {
         const tDiv = (t.contest_division_kr || "공통 / 전체").trim();
         if (tDiv !== selectedDivision) return false;
@@ -1222,14 +1300,21 @@ export const VibeFlowAudioCenter = () => {
         const q = searchText.toLowerCase();
         const titleMatch = (t.title || t.name || "").toLowerCase().includes(q);
         const artistMatch = (t.artist || "").toLowerCase().includes(q);
-        const catMatch = (t.contest_category_kr || "").toLowerCase().includes(q);
+        const catMatch = (t.contest_category_kr || t.category || "").toLowerCase().includes(q);
         const divMatch = (t.contest_division_kr || "").toLowerCase().includes(q);
         if (!titleMatch && !artistMatch && !catMatch && !divMatch) return false;
       }
 
       return true;
     });
-  }, [categoryBaseTracks, selectedDivision, searchText]);
+
+    // 🌟 만약 필터 조건으로 인해 0곡이 된 경우, 수동 재생을 위해 전체 음원에서 검색어만 적용하여 폴백 제공
+    if (list.length === 0 && allAvailableTracks.length > 0 && !searchText) {
+      list = allAvailableTracks;
+    }
+
+    return list;
+  }, [categoryBaseTracks, selectedDivision, searchText, allAvailableTracks]);
 
   // ⏪ 이전 곡 재생
   const handlePrevTrack = () => {
@@ -1583,6 +1668,9 @@ export const VibeFlowAudioCenter = () => {
               currentTabConfig={currentTabConfig}
               currentTime={currentTime}
               trackDuration={trackDuration}
+              volume={volume}
+              handleVolumeChange={handleVolumeChange}
+              handleSmoothVolumeChange={handleSmoothVolumeChange}
               handleSliderChange={handleSliderChange}
               handlePlayTrack={handlePlayTrack}
               handlePrevTrack={handlePrevTrack}
@@ -1592,6 +1680,7 @@ export const VibeFlowAudioCenter = () => {
             <AudioTabControls
               volume={volume}
               handleVolumeChange={handleVolumeChange}
+              handleSmoothVolumeChange={handleSmoothVolumeChange}
               selectedCategoryTab={selectedCategoryTab}
               currentTabConfig={currentTabConfig}
               updateTabFadeDuration={updateTabFadeDuration}
@@ -1629,6 +1718,7 @@ export const VibeFlowAudioCenter = () => {
               searchText={searchText}
               setSearchText={setSearchText}
               tracks={tracks}
+              allAvailableTracks={allAvailableTracks}
               currentStageCategory={currentStageCategory}
               currentStageGrade={currentStageGrade}
               currentStageGender={currentStageGender}
@@ -1643,10 +1733,12 @@ export const VibeFlowAudioCenter = () => {
 
             <AudioTrackTable
               filteredTracks={filteredTracks}
+              allAvailableTracks={allAvailableTracks}
               isLoadingTracks={isLoadingTracks}
               searchText={searchText}
               setSearchText={setSearchText}
               selectedCategoryTab={selectedCategoryTab}
+              setSelectedCategoryTab={setSelectedCategoryTab}
               selectedDivision={selectedDivision}
               setSelectedDivision={setSelectedDivision}
               currentTrack={currentTrack}

@@ -1,28 +1,40 @@
 import React from "react";
-import { Slider, Switch, Tag, Card } from "antd";
+import { Slider, Switch, Tag, Card, Tooltip } from "antd";
 import { SoundFilled, ClockCircleOutlined } from "@ant-design/icons";
 import { DEFAULT_TAB_CONFIGS } from "./constants";
 
 export const AudioTabControls = ({
-  volume,
+  volume = 1,
   handleVolumeChange,
+  handleSmoothVolumeChange,
   selectedCategoryTab,
   currentTabConfig,
   updateTabFadeDuration,
   updateTabAutoNext,
 }) => {
+  const currentVolumePercent = Math.round((volume ?? 1) * 100);
+
+  const mixingPresets = [
+    { val: 0, label: "0", sub: "MUTE", desc: "0% (음소거 / Mute)" },
+    { val: 0.1, label: "10", sub: "10%", desc: "10% (초미세 BGM)" },
+    { val: 0.2, label: "20", sub: "MIC", desc: "20% (🎤 사회자 멘트 권장)" },
+    { val: 0.5, label: "50", sub: "50%", desc: "50% (배경 음악)" },
+    { val: 0.8, label: "80", sub: "80%", desc: "80% (표준 경기 음량)" },
+    { val: 1.0, label: "100", sub: "MAX", desc: "100% (최대 출력)" },
+  ];
+
   return (
     <Card className="shadow-sm rounded-2xl border-slate-200 bg-white">
       <div className="space-y-4">
-        {/* 1. 마스터 볼륨 */}
+        {/* 1. 마스터 볼륨 & 간이 믹싱 버튼 */}
         <div>
           <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
             <span className="flex items-center gap-1.5">
               <SoundFilled className="text-indigo-600" />
-              <span>마스터 볼륨</span>
+              <span>마스터 볼륨 (간이 믹싱)</span>
             </span>
-            <span className="font-mono text-indigo-600 font-black">
-              {Math.round(volume * 100)}%
+            <span className="font-mono text-indigo-600 font-black text-sm">
+              {currentVolumePercent}%
             </span>
           </div>
           <Slider
@@ -33,6 +45,51 @@ export const AudioTabControls = ({
             onChange={handleVolumeChange}
             className="m-0"
           />
+
+          {/* 🎚️ 0, 10, 20, 50, 80, 100 간이 믹싱 버튼 바 */}
+          <div className="grid grid-cols-6 gap-1 mt-2.5">
+            {mixingPresets.map((p) => {
+              const targetPercent = Math.round(p.val * 100);
+              const isActive = Math.abs(currentVolumePercent - targetPercent) <= 3;
+
+              return (
+                <Tooltip key={p.label} title={p.desc}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (handleSmoothVolumeChange) {
+                        handleSmoothVolumeChange(p.val);
+                      } else if (handleVolumeChange) {
+                        handleVolumeChange(p.val);
+                      }
+                    }}
+                    className={`py-1.5 px-0.5 rounded-lg border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                      isActive
+                        ? "bg-indigo-600 text-white border-indigo-700 shadow-xs scale-105 ring-1 ring-indigo-300"
+                        : p.val === 0.2
+                        ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 font-bold"
+                        : p.val === 0
+                        ? "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300"
+                    }`}
+                  >
+                    <span className="font-black text-xs leading-none">{p.label}</span>
+                    <span
+                      className={`text-[8px] font-bold leading-none ${
+                        isActive
+                          ? "text-indigo-100"
+                          : p.val === 0.2
+                          ? "text-amber-600"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {p.sub}
+                    </span>
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
         </div>
 
         {/* 2. 현재 선택된 탭별 페이드 & 자동 연속 재생 설정 */}

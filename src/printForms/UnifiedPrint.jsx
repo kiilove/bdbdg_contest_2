@@ -10,14 +10,16 @@ import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
 import { MdOutlineScale } from "react-icons/md";
 import { HiUserGroup } from "react-icons/hi";
-import { FaChartPie, FaPrint } from "react-icons/fa";
+import { FaChartPie, FaPrint, FaFileExcel } from "react-icons/fa";
 import PrintTable from "./PrintTable";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { exportContestResultsToExcel } from "../functions/functions";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
@@ -121,6 +123,58 @@ const UnifiedPrint = () => {
     },
     [currentContest, categoriesArray, gradesArray, currentSection]
   );
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    const contestId = currentContest?.contests?.id;
+    if (!contestId) {
+      alert("대회 정보가 없습니다.");
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const q = query(
+        collection(db, "contest_results_list"),
+        where("contestId", "==", contestId)
+      );
+      const snap = await getDocs(q);
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      if (rows.length === 0) {
+        alert("집계된 최종 결과 데이터가 없습니다.");
+        return;
+      }
+
+      const contestTitle =
+        currentContest?.contestInfo?.contestTitle ||
+        currentContest?.contests?.contestTitle ||
+        documentTitle ||
+        "제2회 DMZ한반도평화통일기원보디빌딩대회";
+
+      const categoriesMap = {};
+      categoriesArray.forEach((c) => {
+        categoriesMap[c.contestCategoryId] = c;
+      });
+
+      const gradesMap = {};
+      gradesArray.forEach((g) => {
+        gradesMap[g.contestGradeId] = g;
+      });
+
+      await exportContestResultsToExcel(
+        contestTitle,
+        rows,
+        categoriesMap,
+        gradesMap
+      );
+    } catch (e) {
+      console.error(e);
+      alert("엑셀 다운로드 중 오류 발생: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const fetchPool = async (categoryId, gradeId) => {
     setIsLoading(true);
@@ -432,16 +486,28 @@ const UnifiedPrint = () => {
               </div>
             </div>
 
-            {/* 인쇄 버튼 */}
-            <ReactToPrint
-              trigger={() => (
-                <button className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0">
-                  <FaPrint />
-                  <span>인쇄하기 (Print)</span>
-                </button>
-              )}
-              content={() => printRef.current}
-            />
+            {/* 액션 버튼 그룹 (엑셀 다운로드 + 인쇄) */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0 active:scale-95"
+              >
+                <FaFileExcel className="text-base" />
+                <span>{isExporting ? "엑셀 생성중..." : "엑셀 다운로드 (Excel)"}</span>
+              </button>
+
+              {/* 인쇄 버튼 */}
+              <ReactToPrint
+                trigger={() => (
+                  <button className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0 active:scale-95">
+                    <FaPrint />
+                    <span>인쇄하기 (Print)</span>
+                  </button>
+                )}
+                content={() => printRef.current}
+              />
+            </div>
           </div>
 
           {/* 3. 섹션 & 종목/체급 필터 바 */}

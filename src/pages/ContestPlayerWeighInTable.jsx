@@ -782,27 +782,29 @@ const ContestPlayerWeighInTable = () => {
                 entry.contestGradeId === grade.contestGradeId
             );
 
-            matchedPlayers.forEach((player) => {
-              const {
-                playerNumber,
-                playerIndex,
-                playerNoShow,
-                isGradeChanged,
-                isWeighedIn,
-                heightWeight,
-              } = player;
+            matchedPlayers
+              .sort((a, b) => (Number(a.playerIndex) || Number(a.playerNumber) || 0) - (Number(b.playerIndex) || Number(b.playerNumber) || 0))
+              .forEach((player) => {
+                const {
+                  playerNumber,
+                  playerIndex,
+                  playerNoShow,
+                  isGradeChanged,
+                  isWeighedIn,
+                  heightWeight,
+                } = player;
 
-              const newPlayer = {
-                ...player,
-                playerNumber,
-                playerNoShow: !!playerNoShow,
-                isGradeChanged: !!isGradeChanged,
-                isWeighedIn: !!isWeighedIn,
-                heightWeight: heightWeight || "",
-                playerIndex,
-              };
-              matchedPlayerWithPlayerNumber.push({ ...newPlayer });
-            });
+                const newPlayer = {
+                  ...player,
+                  playerNumber,
+                  playerNoShow: !!playerNoShow,
+                  isGradeChanged: !!isGradeChanged,
+                  isWeighedIn: !!isWeighedIn,
+                  heightWeight: heightWeight || "",
+                  playerIndex,
+                };
+                matchedPlayerWithPlayerNumber.push({ ...newPlayer });
+              });
 
             const matchedInfo = {
               ...category,
@@ -893,8 +895,14 @@ const ContestPlayerWeighInTable = () => {
             isGradeChanged: !!lp.isGradeChanged,
             contestGradeId: lp.isGradeChanged ? (lp.contestGradeId || dbPlayer.contestGradeId) : dbPlayer.contestGradeId,
             contestGradeTitle: lp.isGradeChanged ? (lp.contestGradeTitle || dbPlayer.contestGradeTitle) : dbPlayer.contestGradeTitle,
-            playerNumber: dbPlayer.playerNumber !== undefined ? dbPlayer.playerNumber : (Number(lp.playerNumber) || 0),
-            playerIndex: dbPlayer.playerIndex !== undefined ? dbPlayer.playerIndex : (Number(lp.playerIndex) || 0),
+            playerNumber:
+              lp.playerNumber !== undefined && lp.playerNumber !== null && Number(lp.playerNumber) > 0
+                ? Number(lp.playerNumber)
+                : (dbPlayer.playerNumber !== undefined ? dbPlayer.playerNumber : (Number(lp.playerNumber) || 0)),
+            playerIndex:
+              lp.playerIndex !== undefined && lp.playerIndex !== null && Number(lp.playerIndex) > 0
+                ? Number(lp.playerIndex)
+                : (dbPlayer.playerIndex !== undefined ? dbPlayer.playerIndex : (Number(lp.playerIndex) || 0)),
             stagePhoto1: stage1,
             stagePhoto2: stage2,
             stagePhotoUrl1: stage1,
@@ -1777,6 +1785,10 @@ const ContestPlayerWeighInTable = () => {
         antMessage.info(
           `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인이 해제되었습니다.`
         );
+      } else if (updatedFields.playerNumber !== undefined || updatedFields.playerIndex !== undefined) {
+        antMessage.success(
+          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 선수 번호/표시순서가 저장되었습니다! (DB 즉시 저장됨 ✓)`
+        );
       }
     } catch (error) {
       console.error("핀셋 계측 저장 실패:", error);
@@ -1964,25 +1976,28 @@ const ContestPlayerWeighInTable = () => {
     setNumModalOpen(true);
   };
 
-  // ✅ 번호/인덱스/신장체중 수정 적용
-  const applyNumberChange = () => {
+  // ✅ 번호/인덱스/신장체중 수정 적용 (DB 즉시 영구 저장)
+  const applyNumberChange = async () => {
     const { playerNumber, playerIndex, height, weight } = editValues;
-    if (playerNumber <= 0 || playerIndex <= 0) return;
+    if (!editTargetKey || playerNumber <= 0 || playerIndex <= 0) return;
 
+    const targetKey = editTargetKey;
+    const num = Number(playerNumber);
+    const pIdx = Number(playerIndex);
     const combinedHW = formatHeightWeight(height, weight);
-    const newPlayers = [...playersArray];
-    const idx = newPlayers.findIndex((p) => getPlayerEntryKey(p) === editTargetKey);
-    if (idx !== -1) {
-      newPlayers[idx] = {
-        ...newPlayers[idx],
-        playerNumber: Number(playerNumber),
-        playerIndex: Number(playerIndex),
-        heightWeight: combinedHW,
-      };
-      setPlayersArray(newPlayers);
-    }
+
     setNumModalOpen(false);
     setEditTargetKey(null);
+
+    await persistSinglePlayerWeighIn(targetKey, {
+      playerNumber: num,
+      playerIndex: pIdx,
+      heightWeight: combinedHW,
+      playerHeight: height || "",
+      playerWeight: weight || "",
+      height: height || "",
+      weight: weight || "",
+    });
   };
 
   useEffect(() => {

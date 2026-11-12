@@ -300,7 +300,7 @@ export const isTrackExposed = (track) => {
 };
 
 /**
- * 🎼 VibeFlows 대회 음원 목록 가져오기 (?is_active=1 파라미터 적용)
+ * 🎼 VibeFlows 대회 음원 목록 가져오기 (다중 구조 파싱 및 쿼리 폴백 완벽 지원)
  * @param {string} [customToken] - 지정하지 않을 시 스토리지 토큰 사용
  * @returns {Promise<{success: boolean, tracks?: Array<any>, total?: number, rawTotal?: number, error?: string, raw?: any, isUnauthorized?: boolean}>}
  */
@@ -315,24 +315,42 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
     };
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const tryFetch = async (url) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return { ok: true, status: response.status, response };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      return { ok: false, error: err };
+    }
+  };
 
   try {
-    // 📌 [공식 API 쿼리 파라미터] 노출 중인 음원만 필터링 조회: ?is_active=1&active=1
-    const requestUrl = `${VIBEFLOW_API_URL}?is_active=1&active=1`;
+    // 1차 시도: 쿼리 파라미터 포함 (?is_active=1)
+    let fetchRes = await tryFetch(`${VIBEFLOW_API_URL}?is_active=1&active=1`);
 
-    const response = await fetch(requestUrl, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    // 만약 1차 시도가 실패했거나 에러인 경우 2차 시도 (순수 URL)
+    if (!fetchRes.ok || (fetchRes.status && fetchRes.status >= 400 && fetchRes.status !== 401)) {
+      fetchRes = await tryFetch(VIBEFLOW_API_URL);
+    }
 
-    if (response.status === 401) {
+    if (!fetchRes.ok) {
+      throw fetchRes.error || new Error("서버와의 통신에 실패했습니다.");
+    }
+
+    const { status, response } = fetchRes;
+
+    if (status === 401) {
       clearVibeFlowToken();
       return {
         success: false,
@@ -342,19 +360,39 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
     }
 
     const data = await response.json();
+    console.log("[VibeFlow Service] 원본 API 응답 데이터:", data);
 
-    // 트랙 배열 추출 (data.tracks or data.data or data)
+    // 🔍 트랙 배열 추출 (모든 가능한 JSON 구조 대응)
     let rawTracks = [];
-    if (Array.isArray(data.tracks)) {
+    if (Array.isArray(data)) {
+      rawTracks = data;
+    } else if (Array.isArray(data.tracks)) {
       rawTracks = data.tracks;
+    } else if (Array.isArray(data.songs)) {
+      rawTracks = data.songs;
     } else if (Array.isArray(data.data)) {
       rawTracks = data.data;
-    } else if (Array.isArray(data)) {
-      rawTracks = data;
+    } else if (Array.isArray(data.list)) {
+      rawTracks = data.list;
+    } else if (Array.isArray(data.playlist)) {
+      rawTracks = data.playlist;
+    } else if (Array.isArray(data.items)) {
+      rawTracks = data.items;
+    } else if (data.data && typeof data.data === "object") {
+      if (Array.isArray(data.data.tracks)) rawTracks = data.data.tracks;
+      else if (Array.isArray(data.data.songs)) rawTracks = data.data.songs;
+      else if (Array.isArray(data.data.list)) rawTracks = data.data.list;
+      else if (Array.isArray(data.data.items)) rawTracks = data.data.items;
     }
 
-    // 👁️ '노출 안 함 (비노출/숨김)' 체크된 음원 100% 필터링하여 제외
-    const exposedTracks = rawTracks.filter(isTrackExposed);
+    // 👁️ '노출 안 함 (비노출/숨김)' 체크된 음원 필터링
+    let exposedTracks = rawTracks.filter(isTrackExposed);
+
+    // 만약 필터링 결과가 0건인데 원본에는 데이터가 있다면 원본 데이터 반환 (과도한 필터링 방지)
+    if (exposedTracks.length === 0 && rawTracks.length > 0) {
+      console.warn("[VibeFlow Service] isTrackExposed 필터링 후 0건이라 원본 트랙을 반환합니다.");
+      exposedTracks = rawTracks;
+    }
 
     return {
       success: true,
@@ -364,11 +402,13 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
       raw: data,
     };
   } catch (error) {
-    clearTimeout(timeoutId);
     console.error("[VibeFlow API Error]:", error);
     return {
       success: false,
-      error: error.name === "AbortError" ? "음원 목록 요청 시간이 초과되었습니다." : (error.message || "음원 목록을 불러오는 중 네트워크 오류가 발생했습니다."),
+      error: error.name === "AbortError"
+        ? "음원 목록 요청 시간이 초과되었습니다."
+        : (error.message || "음원 목록을 불러오는 중 오류가 발생했습니다. (CORS 또는 네트워크 상태를 확인해주세요)"),
+      raw: { error: error.message, stack: error.stack },
     };
   }
 };

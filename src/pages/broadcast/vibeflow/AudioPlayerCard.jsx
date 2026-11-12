@@ -21,11 +21,25 @@ export const AudioPlayerCard = ({
   currentTabConfig,
   currentTime,
   trackDuration,
+  volume = 1,
+  handleVolumeChange,
+  handleSmoothVolumeChange,
   handleSliderChange,
   handlePlayTrack,
   handlePrevTrack,
   handleNextTrack,
 }) => {
+  const currentVolumePercent = Math.round((volume ?? 1) * 100);
+
+  const mixingPresets = [
+    { val: 0, label: "0", sub: "MUTE", desc: "0% (음소거 / 즉시 Mute)" },
+    { val: 0.1, label: "10", sub: "10%", desc: "10% (초미세 배경 BGM)" },
+    { val: 0.2, label: "20", sub: "MIC", desc: "20% (🎤 사회자 마이크 멘트 권장 믹싱)" },
+    { val: 0.5, label: "50", sub: "50%", desc: "50% (배경 음악)" },
+    { val: 0.8, label: "80", sub: "80%", desc: "80% (표준 경기 음량)" },
+    { val: 1.0, label: "100", sub: "MAX", desc: "100% (최대 출력)" },
+  ];
+
   return (
     <div className="space-y-4">
       {/* 마스터 플레이어 카드 */}
@@ -100,7 +114,7 @@ export const AudioPlayerCard = ({
         </div>
 
         {/* 프로그레스 슬라이더 */}
-        <div className="space-y-1 mb-5">
+        <div className="space-y-1 mb-4">
           <Slider
             min={0}
             max={trackDuration || 100}
@@ -163,6 +177,63 @@ export const AudioPlayerCard = ({
               <StepForwardOutlined className="text-lg" />
             </button>
           </Tooltip>
+        </div>
+
+        {/* 🎚️ 🎤 사회자 마이크 간이 믹싱 & 볼륨 퀵 프리셋 (0, 10, 20, 50, 80, 100) */}
+        <div className="mt-4 pt-3.5 border-t border-slate-100 text-left space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+            <span className="flex items-center gap-1.5">
+              <SoundFilled className="text-indigo-600" />
+              <span>간이 믹싱 (사회자 마이크 연동)</span>
+            </span>
+            <span className="font-mono text-indigo-600 font-black text-sm">
+              {currentVolumePercent}%
+            </span>
+          </div>
+
+          <div className="grid grid-cols-6 gap-1.5">
+            {mixingPresets.map((p) => {
+              const targetPercent = Math.round(p.val * 100);
+              const isActive = Math.abs(currentVolumePercent - targetPercent) <= 3;
+
+              return (
+                <Tooltip key={p.label} title={p.desc}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (handleSmoothVolumeChange) {
+                        handleSmoothVolumeChange(p.val);
+                      } else if (handleVolumeChange) {
+                        handleVolumeChange(p.val);
+                      }
+                    }}
+                    className={`py-2 px-1 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 focus:outline-none ${
+                      isActive
+                        ? "bg-indigo-600 text-white border-indigo-700 shadow-md scale-105 ring-2 ring-indigo-300"
+                        : p.val === 0.2
+                        ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 font-bold"
+                        : p.val === 0
+                        ? "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300"
+                    }`}
+                  >
+                    <span className="font-black text-sm leading-none">{p.label}</span>
+                    <span
+                      className={`text-[9px] font-bold leading-none ${
+                        isActive
+                          ? "text-indigo-100"
+                          : p.val === 0.2
+                          ? "text-amber-600"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {p.sub}
+                    </span>
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
         </div>
       </Card>
 
