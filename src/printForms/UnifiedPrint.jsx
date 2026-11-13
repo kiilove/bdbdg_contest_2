@@ -464,7 +464,7 @@ const UnifiedPrint = () => {
       <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
         {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
         <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar">
             {printTabs.map((tab) => {
               const isActive = !tab.isExternal && printType === tab.type;
 

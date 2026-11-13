@@ -1104,7 +1104,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
           {/* 본부석 진행 및 무대 관리 탭 영역 */}
           <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-            <div className="px-4 md:px-5 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] overflow-x-auto">
+            <div className="px-4 md:px-5 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] overflow-x-auto overflow-y-hidden no-scrollbar">
               <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#e4e4e7]/60 min-w-max">
                 {subTabs.map((tab) => {
                   const IconComponent = tab.icon;

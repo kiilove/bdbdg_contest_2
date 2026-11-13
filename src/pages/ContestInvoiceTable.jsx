@@ -484,7 +484,7 @@ const ContestInvoiceTable = () => {
 
             <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
               {/* 탭 네비게이션 */}
-              <div className="flex items-center gap-1 px-4 pt-3 border-b border-[#171717]/[0.08] bg-[#fafafa] overflow-x-auto">
+              <div className="flex items-center gap-1 px-4 pt-2 border-b border-[#171717]/[0.08] bg-[#fafafa] overflow-x-auto overflow-y-hidden no-scrollbar">
                 {tabArray.map((tab) => {
                   const isActive = currentTab === tab.id;
                   return (
@@ -495,10 +495,10 @@ const ContestInvoiceTable = () => {
                         setCurrentTab(tab.id);
                         setCurrentPage(1);
                       }}
-                      className={`h-9 px-3.5 text-[13px] font-medium inline-flex items-center gap-2 border-b-2 -mb-px shrink-0 transition-colors duration-150 ${
+                      className={`relative h-10 px-3.5 text-[13px] font-medium inline-flex items-center gap-2 shrink-0 transition-colors duration-150 after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] ${
                         isActive
-                          ? "border-[#2563eb] text-[#2563eb]"
-                          : "border-transparent text-[#525252] hover:text-[#171717]"
+                          ? "text-[#2563eb] after:bg-[#2563eb]"
+                          : "text-[#525252] hover:text-[#171717] after:bg-transparent"
                       }`}
                     >
                       <span>{tab.title}</span>
