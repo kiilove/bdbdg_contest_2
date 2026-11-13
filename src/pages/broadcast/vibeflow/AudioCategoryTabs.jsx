@@ -1,15 +1,30 @@
 import React from "react";
-import { Button, Tag, Progress } from "antd";
 import {
-  TrophyOutlined,
-  CloudUploadOutlined,
-} from "@ant-design/icons";
+  Music,
+  Upload,
+  RotateCcw,
+  Flag,
+  Mic,
+  Clock,
+  Award,
+  Coffee,
+  Layers,
+} from "lucide-react";
 import {
   CUSTOM_CATEGORIES,
-  extractGender,
   isCategoryMatched,
   isDivisionMatched,
 } from "./constants";
+import { StatusDot } from "../../../components/ui/BibTag";
+
+const renderCustomIcon = (name) => {
+  if (name.includes("국민의례")) return <Flag size={16} strokeWidth={1.5} />;
+  if (name.includes("내빈")) return <Mic size={16} strokeWidth={1.5} />;
+  if (name.includes("대기")) return <Clock size={16} strokeWidth={1.5} />;
+  if (name.includes("시상")) return <Award size={16} strokeWidth={1.5} />;
+  if (name.includes("쉬는")) return <Coffee size={16} strokeWidth={1.5} />;
+  return <Music size={16} strokeWidth={1.5} />;
+};
 
 export const AudioCategoryTabs = ({
   categoryTabs,
@@ -33,82 +48,82 @@ export const AudioCategoryTabs = ({
   handleUploadCustomMusic,
 }) => {
   const totalCount = allAvailableTracks.length || tracks.length;
+  const isAllUnfiltered =
+    selectedCategoryTab === "ALL" && selectedDivision === "ALL" && !searchText;
+  const activeCustomMeta = CUSTOM_CATEGORIES.find(
+    (c) => c.name === selectedCategoryTab
+  );
 
   return (
-    <div className="space-y-3">
-      {/* 검색 및 필터 헤더 (전체 음원 퀵 전환 바) */}
+    <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* 🎵 전체 음원 상시 보기 퀵 버튼 */}
-          <Button
-            size="small"
-            type={selectedCategoryTab === "ALL" && selectedDivision === "ALL" && !searchText ? "primary" : "default"}
+          <button
+            type="button"
             onClick={() => {
               setSelectedCategoryTab("ALL");
               setSelectedDivision("ALL");
               setSearchText("");
             }}
-            className={`rounded-lg text-xs font-bold ${
-              selectedCategoryTab === "ALL" && selectedDivision === "ALL" && !searchText
-                ? "bg-slate-900 font-black text-white"
-                : "border-slate-300 text-slate-700 hover:bg-slate-100"
+            className={`h-8 px-3 rounded-[8px] border text-xs font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] ${
+              isAllUnfiltered
+                ? "bg-[#2563eb] border-[#2563eb] text-white"
+                : "bg-[#232325] hover:bg-[#2c2c2f] border-[#ededed]/[0.08] text-[#ededed]"
             }`}
           >
-            🎵 전체 음원 목록 ({totalCount}곡)
-          </Button>
+            <Layers size={16} strokeWidth={1.5} />
+            <span>전체 음원</span>
+            <span className="font-mono tabular-nums opacity-80">{totalCount}</span>
+          </button>
 
           {currentStageCategory && (
-            <Button
-              size="small"
-              type={
-                selectedCategoryTab === matchedVibeCategory ||
-                selectedCategoryTab === "CURRENT_STAGE"
-                  ? "primary"
-                  : "default"
-              }
+            <button
+              type="button"
               onClick={handleFilterCurrentStage}
-              className={`rounded-lg text-xs font-bold ${
+              className={`h-8 px-3 rounded-[8px] border text-xs font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] ${
                 selectedCategoryTab === matchedVibeCategory ||
                 selectedCategoryTab === "CURRENT_STAGE"
-                  ? "bg-indigo-600 font-black"
-                  : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                  ? "bg-[#2563eb] border-[#2563eb] text-white"
+                  : "bg-[#232325] hover:bg-[#2c2c2f] border-[#2563eb]/40 text-[#ededed]"
               }`}
             >
-              🎯 현재 무대 [{currentStageCategory}
-              {currentStageGrade ? ` • ${currentStageGrade}` : ""}] 자동 매칭
-            </Button>
+              <StatusDot status="live" live />
+              <span>
+                현재 무대 매칭 ({currentStageCategory}
+                {currentStageGrade ? ` · ${currentStageGrade}` : ""})
+              </span>
+            </button>
           )}
 
-          {(selectedCategoryTab !== "ALL" ||
-            selectedDivision !== "ALL" ||
-            searchText) && (
-            <Button
-              size="small"
+          {!isAllUnfiltered && (
+            <button
+              type="button"
               onClick={() => {
                 setSelectedCategoryTab("ALL");
                 setSelectedDivision("ALL");
                 setSearchText("");
               }}
-              className="rounded-lg text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200"
+              className="h-8 px-3 rounded-[8px] border border-[#ededed]/[0.08] bg-[#141415] hover:bg-[#232325] text-xs font-medium text-[#a1a1a6] hover:text-[#ededed] flex items-center gap-1.5 cursor-pointer transition-[background-color,color] duration-150"
             >
-              🔄 필터 해제 (전체 보기)
-            </Button>
+              <RotateCcw size={14} strokeWidth={1.5} />
+              <span>필터 해제</span>
+            </button>
           )}
+        </div>
+
+        <div className="text-xs text-[#85858b]">
+          전체 보유{" "}
+          <span className="font-mono tabular-nums text-[#ededed] font-medium">
+            {totalCount}
+          </span>
+          곡
         </div>
       </div>
 
-      {/* 🏷️ 1단계: 종목 카테고리 선택 바 */}
-      <div className="space-y-3 pb-2 border-b border-slate-100">
-        {/* 🏆 VibeFlows 공식 경기 종목 영역 */}
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <TrophyOutlined className="text-indigo-600" />
-              <span>1단계: 대회 공식 경기 종목 (VibeFlows)</span>
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">
-              전체 음원 총 <strong className="text-indigo-600 font-mono">{totalCount}</strong>곡 보유
-            </span>
+      <div className="space-y-4 pb-4 border-b border-[#ededed]/[0.08]">
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-[#85858b]">
+            1단계 · 대회 공식 경기 종목
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -123,13 +138,6 @@ export const AudioCategoryTabs = ({
                     currentStageCategory,
                     currentStageGender
                   );
-                const catGender = extractGender(cat.name);
-                const genderIcon =
-                  catGender === "FEMALE"
-                    ? "♀️ "
-                    : catGender === "MALE"
-                    ? "♂️ "
-                    : "";
 
                 return (
                   <button
@@ -139,50 +147,32 @@ export const AudioCategoryTabs = ({
                       setSelectedCategoryTab(cat.name);
                       setSelectedDivision("ALL");
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                    className={`h-8 px-3 rounded-[8px] border text-xs font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] ${
                       isSelected
-                        ? "bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300"
+                        ? "bg-[#2563eb] border-[#2563eb] text-white"
                         : isCurrentMatch
-                        ? "bg-magenta-50 text-magenta-700 border border-magenta-200 hover:bg-magenta-100"
-                        : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                        ? "bg-[#232325] border-[#2563eb]/50 text-[#ededed] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                        : "bg-[#141415] hover:bg-[#232325] border-[#ededed]/[0.08] text-[#a1a1a6] hover:text-[#ededed]"
                     }`}
                   >
-                    <span>
-                      {cat.name === "ALL" ? "전체 종목" : `${genderIcon}${cat.name}`}
-                    </span>
+                    {isCurrentMatch && <StatusDot status="live" live />}
+                    <span>{cat.name === "ALL" ? "전체 종목" : cat.name}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                        isSelected
-                          ? "bg-white/20 text-white"
-                          : isCurrentMatch
-                          ? "bg-magenta-200/60 text-magenta-800"
-                          : "bg-slate-100 text-slate-600"
+                      className={`text-[11px] leading-4 font-mono tabular-nums ${
+                        isSelected ? "text-white/85" : "text-[#85858b]"
                       }`}
                     >
                       {cat.count}
                     </span>
-                    {isCurrentMatch && (
-                      <span
-                        className={`text-[9px] px-1 rounded font-black ${
-                          isSelected
-                            ? "bg-white/30 text-white"
-                            : "bg-magenta-600 text-white"
-                        }`}
-                      >
-                        무대진행
-                      </span>
-                    )}
                   </button>
                 );
               })}
           </div>
         </div>
 
-        {/* ⚡ 특별 연출 음원 영역 */}
-        <div className="space-y-1.5 pt-1">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span className="text-amber-500">⚡</span>
-            <span>특별 연출 음원 (국민의례 / 내빈소개 / 대기 / 시상식 / 쉬는시간)</span>
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-[#85858b]">
+            특별 연출 및 공식 의전 음원
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -198,19 +188,19 @@ export const AudioCategoryTabs = ({
                       setSelectedCategoryTab(cat.name);
                       setSelectedDivision("ALL");
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                    className={`h-8 px-3 rounded-[8px] border text-xs font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] ${
                       isSelected
-                        ? "bg-slate-900 text-white shadow-sm ring-2 ring-slate-400"
-                        : "bg-gradient-to-r from-slate-50 to-indigo-50/40 text-slate-800 hover:bg-indigo-50 border border-indigo-200/80"
+                        ? "bg-[#2563eb] border-[#2563eb] text-white"
+                        : "bg-[#232325] hover:bg-[#2c2c2f] border-[#ededed]/[0.08] text-[#ededed] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                     }`}
                   >
-                    <span className="text-sm">{cat.icon}</span>
+                    <span className={isSelected ? "text-white" : "text-[#85858b]"}>
+                      {renderCustomIcon(cat.name)}
+                    </span>
                     <span>{cat.name}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                        isSelected
-                          ? "bg-white/20 text-white"
-                          : "bg-indigo-100 text-indigo-700"
+                      className={`text-[11px] leading-4 font-mono tabular-nums ${
+                        isSelected ? "text-white/85" : "text-[#85858b]"
                       }`}
                     >
                       {cat.count}
@@ -222,30 +212,24 @@ export const AudioCategoryTabs = ({
         </div>
       </div>
 
-      {/* ☁️ 하드코딩된 커스텀 음원 탭 선택 시 노출되는 전용 업로드 & 가이드 바 */}
-      {CUSTOM_CATEGORIES.some((c) => c.name === selectedCategoryTab) && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-purple-50/60 to-slate-50 border border-indigo-100/90 shadow-2xs space-y-3">
+      {activeCustomMeta && (
+        <div className="p-4 rounded-[8px] bg-[#141415] border border-[#ededed]/[0.08] space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-xl shadow-xs">
-                {CUSTOM_CATEGORIES.find((c) => c.name === selectedCategoryTab)
-                  ?.icon || "🎵"}
+              <div className="w-9 h-9 rounded-[8px] bg-[#232325] border border-[#ededed]/[0.08] flex items-center justify-center text-[#a1a1a6] shrink-0">
+                {renderCustomIcon(selectedCategoryTab)}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-800 text-sm">
+                  <span className="font-medium text-[#ededed] text-[13px]">
                     {selectedCategoryTab}
                   </span>
-                  <Tag color="indigo" className="font-bold text-[10px] m-0">
-                    자체 음원 보관소
-                  </Tag>
+                  <span className="text-[11px] leading-4 px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08] text-[#a1a1a6]">
+                    자체 보관소
+                  </span>
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {
-                    CUSTOM_CATEGORIES.find(
-                      (c) => c.name === selectedCategoryTab
-                    )?.desc
-                  }
+                <div className="text-xs text-[#85858b] mt-0.5">
+                  {activeCustomMeta.desc}
                 </div>
               </div>
             </div>
@@ -267,95 +251,105 @@ export const AudioCategoryTabs = ({
                 }}
                 className="hidden"
               />
-              <Button
-                type="primary"
-                icon={<CloudUploadOutlined />}
-                loading={isUploading}
+              <button
+                type="button"
+                disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-indigo-600 hover:bg-indigo-500 font-bold rounded-xl h-9 px-4 shadow-sm text-xs"
+                className="h-9 px-3.5 rounded-[8px] bg-[#ededed] hover:bg-white text-[#141415] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] text-xs font-medium flex items-center gap-2 cursor-pointer transition-[background-color,transform,opacity] duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isUploading
-                  ? `업로드 중 (${uploadProgress}%)`
-                  : `+ '${selectedCategoryTab}' 파일 업로드`}
-              </Button>
+                <Upload size={16} strokeWidth={1.5} />
+                <span>
+                  {isUploading
+                    ? `업로드 중 (${uploadProgress}%)`
+                    : `${selectedCategoryTab} 파일 업로드`}
+                </span>
+              </button>
             </div>
           </div>
 
           {isUploading && (
-            <div className="space-y-1 bg-white/80 p-2.5 rounded-xl border border-indigo-100">
-              <div className="flex justify-between text-xs font-bold text-indigo-700">
-                <span>음원 파일 업로드 및 동기화 중...</span>
-                <span>{uploadProgress}%</span>
+            <div className="space-y-1.5 bg-[#19191b] p-3 rounded-[8px] border border-[#ededed]/[0.08]">
+              <div className="flex justify-between text-xs text-[#a1a1a6]">
+                <span>음원 파일 업로드 및 동기화 중</span>
+                <span className="font-mono tabular-nums text-[#ededed]">
+                  {uploadProgress}%
+                </span>
               </div>
-              <Progress
-                percent={uploadProgress}
-                showInfo={false}
-                strokeColor="#4f46e5"
-                size="small"
-              />
+              <div className="w-full h-1.5 bg-[#0f0f10] rounded-[4px] overflow-hidden">
+                <div
+                  className="w-full h-full bg-[#2563eb] origin-left transition-transform duration-150"
+                  style={{
+                    transform: `scaleX(${Math.max(
+                      0,
+                      Math.min(1, (uploadProgress || 0) / 100)
+                    )})`,
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 🏷️ 2단계: 세부 체급/부문 칩스 (Division Pills) */}
-      {!CUSTOM_CATEGORIES.some((c) => c.name === selectedCategoryTab) &&
-        availableDivisions.length > 0 && (
-          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                <span>2단계: 세부 부문 / 체급 (Division) 필터</span>
-              </span>
-              <span className="text-[11px] text-slate-500">
-                원하는 체급을 클릭하면 해당 체급 전용 음원만 압축 표출됩니다.
-              </span>
-            </div>
+      {!activeCustomMeta && availableDivisions.length > 0 && (
+        <div className="bg-[#141415] border border-[#ededed]/[0.08] rounded-[8px] p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-medium text-[#a1a1a6]">
+              2단계 · 세부 부문 및 체급 필터
+            </span>
+            <span className="text-xs text-[#85858b]">
+              체급을 선택하면 해당 체급 음원만 표시됩니다
+            </span>
+          </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {availableDivisions.map((div) => {
-                const isSelected = selectedDivision === div.name;
-                const isCurrentMatch =
-                  currentStageGrade &&
-                  div.name !== "ALL" &&
-                  isDivisionMatched(div.name, currentStageGrade);
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setSelectedDivision("ALL")}
+              className={`h-7 px-2.5 rounded-[6px] border text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color] duration-150 ${
+                selectedDivision === "ALL"
+                  ? "bg-[#2563eb] border-[#2563eb] text-white"
+                  : "bg-[#19191b] hover:bg-[#232325] border-[#ededed]/[0.08] text-[#a1a1a6] hover:text-[#ededed]"
+              }`}
+            >
+              <span>전체 체급</span>
+            </button>
 
-                return (
-                  <button
-                    key={div.name}
-                    type="button"
-                    onClick={() => setSelectedDivision(div.name)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                      isSelected
-                        ? "bg-slate-800 text-white shadow-sm ring-1 ring-slate-400"
-                        : isCurrentMatch
-                        ? "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 font-bold"
-                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            {availableDivisions.map((div) => {
+              const isSelected = selectedDivision === div.name;
+              const isCurrentMatch =
+                currentStageGrade &&
+                div.name !== "ALL" &&
+                isDivisionMatched(div.name, currentStageGrade);
+
+              return (
+                <button
+                  key={div.name}
+                  type="button"
+                  onClick={() => setSelectedDivision(div.name)}
+                  className={`h-7 px-2.5 rounded-[6px] border text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color] duration-150 ${
+                    isSelected
+                      ? "bg-[#2563eb] border-[#2563eb] text-white"
+                      : isCurrentMatch
+                      ? "bg-[#232325] border-[#2563eb]/50 text-[#ededed]"
+                      : "bg-[#19191b] hover:bg-[#232325] border-[#ededed]/[0.08] text-[#a1a1a6] hover:text-[#ededed]"
+                  }`}
+                >
+                  {isCurrentMatch && <StatusDot status="live" live />}
+                  <span>{div.name === "ALL" ? "전체 체급" : div.name}</span>
+                  <span
+                    className={`text-[11px] font-mono tabular-nums ${
+                      isSelected ? "text-white/85" : "text-[#85858b]"
                     }`}
                   >
-                    <span>{div.name === "ALL" ? "전체 체급" : div.name}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                        isSelected
-                          ? "bg-white/20 text-white"
-                          : isCurrentMatch
-                          ? "bg-amber-200 text-amber-900"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {div.count}
-                    </span>
-                    {isCurrentMatch && (
-                      <span className="text-[9px] px-1 rounded bg-amber-500 text-white font-black">
-                        현재체급
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                    {div.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 };

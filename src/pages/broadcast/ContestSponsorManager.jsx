@@ -3,7 +3,6 @@
 import React, { useContext, useEffect, useState } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import {
-  useFirestoreGetDocument,
   useFirestoreUpdateData,
   useFirestoreAddData,
   useFirestoreQuery,
@@ -12,20 +11,13 @@ import { storage } from "../../firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { where } from "firebase/firestore";
 import {
-  Card,
   Table,
-  Button,
   Modal,
   Form,
   Input,
-  Space,
-  Tag,
-  Typography,
   Popconfirm,
   message,
   Upload,
-  Progress,
-  Tabs,
   Select,
   InputNumber,
   Switch,
@@ -35,31 +27,85 @@ import {
   Tooltip,
 } from "antd";
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  NotificationOutlined,
-  VideoCameraOutlined,
-  InboxOutlined,
-  CheckCircleOutlined,
-  PlayCircleOutlined,
-  SaveOutlined,
-  FileImageOutlined,
-  FieldTimeOutlined,
-  ThunderboltOutlined,
-  FireOutlined,
-  InfoCircleOutlined,
-  ReloadOutlined,
-  CloudDownloadOutlined,
-} from "@ant-design/icons";
+  Plus,
+  Pencil,
+  Trash2,
+  Film,
+  Image as ImageIcon,
+  Upload as UploadIcon,
+  Clock,
+  Activity,
+  Info,
+  RotateCcw,
+  Download,
+  Megaphone,
+} from "lucide-react";
 import PreDownloadModal from "../../components/broadcast/PreDownloadModal";
 import {
   calculateAdImpressionStats,
   resetAdImpressionCounts,
 } from "../../utils/adEngine";
+import { BibTag, StatusDot } from "../../components/ui/BibTag";
 
-const { Text } = Typography;
 const { Option } = Select;
+
+const VIDEO_SLOTS = [
+  {
+    num: "01",
+    key: "standbyVideoUrl",
+    badge: "대기 화면",
+    title: "대기 및 종목 안내",
+    uploadLabel: "대기 화면 배경 비디오 업로드",
+  },
+  {
+    num: "02",
+    key: "introVideoUrl",
+    badge: "선수 소개",
+    title: "선수 입장 스포트라이트",
+    uploadLabel: "선수 소개 배경 비디오 업로드",
+  },
+  {
+    num: "03",
+    key: "calloutVideoUrl",
+    badge: "비교심사",
+    title: "비교심사 호명",
+    uploadLabel: "비교심사 배경 비디오 업로드",
+  },
+  {
+    num: "04",
+    key: "posedownVideoUrl",
+    badge: "포즈다운",
+    title: "60초 포즈다운 배틀",
+    uploadLabel: "포즈다운 배경 비디오 업로드",
+  },
+  {
+    num: "05",
+    key: "rankingVideoUrl",
+    badge: "순위 발표",
+    title: "실시간 순위 발표 (2열 리스트)",
+    uploadLabel: "순위 발표 배경 비디오 업로드",
+  },
+  {
+    num: "06",
+    key: "championVideoUrl",
+    badge: "챔피언 세레모니",
+    title: "1위 챔피언 단독 쇼케이스",
+    uploadLabel: "챔피언 세레모니 배경 비디오 업로드",
+  },
+  {
+    num: "07",
+    key: "awardVideoUrl",
+    badge: "공식 시상식",
+    title: "시상식 및 포디움 단상",
+    uploadLabel: "시상식 배경 비디오 업로드",
+  },
+];
+
+const SCENE_LABELS = {
+  POSEDOWN: "포즈다운",
+  COMMERCIAL: "광고전용",
+  STANDBY: "대기화면",
+};
 
 const ContestSponsorManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -79,7 +125,6 @@ const ContestSponsorManager = () => {
   });
   const [docId, setDocId] = useState(null);
 
-  // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPreDownloadOpen, setIsPreDownloadOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -87,7 +132,6 @@ const ContestSponsorManager = () => {
   const [selectedMediaType, setSelectedMediaType] = useState("IMAGE");
   const watchedDuration = Form.useWatch("durationSeconds", form);
 
-  // 업로드 상태
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingTarget, setUploadingTarget] = useState("");
@@ -97,7 +141,6 @@ const ContestSponsorManager = () => {
   const updateSponsorData = useFirestoreUpdateData("contest_sponsor_list");
   const addSponsorData = useFirestoreAddData("contest_sponsor_list");
 
-  // 데이터 로드
   const fetchSettings = async () => {
     if (!contestId) return;
     try {
@@ -124,8 +167,10 @@ const ContestSponsorManager = () => {
         setSponsors([]);
       }
 
-      // 🎬 특별영상 목록 로드
-      const spData = await sponsorQuery.getDocuments("contest_special_videos", condition);
+      const spData = await sponsorQuery.getDocuments(
+        "contest_special_videos",
+        condition
+      );
       if (spData && spData.length > 0 && Array.isArray(spData[0]?.videos)) {
         setSpecialVideos(spData[0].videos);
       } else {
@@ -140,17 +185,15 @@ const ContestSponsorManager = () => {
     fetchSettings();
   }, [contestId]);
 
-  // 가중치 & 누적 노출 통계 계산
-  const [statsTick, setStatsTick] = useState(0);
+  const [, setStatsTick] = useState(0);
   const impressionStats = calculateAdImpressionStats(sponsors, "STAGE_LIVE");
 
   const handleResetStats = () => {
     resetAdImpressionCounts("STAGE_LIVE");
     setStatsTick((t) => t + 1);
-    message.success("오늘의 광고 누적 노출 통계가 초기화되었습니다.");
+    message.success("오늘의 광고 누적 노출 통계가 초기화되었습니다");
   };
 
-  // 모달 열기
   const openModal = (index = null) => {
     setEditingIndex(index);
     if (index !== null && sponsors[index]) {
@@ -160,7 +203,8 @@ const ContestSponsorManager = () => {
       setMediaPreview(sp.videoUrl || sp.imageUrl || sp.logoUrl || "");
       form.setFieldsValue({
         ...sp,
-        durationSeconds: sp.durationSeconds || sp.duration || (isVideo ? 10 : 5),
+        durationSeconds:
+          sp.durationSeconds || sp.duration || (isVideo ? 10 : 5),
         weight: sp.weight || 1,
         targetScenes: sp.targetScenes || ["POSEDOWN", "COMMERCIAL"],
       });
@@ -183,10 +227,9 @@ const ContestSponsorManager = () => {
     setIsModalOpen(true);
   };
 
-  // 📤 동영상 업로드 핸들러
   const handleVideoFileUpload = (file, targetField = "adVideo") => {
     if (!contestId) {
-      message.error("대회 정보를 확인할 수 없습니다.");
+      message.error("대회 정보를 확인할 수 없습니다");
       return false;
     }
 
@@ -210,7 +253,7 @@ const ContestSponsorManager = () => {
       },
       (error) => {
         console.error("업로드 에러:", error);
-        message.error("동영상 업로드에 실패했습니다.");
+        message.error("동영상 업로드에 실패했습니다");
         setIsUploading(false);
         setUploadingTarget("");
       },
@@ -226,7 +269,7 @@ const ContestSponsorManager = () => {
           handleSaveVideosToFirestore(newVideos);
         }
 
-        message.success("동영상이 성공적으로 업로드되었습니다!");
+        message.success("동영상이 업로드되었습니다");
         setIsUploading(false);
         setUploadingTarget("");
       }
@@ -235,10 +278,9 @@ const ContestSponsorManager = () => {
     return false;
   };
 
-  // 📤 이미지 업로드 핸들러
   const handleImageFileUpload = (file) => {
     if (!contestId) {
-      message.error("대회 정보를 확인할 수 없습니다.");
+      message.error("대회 정보를 확인할 수 없습니다");
       return false;
     }
 
@@ -262,7 +304,7 @@ const ContestSponsorManager = () => {
       },
       (error) => {
         console.error("업로드 에러:", error);
-        message.error("이미지 업로드에 실패했습니다.");
+        message.error("이미지 업로드에 실패했습니다");
         setIsUploading(false);
         setUploadingTarget("");
       },
@@ -270,7 +312,7 @@ const ContestSponsorManager = () => {
         const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
         form.setFieldsValue({ imageUrl: downloadUrl, mediaUrl: downloadUrl });
         setMediaPreview(downloadUrl);
-        message.success("이미지가 성공적으로 업로드되었습니다!");
+        message.success("이미지가 업로드되었습니다");
         setIsUploading(false);
         setUploadingTarget("");
       }
@@ -279,7 +321,6 @@ const ContestSponsorManager = () => {
     return false;
   };
 
-  // 비디오 설정 저장
   const handleSaveVideosToFirestore = async (newVideos) => {
     if (!contestId) return;
     try {
@@ -301,7 +342,6 @@ const ContestSponsorManager = () => {
     }
   };
 
-  // 스폰서 저장
   const handleSaveSponsorsToFirestore = async (newSponsors) => {
     if (!contestId) return;
     try {
@@ -317,15 +357,14 @@ const ContestSponsorManager = () => {
           ...videoSettings,
         });
       }
-      message.success("광고 설정이 저장되었습니다.");
+      message.success("광고 설정이 저장되었습니다");
       fetchSettings();
     } catch (error) {
       console.error("스폰서 저장 실패:", error);
-      message.error("저장에 실패했습니다.");
+      message.error("저장에 실패했습니다");
     }
   };
 
-  // 스폰서 폼 제출
   const handleSubmitSponsor = (values) => {
     const newSponsors = [...sponsors];
     const itemData = {
@@ -352,7 +391,6 @@ const ContestSponsorManager = () => {
     handleSaveSponsorsToFirestore(newSponsors);
   };
 
-  // 노출 On/Off 토글
   const handleToggleActive = (index, checked) => {
     const newSponsors = [...sponsors];
     newSponsors[index] = {
@@ -367,15 +405,17 @@ const ContestSponsorManager = () => {
       title: "순서",
       dataIndex: "order",
       key: "order",
-      width: 60,
+      width: 68,
       align: "center",
-      render: (_, __, index) => <Tag color="blue">{index + 1}</Tag>,
+      render: (_, __, index) => (
+        <BibTag number={String(index + 1).padStart(2, "0")} size="sm" />
+      ),
     },
     {
       title: "노출",
       dataIndex: "isActive",
       key: "isActive",
-      width: 70,
+      width: 72,
       align: "center",
       render: (active, _, index) => (
         <Switch
@@ -386,85 +426,117 @@ const ContestSponsorManager = () => {
       ),
     },
     {
-      title: "타입",
+      title: "유형",
       dataIndex: "mediaType",
       key: "mediaType",
-      width: 85,
+      width: 96,
       align: "center",
-      render: (type, record) =>
-        type === "VIDEO" || record.videoUrl ? (
-          <Tag color="purple" icon={<VideoCameraOutlined />}>동영상</Tag>
-        ) : (
-          <Tag color="cyan" icon={<FileImageOutlined />}>이미지</Tag>
-        ),
-    },
-    {
-      title: "1회 송출 시간",
-      key: "durationSeconds",
-      width: 110,
-      align: "center",
-      render: (_, record) => {
-        const isVideo = record.mediaType === "VIDEO" || !!record.videoUrl;
-        const sec = Number(record.durationSeconds || record.duration) || (isVideo ? 10 : 5);
+      render: (type, record) => {
+        const isVideo = type === "VIDEO" || Boolean(record.videoUrl);
         return (
-          <Tag color={isVideo ? "geekblue" : "blue"} className="font-mono font-black text-xs">
-            ⏱️ {sec}초
-          </Tag>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs text-[#525252]">
+            {isVideo ? (
+              <>
+                <Film size={14} strokeWidth={1.5} className="text-[#737373]" />
+                <span>동영상</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon
+                  size={14}
+                  strokeWidth={1.5}
+                  className="text-[#737373]"
+                />
+                <span>이미지</span>
+              </>
+            )}
+          </span>
         );
       },
     },
     {
-      title: "스폰서 / 광고명",
+      title: "스폰서 및 광고명",
       dataIndex: "name",
       key: "name",
       render: (text, record) => (
-        <div>
-          <strong className="text-slate-900 text-sm">{text}</strong>
-          {record.tag && <Tag color="orange" className="ml-2 text-xs">{record.tag}</Tag>}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[14px] leading-5 font-medium text-[#171717]">
+              {text}
+            </span>
+            {record.tag && (
+              <span className="text-[11px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.10] text-[#525252]">
+                {record.tag}
+              </span>
+            )}
+          </div>
+          {record.slogan && (
+            <div className="text-xs text-[#737373] truncate max-w-[280px]">
+              {record.slogan}
+            </div>
+          )}
         </div>
       ),
     },
     {
-      title: "노출 가중치 (빈도)",
+      title: "1회 송출",
+      key: "durationSeconds",
+      width: 96,
+      align: "right",
+      render: (_, record) => {
+        const isVideo = record.mediaType === "VIDEO" || !!record.videoUrl;
+        const sec =
+          Number(record.durationSeconds || record.duration) ||
+          (isVideo ? 10 : 5);
+        return (
+          <span className="inline-flex items-center gap-1 font-mono tabular-nums text-xs text-[#171717] font-medium">
+            <Clock size={14} strokeWidth={1.5} className="text-[#737373]" />
+            <span>{sec}s</span>
+          </span>
+        );
+      },
+    },
+    {
+      title: "노출 가중치",
       dataIndex: "weight",
       key: "weight",
-      width: 140,
-      align: "center",
+      width: 132,
+      align: "right",
       render: (w, record) => {
         const found = impressionStats.find((p) => p.name === record.name);
         const targetPercent = found ? found.targetPercent : 0;
         const weightVal = Number(w) || 1;
 
         return (
-          <div className="flex flex-col items-center">
-            <span className="font-mono font-black text-amber-600">
-              가중치 {weightVal}배
-            </span>
-            <span className="text-[10px] text-slate-500 font-bold">
-              (목표 점유율 {targetPercent}%)
-            </span>
+          <div className="text-right">
+            <div className="font-mono tabular-nums text-xs font-medium text-[#171717]">
+              {weightVal}배
+            </div>
+            <div className="text-[11px] leading-4 font-mono tabular-nums text-[#737373]">
+              목표 {targetPercent}%
+            </div>
           </div>
         );
       },
     },
     {
-      title: "오늘 실제 누적 노출 (Impressions)",
+      title: "누적 송출",
       key: "impressions",
-      width: 160,
-      align: "center",
+      width: 140,
+      align: "right",
       render: (_, record) => {
         const found = impressionStats.find((p) => p.name === record.name);
         const count = found ? found.impressions : 0;
         const actualPercent = found ? found.actualPercent : 0;
 
         return (
-          <div className="flex flex-col items-center">
-            <Tag color="cyan" className="font-mono font-black text-xs mr-0">
-              총 {count}회 송출
-            </Tag>
-            <span className="text-[10px] text-slate-500 font-semibold mt-0.5">
-              실제 점유율: {actualPercent}%
-            </span>
+          <div className="text-right">
+            <div className="font-mono tabular-nums text-xs font-medium text-[#2563eb]">
+              {count}회
+            </div>
+            <div className="text-[11px] leading-4 font-mono tabular-nums text-[#737373]">
+              실제 {actualPercent}%
+            </div>
           </div>
         );
       },
@@ -473,375 +545,335 @@ const ContestSponsorManager = () => {
       title: "노출 대상 화면",
       dataIndex: "targetScenes",
       key: "targetScenes",
-      width: 160,
+      width: 168,
       render: (scenes) => {
-        const list = Array.isArray(scenes) ? scenes : ["POSEDOWN", "COMMERCIAL"];
+        const list = Array.isArray(scenes)
+          ? scenes
+          : ["POSEDOWN", "COMMERCIAL"];
         return (
           <div className="flex flex-wrap gap-1">
-            {list.includes("POSEDOWN") && <Tag color="volcano" className="mr-0 text-[10px]">🔥 포즈다운</Tag>}
-            {list.includes("COMMERCIAL") && <Tag color="orange" className="mr-0 text-[10px]">📢 광고전용</Tag>}
-            {list.includes("STANDBY") && <Tag color="blue" className="mr-0 text-[10px]">대기화면</Tag>}
+            {list.map((sc) => (
+              <span
+                key={sc}
+                className="text-[11px] leading-4 px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252]"
+              >
+                {SCENE_LABELS[sc] || sc}
+              </span>
+            ))}
           </div>
         );
       },
     },
     {
-      title: "노출 시간",
-      dataIndex: "durationSeconds",
-      key: "durationSeconds",
-      width: 95,
-      align: "center",
-      render: (val, record) => (
-        <span className="font-mono font-bold text-slate-700">
-          <FieldTimeOutlined className="mr-1 text-amber-500" />
-          {val || record.duration || 10}초
-        </span>
-      ),
-    },
-    {
       title: "미리보기",
       key: "mediaPreview",
-      width: 110,
+      width: 100,
       align: "center",
       render: (_, record) => {
         const isVideo = record.mediaType === "VIDEO" || !!record.videoUrl;
         const url = record.videoUrl || record.imageUrl;
-        if (!url) return <span className="text-slate-400 text-xs">기본</span>;
+        if (!url) return <span className="text-[#737373] text-xs">기본</span>;
 
         return isVideo ? (
-          <video src={url} className="w-14 h-9 object-cover rounded border" muted />
+          <video
+            src={url}
+            className="w-14 h-9 object-cover rounded-[4px] border border-[#171717]/[0.08] mx-auto"
+            muted
+          />
         ) : (
-          <img src={url} alt="배너" className="w-14 h-9 object-cover rounded border" />
+          <img
+            src={url}
+            alt="배너"
+            className="w-14 h-9 object-cover rounded-[4px] border border-[#171717]/[0.08] mx-auto"
+          />
         );
       },
     },
     {
       title: "관리",
       key: "action",
-      width: 100,
-      align: "center",
-      render: (_, record, index) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
+      width: 96,
+      align: "right",
+      render: (_, __, index) => (
+        <div className="inline-flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            aria-label="수정"
             onClick={() => openModal(index)}
-          />
+            className="h-8 w-8 rounded-[6px] bg-[#ffffff] hover:bg-[#f4f4f5] border border-[#171717]/[0.10] text-[#525252] hover:text-[#171717] inline-flex items-center justify-center cursor-pointer transition-colors duration-150"
+          >
+            <Pencil size={15} strokeWidth={1.5} />
+          </button>
           <Popconfirm
-            title="정말 삭제하시겠습니까?"
+            title="이 스폰서 광고를 삭제하시겠습니까?"
             onConfirm={() => handleDelete(index)}
             okText="삭제"
             cancelText="취소"
           >
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <button
+              type="button"
+              aria-label="삭제"
+              className="h-8 w-8 rounded-[6px] bg-[#ffffff] hover:bg-[#dc2626]/10 border border-[#171717]/[0.10] hover:border-[#dc2626]/30 text-[#737373] hover:text-[#dc2626] inline-flex items-center justify-center cursor-pointer transition-colors duration-150"
+            >
+              <Trash2 size={15} strokeWidth={1.5} />
+            </button>
           </Popconfirm>
-        </Space>
+        </div>
       ),
     },
   ];
 
   return (
-    <div className="p-4 sm:p-6 bg-slate-100 min-h-screen space-y-4">
-      <Card className="shadow-sm rounded-2xl border-slate-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white text-2xl shadow-md">
-              <VideoCameraOutlined />
+    <div className="min-h-screen bg-[#fafafa] text-[#171717] p-6">
+      <div className="max-w-[1600px] mx-auto space-y-5">
+        <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center text-[#525252] shrink-0">
+                <Film size={18} strokeWidth={1.5} />
+              </div>
+              <div>
+                <h1 className="text-[20px] leading-7 font-medium text-[#171717] m-0">
+                  전광판 미디어 및 스폰서 가중치 관리
+                </h1>
+                <p className="text-xs text-[#525252] m-0 mt-0.5">
+                  스폰서별 노출 빈도 배수, 1회 송출 시간, 무대 화면별 배경 비디오를 설정합니다
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 m-0">
-                무대 전광판 미디어 & 스마트 광고 가중치 엔진 관리
-              </h1>
-              <p className="text-xs text-slate-500 m-0">
-                스폰서별 가중치(노출 빈도 배수), 개별 노출 시간(초), 포즈다운/전광판 노출 대상을 관리합니다.
-              </p>
+
+            <div className="inline-flex p-1 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => setActiveTab("sponsors")}
+                className={`h-8 px-3.5 rounded-[6px] text-xs font-medium cursor-pointer transition-[background-color,color] duration-150 ${
+                  activeTab === "sponsors"
+                    ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+                    : "text-[#525252] hover:text-[#171717]"
+                }`}
+              >
+                스폰서 광고 엔진
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("videos")}
+                className={`h-8 px-3.5 rounded-[6px] text-xs font-medium cursor-pointer transition-[background-color,color] duration-150 ${
+                  activeTab === "videos"
+                    ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+                    : "text-[#525252] hover:text-[#171717]"
+                }`}
+              >
+                무대 배경 비디오 (7종)
+              </button>
             </div>
           </div>
-
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={[
-              { key: "sponsors", label: "스폰서 광고 엔진 관리" },
-              { key: "videos", label: "무대 배경 비디오(MP4) 설정" },
-            ]}
-          />
         </div>
-      </Card>
 
-      {activeTab === "sponsors" && (
-        <div className="space-y-4">
-          {/* 🌟 스마트 광고 엔진 실시간 점유율 위젯 */}
-          {impressionStats.length > 0 && (
-            <Card size="small" className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl border-indigo-800 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <ThunderboltOutlined className="text-amber-400 text-lg" />
-                  <span className="font-black text-sm text-white">
-                    오늘 실시간 누적 노출 & 공정 가중치 보정 엔진 (Fair Weighted Deficit Scheduler)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-indigo-300 font-mono">
-                    총 {impressionStats.length}개 광고 활성
-                  </span>
+        {activeTab === "sponsors" && (
+          <div className="space-y-5">
+            {impressionStats.length > 0 && (
+              <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+                <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Activity
+                      size={16}
+                      strokeWidth={1.5}
+                      className="text-[#525252]"
+                    />
+                    <span className="text-[13px] leading-5 font-medium text-[#171717]">
+                      금일 누적 송출 및 가중치 수렴 현황
+                    </span>
+                    <span className="text-xs font-mono tabular-nums text-[#737373] ml-1">
+                      활성 {impressionStats.length}건
+                    </span>
+                  </div>
                   <Popconfirm
-                    title="오늘의 광고 누적 노출 횟수를 초기화하시겠습니까?"
+                    title="금일 광고 누적 노출 횟수를 초기화하시겠습니까?"
                     onConfirm={handleResetStats}
                     okText="초기화"
                     cancelText="취소"
                   >
-                    <Button
-                      size="small"
-                      icon={<ReloadOutlined />}
-                      className="text-xs text-slate-300 bg-white/10 hover:bg-white/20 border-white/20"
+                    <button
+                      type="button"
+                      className="h-8 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#fafafa] border border-[#171717]/[0.10] text-xs font-medium text-[#525252] hover:text-[#171717] inline-flex items-center gap-1.5 cursor-pointer transition-colors duration-150 self-start sm:self-auto"
                     >
-                      노출 통계 리셋
-                    </Button>
+                      <RotateCcw size={14} strokeWidth={1.5} />
+                      <span>노출 통계 초기화</span>
+                    </button>
                   </Popconfirm>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-                {impressionStats.map((ad, idx) => (
-                  <div key={idx} className="bg-white/10 p-2.5 rounded-xl border border-white/15">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-black text-white truncate max-w-[120px]">{ad.name}</span>
-                      <span className="font-mono text-cyan-300 font-black">
-                        총 {ad.impressions}회 ({ad.actualPercent}%)
-                      </span>
-                    </div>
-                    <Progress
-                      percent={ad.actualPercent}
-                      showInfo={false}
-                      strokeColor="#22d3ee"
-                      trailColor="rgba(255,255,255,0.15)"
-                      size="small"
-                    />
-                    <div className="text-[10px] text-slate-300 flex justify-between pt-1">
-                      <span>가중치: {ad.weight}배 (목표 {ad.targetPercent}%)</span>
-                      <span className="text-amber-300">
-                        {ad.actualPercent < ad.targetPercent ? "▲ 우선추첨대상" : "● 정상수렴"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+                <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {impressionStats.map((ad, idx) => {
+                    const isDeficit = ad.actualPercent < ad.targetPercent;
+                    const ratio = Math.max(
+                      0,
+                      Math.min(1, (ad.actualPercent || 0) / 100)
+                    );
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-medium text-[#171717] truncate">
+                            {ad.name}
+                          </span>
+                          <span className="font-mono tabular-nums text-[#2563eb] font-medium shrink-0">
+                            {ad.impressions}회 ({ad.actualPercent}%)
+                          </span>
+                        </div>
 
-          <Card
-            className="shadow-sm rounded-2xl border-slate-200"
-            title={
-              <div className="flex items-center justify-between">
-                <span className="font-black text-slate-800 text-base">
-                  등록된 스폰서 광고 목록
-                </span>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
+                        <div className="w-full h-1.5 rounded-[4px] bg-[#e4e4e7] overflow-hidden">
+                          <div
+                            className="w-full h-full bg-[#2563eb] origin-left transition-transform duration-200"
+                            style={{ transform: `scaleX(${ratio})` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] leading-4 text-[#737373]">
+                          <span className="font-mono tabular-nums">
+                            가중치 {ad.weight}x · 목표 {ad.targetPercent}%
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[#525252]">
+                            <StatusDot
+                              status={isDeficit ? "active" : "live"}
+                              live={false}
+                            />
+                            <span>{isDeficit ? "우선 배정" : "정상 수렴"}</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="bg-[#f4f4f5] px-5 py-3.5 border-b border-[#171717]/[0.08] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] leading-5 font-medium text-[#171717]">
+                    등록된 스폰서 광고 목록
+                  </span>
+                  <span className="text-xs font-mono tabular-nums text-[#737373]">
+                    {sponsors.length}건
+                  </span>
+                </div>
+                <button
+                  type="button"
                   onClick={() => openModal()}
-                  className="bg-indigo-600 font-bold"
+                  className="h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-[background-color,transform] duration-150 active:scale-[0.98]"
                 >
-                  새 광고 / 스폰서 등록
-                </Button>
+                  <Plus size={16} strokeWidth={1.5} />
+                  <span>새 스폰서 등록</span>
+                </button>
               </div>
-            }
-          >
-            <Table
-              dataSource={sponsors}
-              columns={columns}
-              rowKey={(r, idx) => r.id || idx}
-              pagination={false}
-              size="middle"
-            />
-          </Card>
-        </div>
-      )}
 
-      {/* 2. 배경 비디오 설정 탭 */}
-      {activeTab === "videos" && (
-        <Card
-          className="shadow-sm rounded-2xl border-slate-200"
-          title={<span className="font-black text-slate-800">무대 전광판 화면별 배경 비디오 (MP4) 7종 독립 설정</span>}
-          extra={
-            <Button
-              type="primary"
-              icon={<CloudDownloadOutlined />}
-              onClick={() => setIsPreDownloadOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 font-black rounded-xl shadow-md border-none"
-            >
-              ⚡ 무대 영상 사전 다운로드 (Pre-Download) 매니저
-            </Button>
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            
-            {/* ① 대기 화면 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="blue" className="font-bold">1. 대기 화면</Tag>
-                  <span className="font-black text-sm text-slate-800">대기 및 종목 안내</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "standbyVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-blue-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">대기 화면 비디오 업로드</p>
-                </Upload.Dragger>
+              <div className="p-0">
+                <Table
+                  dataSource={sponsors}
+                  columns={columns}
+                  rowKey={(r, idx) => r.id || idx}
+                  pagination={false}
+                  size="middle"
+                />
               </div>
-              {videoSettings.standbyVideoUrl && (
-                <video src={videoSettings.standbyVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
             </div>
-
-            {/* ② 선수 소개 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="cyan" className="font-bold">2. 선수 소개</Tag>
-                  <span className="font-black text-sm text-slate-800">선수 입장 스포트라이트</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "introVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-cyan-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">선수 소개 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.introVideoUrl && (
-                <video src={videoSettings.introVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
-            {/* ③ 비교심사 호명 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="orange" className="font-bold">3. 비교심사</Tag>
-                  <span className="font-black text-sm text-slate-800">비교심사 호명</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "calloutVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-orange-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">비교심사 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.calloutVideoUrl && (
-                <video src={videoSettings.calloutVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
-            {/* ④ 포즈다운 배틀 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="red" className="font-bold">4. 포즈다운</Tag>
-                  <span className="font-black text-sm text-slate-800">60초 포즈다운 배틀</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "posedownVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-red-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">포즈다운 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.posedownVideoUrl && (
-                <video src={videoSettings.posedownVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
-            {/* ⑤ 순위 발표 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="gold" className="font-bold">5. 순위 발표</Tag>
-                  <span className="font-black text-sm text-slate-800">실시간 순위 발표 (2열 리스트)</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "rankingVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-amber-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">순위 발표 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.rankingVideoUrl && (
-                <video src={videoSettings.rankingVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
-            {/* ⑥ 👑 1위 챔피언 단독 세레모니 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="volcano" className="font-bold">6. 챔피언 세레모니</Tag>
-                  <span className="font-black text-sm text-slate-800">👑 1위 챔피언 단독 쇼케이스</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "championVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-orange-600" /></p>
-                  <p className="ant-upload-text text-xs font-bold">챔피언 세레모니 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.championVideoUrl && (
-                <video src={videoSettings.championVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
-            {/* ⑦ 공식 시상식 배경 */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag color="purple" className="font-bold">7. 공식 시상식</Tag>
-                  <span className="font-black text-sm text-slate-800">🏅 시상식 & 포디움 단상</span>
-                </div>
-                <Upload.Dragger
-                  accept="video/mp4,video/*"
-                  showUploadList={false}
-                  beforeUpload={(file) => handleVideoFileUpload(file, "awardVideoUrl")}
-                  disabled={isUploading}
-                >
-                  <p className="ant-upload-drag-icon"><InboxOutlined className="text-purple-500" /></p>
-                  <p className="ant-upload-text text-xs font-bold">시상식 비디오 업로드</p>
-                </Upload.Dragger>
-              </div>
-              {videoSettings.awardVideoUrl && (
-                <video src={videoSettings.awardVideoUrl} controls className="w-full h-28 object-cover rounded-xl mt-2" />
-              )}
-            </div>
-
           </div>
-        </Card>
-      )}
+        )}
 
-      {/* 🌟 스폰서 광고 등록 / 수정 모달 (가중치 및 노출 대상 포함) */}
+        {activeTab === "videos" && (
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="bg-[#f4f4f5] px-5 py-3.5 border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[14px] leading-5 font-medium text-[#171717] m-0">
+                  무대 전광판 화면별 배경 비디오 설정
+                </h2>
+                <p className="text-xs text-[#737373] m-0 mt-0.5">
+                  7개 연출 화면에 독립 재생할 MP4 배경 영상을 등록합니다
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPreDownloadOpen(true)}
+                className="h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium inline-flex items-center gap-2 cursor-pointer transition-[background-color,transform] duration-150 active:scale-[0.98] self-start sm:self-auto"
+              >
+                <Download size={16} strokeWidth={1.5} />
+                <span>무대 영상 사전 다운로드</span>
+              </button>
+            </div>
+
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {VIDEO_SLOTS.map((slot) => {
+                const videoUrl = videoSettings[slot.key];
+                const isSlotUploading =
+                  isUploading && uploadingTarget === slot.key;
+
+                return (
+                  <div
+                    key={slot.key}
+                    className="p-4 bg-[#fafafa] rounded-[10px] border border-[#171717]/[0.08] flex flex-col justify-between gap-3"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <BibTag number={slot.num} size="sm" />
+                          <span className="text-[13px] leading-5 font-medium text-[#171717] truncate">
+                            {slot.title}
+                          </span>
+                        </div>
+                        <span className="text-[11px] leading-4 px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-[#525252] shrink-0">
+                          {slot.badge}
+                        </span>
+                      </div>
+
+                      <Upload.Dragger
+                        accept="video/mp4,video/*"
+                        showUploadList={false}
+                        beforeUpload={(file) =>
+                          handleVideoFileUpload(file, slot.key)
+                        }
+                        disabled={isUploading}
+                      >
+                        <div className="py-2 flex flex-col items-center gap-1.5">
+                          <UploadIcon
+                            size={18}
+                            strokeWidth={1.5}
+                            className="text-[#737373]"
+                          />
+                          <span className="text-xs font-medium text-[#525252]">
+                            {isSlotUploading
+                              ? `업로드 중 (${uploadProgress}%)`
+                              : slot.uploadLabel}
+                          </span>
+                        </div>
+                      </Upload.Dragger>
+                    </div>
+
+                    {videoUrl && (
+                      <video
+                        src={videoUrl}
+                        controls
+                        className="w-full h-28 object-cover rounded-[8px] border border-[#171717]/[0.08]"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       <Modal
         title={
-          <div className="flex items-center gap-2">
-            <NotificationOutlined className="text-indigo-600" />
-            <span className="font-black text-slate-900">
-              {editingIndex !== null ? "스폰서 광고 및 가중치 수정" : "새 스폰서 광고 등록"}
+          <div className="flex items-center gap-2 text-[#171717]">
+            <Megaphone size={18} strokeWidth={1.5} className="text-[#525252]" />
+            <span className="font-medium text-[15px]">
+              {editingIndex !== null
+                ? "스폰서 광고 및 가중치 수정"
+                : "새 스폰서 광고 등록"}
             </span>
           </div>
         }
@@ -851,114 +883,130 @@ const ContestSponsorManager = () => {
         destroyOnClose
         width={680}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmitSponsor} className="pt-2">
-          
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmitSponsor}
+          className="pt-2"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Form.Item
               name="name"
-              label="스폰서 / 광고명"
-              rules={[{ required: true, message: "스폰서명을 입력하세요." }]}
+              label="스폰서 및 광고명"
+              rules={[{ required: true, message: "스폰서명을 입력하세요" }]}
             >
               <Input placeholder="예: (주)인바디, MONSTER ENERGY" />
             </Form.Item>
 
-            <Form.Item name="tag" label="스폰서 등급 뱃지">
+            <Form.Item name="tag" label="스폰서 등급">
               <Select>
-                <Option value="DIAMOND">💎 DIAMOND SPONSOR (메인)</Option>
-                <Option value="PLATINUM">⭐ PLATINUM SPONSOR</Option>
-                <Option value="GOLD">🏆 GOLD SPONSOR</Option>
-                <Option value="OFFICIAL">🛡️ OFFICIAL PARTNER</Option>
+                <Option value="DIAMOND">DIAMOND (메인 스폰서)</Option>
+                <Option value="PLATINUM">PLATINUM 스폰서</Option>
+                <Option value="GOLD">GOLD 스폰서</Option>
+                <Option value="OFFICIAL">OFFICIAL 파트너</Option>
               </Select>
             </Form.Item>
           </div>
 
-          <Form.Item name="slogan" label="광고 카피 / 슬로건 문구">
-            <Input placeholder="예: 한계를 뛰어넘어라! 공식 에너지 드링크 파트너" />
+          <Form.Item name="slogan" label="광고 카피 및 슬로건">
+            <Input placeholder="예: 공식 에너지 드링크 파트너" />
           </Form.Item>
 
-          {/* 🌟 노출 가중치 & 노출 시간 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#f4f4f5] p-4 rounded-[8px] border border-[#171717]/[0.08] mb-4">
             <Form.Item
               name="weight"
               label={
-                <span className="font-bold flex items-center gap-1">
-                  <span>노출 가중치 (빈도 배수: 1~10배)</span>
-                  <Tooltip title="가중치가 3이면 1인 광고보다 3배 더 자주 랜덤으로 배정되어 상영됩니다.">
-                    <InfoCircleOutlined className="text-slate-400" />
+                <span className="font-medium text-xs text-[#171717] flex items-center gap-1.5">
+                  <span>노출 가중치 (1–10배)</span>
+                  <Tooltip title="가중치가 3이면 1인 광고보다 3배 더 자주 배정되어 송출됩니다">
+                    <Info
+                      size={14}
+                      strokeWidth={1.5}
+                      className="text-[#737373]"
+                    />
                   </Tooltip>
                 </span>
               }
               rules={[{ required: true }]}
+              className="mb-0"
             >
-              <Slider min={1} max={10} marks={{ 1: "1배", 3: "3배(추천)", 5: "5배", 10: "10배(독점)" }} />
+              <Slider
+                min={1}
+                max={10}
+                marks={{ 1: "1x", 3: "3x", 5: "5x", 10: "10x" }}
+              />
             </Form.Item>
 
-            <div className="space-y-1">
+            <div className="space-y-2">
               <Form.Item
                 name="durationSeconds"
                 label={
-                  <span className="font-bold flex items-center justify-between w-full">
+                  <span className="font-medium text-xs text-[#171717] flex items-center justify-between w-full gap-2">
                     <span>1회 송출 시간 (초)</span>
-                    <span className="text-[11px] text-slate-500 font-normal">
-                      {selectedMediaType === "VIDEO" ? "(영상 권장: 10초)" : "(로고/이미지 권장: 5초)"}
+                    <span className="text-[11px] text-[#737373] font-normal">
+                      {selectedMediaType === "VIDEO"
+                        ? "권장 10초"
+                        : "권장 5초"}
                     </span>
                   </span>
                 }
-                rules={[{ required: true, message: "송출 시간을 입력하세요." }]}
+                rules={[{ required: true, message: "송출 시간을 입력하세요" }]}
                 className="mb-1"
               >
-                <InputNumber min={2} max={60} step={1} className="w-full" addonAfter="초" />
+                <InputNumber
+                  min={2}
+                  max={60}
+                  step={1}
+                  className="w-full"
+                  addonAfter="초"
+                />
               </Form.Item>
 
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                <Tag
-                  color={watchedDuration === 5 ? "blue" : "default"}
-                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
-                  onClick={() => form.setFieldsValue({ durationSeconds: 5 })}
-                >
-                  ⚡ 5초 (로고 권장)
-                </Tag>
-                <Tag
-                  color={watchedDuration === 10 ? "purple" : "default"}
-                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
-                  onClick={() => form.setFieldsValue({ durationSeconds: 10 })}
-                >
-                  🎬 10초 (영상 권장)
-                </Tag>
-                <Tag
-                  color={watchedDuration === 15 ? "geekblue" : "default"}
-                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
-                  onClick={() => form.setFieldsValue({ durationSeconds: 15 })}
-                >
-                  15초
-                </Tag>
-                <Tag
-                  color={watchedDuration === 20 ? "gold" : "default"}
-                  className="cursor-pointer hover:opacity-80 text-xs px-2 py-0.5 font-bold"
-                  onClick={() => form.setFieldsValue({ durationSeconds: 20 })}
-                >
-                  20초
-                </Tag>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { sec: 5, label: "5s 로고" },
+                  { sec: 10, label: "10s 영상" },
+                  { sec: 15, label: "15s" },
+                  { sec: 20, label: "20s" },
+                ].map((preset) => (
+                  <button
+                    key={preset.sec}
+                    type="button"
+                    onClick={() =>
+                      form.setFieldsValue({ durationSeconds: preset.sec })
+                    }
+                    className={`h-7 px-2.5 rounded-[6px] border text-xs font-mono tabular-nums cursor-pointer transition-colors duration-150 ${
+                      watchedDuration === preset.sec
+                        ? "bg-[#2563eb] border-[#2563eb] text-white"
+                        : "bg-[#ffffff] border-[#171717]/[0.10] text-[#525252] hover:text-[#171717]"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* 🌟 노출 대상 화면 선택 */}
           <Form.Item
             name="targetScenes"
             label="광고 노출 대상 화면"
-            rules={[{ required: true, message: "노출할 화면을 최소 1개 이상 선택하세요." }]}
+            rules={[
+              {
+                required: true,
+                message: "노출할 화면을 최소 1개 이상 선택하세요",
+              },
+            ]}
           >
             <Checkbox.Group
               options={[
-                { label: "🔥 포즈다운 화면 (POSEDOWN)", value: "POSEDOWN" },
-                { label: "📢 공식 광고 전용 화면 (COMMERCIAL)", value: "COMMERCIAL" },
-                { label: "대기/종목안내 화면 (STANDBY)", value: "STANDBY" },
+                { label: "포즈다운 화면 (POSEDOWN)", value: "POSEDOWN" },
+                { label: "공식 광고 화면 (COMMERCIAL)", value: "COMMERCIAL" },
+                { label: "대기 및 안내 화면 (STANDBY)", value: "STANDBY" },
               ]}
             />
           </Form.Item>
 
-          {/* 미디어 유형 선택 */}
           <Form.Item label="광고 콘텐츠 형태" required>
             <Radio.Group
               value={selectedMediaType}
@@ -974,16 +1022,25 @@ const ContestSponsorManager = () => {
               }}
               buttonStyle="solid"
             >
-              <Radio.Button value="IMAGE">🖼️ 이미지 배너/포스터 (기본 5초)</Radio.Button>
-              <Radio.Button value="VIDEO">🎬 MP4 동영상 광고 (기본 10초)</Radio.Button>
+              <Radio.Button value="IMAGE">
+                이미지 배너 및 포스터 (기본 5초)
+              </Radio.Button>
+              <Radio.Button value="VIDEO">
+                MP4 동영상 광고 (기본 10초)
+              </Radio.Button>
             </Radio.Group>
           </Form.Item>
 
-          {/* 미디어 업로드 / URL 입력 */}
           {selectedMediaType === "IMAGE" ? (
             <div className="space-y-2">
-              <Form.Item name="imageUrl" label="이미지 URL 직접 입력 또는 파일 업로드">
-                <Input placeholder="https://..." onChange={(e) => setMediaPreview(e.target.value)} />
+              <Form.Item
+                name="imageUrl"
+                label="이미지 URL 입력 또는 파일 업로드"
+              >
+                <Input
+                  placeholder="https://..."
+                  onChange={(e) => setMediaPreview(e.target.value)}
+                />
               </Form.Item>
               <Upload.Dragger
                 accept="image/*"
@@ -991,14 +1048,28 @@ const ContestSponsorManager = () => {
                 beforeUpload={handleImageFileUpload}
                 disabled={isUploading}
               >
-                <p className="ant-upload-drag-icon"><InboxOutlined className="text-indigo-500" /></p>
-                <p className="ant-upload-text text-xs font-bold">이미지 파일 드래그 & 드롭</p>
+                <div className="py-2 flex flex-col items-center gap-1.5">
+                  <UploadIcon
+                    size={18}
+                    strokeWidth={1.5}
+                    className="text-[#737373]"
+                  />
+                  <span className="text-xs font-medium text-[#525252]">
+                    이미지 파일 드래그 또는 클릭하여 업로드
+                  </span>
+                </div>
               </Upload.Dragger>
             </div>
           ) : (
             <div className="space-y-2">
-              <Form.Item name="videoUrl" label="동영상 URL 직접 입력 또는 MP4 파일 업로드">
-                <Input placeholder="https://...mp4" onChange={(e) => setMediaPreview(e.target.value)} />
+              <Form.Item
+                name="videoUrl"
+                label="동영상 URL 입력 또는 MP4 파일 업로드"
+              >
+                <Input
+                  placeholder="https://...mp4"
+                  onChange={(e) => setMediaPreview(e.target.value)}
+                />
               </Form.Item>
               <Upload.Dragger
                 accept="video/mp4,video/*"
@@ -1006,43 +1077,83 @@ const ContestSponsorManager = () => {
                 beforeUpload={(file) => handleVideoFileUpload(file, "adVideo")}
                 disabled={isUploading}
               >
-                <p className="ant-upload-drag-icon"><InboxOutlined className="text-purple-500" /></p>
-                <p className="ant-upload-text text-xs font-bold">MP4 동영상 파일 드래그 & 드롭</p>
+                <div className="py-2 flex flex-col items-center gap-1.5">
+                  <UploadIcon
+                    size={18}
+                    strokeWidth={1.5}
+                    className="text-[#737373]"
+                  />
+                  <span className="text-xs font-medium text-[#525252]">
+                    MP4 동영상 파일 드래그 또는 클릭하여 업로드
+                  </span>
+                </div>
               </Upload.Dragger>
             </div>
           )}
 
           {isUploading && (
-            <div className="py-2">
-              <Text className="text-xs text-indigo-600 font-bold">업로드 진행 중...</Text>
-              <Progress percent={uploadProgress} size="small" />
+            <div className="py-3 space-y-1.5">
+              <div className="flex justify-between text-xs text-[#525252]">
+                <span>파일 업로드 진행 중</span>
+                <span className="font-mono tabular-nums text-[#171717]">
+                  {uploadProgress}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-[#e4e4e7] rounded-[4px] overflow-hidden">
+                <div
+                  className="w-full h-full bg-[#2563eb] origin-left transition-transform duration-150"
+                  style={{
+                    transform: `scaleX(${Math.max(
+                      0,
+                      Math.min(1, (uploadProgress || 0) / 100)
+                    )})`,
+                  }}
+                />
+              </div>
             </div>
           )}
 
-          {/* 미디어 미리보기 */}
           {mediaPreview && (
-            <div className="mt-3 p-2 bg-slate-900 rounded-xl">
-              <Text className="text-xs text-slate-400 block mb-1">미디어 미리보기</Text>
+            <div className="mt-3 p-3 bg-[#f4f4f5] rounded-[8px] border border-[#171717]/[0.08]">
+              <div className="text-xs text-[#737373] mb-2">미디어 미리보기</div>
               {selectedMediaType === "VIDEO" ? (
-                <video src={mediaPreview} controls className="w-full h-36 object-contain rounded-lg" />
+                <video
+                  src={mediaPreview}
+                  controls
+                  className="w-full h-36 object-contain rounded-[6px] bg-[#141415]"
+                />
               ) : (
-                <img src={mediaPreview} alt="미리보기" className="w-full h-36 object-contain rounded-lg" />
+                <img
+                  src={mediaPreview}
+                  alt="미리보기"
+                  className="w-full h-36 object-contain rounded-[6px] bg-[#ffffff]"
+                />
               )}
             </div>
           )}
 
-          <Form.Item name="id" hidden><Input /></Form.Item>
+          <Form.Item name="id" hidden>
+            <Input />
+          </Form.Item>
 
-          <div className="flex justify-end gap-2 pt-4 mt-3 border-t">
-            <Button onClick={() => setIsModalOpen(false)}>취소</Button>
-            <Button type="primary" htmlType="submit" className="bg-indigo-600 font-bold">
+          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-[#171717]/[0.08]">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] cursor-pointer transition-colors duration-150"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer transition-colors duration-150"
+            >
               저장하기
-            </Button>
+            </button>
           </div>
         </Form>
       </Modal>
 
-      {/* ⚡ 무대 비디오 및 스폰서 광고 + 특별영상 사전 다운로드 매니저 모달 */}
       <PreDownloadModal
         open={isPreDownloadOpen}
         onClose={() => setIsPreDownloadOpen(false)}

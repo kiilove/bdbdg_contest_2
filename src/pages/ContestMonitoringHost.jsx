@@ -1,6 +1,22 @@
 "use client";
 
-import { useContext, useEffect, useState, useMemo } from "react";
+import React, { useContext, useEffect, useState, useMemo } from "react";
+import {
+  Mic,
+  Type,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  Timer,
+  BarChart3,
+  Trophy,
+  Award,
+  Users,
+  Send,
+  ArrowDownUp,
+  Check,
+  AlertCircle,
+} from "lucide-react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
@@ -13,36 +29,24 @@ import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { matchedGradewWithPlayers } from "../functions/functions";
 import { Spin, message } from "antd";
-import {
-  UpOutlined,
-  DownOutlined,
-  EyeOutlined,
-  SendOutlined,
-  TrophyOutlined,
-  UnorderedListOutlined,
-  CheckCircleFilled,
-  FullscreenOutlined,
-  FullscreenExitOutlined,
-  FontSizeOutlined,
-  SoundOutlined,
-} from "@ant-design/icons";
+import { BibTag, StatusDot } from "../components/ui/BibTag";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const { currentContest } = useContext(CurrentContestContext);
   const effectiveContestId = contestId || currentContest?.contests?.id || "";
 
-  const [stagesArray, setStagesArray] = useState([]);
+  const [, setStagesArray] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
-  const [contestInfo, setContestInfo] = useState({});
+  const [, setContestInfo] = useState({});
   const [selectedPlayerUid, setSelectedPlayerUid] = useState(null);
-  const [calledPlayers, setCalledPlayers] = useState({}); // 호명 완료 체크 상태
-  const [calledCompareNums, setCalledCompareNums] = useState({}); // 비교심사 호명 체크
+  const [calledPlayers, setCalledPlayers] = useState({});
+  const [calledCompareNums, setCalledCompareNums] = useState({});
 
   const fetchResultQuery = useFirestoreQuery();
   const [rankingData, setRankingData] = useState(null);
   const [isRankingView, setIsRankingView] = useState(false);
-  const [isReversed, setIsReversed] = useState(true); // 사회자는 기본 역순(5위->1위)이 편함
+  const [isReversed, setIsReversed] = useState(true);
   const [isLandscape, setIsLandscape] = useState(
     typeof window !== "undefined"
       ? window.innerWidth > window.innerHeight
@@ -50,7 +54,7 @@ const ContestMonitoringHost = ({ contestId }) => {
   );
 
   // 글자 크기 조절 (normal / large / xlarge)
-  const [fontScale, setFontScale] = useState("large"); // tablet default = large
+  const [fontScale, setFontScale] = useState("large");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 사회자 비교심사 전용 상태
@@ -67,13 +71,13 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   const updateCurrentStage = useFirebaseRealtimeUpdateData();
 
-  // 📡 실시간 전광판 송출 상태 구독 및 제어 (최상단 호출)
+  // 실시간 전광판 송출 상태 구독 및 제어
   const { data: broadcastData } = useFirebaseRealtimeGetDocument(
     effectiveContestId ? `currentBroadcast/${effectiveContestId}` : null
   );
   const updateBroadcast = useFirebaseRealtimeUpdateData();
 
-  // 📸 전체 선수 풀에서 playerUid 기준 사진 맵 구축 (최상단 호출로 React Rules of Hooks 준수)
+  // 전체 선수 풀에서 playerUid 기준 사진 맵 구축
   const uidPhotoMap = useMemo(() => {
     const map = new Map();
     (currentPlayersArray || []).forEach((g) => {
@@ -103,7 +107,7 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   const fetchPool = async (
     noticeId,
-    contestId,
+    cId,
     stageAssignId,
     playerFinalId,
     currentStageId
@@ -136,7 +140,7 @@ const ContestMonitoringHost = ({ contestId }) => {
         const playerList = currentStageGrades.length
           ? currentStageGrades.map((grade) => {
               const matchedPlayers = matchedGradewWithPlayers(
-                contestId,
+                cId,
                 grade.gradeId,
                 players
               );
@@ -157,7 +161,7 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
-  const handleViewRanking = async (gradeId, gradeTitle) => {
+  const handleViewRanking = async (gradeId) => {
     if (isRankingView) {
       setIsRankingView(false);
       setRankingData(null);
@@ -171,7 +175,7 @@ const ContestMonitoringHost = ({ contestId }) => {
 
         if (!data || data.length === 0) {
           setRankingData([]);
-          message.error("순위결과가 아직 등록되지 않았습니다.");
+          message.error("순위 결과가 아직 등록되지 않았습니다");
           return;
         }
 
@@ -190,9 +194,9 @@ const ContestMonitoringHost = ({ contestId }) => {
   const handleSendToScreen = async (gradeId, gradeTitle) => {
     try {
       await fetchResultAndScoreBoard(gradeId, gradeTitle);
-      message.success("전광판에 순위가 송출되었습니다!");
+      message.success("전광판에 순위가 송출되었습니다");
     } catch (error) {
-      message.error("스크린 송출 중 에러 발생");
+      message.error("스크린 송출 중 오류가 발생했습니다");
       console.log("스크린 송출 중 에러:", error);
     }
   };
@@ -226,7 +230,6 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
-  // 호명 완료 토글
   const togglePlayerCalled = (playerUid) => {
     setCalledPlayers((prev) => ({
       ...prev,
@@ -242,20 +245,16 @@ const ContestMonitoringHost = ({ contestId }) => {
     }));
   };
 
-  // 전체화면 토글
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
       setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-        setIsFullscreen(false);
-      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
     }
   };
 
-  // 폰트 크기 변경
   const cycleFontSize = () => {
     if (fontScale === "normal") setFontScale("large");
     else if (fontScale === "large") setFontScale("xlarge");
@@ -271,7 +270,6 @@ const ContestMonitoringHost = ({ contestId }) => {
         realtimeData?.stageId
       ) {
         setIsLoading(true);
-        // 체급 변경 시 호명 상태 초기화
         setCalledPlayers({});
         setCalledCompareNums({});
         await fetchPool(
@@ -285,6 +283,7 @@ const ContestMonitoringHost = ({ contestId }) => {
     };
 
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest, realtimeData?.stageId]);
 
   useEffect(() => {
@@ -302,7 +301,6 @@ const ContestMonitoringHost = ({ contestId }) => {
     if (!nums || nums.length === 0) {
       setIsCompareView(false);
     } else {
-      // 새로운 비교심사가 오면 자동으로 비교심사 뷰 활성화
       setIsCompareView(true);
       setIsRankingView(false);
     }
@@ -310,66 +308,63 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   if (isLoading || realtimeLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white gap-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#141415] text-[#ededed] gap-3">
         <Spin size="large" />
-        <p className="text-lg font-bold text-slate-300">사회자 무대 데이터를 불러오는 중...</p>
+        <p className="text-sm font-medium text-[#a1a1a6] m-0">
+          사회자 무대 데이터를 불러오는 중
+        </p>
       </div>
     );
   }
 
   if (realtimeError) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-900 p-6">
-        <div className="bg-red-900/40 border border-red-500 rounded-2xl p-6 text-white text-center">
-          <p className="text-xl font-bold">오류 발생: {realtimeError.message}</p>
+      <div className="flex items-center justify-center min-h-screen bg-[#141415] p-6">
+        <div className="bg-[#19191b] border border-[#e5484d]/40 rounded-[12px] p-6 text-[#ededed] flex items-center gap-3 max-w-md">
+          <AlertCircle size={18} strokeWidth={1.5} className="text-[#e5484d] shrink-0" />
+          <p className="text-sm font-medium m-0">
+            연결 오류: {realtimeError.message}
+          </p>
         </div>
       </div>
     );
   }
 
-  // 비교 상태 파생값
   const compareStatus = realtimeData?.compares?.status || {};
   const isCompareRunning =
-    !!compareStatus?.compareStart || !!compareStatus?.compareIng;
+    Boolean(compareStatus?.compareStart) || Boolean(compareStatus?.compareIng);
   const isCompareConfirmed = (compareNumbers?.length || 0) > 0;
 
-  // 글자 크기 매핑
+  // 프롬프터 글자 크기 매핑 (400~600 웨이트 유지)
   const textClasses = {
     normal: {
-      playerNum: "text-4xl",
-      playerName: "text-2xl",
-      playerGym: "text-base",
+      playerNum: "text-3xl",
+      playerName: "text-xl",
+      playerGym: "text-sm",
       playerText: "text-sm",
-      rankTitle: "text-5xl",
-      rankName: "text-3xl",
-      compareNum: "text-5xl",
+      compareNum: "text-4xl",
     },
     large: {
-      playerNum: "text-6xl",
-      playerName: "text-3xl sm:text-4xl",
-      playerGym: "text-lg sm:text-xl",
-      playerText: "text-base sm:text-lg",
-      rankTitle: "text-7xl",
-      rankName: "text-4xl sm:text-5xl",
-      compareNum: "text-7xl",
+      playerNum: "text-5xl",
+      playerName: "text-2xl sm:text-3xl",
+      playerGym: "text-base sm:text-lg",
+      playerText: "text-base",
+      compareNum: "text-6xl",
     },
     xlarge: {
-      playerNum: "text-7xl sm:text-8xl",
-      playerName: "text-4xl sm:text-5xl",
-      playerGym: "text-2xl sm:text-3xl",
-      playerText: "text-xl sm:text-2xl",
-      rankTitle: "text-8xl sm:text-9xl",
-      rankName: "text-5xl sm:text-6xl",
-      compareNum: "text-8xl sm:text-9xl",
+      playerNum: "text-6xl sm:text-7xl",
+      playerName: "text-3xl sm:text-4xl",
+      playerGym: "text-xl sm:text-2xl",
+      playerText: "text-lg sm:text-xl",
+      compareNum: "text-7xl sm:text-8xl",
     },
   }[fontScale];
 
   const currentBroadcastMode = broadcastData?.mode || "STANDBY";
 
-  // 📡 전광판 방송 모드 즉시 스위칭 핸들러
   const handleSwitchBroadcastMode = async (mode, extraData = {}) => {
     if (!effectiveContestId) {
-      message.error("대회 정보를 불러올 수 없습니다.");
+      message.error("대회 정보를 불러올 수 없습니다");
       return;
     }
     try {
@@ -380,25 +375,25 @@ const ContestMonitoringHost = ({ contestId }) => {
       });
 
       const modeNames = {
-        STANDBY: "🏠 대기 및 종목안내",
-        ATHLETE_INTRO: "📢 선수 단독 소개",
-        COMPARISON_CALLOUT: "⚔️ 비교심사 호명",
-        POSEDOWN: "🔥 60초 포즈다운 배틀",
-        COMMERCIAL: "📊 점수 집계중 (광고)",
-        RANKING: "🏆 1~3위 순위 발표",
-        CHAMPION_SHOWCASE: "👑 1위 챔피언 세레모니",
+        STANDBY: "대기 및 종목 안내",
+        ATHLETE_INTRO: "선수 단독 소개",
+        COMPARISON_CALLOUT: "비교심사 호명",
+        POSEDOWN: "60초 포즈다운",
+        COMMERCIAL: "점수 집계 중",
+        RANKING: "순위 발표",
+        CHAMPION_SHOWCASE: "1위 챔피언 세레모니",
       };
 
-      message.success(`전광판 송출 전환: [${modeNames[mode] || mode}]`);
+      message.success(`전광판 송출 전환: ${modeNames[mode] || mode}`);
     } catch (error) {
       console.error("방송 모드 전환 실패:", error);
-      message.error("전광판 송출 전환 중 오류가 발생했습니다.");
+      message.error("전광판 송출 전환 중 오류가 발생했습니다");
     }
   };
 
-  // 👤 특정 선수 단독 소개 송출 (playerUid 기반으로 사진을 확실하게 물고 전광판 송출)
   const handleIntroPlayerToScreen = (player) => {
-    const uidPhotos = (player.playerUid && uidPhotoMap.get(player.playerUid)) || [];
+    const uidPhotos =
+      (player.playerUid && uidPhotoMap.get(player.playerUid)) || [];
     const directPhotos = [
       ...(Array.isArray(player.photos) ? player.photos : []),
       ...(Array.isArray(player.playerPhotos) ? player.playerPhotos : []),
@@ -408,14 +403,23 @@ const ContestMonitoringHost = ({ contestId }) => {
     ].filter((u) => typeof u === "string" && u.trim().length > 5);
 
     const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
-    
+
     let stage1 = player.stagePhoto1 || player.stagePhotoUrl1 || "";
-    let stage2 = player.stagePhoto2 || player.stagePhotoUrl2 || player.backgroundPhotoUrl || "";
+    let stage2 =
+      player.stagePhoto2 ||
+      player.stagePhotoUrl2 ||
+      player.backgroundPhotoUrl ||
+      "";
 
     if (!stage1 && allPhotos.length > 0) stage1 = allPhotos[0];
     if (!stage2 && allPhotos.length > 1) stage2 = allPhotos[1];
 
-    const primary = stage1 || allPhotos[0] || player.profileImageUrl || player.playerPhoto || "";
+    const primary =
+      stage1 ||
+      allPhotos[0] ||
+      player.profileImageUrl ||
+      player.playerPhoto ||
+      "";
 
     const playerObj = {
       playerUid: player.playerUid || "",
@@ -440,199 +444,245 @@ const ContestMonitoringHost = ({ contestId }) => {
     });
   };
 
-  const getBroadcastBadge = (mode) => {
-    const config = {
-      STANDBY: { label: "대기 / 종목안내", color: "bg-blue-600" },
-      ATHLETE_INTRO: { label: "선수 단독 소개 중", color: "bg-cyan-600" },
-      COMPARISON_CALLOUT: { label: "비교심사 호명 중", color: "bg-purple-600" },
-      POSEDOWN: { label: "🔥 포즈다운 배틀 중", color: "bg-red-600 animate-pulse" },
-      COMMERCIAL: { label: "📊 점수 집계중 (광고)", color: "bg-indigo-600" },
-      RANKING: { label: "🏆 순위 발표 중", color: "bg-amber-600" },
-      CHAMPION_SHOWCASE: { label: "👑 1위 챔피언 세레모니", color: "bg-yellow-500 text-slate-950 font-black animate-bounce" },
-    };
-    return config[mode] || { label: mode, color: "bg-slate-700" };
+  const modeLabelMap = {
+    STANDBY: "대기 및 종목 안내",
+    ATHLETE_INTRO: "선수 단독 소개 중",
+    COMPARISON_CALLOUT: "비교심사 호명 중",
+    POSEDOWN: "포즈다운 배틀 중",
+    COMMERCIAL: "점수 집계 중",
+    RANKING: "순위 발표 중",
+    CHAMPION_SHOWCASE: "1위 챔피언 세레모니",
   };
 
-  const broadcastBadge = getBroadcastBadge(currentBroadcastMode);
+  const broadcastLabel =
+    modeLabelMap[currentBroadcastMode] || currentBroadcastMode;
+
+  const triggerChampionShowcase = () => {
+    const ranked1st =
+      rankingData && rankingData.length > 0
+        ? rankingData.find((p) => (p.playerRank || p.rank) === 1) ||
+          rankingData[0]
+        : currentPlayersArray[0]?.players?.[0];
+
+    const rawTop = ranked1st || {
+      playerNumber: "100",
+      playerName: "1위 챔피언",
+      playerGym: "무소속",
+    };
+
+    const uidPhotos =
+      (rawTop.playerUid && uidPhotoMap.get(rawTop.playerUid)) || [];
+    const directPhotos = [
+      ...(Array.isArray(rawTop.photos) ? rawTop.photos : []),
+      ...(Array.isArray(rawTop.playerPhotos) ? rawTop.playerPhotos : []),
+      rawTop.profileImageUrl,
+      rawTop.playerPhoto,
+      rawTop.photoUrl,
+    ].filter((u) => typeof u === "string" && u.trim().length > 5);
+
+    const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
+    const primary =
+      allPhotos[0] || rawTop.profileImageUrl || rawTop.playerPhoto || "";
+
+    const topPlayerObj = {
+      ...rawTop,
+      profileImageUrl: primary,
+      photoUrl: primary,
+      photos: allPhotos,
+    };
+
+    handleSwitchBroadcastMode("CHAMPION_SHOWCASE", {
+      topPlayer: topPlayerObj,
+    });
+  };
+
+  const quickScenes = [
+    {
+      mode: "STANDBY",
+      label: "대기 화면",
+      icon: Monitor,
+      onClick: () => handleSwitchBroadcastMode("STANDBY"),
+    },
+    {
+      mode: "POSEDOWN",
+      label: "포즈다운 60초",
+      icon: Timer,
+      onClick: () => handleSwitchBroadcastMode("POSEDOWN"),
+    },
+    {
+      mode: "COMMERCIAL",
+      label: "점수 집계 중",
+      icon: BarChart3,
+      onClick: () => handleSwitchBroadcastMode("COMMERCIAL"),
+    },
+    {
+      mode: "RANKING",
+      label: "순위 발표",
+      icon: Trophy,
+      onClick: () => handleSwitchBroadcastMode("RANKING"),
+    },
+    {
+      mode: "CHAMPION_SHOWCASE",
+      label: "1위 단독 송출",
+      icon: Award,
+      onClick: triggerChampionShowcase,
+      spanClass: "col-span-2 sm:col-span-1",
+    },
+  ];
 
   return (
-    <div className="w-full min-h-screen bg-slate-900 text-slate-100 flex flex-col select-none">
-      {/* 👑 사회자 상단 글로벌 헤더 바 */}
-      <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
-            <SoundOutlined className="text-white text-lg" />
+    <div className="w-full min-h-screen bg-[#141415] text-[#ededed] flex flex-col select-none">
+      {/* 사회자 상단 헤더 바 (#0f0f10 deepest) */}
+      <header className="sticky top-0 z-30 bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-4 h-14 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-[8px] bg-[#232325] border border-[#ededed]/[0.08] flex items-center justify-center shrink-0">
+            <Mic size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-300 border border-indigo-700">
-                사회자 모니터 & 방송 제어
-              </span>
-              <h1 className="text-base sm:text-lg font-black text-white m-0 tracking-tight">
-                {currentContest?.contests?.contestTitle || "보디빌딩 대회"}
-              </h1>
-            </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#232325] text-[#a1a1a6] border border-[#ededed]/[0.08] text-xs font-medium shrink-0">
+              사회자 콘솔
+            </span>
+            <h1 className="text-sm sm:text-base font-medium text-[#ededed] m-0 truncate">
+              {currentContest?.contests?.contestTitle || "보디빌딩 대회"}
+            </h1>
           </div>
         </div>
 
-        {/* 📡 전광판 현재 송출 상태 뱃지 & 상단 컨트롤 */}
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 bg-black/80 px-3 py-1 rounded-xl border border-slate-700">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">전광판:</span>
-            <span className={`text-xs px-2 py-0.5 rounded-lg text-white font-bold ${broadcastBadge.color}`}>
-              {broadcastBadge.label}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden sm:flex items-center gap-2 bg-[#19191b] px-3 h-9 rounded-[8px] border border-[#ededed]/[0.08]">
+            <StatusDot
+              status={currentBroadcastMode === "STANDBY" ? "idle" : "live"}
+              live={currentBroadcastMode !== "STANDBY"}
+            />
+            <span className="text-xs text-[#85858b]">전광판</span>
+            <span className="text-xs font-medium text-[#ededed]">
+              {broadcastLabel}
             </span>
           </div>
 
           <button
+            type="button"
             onClick={cycleFontSize}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm cursor-pointer transition-all"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border border-[#ededed]/[0.08] font-medium text-xs transition-colors active:scale-[0.98] cursor-pointer"
             title="글자 크기 변경"
           >
-            <FontSizeOutlined />
-            <span>크기: {fontScale === "normal" ? "보통" : fontScale === "large" ? "크게" : "아주크게"}</span>
+            <Type size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+            <span>
+              크기:{" "}
+              {fontScale === "normal"
+                ? "보통"
+                : fontScale === "large"
+                ? "크게"
+                : "아주 크게"}
+            </span>
           </button>
 
           <button
+            type="button"
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer transition-all"
-            title="전체화면 토글"
+            className="w-9 h-9 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border border-[#ededed]/[0.08] flex items-center justify-center transition-colors active:scale-[0.98] cursor-pointer"
+            title="전체화면 전환"
           >
-            {isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            {isFullscreen ? (
+              <Minimize2 size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+            ) : (
+              <Maximize2 size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+            )}
           </button>
         </div>
       </header>
 
-      {/* 🚀 [사회자 태블릿 전광판 원터치 방송 제어 대형 퀵 바] */}
-      <div className="bg-slate-950 border-b border-slate-800 p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 shadow-xl">
-        {/* ① 대기화면 */}
-        <button
-          onClick={() => handleSwitchBroadcastMode("STANDBY")}
-          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
-            currentBroadcastMode === "STANDBY"
-              ? "bg-blue-600 text-white border-2 border-white"
-              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-          }`}
-        >
-          <span>🏠 대기 화면</span>
-        </button>
-
-        {/* ② 🔥 포즈다운 60초 */}
-        <button
-          onClick={() => handleSwitchBroadcastMode("POSEDOWN")}
-          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
-            currentBroadcastMode === "POSEDOWN"
-              ? "bg-gradient-to-r from-red-600 to-orange-500 text-white border-2 border-white ring-4 ring-orange-500/30"
-              : "bg-gradient-to-r from-red-950 to-orange-950 hover:from-red-900 text-orange-200 border border-orange-700/60"
-          }`}
-        >
-          <span>🔥 포즈다운 (60s)</span>
-        </button>
-
-        {/* ③ 📊 점수 집계중 (광고) */}
-        <button
-          onClick={() => handleSwitchBroadcastMode("COMMERCIAL")}
-          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
-            currentBroadcastMode === "COMMERCIAL"
-              ? "bg-indigo-600 text-white border-2 border-white ring-4 ring-indigo-500/30"
-              : "bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/60"
-          }`}
-        >
-          <span>📊 점수 집계중</span>
-        </button>
-
-        {/* ④ 🏆 1~3위 순위 발표 */}
-        <button
-          onClick={() => handleSwitchBroadcastMode("RANKING")}
-          className={`flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
-            currentBroadcastMode === "RANKING"
-              ? "bg-amber-500 text-slate-950 border-2 border-white font-black"
-              : "bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60"
-          }`}
-        >
-          <span>🏆 순위 발표</span>
-        </button>
-
-        {/* ⑤ 👑 1위 챔피언 세레모니 */}
-        <button
-          onClick={() => {
-            const ranked1st =
-              rankingData && rankingData.length > 0
-                ? rankingData.find((p) => (p.playerRank || p.rank) === 1) || rankingData[0]
-                : currentPlayersArray[0]?.players?.[0];
-
-            const rawTop = ranked1st || {
-              playerNumber: "100",
-              playerName: "1위 챔피언",
-              playerGym: "Get_in",
-            };
-
-            const uidPhotos = (rawTop.playerUid && uidPhotoMap.get(rawTop.playerUid)) || [];
-            const directPhotos = [
-              ...(Array.isArray(rawTop.photos) ? rawTop.photos : []),
-              ...(Array.isArray(rawTop.playerPhotos) ? rawTop.playerPhotos : []),
-              rawTop.profileImageUrl,
-              rawTop.playerPhoto,
-              rawTop.photoUrl,
-            ].filter((u) => typeof u === "string" && u.trim().length > 5);
-
-            const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
-            const primary = allPhotos[0] || rawTop.profileImageUrl || rawTop.playerPhoto || "";
-
-            const topPlayerObj = {
-              ...rawTop,
-              profileImageUrl: primary,
-              photoUrl: primary,
-              photos: allPhotos,
-            };
-
-            handleSwitchBroadcastMode("CHAMPION_SHOWCASE", {
-              topPlayer: topPlayerObj,
-            });
-          }}
-          className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 h-14 rounded-xl font-black text-sm sm:text-base transition-all shadow-md active:scale-95 cursor-pointer ${
-            currentBroadcastMode === "CHAMPION_SHOWCASE"
-              ? "bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 border-2 border-white ring-4 ring-yellow-400/40 font-black"
-              : "bg-gradient-to-r from-amber-900 to-yellow-900 hover:from-amber-800 text-amber-200 border border-amber-500/60"
-          }`}
-        >
-          <span>👑 1위 송출</span>
-        </button>
+      {/* 전광판 원터치 방송 제어 스튜디오 스위처 바 */}
+      <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {quickScenes.map((scene) => {
+          const Icon = scene.icon;
+          const isActive = currentBroadcastMode === scene.mode;
+          return (
+            <button
+              key={scene.mode}
+              type="button"
+              onClick={scene.onClick}
+              className={`${
+                scene.spanClass || ""
+              } flex items-center justify-center gap-2 h-12 px-3 rounded-[10px] font-medium text-sm transition-colors active:scale-[0.98] cursor-pointer border ${
+                isActive
+                  ? "bg-[#2563eb] text-white border-[#2563eb]"
+                  : "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border-[#ededed]/[0.08]"
+              }`}
+            >
+              <Icon
+                size={16}
+                strokeWidth={1.5}
+                className={isActive ? "text-white" : "text-[#a1a1a6]"}
+              />
+              <span>{scene.label}</span>
+              {isActive && <StatusDot status="live" live />}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 메인 바디 영역 (좌우/상하 반응형) */}
-      <div className={`flex-1 flex ${isLandscape ? "flex-row" : "flex-col"} p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden`}>
-        {/* 📱 좌측 패널 (무대 정보 및 퀵 컨트롤 버튼) */}
-        <div className={isLandscape ? "w-[320px] lg:w-[360px] flex flex-col gap-3 flex-shrink-0" : "w-full flex flex-col gap-3"}>
+      {/* 메인 바디 영역 */}
+      <div
+        className={`flex-1 flex ${
+          isLandscape ? "flex-row" : "flex-col"
+        } p-4 gap-4 overflow-hidden`}
+      >
+        {/* 좌측 패널 (현재 무대 및 상태 제어) */}
+        <div
+          className={
+            isLandscape
+              ? "w-[320px] lg:w-[352px] flex flex-col gap-3 shrink-0"
+              : "w-full flex flex-col gap-3"
+          }
+        >
           {/* 현재 진행 중인 무대 카드 */}
-          <div className="bg-slate-800/90 rounded-2xl border border-slate-700 p-4 shadow-xl">
-            <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">
-              현재 무대 종목 / 체급
-            </div>
-            <div className="text-2xl lg:text-3xl font-black text-white leading-tight">
-              {realtimeData?.categoryTitle || "진행 종목 없음"}
-            </div>
-            <div className="text-xl lg:text-2xl font-bold text-amber-400 mt-1">
-              {realtimeData?.gradeTitle || "대기 중"}
+          <div className="bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-[#85858b]">
+                현재 진행 무대
+              </span>
+              {realtimeData?.stageNumber && (
+                <BibTag
+                  variant="dark"
+                  size="sm"
+                  prefix="#"
+                  number={realtimeData.stageNumber}
+                />
+              )}
             </div>
 
-            {/* 체급별 심사/확정 상태 */}
+            <div>
+              <div className="text-xl lg:text-2xl font-semibold text-[#ededed] leading-snug">
+                {realtimeData?.categoryTitle || "진행 종목 없음"}
+              </div>
+              <div className="text-base lg:text-lg font-medium text-[#a1a1a6] mt-1">
+                {realtimeData?.gradeTitle || "대기 중"}
+              </div>
+            </div>
+
             {currentPlayersArray.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
+              <div className="pt-3 border-t border-[#ededed]/[0.08] space-y-2">
                 {currentPlayersArray.map((current, cIdx) => {
                   const isSaved =
                     Array.isArray(realtimeData?.resultSaved) &&
                     realtimeData.resultSaved.includes(current.gradeId);
                   return (
-                    <div key={cIdx} className="flex items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60">
-                      <span className="font-bold text-sm text-slate-200">{current.gradeTitle}</span>
+                    <div
+                      key={cIdx}
+                      className="flex items-center justify-between bg-[#232325] px-3 py-2 rounded-[8px] border border-[#ededed]/[0.08]"
+                    >
+                      <span className="text-sm font-medium text-[#ededed]">
+                        {current.gradeTitle}
+                      </span>
                       {isSaved ? (
-                        <span className="px-2.5 py-1 rounded-md bg-emerald-950 text-emerald-300 font-extrabold text-xs border border-emerald-600 animate-pulse">
-                          🏆 순위 확정됨
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#4cc38a]">
+                          <StatusDot status="live" />
+                          <span>순위 확정됨</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 font-bold text-xs border border-amber-600">
-                          심사진행중
+                        <span className="text-xs font-medium text-[#a1a1a6]">
+                          심사 진행 중
                         </span>
                       )}
                     </div>
@@ -642,79 +692,122 @@ const ContestMonitoringHost = ({ contestId }) => {
             )}
           </div>
 
-          {/* 🚨 비교심사(Call-out) 퀵 알림 & 전환 버튼 */}
+          {/* 비교심사 진행 상태 알림 */}
           {isCompareRunning && !isCompareConfirmed && (
-            <div className="bg-amber-950/80 border-2 border-amber-500 rounded-2xl p-4 text-center animate-pulse shadow-lg">
-              <div className="text-2xl mb-1">⏳</div>
-              <div className="text-lg font-black text-amber-300">비교심사 투표 진행 중...</div>
-              <div className="text-xs text-amber-400 mt-1">심사위원들이 비교심사 선수를 선발하고 있습니다.</div>
+            <div className="bg-[#19191b] border border-[#2563eb]/40 rounded-[12px] p-4 flex items-start gap-3">
+              <div className="mt-1">
+                <StatusDot status="active" live />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-[#ededed]">
+                  비교심사 투표 진행 중
+                </div>
+                <div className="text-xs text-[#a1a1a6] mt-1">
+                  심사위원 선발 집계가 완료되면 호명 명단이 활성화됩니다
+                </div>
+              </div>
             </div>
           )}
 
           {isCompareConfirmed && (
             <button
+              type="button"
               onClick={() => {
                 setIsCompareView((prev) => !prev);
                 setIsRankingView(false);
               }}
-              className={`w-full py-4 px-4 rounded-2xl font-black text-lg transition-all flex flex-col items-center justify-center gap-1 shadow-2xl cursor-pointer border-none ${
+              className={`w-full p-4 rounded-[12px] text-left transition-colors active:scale-[0.98] cursor-pointer border ${
                 isCompareView
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-400"
-                  : "bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-600 text-white animate-bounce-short hover:opacity-95"
+                  ? "bg-[#2563eb] text-white border-[#2563eb]"
+                  : "bg-[#19191b] hover:bg-[#232325] text-[#ededed] border-[#4cc38a]/50"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <UnorderedListOutlined className="text-2xl" />
-                <span className="text-xl">📢 비교심사 선수 호명</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Users
+                    size={16}
+                    strokeWidth={1.5}
+                    className={isCompareView ? "text-white" : "text-[#4cc38a]"}
+                  />
+                  <span className="text-base font-semibold">
+                    비교심사 선수 호명
+                  </span>
+                </div>
+                <span
+                  className={`font-mono tabular-nums text-xs px-2 py-0.5 rounded-[4px] ${
+                    isCompareView
+                      ? "bg-white/20 text-white"
+                      : "bg-[#4cc38a]/15 text-[#4cc38a]"
+                  }`}
+                >
+                  {compareNumbers.length}명 선발
+                </span>
               </div>
-              <span className="text-xs text-emerald-100 font-medium">
-                {isCompareView ? "✓ 호명 화면 표시 중 (클릭 시 명단 전환)" : `총 ${compareNumbers.length}명 선발 완료! (지금 클릭)`}
-              </span>
+              <div
+                className={`text-xs mt-1.5 ${
+                  isCompareView ? "text-white/80" : "text-[#a1a1a6]"
+                }`}
+              >
+                {isCompareView
+                  ? "호명 화면 표시 중 · 누르면 참가 명단으로 전환"
+                  : "누르면 대형 번호판 호명 화면으로 전환"}
+              </div>
             </button>
           )}
 
-          {/* 🏆 순위확정 및 발표 버튼들 */}
+          {/* 체급별 순위 확인 및 전광판 송출 버튼 */}
           {currentPlayersArray.length > 0 &&
             currentPlayersArray.map((current, cIdx) => {
               const isSaved =
                 Array.isArray(realtimeData?.resultSaved) &&
                 realtimeData.resultSaved.includes(current.gradeId);
               return (
-                <div key={cIdx} className="bg-slate-800/80 rounded-2xl border border-slate-700 p-3 space-y-2">
-                  <div className="text-xs text-slate-400 font-semibold px-1">
+                <div
+                  key={cIdx}
+                  className="bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] p-4 space-y-2.5"
+                >
+                  <div className="text-xs font-medium text-[#85858b]">
                     {current.gradeTitle} 발표 제어
                   </div>
 
                   <button
-                    onClick={() => handleViewRanking(current.gradeId, current.gradeTitle)}
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 cursor-pointer border-none ${
+                    type="button"
+                    onClick={() =>
+                      handleViewRanking(current.gradeId, current.gradeTitle)
+                    }
+                    className={`w-full h-11 px-4 rounded-[8px] font-medium text-sm transition-colors active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer border ${
                       isRankingView
-                        ? "bg-slate-700 hover:bg-slate-600 text-white ring-2 ring-indigo-400"
+                        ? "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border-[#2563eb]"
                         : isSaved
-                        ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/20 font-black animate-pulse"
-                        : "bg-slate-700/80 hover:bg-slate-700 text-slate-300"
+                        ? "bg-[#ededed] hover:bg-white text-[#141415] border-[#ededed]"
+                        : "bg-[#232325] hover:bg-[#2c2c2f] text-[#a1a1a6] border-[#ededed]/[0.08]"
                     }`}
                   >
                     {isRankingView ? (
                       <>
-                        <UnorderedListOutlined />
+                        <Users size={16} strokeWidth={1.5} />
                         <span>참가 선수 명단으로 돌아가기</span>
                       </>
                     ) : (
                       <>
-                        <TrophyOutlined className={isSaved ? "text-xl text-yellow-200" : ""} />
-                        <span>{isSaved ? "🏆 순위 발표 모드 (시상식)" : "순위 결과 확인"}</span>
+                        <Trophy size={16} strokeWidth={1.5} />
+                        <span>
+                          {isSaved ? "순위 발표 모드 열기" : "순위 결과 확인"}
+                        </span>
                       </>
                     )}
                   </button>
 
                   {isSaved && (
                     <button
-                      onClick={() => handleSendToScreen(current.gradeId, current.gradeTitle)}
-                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-sm flex items-center justify-center gap-2 cursor-pointer border-none transition-colors"
+                      type="button"
+                      onClick={() =>
+                        handleSendToScreen(current.gradeId, current.gradeTitle)
+                      }
+                      className="w-full h-10 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98] cursor-pointer"
                     >
-                      <SendOutlined />
-                      <span>전광판 화면 송출</span>
+                      <Send size={16} strokeWidth={1.5} />
+                      <span>전광판 순위 화면 송출</span>
                     </button>
                   )}
                 </div>
@@ -722,141 +815,165 @@ const ContestMonitoringHost = ({ contestId }) => {
             })}
         </div>
 
-        {/* 📋 우측 메인 프롬프터 뷰 (선수 카드 / 비교심사 / 순위 발표) */}
-        <main className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 flex flex-col overflow-hidden shadow-2xl">
-          {/* 프롬프터 상단 타이틀 바 */}
-          <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-xl">
+        {/* 우측 메인 프롬프터 뷰 */}
+        <main className="flex-1 bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] flex flex-col overflow-hidden">
+          {/* 프롬프터 상단 바 */}
+          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2.5">
+              {isCompareView && compareNumbers.length > 0 ? (
+                <Users size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+              ) : isRankingView ? (
+                <Trophy size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+              ) : (
+                <Mic size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+              )}
+              <h2 className="text-base font-semibold text-[#ededed] m-0">
                 {isCompareView && compareNumbers.length > 0
-                  ? "📢"
+                  ? "비교심사 호명 대상 번호판"
                   : isRankingView
-                  ? "🏆"
-                  : "🎙️"}
-              </span>
-              <h2 className="text-lg sm:text-xl font-black text-white m-0 tracking-tight">
-                {isCompareView && compareNumbers.length > 0
-                  ? "비교심사 호명 대상 선수 (대형 번호판)"
-                  : isRankingView
-                  ? "시상식 순위 발표"
-                  : "참가 선수 호명 명단"}
+                  ? "시상식 순위 발표 프롬프터"
+                  : "참가 선수 호명 프롬프터"}
               </h2>
             </div>
 
-            {/* 순위 발표 시 역순/정순 토글 */}
             {isRankingView && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 hidden sm:inline font-medium">발표 순서:</span>
-                <button
-                  onClick={() => setIsReversed((prev) => !prev)}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer border-none transition-all shadow-md"
-                >
-                  {isReversed ? <DownOutlined /> : <UpOutlined />}
-                  <span>{isReversed ? "역순 발표 (5위➔1위)" : "정순 발표 (1위➔5위)"}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsReversed((prev) => !prev)}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-[6px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.1] text-[#ededed] font-medium text-xs transition-colors active:scale-[0.98] cursor-pointer"
+              >
+                <ArrowDownUp
+                  size={14}
+                  strokeWidth={1.5}
+                  className="text-[#a1a1a6]"
+                />
+                <span>
+                  {isReversed
+                    ? "역순 발표 (하위 → 1위)"
+                    : "정순 발표 (1위 → 하위)"}
+                </span>
+              </button>
             )}
 
-            {/* 일반 선수 호명 시 도움말 */}
             {!isRankingView && !isCompareView && (
-              <div className="text-xs text-slate-300 font-bold bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700">
-                💡 <span className="text-amber-300">선수 이름/카드</span>를 터치하면 <strong className="text-emerald-400">전광판에 즉시 소개</strong>됩니다!
-              </div>
+              <span className="text-xs text-[#85858b]">
+                선수 카드를 터치하면 전광판에 단독 소개 화면이 송출됩니다
+              </span>
             )}
           </div>
 
-          {/* 스크롤 가능한 본문 */}
-          <div className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-3">
-            {/* 1️⃣ 비교심사 확정 명단 뷰 (대형 번호 타일 그리드) */}
+          {/* 스크롤 가능한 프롬프터 본문 */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-3">
+            {/* 1. 비교심사 확정 명단 뷰 */}
             {isCompareView && compareNumbers.length > 0 ? (
               <div className="space-y-4">
-                <div className="p-3 bg-emerald-950/40 border border-emerald-700/60 rounded-xl text-center text-emerald-300 text-sm font-bold">
-                  아래 번호를 큰 소리로 호명해 주세요. 호명한 번호를 터치하면 체크됩니다.
+                <div className="px-4 py-2.5 bg-[#232325] border border-[#ededed]/[0.08] rounded-[8px] text-xs text-[#a1a1a6]">
+                  선수 번호를 순서대로 호명하고 터치하여 완료 표시하세요
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {compareNumbers.map((num) => {
                     const isCalled = calledCompareNums[num];
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={num}
                         onClick={() => toggleCompareNumCalled(num)}
-                        className={`p-6 sm:p-8 rounded-2xl text-center cursor-pointer transition-all transform active:scale-95 border-2 ${
+                        className={`p-6 rounded-[12px] text-center cursor-pointer transition-colors active:scale-[0.98] border flex flex-col items-center justify-center gap-3 ${
                           isCalled
-                            ? "bg-slate-900 border-slate-700 opacity-40 shadow-none"
-                            : "bg-gradient-to-b from-slate-800 to-slate-900 border-emerald-500 shadow-xl hover:border-emerald-400 hover:shadow-emerald-500/20"
+                            ? "bg-[#141415] border-[#ededed]/[0.06] opacity-50"
+                            : "bg-[#232325] hover:bg-[#2c2c2f] border-[#2563eb]/60"
                         }`}
                       >
-                        <div className={`${textClasses.compareNum} font-black ${isCalled ? "text-slate-500 line-through" : "text-emerald-400"} leading-none`}>
+                        <BibTag
+                          variant={isCalled ? "dark" : "active"}
+                          size="lg"
+                          prefix="#"
+                          number={num}
+                        />
+                        <div
+                          className={`font-mono tabular-nums font-semibold leading-none ${
+                            textClasses.compareNum
+                          } ${
+                            isCalled
+                              ? "text-[#85858b] line-through"
+                              : "text-[#ededed]"
+                          }`}
+                        >
                           {num}
                         </div>
-                        <div className="mt-3 flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5">
                           {isCalled ? (
-                            <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                              <CheckCircleFilled /> 호명 완료
+                            <span className="text-xs font-medium text-[#4cc38a] inline-flex items-center gap-1">
+                              <Check size={14} strokeWidth={1.5} />
+                              <span>호명 완료</span>
                             </span>
                           ) : (
-                            <span className="text-xs sm:text-sm font-extrabold text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-700">
-                              호명 대상 (탭하여 완료)
+                            <span className="text-xs font-medium text-[#a1a1a6]">
+                              터치하여 완료
                             </span>
                           )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
               </div>
             ) : isRankingView && rankingData ? (
-              /* 2️⃣ 순위 발표 뷰 (시상식 전용) */
+              /* 2. 순위 발표 뷰 */
               <div className="space-y-3">
                 {(isReversed ? [...rankingData].reverse() : rankingData)
                   .filter((player) => player.playerRank < 1000)
                   .map((player) => {
                     const rank = player.playerRank;
                     const isSelected = selectedPlayerUid === player.playerUid;
-
-                    let badgeColor = "bg-slate-800 border-slate-700 text-slate-300";
-                    let rankText = `${rank}위`;
-                    let rankBg = "bg-slate-900 border-slate-800";
-
-                    if (rank === 1) {
-                      badgeColor = "bg-gradient-to-br from-yellow-400 to-amber-600 text-slate-950 font-black border-amber-300 shadow-lg shadow-amber-500/30";
-                      rankText = "🥇 1위 (우승)";
-                      rankBg = "bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-900 border-amber-500/80";
-                    } else if (rank === 2) {
-                      badgeColor = "bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 font-black border-white shadow-md";
-                      rankText = "🥈 2위 (준우승)";
-                      rankBg = "bg-gradient-to-r from-slate-800/60 via-slate-900 to-slate-900 border-slate-400/60";
-                    } else if (rank === 3) {
-                      badgeColor = "bg-gradient-to-br from-amber-700 to-amber-900 text-amber-100 font-black border-amber-600 shadow-md";
-                      rankText = "🥉 3위";
-                      rankBg = "bg-gradient-to-r from-orange-950/40 via-slate-900 to-slate-900 border-orange-700/50";
-                    }
+                    const isFirst = rank === 1;
 
                     return (
                       <div
                         key={player.playerUid}
                         onClick={() => setSelectedPlayerUid(player.playerUid)}
-                        className={`p-4 sm:p-5 rounded-2xl cursor-pointer transition-all border-2 ${rankBg} ${
-                          isSelected ? "ring-4 ring-amber-400 shadow-2xl scale-[1.01]" : "hover:border-slate-700 hover:shadow-lg"
+                        className={`p-4 sm:p-5 rounded-[12px] cursor-pointer transition-colors border ${
+                          isSelected
+                            ? "bg-[#232325] border-[#2563eb]"
+                            : isFirst
+                            ? "bg-[#232325] border-[#ededed]/20"
+                            : "bg-[#141415] hover:bg-[#232325] border-[#ededed]/[0.08]"
                         }`}
                       >
                         <div className="flex items-center gap-4 sm:gap-6">
-                          {/* 순위 뱃지 */}
-                          <div className={`min-w-[110px] sm:min-w-[140px] px-3 py-2 rounded-xl text-center border font-black ${badgeColor}`}>
-                            <span className="text-xl sm:text-2xl">{rankText}</span>
+                          <div
+                            className={`min-w-[96px] sm:min-w-[116px] px-3 py-2.5 rounded-[8px] text-center border font-mono tabular-nums ${
+                              isFirst
+                                ? "bg-[#2563eb] text-white border-[#2563eb]"
+                                : "bg-[#19191b] text-[#ededed] border-[#ededed]/[0.1]"
+                            }`}
+                          >
+                            <span className="text-lg sm:text-xl font-semibold">
+                              {rank}위
+                            </span>
                           </div>
 
-                          {/* 선수 번호 및 이름 */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline gap-3 flex-wrap">
-                              <span className={`font-black text-amber-400 ${textClasses.playerNum}`}>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <BibTag
+                                variant={isFirst ? "active" : "dark"}
+                                size="lg"
+                                number={player.playerNumber}
+                              />
+                              <span
+                                className={`font-mono tabular-nums font-semibold text-[#a1a1a6] ${textClasses.playerNum}`}
+                              >
                                 {player.playerNumber}번
                               </span>
-                              <span className={`font-black text-white ${textClasses.playerName}`}>
+                              <span
+                                className={`font-semibold text-[#ededed] ${textClasses.playerName}`}
+                              >
                                 {player.playerName}
                               </span>
                             </div>
-                            <div className={`text-slate-400 font-bold mt-0.5 ${textClasses.playerGym}`}>
+                            <div
+                              className={`text-[#a1a1a6] mt-1 ${textClasses.playerGym}`}
+                            >
                               소속: {player.playerGym || "무소속"}
                             </div>
                           </div>
@@ -866,20 +983,24 @@ const ContestMonitoringHost = ({ contestId }) => {
                   })}
               </div>
             ) : (
-              /* 3️⃣ 일반 참가 선수 명단 뷰 (사회자 멘트 및 호명 프롬프터) */
+              /* 3. 참가 선수 명단 및 멘트 프롬프터 */
               currentPlayersArray.map((current, cIdx) => (
                 <div key={cIdx} className="space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <h3 className="text-lg font-bold text-slate-300 m-0">
-                      {current.gradeTitle} 선수 리스트 ({current.players.length}명)
+                  <div className="flex items-center justify-between pb-2 border-b border-[#ededed]/[0.08]">
+                    <h3 className="text-sm font-medium text-[#a1a1a6] m-0">
+                      {current.gradeTitle} 선수 명단
                     </h3>
+                    <span className="font-mono tabular-nums text-xs text-[#85858b]">
+                      총 {current.players.length}명
+                    </span>
                   </div>
 
                   {current.players.length > 0 ? (
                     <div className="space-y-3">
                       {current.players.map((player) => {
                         const isCalled = calledPlayers[player.playerUid];
-                        const isSelected = selectedPlayerUid === player.playerUid;
+                        const isSelected =
+                          selectedPlayerUid === player.playerUid;
 
                         return (
                           <div
@@ -888,65 +1009,68 @@ const ContestMonitoringHost = ({ contestId }) => {
                               togglePlayerCalled(player.playerUid);
                               handleIntroPlayerToScreen(player);
                             }}
-                            className={`p-4 sm:p-5 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.99] ${
+                            className={`p-4 sm:p-5 rounded-[12px] cursor-pointer transition-colors border active:scale-[0.99] ${
                               isCalled
-                                ? "bg-slate-900/90 border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
+                                ? "bg-[#232325] border-[#4cc38a]/50"
                                 : isSelected
-                                ? "bg-slate-800 border-indigo-500 shadow-xl"
-                                : "bg-slate-900 border-slate-800 hover:border-amber-400/60 hover:shadow-xl"
+                                ? "bg-[#232325] border-[#2563eb]"
+                                : "bg-[#141415] hover:bg-[#232325] border-[#ededed]/[0.08]"
                             }`}
                           >
-                            <div className="flex items-start gap-4 sm:gap-6">
-                              {/* 선수 번호 대형 뱃지 */}
-                              <div
-                                className={`min-w-[85px] sm:min-w-[110px] py-2.5 px-2 rounded-2xl flex flex-col items-center justify-center border-2 shadow-inner transition-colors ${
-                                  isCalled
-                                    ? "bg-emerald-950 border-emerald-500 text-emerald-300"
-                                    : "bg-slate-800 border-indigo-500/60 text-indigo-300"
-                                }`}
-                              >
-                                <span className={`font-black ${textClasses.playerNum} leading-none`}>
+                            <div className="flex items-start gap-4 sm:gap-5">
+                              {/* 선수 번호 블록 */}
+                              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                <BibTag
+                                  variant={isCalled ? "active" : "dark"}
+                                  size="lg"
+                                  number={player.playerNumber}
+                                />
+                                <span
+                                  className={`font-mono tabular-nums font-semibold leading-none text-[#ededed] ${textClasses.playerNum}`}
+                                >
                                   {player.playerNumber}
-                                </span>
-                                <span className="text-[11px] font-bold mt-1 text-slate-400">
-                                  {isCalled ? "소개중 ✓" : "선수번호"}
                                 </span>
                               </div>
 
-                              {/* 선수 정보 및 소개 멘트 */}
+                              {/* 선수 이름, 소속, 출전 동기 */}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-baseline gap-3">
-                                    <span className={`font-black text-white hover:text-amber-300 transition-colors ${textClasses.playerName}`}>
+                                  <div className="flex items-baseline gap-3 flex-wrap">
+                                    <span
+                                      className={`font-semibold text-[#ededed] ${textClasses.playerName}`}
+                                    >
                                       {player.playerName}
                                     </span>
-                                    <span className={`font-bold text-slate-400 ${textClasses.playerGym}`}>
+                                    <span
+                                      className={`text-[#a1a1a6] ${textClasses.playerGym}`}
+                                    >
                                       {player.playerGym || "무소속"}
                                     </span>
                                   </div>
 
-                                  <div className="flex items-center gap-2">
-                                    {isCalled ? (
-                                      <span className="flex items-center gap-1 text-xs font-black text-emerald-300 bg-emerald-950/90 px-3 py-1 rounded-full border border-emerald-600 shadow-sm">
-                                        <CheckCircleFilled className="text-emerald-400" /> 전광판 소개됨
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs font-bold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
-                                        터치하여 전광판 소개
-                                      </span>
-                                    )}
-                                  </div>
+                                  {isCalled ? (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#4cc38a] bg-[#4cc38a]/10 px-2.5 py-1 rounded-[6px] border border-[#4cc38a]/30">
+                                      <Check size={14} strokeWidth={1.5} />
+                                      <span>전광판 소개됨</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-[#85858b] bg-[#19191b] px-2.5 py-1 rounded-[6px] border border-[#ededed]/[0.08]">
+                                      터치하여 전광판 소개
+                                    </span>
+                                  )}
                                 </div>
 
-                                {/* 출전 동기 / 소개 멘트 박스 */}
-                                {(player.playerText || player.playerMotivation) && (
-                                  <div className="mt-3 p-3 sm:p-3.5 rounded-xl bg-slate-950 border-l-4 border-indigo-500 text-slate-300">
-                                    <div className="text-xs font-bold text-indigo-400 mb-1 flex items-center gap-1">
-                                      <span>🎙️</span>
-                                      <span>소개 멘트 / 출전 동기:</span>
+                                {(player.playerText ||
+                                  player.playerMotivation) && (
+                                  <div className="mt-3 p-3.5 rounded-[8px] bg-[#0f0f10] border-l-2 border-[#2563eb] text-[#ededed]">
+                                    <div className="text-xs font-medium text-[#85858b] mb-1">
+                                      출전 동기 및 소개 멘트
                                     </div>
-                                    <div className={`${textClasses.playerText} leading-relaxed whitespace-pre-wrap`}>
-                                      {player.playerText || player.playerMotivation}
+                                    <div
+                                      className={`${textClasses.playerText} leading-relaxed whitespace-pre-wrap text-[#ededed]`}
+                                    >
+                                      {player.playerText ||
+                                        player.playerMotivation}
                                     </div>
                                   </div>
                                 )}
@@ -957,8 +1081,8 @@ const ContestMonitoringHost = ({ contestId }) => {
                       })}
                     </div>
                   ) : (
-                    <div className="py-12 text-center text-slate-500 font-bold text-lg">
-                      참가한 선수가 없습니다.
+                    <div className="py-12 text-center text-sm text-[#85858b]">
+                      배정된 참가 선수가 없습니다
                     </div>
                   )}
                 </div>

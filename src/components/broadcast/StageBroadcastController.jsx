@@ -12,7 +12,10 @@ import {
   useFirestoreAddData,
 } from "../../hooks/useFirestores";
 import { where, doc, getDoc } from "firebase/firestore";
-import { extractPlayerPhotos, isNonPlayerUrl } from "../../pages/ContestPlayerWeighInTable";
+import {
+  extractPlayerPhotos,
+  isNonPlayerUrl,
+} from "../../pages/ContestPlayerWeighInTable";
 import { storage, db } from "../../firebase";
 import {
   ref as storageRef,
@@ -21,51 +24,42 @@ import {
   deleteObject,
 } from "firebase/storage";
 import {
-  Card,
-  Tag,
-  Button,
-  Space,
-  Typography,
   message,
   Modal,
-  Form,
   Input,
-  InputNumber,
   Select,
   Popconfirm,
-  Divider,
   Checkbox,
   Progress,
 } from "antd";
 import {
-  DesktopOutlined,
-  PlayCircleOutlined,
-  NotificationOutlined,
-  TrophyOutlined,
-  UserOutlined,
-  ForwardOutlined,
-  ExportOutlined,
-  BgColorsOutlined,
-  CrownOutlined,
-  StarOutlined,
-  PlusOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  ThunderboltOutlined,
-  FireOutlined,
-  SoundOutlined,
-  AudioMutedOutlined,
-  AppstoreOutlined,
-  ReloadOutlined,
-  CheckCircleOutlined,
-  CloudUploadOutlined,
-  VideoCameraOutlined,
-  LinkOutlined,
-  BackwardOutlined,
-  PauseCircleOutlined,
-  StopOutlined,
-} from "@ant-design/icons";
+  Monitor,
+  ExternalLink,
+  Palette,
+  Volume2,
+  VolumeX,
+  Tv,
+  Users,
+  Activity,
+  Megaphone,
+  ListOrdered,
+  Layers,
+  Award,
+  Trophy,
+  SkipForward,
+  Film,
+  Upload,
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  RotateCw,
+  User,
+  Trash2,
+  Link2,
+} from "lucide-react";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
+import { BibTag, StatusDot } from "../ui/BibTag";
 
 const POSES_PRESET = [
   "호명된 선수들은 무대 중앙으로 나와 라인업 해주시기 바랍니다.",
@@ -80,11 +74,27 @@ const POSES_PRESET = [
   "호명된 선수들은 제자리로 복귀해 주시기 바랍니다.",
 ];
 
+const MODE_LABELS = {
+  STANDBY: "대기 / 종목 안내",
+  ATHLETE_INTRO: "선수 프로필 소개 중",
+  COMPARISON_CALLOUT: "비교심사 호명 중",
+  POSEDOWN: "포즈다운 배틀 중",
+  COMMERCIAL: "스폰서 광고 로테이션 중",
+  RANKING: "전체 순위 발표 중",
+  SQUARE_RANKING: "단계별 순위 발표 중",
+  AWARD_CEREMONY: "공식 시상식 송출 중",
+  CHAMPION_SHOWCASE: "1위 챔피언 단독 송출 중",
+  SPECIAL_VIDEO: "특별영상 송출 중",
+  SPECIAL_SCREEN: "특수화면 송출 중",
+};
+
 const StageBroadcastController = ({
   currentStage,
   currentPlayers = [],
   rankingResults = [],
 }) => {
+  void rankingResults;
+
   const { currentContest } = useContext(CurrentContestContext);
   const contestId =
     currentContest?.contests?.id ||
@@ -99,10 +109,12 @@ const StageBroadcastController = ({
 
   const updateBroadcast = useFirebaseRealtimeUpdateData();
   const fetchResultQuery = useFirestoreQuery();
-  const updateSpecialVideosQuery = useFirestoreUpdateData("contest_special_videos");
+  const updateSpecialVideosQuery = useFirestoreUpdateData(
+    "contest_special_videos"
+  );
   const addSpecialVideosQuery = useFirestoreAddData("contest_special_videos");
 
-  // 🎬 특별영상 상태 (동적 업로드 및 목록 관리)
+  // 특별영상 상태 (동적 업로드 및 목록 관리)
   const [specialVideos, setSpecialVideos] = useState([]);
   const [specialVideosDocId, setSpecialVideosDocId] = useState(null);
   const [isSpecialVideoModalOpen, setIsSpecialVideoModalOpen] = useState(false);
@@ -112,18 +124,23 @@ const StageBroadcastController = ({
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const specialVideoFileInputRef = useRef(null);
 
-  // ⚔️ 비교심사 모달 상태
+  // 비교심사 모달 상태
   const [isCalloutModalOpen, setIsCalloutModalOpen] = useState(false);
   const [selectedCalloutPlayers, setSelectedCalloutPlayers] = useState([]);
-  const [calloutRound, setCalloutRound] = useState("1차 비교심사 (FIRST CALLOUT)");
+  const [calloutRound, setCalloutRound] = useState(
+    "1차 비교심사 (FIRST CALLOUT)"
+  );
   const [calloutPose, setCalloutPose] = useState(POSES_PRESET[0]);
 
   const currentMode = broadcastData?.mode || "STANDBY";
   const activePlayer = broadcastData?.activePlayer || null;
   const currentTheme = broadcastData?.colorTheme || "GOLD";
-  const currentSpecialVideoId = broadcastData?.specialVideoData?.id || broadcastData?.specialVideoUrl || null;
+  const currentSpecialVideoId =
+    broadcastData?.specialVideoData?.id ||
+    broadcastData?.specialVideoUrl ||
+    null;
 
-  // 🏆 통합 무대(2개 이상 체급 결합) 감지 및 개별 체급 시상 선택 상태
+  // 통합 무대(2개 이상 체급 결합) 감지 및 개별 체급 시상 선택 상태
   const stageGrades = currentStage?.grades || [];
   const isIntegratedStage = stageGrades.length > 1;
   const [selectedGradeId, setSelectedGradeId] = useState("");
@@ -136,21 +153,29 @@ const StageBroadcastController = ({
     }
   }, [currentStage?.gradeId, stageGrades.length]);
 
-  // 현재 시상 대상으로 선택된 개별 체급 정보 도출
   const activeGradeObj =
     stageGrades.find((g) => g.gradeId === selectedGradeId) ||
     stageGrades[0] ||
     null;
   const activeGradeTitle =
-    activeGradeObj?.gradeTitle || currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
+    activeGradeObj?.gradeTitle ||
+    currentStage?.gradeTitle ||
+    currentStage?.contestGradeTitle ||
+    "";
   const activeGradeId =
-    activeGradeObj?.gradeId || currentStage?.gradeId || stageGrades[0]?.gradeId || "";
+    activeGradeObj?.gradeId ||
+    currentStage?.gradeId ||
+    stageGrades[0]?.gradeId ||
+    "";
   const activeCategoryTitle =
-    activeGradeObj?.categoryTitle || currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식";
+    activeGradeObj?.categoryTitle ||
+    currentStage?.categoryTitle ||
+    currentStage?.contestCategoryTitle ||
+    "공식 시상식";
 
   const [invoicePhotoMap, setInvoicePhotoMap] = useState(new Map());
 
-  // 📥 invoices_pool 원본 참가신청서 사진 직접 로드 (선수 명단 사진 누락 100% 방지)
+  // invoices_pool 원본 참가신청서 사진 직접 로드
   useEffect(() => {
     if (!contestId) return;
     const loadInvoicePhotos = async () => {
@@ -166,7 +191,9 @@ const StageBroadcastController = ({
             if (inv.playerName) {
               const trimmed = inv.playerName.trim();
               if (!map.has(trimmed)) map.set(trimmed, photos);
-              const telPart = (inv.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
+              const telPart = (inv.playerTel || "")
+                .replace(/[^0-9]/g, "")
+                .slice(-4);
               if (telPart) map.set(`${trimmed}_${telPart}`, photos);
             }
           }
@@ -246,21 +273,23 @@ const StageBroadcastController = ({
         if (res?.id) setSpecialVideosDocId(res.id);
       }
       setSpecialVideos(newVideos);
-      await updateBroadcast.updateData(`contests/${contestId}/specialVideos`, newVideos);
+      await updateBroadcast.updateData(
+        `contests/${contestId}/specialVideos`,
+        newVideos
+      );
     } catch (error) {
       console.error("특별영상 저장 실패:", error);
       message.error("저장 중 오류가 발생했습니다.");
     }
   };
 
-  // 실제 대회명 추출
   const realContestTitle =
     currentContest?.contestInfo?.contestTitle ||
     currentContest?.contests?.contestTitle ||
     currentStage?.contestTitle ||
     "";
 
-  // 📡 대회별 슬롯(currentBroadcast/${contestId})과 전역 백업 슬롯(ACTIVE_STAGE) 동시 동기화 헬퍼
+  // 대회별 슬롯(currentBroadcast/${contestId})과 전역 백업 슬롯(ACTIVE_STAGE) 동시 동기화 헬퍼
   const syncBroadcastPayload = async (payload) => {
     if (!contestId) return;
     await Promise.all([
@@ -281,13 +310,15 @@ const StageBroadcastController = ({
         contestTitle: realContestTitle,
         updatedAt: Date.now(),
       });
-      message.success(`전광판 색상 테마: [${THEME_CONFIGS[themeKey]?.name}] 적용!`);
+      message.success(
+        `전광판 색상 테마: [${THEME_CONFIGS[themeKey]?.name}] 적용 완료`
+      );
     } catch (error) {
       console.error("테마 변경 오류:", error);
     }
   };
 
-  // 🔊 전광판 사운드 ON/OFF 토글 핸들러
+  // 전광판 사운드 ON/OFF 토글 핸들러
   const isAudioEnabled = Boolean(broadcastData?.isAudioEnabled);
   const handleToggleAudio = async () => {
     if (!contestId) return;
@@ -297,21 +328,30 @@ const StageBroadcastController = ({
         isAudioEnabled: nextState,
         updatedAt: Date.now(),
       });
-      message.success(nextState ? "전광판 사운드: [ON - 음향 출력]" : "전광판 사운드: [OFF - 음소거]");
+      message.success(
+        nextState ? "전광판 사운드: 음향 출력 켜짐" : "전광판 사운드: 음소거됨"
+      );
     } catch (error) {
       console.error("사운드 변경 오류:", error);
     }
   };
 
-  // 🔄 종목이나 체급(무대) 변경 시 무조건 전광판 화면을 [대기 및 종목/체급 안내(STANDBY)]로 즉시 강제 전환!
+  // 종목이나 체급(무대) 변경 시 전광판 화면을 대기 및 종목/체급 안내(STANDBY)로 전환
   const lastBroadcastStageKeyRef = useRef("");
 
   useEffect(() => {
     if (!contestId || !currentStage) return;
-    const cat = currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "";
-    const grd = currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
-    const gradeId = currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "";
-    const stageNum = currentStage?.stageNumber || currentStage?.stageIndex || currentStage?.stageId || "";
+    const cat =
+      currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "";
+    const grd =
+      currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
+    const gradeId =
+      currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "";
+    const stageNum =
+      currentStage?.stageNumber ||
+      currentStage?.stageIndex ||
+      currentStage?.stageId ||
+      "";
     if (!cat && !grd) return;
 
     const currentKey = `${currentStage?.stageId || ""}_${gradeId}_${stageNum}_${cat}_${grd}`;
@@ -322,7 +362,6 @@ const StageBroadcastController = ({
     if (currentKey === lastBroadcastStageKeyRef.current) return;
     lastBroadcastStageKeyRef.current = currentKey;
 
-    // 🎯 종목이나 체급이 바뀌면 무조건 전광판을 [대기 및 종목/체급 안내 씬(STANDBY)]으로 즉각 강제 전환!
     syncBroadcastPayload({
       mode: "STANDBY",
       contestTitle: realContestTitle,
@@ -348,7 +387,7 @@ const StageBroadcastController = ({
     currentStage?.gradeTitle,
     currentStage?.stageNumber,
     currentPlayers?.length,
-    contestId
+    contestId,
   ]);
 
   // 1. 대기 및 현재 종목 안내 송출
@@ -359,10 +398,16 @@ const StageBroadcastController = ({
         mode: "STANDBY",
         contestTitle: realContestTitle,
         stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+          categoryTitle:
+            currentStage?.categoryTitle ||
+            currentStage?.contestCategoryTitle ||
+            "",
+          gradeTitle:
+            currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          gradeId:
+            currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+          stageNumber:
+            currentStage?.stageNumber || currentStage?.stageIndex || "",
           playerCount: currentPlayers?.length || 0,
         },
         activePlayer: null,
@@ -371,47 +416,62 @@ const StageBroadcastController = ({
         calloutData: null,
         updatedAt: Date.now(),
       });
-      message.info("전광판: [대기 / 종목 안내] 송출 중");
+      message.info("전광판: 대기 및 종목 안내 송출 중");
     } catch (error) {
       console.error("대기 화면 송출 오류:", error);
     }
   };
 
-  // 2. 실시간 선수 전체 화면 스포트라이트 송출 (계측에서 지정한 무대용 사진 stagePhotoUrl 100% 최신 상태로 즉시 조회하여 송출)
+  // 2. 실시간 선수 전체 화면 스포트라이트 송출
   const handleIntroPlayer = async (player) => {
     if (!contestId || !player) return;
     try {
-      // 🌟 contest_players_final에서 최신 선수 사진 데이터를 즉시 조회하여 보장
       let latestPlayer = player;
       const finalDocId = currentContest?.contests?.contestPlayersFinalId;
       if (finalDocId) {
         try {
-          const finalSnap = await getDoc(doc(db, "contest_players_final", finalDocId));
+          const finalSnap = await getDoc(
+            doc(db, "contest_players_final", finalDocId)
+          );
           if (finalSnap.exists()) {
             const finalPlayers = finalSnap.data()?.players || [];
             const matched = finalPlayers.find(
               (fp) =>
-                (fp.playerUid && player.playerUid && fp.playerUid === player.playerUid && fp.contestCategoryId === player.contestCategoryId) ||
-                (fp.playerNumber && player.playerNumber && String(fp.playerNumber) === String(player.playerNumber) && fp.contestCategoryId === player.contestCategoryId) ||
-                (fp.playerName === player.playerName && String(fp.playerNumber) === String(player.playerNumber))
+                (fp.playerUid &&
+                  player.playerUid &&
+                  fp.playerUid === player.playerUid &&
+                  fp.contestCategoryId === player.contestCategoryId) ||
+                (fp.playerNumber &&
+                  player.playerNumber &&
+                  String(fp.playerNumber) === String(player.playerNumber) &&
+                  fp.contestCategoryId === player.contestCategoryId) ||
+                (fp.playerName === player.playerName &&
+                  String(fp.playerNumber) === String(player.playerNumber))
             );
             if (matched) {
               latestPlayer = { ...player, ...matched };
             }
           }
         } catch (fErr) {
-          console.warn("선수 소개 시 최신 final 조회 실패(기존 데이터 사용):", fErr);
+          console.warn(
+            "선수 소개 시 최신 final 조회 실패(기존 데이터 사용):",
+            fErr
+          );
         }
       }
 
       const resolvedPhotos = getPlayerResolvedPhotos(latestPlayer);
       let stage1 =
-        (!isNonPlayerUrl(latestPlayer.stagePhoto1) && latestPlayer.stagePhoto1) ||
-        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl1) && latestPlayer.stagePhotoUrl1) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhoto1) &&
+          latestPlayer.stagePhoto1) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl1) &&
+          latestPlayer.stagePhotoUrl1) ||
         "";
       let stage2 =
-        (!isNonPlayerUrl(latestPlayer.stagePhoto2) && latestPlayer.stagePhoto2) ||
-        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl2) && latestPlayer.stagePhotoUrl2) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhoto2) &&
+          latestPlayer.stagePhoto2) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl2) &&
+          latestPlayer.stagePhotoUrl2) ||
         "";
 
       if (!stage1 && resolvedPhotos.length > 0) stage1 = resolvedPhotos[0];
@@ -420,8 +480,10 @@ const StageBroadcastController = ({
       const designatedStagePhoto =
         stage1 ||
         stage2 ||
-        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl) && latestPlayer.stagePhotoUrl) ||
-        (!isNonPlayerUrl(latestPlayer.profileImageUrl) && latestPlayer.profileImageUrl) ||
+        (!isNonPlayerUrl(latestPlayer.stagePhotoUrl) &&
+          latestPlayer.stagePhotoUrl) ||
+        (!isNonPlayerUrl(latestPlayer.profileImageUrl) &&
+          latestPlayer.profileImageUrl) ||
         resolvedPhotos[0] ||
         "";
 
@@ -448,8 +510,12 @@ const StageBroadcastController = ({
           stagePhotoUrl: designatedStagePhoto,
           profileImageUrl: designatedStagePhoto,
           photos: resolvedPhotos,
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          categoryTitle:
+            currentStage?.categoryTitle ||
+            currentStage?.contestCategoryTitle ||
+            "",
+          gradeTitle:
+            currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
         },
         specialScreenData: null,
         videoCommand: null,
@@ -458,13 +524,15 @@ const StageBroadcastController = ({
       };
 
       await syncBroadcastPayload(payload);
-      message.success(`${latestPlayer.playerNumber}번 ${latestPlayer.playerName} 선수 전체화면 소개 송출!`);
+      message.success(
+        `${latestPlayer.playerNumber}번 ${latestPlayer.playerName} 선수 프로필 송출`
+      );
     } catch (error) {
       console.error("선수 소개 송출 오류:", error);
     }
   };
 
-  // 3. ⚔️ 비교심사 호명 송출
+  // 3. 비교심사 호명 송출
   const handleSendCallout = async () => {
     if (!contestId) return;
     if (selectedCalloutPlayers.length === 0) {
@@ -473,7 +541,9 @@ const StageBroadcastController = ({
     }
 
     const calloutList = currentPlayers
-      .filter((p) => selectedCalloutPlayers.includes(p.playerNumber || p.playerUid))
+      .filter((p) =>
+        selectedCalloutPlayers.includes(p.playerNumber || p.playerUid)
+      )
       .map((p) => ({
         playerNumber: p.playerNumber,
         playerName: p.playerName,
@@ -486,10 +556,16 @@ const StageBroadcastController = ({
         mode: "COMPARISON_CALLOUT",
         contestTitle: realContestTitle,
         stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+          categoryTitle:
+            currentStage?.categoryTitle ||
+            currentStage?.contestCategoryTitle ||
+            "",
+          gradeTitle:
+            currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          gradeId:
+            currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+          stageNumber:
+            currentStage?.stageNumber || currentStage?.stageIndex || "",
         },
         calloutData: {
           roundTitle: calloutRound,
@@ -501,14 +577,16 @@ const StageBroadcastController = ({
         videoCommand: null,
         updatedAt: Date.now(),
       });
-      message.success(`전광판: [${calloutRound}] ${calloutList.length}명 비교심사 화면 송출!`);
+      message.success(
+        `전광판: [${calloutRound}] ${calloutList.length}명 비교심사 화면 송출`
+      );
       setIsCalloutModalOpen(false);
     } catch (error) {
       console.error("비교심사 송출 오류:", error);
     }
   };
 
-  // 4. 🔥 포즈다운 배틀 송출
+  // 4. 포즈다운 배틀 송출
   const handleSendPosedown = async () => {
     if (!contestId) return;
     try {
@@ -516,10 +594,16 @@ const StageBroadcastController = ({
         mode: "POSEDOWN",
         contestTitle: realContestTitle,
         stageInfo: {
-          categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "",
-          gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-          gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+          categoryTitle:
+            currentStage?.categoryTitle ||
+            currentStage?.contestCategoryTitle ||
+            "",
+          gradeTitle:
+            currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          gradeId:
+            currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+          stageNumber:
+            currentStage?.stageNumber || currentStage?.stageIndex || "",
           players: currentPlayers || [],
         },
         activePlayer: null,
@@ -528,13 +612,13 @@ const StageBroadcastController = ({
         calloutData: null,
         updatedAt: Date.now(),
       });
-      message.success("전광판: [🔥 포즈다운 배틀] 송출 시작!");
+      message.success("전광판: 포즈다운 배틀 송출 시작");
     } catch (error) {
       console.error("포즈다운 송출 오류:", error);
     }
   };
 
-  // 특정 체급의 Firestore contest_results_list 조회 유틸 (통합 무대 개별 체급 분리 조회)
+  // 특정 체급의 Firestore contest_results_list 조회 유틸
   const fetchCurrentGradeRankings = async (targetGradeId = null) => {
     const gId = targetGradeId || activeGradeId;
     if (!gId) return [];
@@ -556,11 +640,11 @@ const StageBroadcastController = ({
     return [];
   };
 
-  // 5. 📢 스폰서 광고 송출 (10초 무한 로테이션)
+  // 5. 스폰서 광고 송출 (10초 무한 로테이션)
   const handleStartCommercials = async () => {
     if (!contestId) return;
 
-    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const finalRanks = await fetchCurrentGradeRankings(activeGradeId);
 
     try {
       await syncBroadcastPayload({
@@ -570,7 +654,8 @@ const StageBroadcastController = ({
           categoryTitle: activeCategoryTitle,
           gradeTitle: activeGradeTitle,
           gradeId: activeGradeId,
-          stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+          stageNumber:
+            currentStage?.stageNumber || currentStage?.stageIndex || "",
         },
         rankingData: finalRanks,
         activePlayer: null,
@@ -579,13 +664,12 @@ const StageBroadcastController = ({
         calloutData: null,
         updatedAt: Date.now(),
       });
-      message.success("전광판: 스폰서 광고 송출 시작! (10초씩 무한 로테이션)");
+      message.success("전광판: 스폰서 광고 로테이션 송출 시작");
     } catch (error) {
       console.error("광고 송출 오류:", error);
     }
   };
 
-  // 🏆 랭킹 데이터가 비어있을 때는 임의의 가짜 순위를 만들지 않고 '데이터 없음'으로 정직하게 대체
   const getReliableRankings = (rawRanks) => {
     if (rawRanks && rawRanks.length > 0) {
       return rawRanks;
@@ -603,28 +687,8 @@ const StageBroadcastController = ({
     ];
   };
 
-  // 6. 🏆 순위 발표 즉시 송출 (선택된 체급 전용)
-  const handleDirectRanking = async () => {
-    console.log("%c[CONTROLLER] 📢 [전체 순위 동시발표] 버튼 클릭됨!", "background:#22c55e;color:black;font-weight:bold;font-size:14px;", {
-      contestId,
-      currentContest,
-      currentStage,
-      activeGradeTitle,
-      activeGradeId,
-      currentPlayers,
-    });
-
-    if (!contestId) {
-      console.warn("[CONTROLLER] ⚠️ contestId가 비어있습니다! currentContest 확인 필요");
-      message.warning("대회 ID를 확인할 수 없습니다. 대회를 선택해주세요.");
-      return;
-    }
-
-    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
-    const reliableRanks = getReliableRankings(finalRanks);
-
-    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
-    const enrichedRanks = reliableRanks.map((r) => {
+  const enrichRankingsWithPhotos = (reliableRanks) =>
+    reliableRanks.map((r) => {
       const p = (currentPlayers || []).find(
         (cp) =>
           String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
@@ -633,8 +697,17 @@ const StageBroadcastController = ({
       );
       if (p) {
         const photos = extractPlayerPhotos(p);
-        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
-        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
+        const stage1 =
+          (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) ||
+          (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) ||
+          photos[0] ||
+          "";
+        const stage2 =
+          (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) ||
+          (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) ||
+          (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) ||
+          photos[1] ||
+          "";
         return {
           ...r,
           ...p,
@@ -651,6 +724,17 @@ const StageBroadcastController = ({
       }
       return r;
     });
+
+  // 6. 순위 발표 즉시 송출 (선택된 체급 전용)
+  const handleDirectRanking = async () => {
+    if (!contestId) {
+      message.warning("대회 ID를 확인할 수 없습니다. 대회를 선택해주세요.");
+      return;
+    }
+
+    const finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const reliableRanks = getReliableRankings(finalRanks);
+    const enrichedRanks = enrichRankingsWithPhotos(reliableRanks);
 
     const payload = {
       mode: "RANKING",
@@ -659,7 +743,8 @@ const StageBroadcastController = ({
         categoryTitle: activeCategoryTitle,
         gradeTitle: activeGradeTitle,
         gradeId: activeGradeId,
-        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+        stageNumber:
+          currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
       activePlayer: null,
@@ -669,58 +754,24 @@ const StageBroadcastController = ({
       updatedAt: Date.now(),
     };
 
-    console.log("%c[CONTROLLER] 🚀 Firebase 전송 시작:", "background:#3b82f6;color:white;font-weight:bold;", {
-      path: `currentBroadcast/${contestId}`,
-      payload,
-    });
-
     try {
       await syncBroadcastPayload(payload);
-      console.log("%c[CONTROLLER] ✅ [전체 순위 동시발표] Firebase 전송 완료!", "background:#10b981;color:black;font-weight:bold;font-size:14px;");
-      message.success(`전광판: [${activeGradeTitle}] 순위 발표 화면 송출!`);
+      message.success(`전광판: [${activeGradeTitle}] 순위 발표 화면 송출`);
     } catch (error) {
-      console.error("[CONTROLLER] ❌ 순위 발표 송출 오류:", error);
+      console.error("[CONTROLLER] 순위 발표 송출 오류:", error);
     }
   };
 
-  // 6-1. 🏅 공식 시상식 (1위·2위·3위 포디움 단상 + TOP 5 리스트) 송출
+  // 6-1. 공식 시상식 (1위·2위·3위 포디움 단상 + TOP 5 리스트) 송출
   const handleSendAwardCeremony = async () => {
     if (!contestId) {
       message.warning("대회 ID를 확인할 수 없습니다.");
       return;
     }
 
-    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const finalRanks = await fetchCurrentGradeRankings(activeGradeId);
     const reliableRanks = getReliableRankings(finalRanks);
-
-    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
-    const enrichedRanks = reliableRanks.map((r) => {
-      const p = (currentPlayers || []).find(
-        (cp) =>
-          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
-          cp.playerName === r.playerName ||
-          cp.playerUid === r.playerUid
-      );
-      if (p) {
-        const photos = extractPlayerPhotos(p);
-        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
-        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
-        return {
-          ...r,
-          ...p,
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: stage1 || r.stagePhotoUrl,
-          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
-          playerGym: p.playerGym || r.playerGym,
-          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
-          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
-        };
-      }
-      return r;
-    });
+    const enrichedRanks = enrichRankingsWithPhotos(reliableRanks);
 
     const payload = {
       mode: "AWARD_CEREMONY",
@@ -729,7 +780,8 @@ const StageBroadcastController = ({
         categoryTitle: activeCategoryTitle,
         gradeTitle: activeGradeTitle,
         gradeId: activeGradeId,
-        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+        stageNumber:
+          currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
       activePlayer: null,
@@ -741,52 +793,29 @@ const StageBroadcastController = ({
 
     try {
       await syncBroadcastPayload(payload);
-      message.success(`전광판: [${activeGradeTitle}] 공식 시상식 (포디움) 화면 송출 시작!`);
+      message.success(
+        `전광판: [${activeGradeTitle}] 공식 시상식 (포디움) 화면 송출`
+      );
     } catch (error) {
       console.error("공식 시상식 송출 오류:", error);
     }
   };
 
-  // 7. 👑 1위 우승자 단독 전체화면 송출
+  // 7. 1위 우승자 단독 전체화면 송출
   const handleShowChampion = async () => {
     if (!contestId) {
       message.warning("대회 ID를 확인할 수 없습니다.");
       return;
     }
 
-    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const finalRanks = await fetchCurrentGradeRankings(activeGradeId);
     const reliableRanks = getReliableRankings(finalRanks);
+    const enrichedRanks = enrichRankingsWithPhotos(reliableRanks);
 
-    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
-    const enrichedRanks = reliableRanks.map((r) => {
-      const p = (currentPlayers || []).find(
-        (cp) =>
-          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
-          cp.playerName === r.playerName ||
-          cp.playerUid === r.playerUid
-      );
-      if (p) {
-        const photos = extractPlayerPhotos(p);
-        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
-        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
-        return {
-          ...r,
-          ...p,
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: stage1 || r.stagePhotoUrl,
-          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
-          playerGym: p.playerGym || r.playerGym,
-          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
-          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
-        };
-      }
-      return r;
-    });
-
-    const top1 = enrichedRanks.find((p) => (p.playerRank || p.rank || 0) === 1) || enrichedRanks[0] || null;
+    const top1 =
+      enrichedRanks.find((p) => (p.playerRank || p.rank || 0) === 1) ||
+      enrichedRanks[0] ||
+      null;
 
     const payload = {
       mode: "CHAMPION_SHOWCASE",
@@ -795,7 +824,8 @@ const StageBroadcastController = ({
         categoryTitle: activeCategoryTitle,
         gradeTitle: activeGradeTitle,
         gradeId: activeGradeId,
-        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+        stageNumber:
+          currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
       activePlayer: top1 || null,
@@ -809,61 +839,41 @@ const StageBroadcastController = ({
     try {
       await syncBroadcastPayload(payload);
       message.success(
-        top1 ? `1위 [${top1.playerName}] (${activeGradeTitle}) 챔피언 단독 전체화면 송출!` : `[${activeGradeTitle}] 1위 챔피언 단독 송출!`
+        top1
+          ? `1위 [${top1.playerName}] (${activeGradeTitle}) 챔피언 단독 송출`
+          : `[${activeGradeTitle}] 1위 챔피언 단독 송출`
       );
     } catch (error) {
       console.error("1위 단독 송출 오류:", error);
     }
   };
 
-  // 7-1. 🔲 2~10위 발표 ➜ 1위 단독 시상식 송출
+  // 7-1. 2~10위 발표 → 1위 단독 시상식 송출
   const handleSendSquareRanking = async () => {
     if (!contestId) {
       message.warning("대회 ID를 확인할 수 없습니다.");
       return;
     }
 
-    let finalRanks = await fetchCurrentGradeRankings(activeGradeId);
+    const finalRanks = await fetchCurrentGradeRankings(activeGradeId);
     const reliableRanks = getReliableRankings(finalRanks);
-
-    // 📸 실제 등록된 선수의 무대 사진 및 프로필 사진 실시간 매칭
-    const enrichedRanks = reliableRanks.map((r) => {
-      const p = (currentPlayers || []).find(
-        (cp) =>
-          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
-          cp.playerName === r.playerName ||
-          cp.playerUid === r.playerUid
-      );
-      if (p) {
-        const photos = extractPlayerPhotos(p);
-        const stage1 = (!isNonPlayerUrl(p.stagePhoto1) && p.stagePhoto1) || (!isNonPlayerUrl(p.stagePhotoUrl1) && p.stagePhotoUrl1) || photos[0] || "";
-        const stage2 = (!isNonPlayerUrl(p.stagePhoto2) && p.stagePhoto2) || (!isNonPlayerUrl(p.stagePhotoUrl2) && p.stagePhotoUrl2) || (!isNonPlayerUrl(p.backgroundPhotoUrl) && p.backgroundPhotoUrl) || photos[1] || "";
-        return {
-          ...r,
-          ...p,
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          stagePhotoUrl1: stage1,
-          stagePhotoUrl2: stage2,
-          stagePhotoUrl: stage1 || r.stagePhotoUrl,
-          profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
-          playerGym: p.playerGym || r.playerGym,
-          playerHeight: p.playerHeight || p.height || r.playerHeight || "",
-          playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
-        };
-      }
-      return r;
-    });
+    const enrichedRanks = enrichRankingsWithPhotos(reliableRanks);
 
     const payload = {
       mode: "SQUARE_RANKING",
       rankingPhase: "FULL_RANKING",
       contestTitle: realContestTitle,
       stageInfo: {
-        categoryTitle: currentStage?.categoryTitle || currentStage?.contestCategoryTitle || "공식 시상식",
-        gradeTitle: currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-        gradeId: currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
-        stageNumber: currentStage?.stageNumber || currentStage?.stageIndex || "",
+        categoryTitle:
+          currentStage?.categoryTitle ||
+          currentStage?.contestCategoryTitle ||
+          "공식 시상식",
+        gradeTitle:
+          currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+        gradeId:
+          currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        stageNumber:
+          currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
       rankingData: enrichedRanks,
       activePlayer: null,
@@ -875,13 +885,13 @@ const StageBroadcastController = ({
 
     try {
       await syncBroadcastPayload(payload);
-      message.success("전광판: [2~10위 발표 ➜ 1위 단독 시상식] 송출 시작!");
+      message.success("전광판: [2~10위 발표 → 1위 단독 시상식] 송출 시작");
     } catch (error) {
       console.error("순위발표 송출 오류:", error);
     }
   };
 
-  // 7-2. 👑 1:1 1위 우승자 단독 선수소개 샷 즉시 전환 (콘솔 원클릭)
+  // 7-2. 1위 우승자 단독 선수소개 샷 즉시 전환
   const handleSquareChampionSolo = async () => {
     if (!contestId) return;
     try {
@@ -890,13 +900,13 @@ const StageBroadcastController = ({
         rankingPhase: "CHAMPION_SOLO",
         updatedAt: Date.now(),
       });
-      message.success("전광판: [👑 1위 단독 선수소개 샷] 즉시 송출!");
+      message.success("전광판: 1위 단독 선수소개 화면 송출");
     } catch (error) {
       console.error("1위 단독 샷 전환 오류:", error);
     }
   };
 
-  // 7-3. 📋 1:1 전체 순위표 복귀 (콘솔 원클릭)
+  // 7-3. 전체 순위표 복귀
   const handleSquareBackToFullRanking = async () => {
     if (!contestId) return;
     try {
@@ -905,13 +915,13 @@ const StageBroadcastController = ({
         rankingPhase: "FULL_RANKING",
         updatedAt: Date.now(),
       });
-      message.success("전광판: [📋 1:1 전체 순위표] 로 복귀했습니다.");
+      message.success("전광판: 2~10위 순위표 화면으로 복귀했습니다.");
     } catch (error) {
       console.error("전체 순위표 복귀 오류:", error);
     }
   };
 
-  // 8. 🎬 특별영상 전체화면 즉시 송출 핸들러 (잔여 PAUSE/STOP 명령 즉시 초기화)
+  // 8. 특별영상 전체화면 즉시 송출 핸들러
   const handleSendSpecialVideo = async (video) => {
     if (!contestId || !video) return;
     const now = Date.now();
@@ -940,13 +950,13 @@ const StageBroadcastController = ({
 
     try {
       await syncBroadcastPayload(payload);
-      message.success(`전광판: 특별영상 [${video.title}] 전체화면 즉시 송출!`);
+      message.success(`전광판: 특별영상 [${video.title}] 전체화면 송출`);
     } catch (error) {
       console.error("특별영상 송출 오류:", error);
     }
   };
 
-  // 🎮 특별영상 실시간 원격 재생 제어 (재생, 일시정지, 정지, 앞으로 10초, 뒤로 10초)
+  // 특별영상 실시간 원격 재생 제어
   const handleVideoCommand = async (action) => {
     if (!contestId) return;
     const cmd = {
@@ -955,15 +965,22 @@ const StageBroadcastController = ({
     };
     try {
       await Promise.all([
-        updateBroadcast.updateData(`currentBroadcast/${contestId}/videoCommand`, cmd),
-        updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE/videoCommand", cmd),
+        updateBroadcast.updateData(
+          `currentBroadcast/${contestId}/videoCommand`,
+          cmd
+        ),
+        updateBroadcast.updateData(
+          "currentBroadcast/ACTIVE_STAGE/videoCommand",
+          cmd
+        ),
       ]);
 
-      if (action === "PLAY") message.success("특별영상: ▶️ 재생 시작");
-      else if (action === "PAUSE") message.info("특별영상: ⏸️ 일시정지");
-      else if (action === "STOP") message.warning("특별영상: ⏹️ 정지 (처음으로)");
-      else if (action === "SEEK_BACK_10") message.info("특별영상: ⏪ 10초 뒤로");
-      else if (action === "SEEK_FORWARD_10") message.info("특별영상: ⏩ 10초 앞으로");
+      if (action === "PLAY") message.success("특별영상: 재생 시작");
+      else if (action === "PAUSE") message.info("특별영상: 일시정지");
+      else if (action === "STOP") message.warning("특별영상: 정지 (처음으로)");
+      else if (action === "SEEK_BACK_10") message.info("특별영상: 10초 뒤로");
+      else if (action === "SEEK_FORWARD_10")
+        message.info("특별영상: 10초 앞으로");
     } catch (err) {
       console.error("비디오 제어 명령 전송 실패:", err);
     }
@@ -986,7 +1003,9 @@ const StageBroadcastController = ({
       uploadTask.on(
         "state_changed",
         (snapshot) => {
-          const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          const percent = Math.round(
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          );
           setVideoUploadProgress(percent);
         },
         (error) => {
@@ -998,7 +1017,9 @@ const StageBroadcastController = ({
           try {
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
             const newVideoItem = {
-              id: `spvid_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              id: `spvid_${Date.now()}_${Math.random()
+                .toString(36)
+                .substr(2, 5)}`,
               title: title,
               videoUrl: downloadUrl,
               storagePath: storagePath,
@@ -1007,7 +1028,7 @@ const StageBroadcastController = ({
 
             const updated = [...specialVideos, newVideoItem];
             await handleSaveSpecialVideos(updated);
-            message.success(`특별영상 '${title}' 등록 완료!`);
+            message.success(`특별영상 '${title}' 등록 완료`);
             setIsUploadingVideo(false);
             setVideoUploadProgress(0);
             setNewVideoTitle("");
@@ -1035,7 +1056,8 @@ const StageBroadcastController = ({
       message.warning("동영상 URL을 입력해주세요.");
       return;
     }
-    const title = newVideoTitle.trim() || `특별영상 ${specialVideos.length + 1}`;
+    const title =
+      newVideoTitle.trim() || `특별영상 ${specialVideos.length + 1}`;
     const newVideoItem = {
       id: `spvid_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       title: title,
@@ -1045,7 +1067,7 @@ const StageBroadcastController = ({
     };
     const updated = [...specialVideos, newVideoItem];
     await handleSaveSpecialVideos(updated);
-    message.success(`특별영상 '${title}' 등록 완료!`);
+    message.success(`특별영상 '${title}' 등록 완료`);
     setNewVideoTitle("");
     setNewVideoUrl("");
   };
@@ -1078,7 +1100,7 @@ const StageBroadcastController = ({
     );
   };
 
-  // 🔲 1:1 정방형 전광판 새창 열기 (신규)
+  // 1:1 정방형 전광판 새창 열기
   const openSquareDisplayWindow = () => {
     window.open(
       `/stage-square?contestId=${contestId}`,
@@ -1087,89 +1109,128 @@ const StageBroadcastController = ({
     );
   };
 
+  const sceneButtons = [
+    {
+      key: "STANDBY",
+      label: "종목/체급 안내",
+      icon: Tv,
+      isActive: currentMode === "STANDBY",
+      onClick: handleSetStandby,
+    },
+    {
+      key: "COMPARISON_CALLOUT",
+      label: "비교심사 호명",
+      icon: Users,
+      isActive: currentMode === "COMPARISON_CALLOUT",
+      onClick: () => setIsCalloutModalOpen(true),
+    },
+    {
+      key: "POSEDOWN",
+      label: "포즈다운 배틀",
+      icon: Activity,
+      isActive: currentMode === "POSEDOWN",
+      onClick: handleSendPosedown,
+    },
+    {
+      key: "COMMERCIAL",
+      label: "광고 로테이션",
+      icon: Megaphone,
+      isActive: currentMode === "COMMERCIAL",
+      onClick: handleStartCommercials,
+    },
+    {
+      key: "RANKING",
+      label: "전체 순위 발표",
+      icon: ListOrdered,
+      isActive: currentMode === "RANKING",
+      onClick: handleDirectRanking,
+    },
+    {
+      key: "SQUARE_RANKING",
+      label: "2~10위 → 1위 시상",
+      icon: Layers,
+      isActive: currentMode === "SQUARE_RANKING",
+      onClick: handleSendSquareRanking,
+    },
+    {
+      key: "AWARD_CEREMONY",
+      label: "공식 시상식 (포디움)",
+      icon: Award,
+      isActive: currentMode === "AWARD_CEREMONY",
+      onClick: handleSendAwardCeremony,
+    },
+    {
+      key: "CHAMPION_SHOWCASE",
+      label: "1위 챔피언 단독",
+      icon: Trophy,
+      isActive: currentMode === "CHAMPION_SHOWCASE",
+      onClick: handleShowChampion,
+    },
+    {
+      key: "NEXT_STANDBY",
+      label: "다음 종목 대기",
+      icon: SkipForward,
+      isActive: false,
+      onClick: handleSetStandby,
+    },
+  ];
+
+  const isLiveScene = currentMode !== "STANDBY";
+
   return (
-    <Card
-      size="small"
-      className="bg-slate-900 text-white rounded-2xl border-slate-700 shadow-2xl overflow-hidden mb-4"
-      title={
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
-          <div className="flex items-center gap-2">
-            <DesktopOutlined className="text-amber-400 text-lg" />
-            <span className="font-black text-white text-sm tracking-wide">
-              실시간 무대 전광판 송출 콘솔 (Live Broadcast Control)
+    <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden mb-4">
+      {/* 상단 컨트롤러 헤더 바 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-5 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+        <div className="flex items-center gap-2.5">
+          <Monitor size={16} strokeWidth={1.5} className="text-[#525252]" />
+          <span className="text-sm font-semibold text-[#171717]">
+            실시간 무대 전광판 송출 콘솔
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-2 h-7 px-2.5 rounded-[6px] bg-white border border-[#171717]/10 text-xs">
+            <StatusDot
+              status={isLiveScene ? "live" : "idle"}
+              live={isLiveScene}
+            />
+            <span className="text-[#737373]">송출:</span>
+            <span className="font-medium text-[#171717]">
+              {MODE_LABELS[currentMode] || currentMode}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-400 font-bold">송출 상태:</span>
-            {currentMode === "STANDBY" && (
-              <Tag color="blue" className="font-black text-xs mr-0">
-                대기 / 종목 안내
-              </Tag>
-            )}
-            {currentMode === "ATHLETE_INTRO" && (
-              <Tag color="cyan" className="font-black text-xs mr-0 animate-pulse">
-                선수 전체화면 소개 중
-              </Tag>
-            )}
-            {currentMode === "COMPARISON_CALLOUT" && (
-              <Tag color="red" className="font-black text-xs mr-0 animate-pulse">
-                ⚔️ 비교심사 호명 중
-              </Tag>
-            )}
-            {currentMode === "POSEDOWN" && (
-              <Tag color="volcano" className="font-black text-xs mr-0 animate-pulse">
-                🔥 포즈다운 배틀 중
-              </Tag>
-            )}
-            {currentMode === "COMMERCIAL" && (
-              <Tag color="orange" className="font-black text-xs mr-0 animate-pulse">
-                📢 스폰서 광고 로테이션 중
-              </Tag>
-            )}
-            {currentMode === "RANKING" && (
-              <Tag color="gold" className="font-black text-xs mr-0">
-                🏆 순위 발표 중
-              </Tag>
-            )}
-            {currentMode === "AWARD_CEREMONY" && (
-              <Tag color="gold" className="font-black text-xs mr-0 animate-pulse">
-                🏅 공식 시상식 송출 중
-              </Tag>
-            )}
-            {currentMode === "CHAMPION_SHOWCASE" && (
-              <Tag color="purple" className="font-black text-xs mr-0 animate-pulse">
-                👑 1위 챔피언 단독 송출 중
-              </Tag>
-            )}
-            {currentMode === "SPECIAL_SCREEN" && (
-              <Tag color="magenta" className="font-black text-xs mr-0 animate-pulse">
-                ⭐ 특수화면 송출 중
-              </Tag>
-            )}
+          <button
+            type="button"
+            onClick={openSquareDisplayWindow}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+          >
+            <ExternalLink size={14} strokeWidth={1.5} />
+            <span className="tabular-nums">1:1 전광판</span>
+          </button>
 
-            <Button
-              size="small"
-              type="primary"
-              icon={<ExportOutlined />}
-              onClick={openDisplayWindow}
-              className="bg-blue-600 hover:bg-blue-500 font-bold text-xs ml-2 rounded-lg"
-            >
-              📺 실시간 전광판 화면 열기
-            </Button>
-          </div>
+          <button
+            type="button"
+            onClick={openDisplayWindow}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
+          >
+            <ExternalLink size={14} strokeWidth={1.5} />
+            <span>전광판 화면 열기</span>
+          </button>
         </div>
-      }
-    >
-      <div className="space-y-3 py-1">
-        
-        {/* 테마 색상 5종 선택 및 전광판 음향(사운드) 제어 바 */}
-        <div className="bg-slate-950/70 px-3.5 py-2 rounded-xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* 테마 색상 선택 */}
+      </div>
+
+      <div className="p-4 md:p-5 space-y-4">
+        {/* 테마 색상 선택 및 전광판 음향 제어 바 */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-3.5 py-2.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
-              <BgColorsOutlined className="text-amber-400 text-sm" />
-              <span>화면 색상 테마:</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#525252] shrink-0">
+              <Palette
+                size={15}
+                strokeWidth={1.5}
+                className="text-[#737373]"
+              />
+              <span>전광판 테마</span>
             </span>
 
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1178,88 +1239,101 @@ const StageBroadcastController = ({
                 return (
                   <button
                     key={t.key}
+                    type="button"
                     onClick={() => handleSelectTheme(t.key)}
-                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 ${
+                    className={`h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer border ${
                       isSelected
-                        ? "bg-slate-800 text-white border-white shadow-md scale-105"
-                        : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
+                        ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]"
+                        : "bg-white text-[#525252] border-[#171717]/10 hover:bg-[#f4f4f5] hover:text-[#171717]"
                     }`}
                   >
-                    <span className={isSelected ? t.primary : ""}>{t.name}</span>
+                    {t.name}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* 🔊 전광판 사운드 ON/OFF 원클릭 제어 버튼 */}
-          <div className="flex items-center gap-2 lg:pl-3 lg:border-l lg:border-slate-800 shrink-0">
-            <span className="text-xs font-bold text-slate-300 flex items-center gap-1 shrink-0">
-              {isAudioEnabled ? (
-                <SoundOutlined className="text-cyan-400 animate-pulse" />
-              ) : (
-                <AudioMutedOutlined className="text-slate-400" />
-              )}
-              <span>전광판 사운드:</span>
+          <div className="flex items-center gap-2 lg:pl-3 lg:border-l lg:border-[#171717]/[0.08] shrink-0">
+            <span className="text-xs font-medium text-[#525252]">
+              전광판 음향
             </span>
-            <Button
-              size="small"
-              type={isAudioEnabled ? "primary" : "default"}
+            <button
+              type="button"
               onClick={handleToggleAudio}
-              className={`font-black text-xs rounded-lg transition-all ${
+              className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-[6px] text-xs font-medium border transition-colors cursor-pointer ${
                 isAudioEnabled
-                  ? "bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)] animate-pulse"
-                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+                  ? "bg-[#2563eb]/[0.08] border-[#2563eb] text-[#2563eb]"
+                  : "bg-white border-[#171717]/15 text-[#525252] hover:bg-[#f4f4f5]"
               }`}
-              icon={isAudioEnabled ? <SoundOutlined /> : <AudioMutedOutlined />}
             >
-              {isAudioEnabled ? "사운드 출력 중 (ON)" : "음소거 (OFF)"}
-            </Button>
+              {isAudioEnabled ? (
+                <>
+                  <StatusDot status="live" live />
+                  <Volume2 size={14} strokeWidth={1.5} />
+                  <span>출력 중 (ON)</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX size={14} strokeWidth={1.5} />
+                  <span>음소거 (OFF)</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* 🏆 [통합 무대 전용] 시상/성적 발표 체급 선택 바 (무대는 통합이나 순위는 체급별로 독립 발표) */}
+        {/* 통합 무대 전용 개별 체급 시상 선택 바 */}
         {isIntegratedStage && (
-          <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3 sm:p-3.5 rounded-2xl border-2 border-amber-500/80 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0" />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/12">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <StatusDot status="active" live />
               <div>
-                <div className="text-[11px] font-bold text-amber-400 tracking-wide">
-                  ⚡ 통합 무대 개별 시상 제어기 (무대는 통합 진행, 순위 발표는 체급별 독립 송출)
+                <div className="text-xs font-medium text-[#525252]">
+                  통합 무대 개별 시상 대상 선택 (순위 발표는 선택된 체급 기준으로 송출)
                 </div>
-                <div className="text-sm font-black text-white flex items-center gap-1.5">
-                  <span>현재 시상/순위발표 대상 체급:</span>
-                  <span className="text-amber-300 font-mono text-base font-black px-2 py-0.5 rounded bg-black/60 border border-amber-400/60">
+                <div className="text-sm font-semibold text-[#171717] flex items-center gap-1.5 mt-0.5">
+                  <span>선택 체급:</span>
+                  <span className="px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/15 text-xs font-mono font-medium text-[#2563eb]">
                     {activeGradeTitle}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-400 hidden sm:inline">체급 선택:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
               {stageGrades.map((g, gIdx) => {
-                const isSelected = (g.gradeId === selectedGradeId) || (!selectedGradeId && gIdx === 0);
-                const gradePlayers = (currentPlayers || []).filter((p) => p.contestGradeId === g.gradeId);
+                const isSelected =
+                  g.gradeId === selectedGradeId ||
+                  (!selectedGradeId && gIdx === 0);
+                const gradePlayers = (currentPlayers || []).filter(
+                  (p) => p.contestGradeId === g.gradeId
+                );
 
                 return (
                   <button
                     key={g.gradeId || gIdx}
+                    type="button"
                     onClick={() => {
                       setSelectedGradeId(g.gradeId);
-                      message.info(`시상 대상 체급이 [${g.gradeTitle}]로 선택되었습니다.`);
+                      message.info(
+                        `시상 대상 체급이 [${g.gradeTitle}]로 선택되었습니다.`
+                      );
                     }}
-                    className={`px-3.5 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer border flex items-center gap-2 ${
+                    className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] text-xs font-medium border transition-colors cursor-pointer ${
                       isSelected
-                        ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/30 scale-105"
-                        : "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 hover:border-amber-400/50"
+                        ? "bg-[#2563eb] text-white border-[#2563eb]"
+                        : "bg-white text-[#171717] border-[#171717]/15 hover:bg-[#fafafa]"
                     }`}
                   >
-                    <TrophyOutlined className={isSelected ? "text-slate-950" : "text-amber-400"} />
                     <span>{g.gradeTitle}</span>
-                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                      isSelected ? "bg-slate-950 text-amber-300 font-bold" : "bg-slate-800 text-slate-400"
-                    }`}>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-[4px] text-[11px] font-mono tabular-nums ${
+                        isSelected
+                          ? "bg-white/20 text-white"
+                          : "bg-[#f4f4f5] text-[#525252]"
+                      }`}
+                    >
                       {gradePlayers.length}명
                     </span>
                   </button>
@@ -1269,216 +1343,144 @@ const StageBroadcastController = ({
           </div>
         )}
 
-        {/* 1. 8대 주요 송출 원클릭 액션 버튼 바 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-          {/* ① 종목 안내 / 대기 화면 */}
-          <button
-            onClick={handleSetStandby}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "STANDBY"
-                ? "bg-blue-600 text-white border-blue-400 shadow-lg"
-                : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-            }`}
-          >
-            <PlayCircleOutlined className="text-lg" />
-            <span>종목/체급 안내</span>
-          </button>
-
-          {/* ② ⚔️ 비교심사 호명 송출 */}
-          <button
-            onClick={() => setIsCalloutModalOpen(true)}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "COMPARISON_CALLOUT"
-                ? "bg-red-600 text-white border-red-300 shadow-lg shadow-red-600/50"
-                : "bg-gradient-to-r from-red-950 to-rose-900 text-red-200 border-red-600/40 hover:border-red-400"
-            }`}
-          >
-            <ThunderboltOutlined className="text-lg text-amber-400" />
-            <span>⚔️ 비교심사 호명</span>
-          </button>
-
-          {/* ③ 🔥 포즈다운 배틀 송출 */}
-          <button
-            onClick={handleSendPosedown}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "POSEDOWN"
-                ? "bg-orange-600 text-white border-orange-300 shadow-lg shadow-orange-600/50"
-                : "bg-gradient-to-r from-rose-950 to-orange-950 text-orange-200 border-orange-500/40 hover:border-orange-400"
-            }`}
-          >
-            <FireOutlined className="text-lg text-amber-400 animate-pulse" />
-            <span>🔥 포즈다운 배틀</span>
-          </button>
-
-          {/* ④ 📢 스폰서 광고 송출 (10초 무한 로테이션) */}
-          <button
-            onClick={handleStartCommercials}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "COMMERCIAL"
-                ? "bg-orange-500 text-slate-950 border-orange-300 shadow-lg"
-                : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white border-amber-400/50 shadow-lg shadow-amber-600/20 active:scale-95"
-            }`}
-          >
-            <NotificationOutlined className="text-lg" />
-            <span>광고 무한 로테이션</span>
-          </button>
-
-          {/* ⑤ 시상식 1: 기존 전체 순위 동시 발표 (1~10위 동시 노출) */}
-          <button
-            onClick={handleDirectRanking}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "RANKING"
-                ? "bg-amber-500 text-slate-950 border-amber-300 shadow-lg"
-                : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-            }`}
-          >
-            <TrophyOutlined className="text-lg" />
-            <span>🏆 전체 순위 동시발표</span>
-          </button>
-
-          {/* ⑤-0 시상식 2: 2~10위 먼저 발표 ➜ 1위 단독 샷으로 이어지는 시상식 */}
-          <button
-            onClick={handleSendSquareRanking}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "SQUARE_RANKING"
-                ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/50 scale-105"
-                : "bg-gradient-to-r from-amber-950/90 to-yellow-950/90 hover:from-amber-900 hover:to-yellow-900 text-amber-300 border-amber-500/60"
-            }`}
-          >
-            <CrownOutlined className="text-lg text-amber-400 animate-pulse" />
-            <span>🥇 2~10위 ➜ 1위단독 시상</span>
-          </button>
-
-          {/* ⑤-1 🏅 공식 시상식 (포디움 단상) 송출 */}
-          <button
-            onClick={handleSendAwardCeremony}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "AWARD_CEREMONY"
-                ? "bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 border-white shadow-xl shadow-amber-500/50 scale-105"
-                : "bg-gradient-to-r from-amber-950/80 to-yellow-950/80 hover:from-amber-900 hover:to-yellow-900 text-amber-300 border-amber-500/60"
-            }`}
-          >
-            <TrophyOutlined className="text-lg text-amber-300" />
-            <span>🏅 공식 시상식 (포디움)</span>
-          </button>
-
-          {/* ⑥ 👑 1위 챔피언 단독 송출 */}
-          <button
-            onClick={handleShowChampion}
-            className={`p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-              currentMode === "CHAMPION_SHOWCASE"
-                ? "bg-purple-600 text-white border-purple-300 shadow-lg"
-                : "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-purple-200 border-purple-500/50 hover:bg-purple-800"
-            }`}
-          >
-            <CrownOutlined className="text-lg text-amber-400" />
-            <span>1위 챔피언 단독</span>
-          </button>
-
-          {/* ⑦ 다음 종목 대기 복귀 */}
-          <button
-            onClick={handleSetStandby}
-            className="p-3 rounded-xl font-black text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-          >
-            <ForwardOutlined className="text-lg" />
-            <span>다음 종목 대기</span>
-          </button>
+        {/* 스튜디오 씬 스위처 그리드 (Studio Switcher Grid) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2">
+          {sceneButtons.map((scene) => {
+            const IconComponent = scene.icon;
+            return (
+              <button
+                key={scene.key}
+                type="button"
+                onClick={scene.onClick}
+                className={`relative p-3 rounded-[8px] text-xs font-medium flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer border ${
+                  scene.isActive
+                    ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]"
+                    : "bg-[#f4f4f5] hover:bg-[#e4e4e7]/70 text-[#171717] border-[#171717]/[0.08]"
+                }`}
+              >
+                {scene.isActive && (
+                  <span className="absolute top-2 right-2">
+                    <StatusDot status="live" live />
+                  </span>
+                )}
+                <IconComponent
+                  size={16}
+                  strokeWidth={1.5}
+                  className={
+                    scene.isActive ? "text-[#2563eb]" : "text-[#525252]"
+                  }
+                />
+                <span className="text-center leading-tight">{scene.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-          {/* 🌟 [2~10위 ➜ 1위 단독 시상식] 실시간 원격 제어 바 */}
-          {currentMode === "SQUARE_RANKING" && (
-            <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-amber-400/60 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
-                <span className="font-black text-xs sm:text-sm text-amber-300">
-                  🥇 [2~10위 발표 ➜ 1위 단독 시상식] 실시간 제어 중
-                </span>
-                <Tag color={broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "purple" : "gold"} className="font-black text-xs">
-                  {broadcastData?.rankingPhase === "CHAMPION_SOLO" ? "👑 1위 단독 샷 송출 중" : "📋 2·3위 + 4~10위 발표 중"}
-                </Tag>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  type="primary"
-                  icon={<CrownOutlined />}
-                  onClick={handleSquareChampionSolo}
-                  className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs border-none shadow-lg hover:opacity-90"
-                >
-                  👑 1위 단독 샷 즉시 송출
-                </Button>
-
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={handleSquareBackToFullRanking}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 font-bold text-xs shadow"
-                >
-                  📋 2~10위 순위표 복귀
-                </Button>
-
-                <Button
-                  icon={<ForwardOutlined />}
-                  onClick={handleSetStandby}
-                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs"
-                >
-                  대기 화면 복귀
-                </Button>
-              </div>
+        {/* [2~10위 → 1위 단독 시상식] 실시간 원격 제어 바 */}
+        {currentMode === "SQUARE_RANKING" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-[8px] bg-[#f4f4f5] border border-[#2563eb]/30">
+            <div className="flex items-center gap-2 flex-wrap">
+              <StatusDot status="live" live />
+              <span className="text-xs font-semibold text-[#171717]">
+                단계별 시상식 원격 제어
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-xs font-medium text-[#2563eb]">
+                {broadcastData?.rankingPhase === "CHAMPION_SOLO"
+                  ? "1위 단독 화면 송출 중"
+                  : "2~10위 순위표 송출 중"}
+              </span>
             </div>
-          )}
 
-        {/* 🌟 2. 🎬 특별영상 전체화면 송출 바 */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-purple-950 p-3.5 rounded-2xl border border-purple-500/30 space-y-2.5 shadow-xl">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleSquareChampionSolo}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
+              >
+                <Trophy size={14} strokeWidth={1.5} />
+                <span>1위 단독 화면 전환</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSquareBackToFullRanking}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <RotateCcw size={14} strokeWidth={1.5} />
+                <span>2~10위 순위표 복귀</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSetStandby}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#525252] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <SkipForward size={14} strokeWidth={1.5} />
+                <span>대기 화면 복귀</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 특별영상 전체화면 송출 패널 */}
+        <div className="p-3.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] space-y-2.5">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className="font-black text-xs text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
-              <VideoCameraOutlined className="text-purple-400 text-sm" />
-              <span>특별영상 송출 (전체화면 단독 영상 재생)</span>
+            <div className="flex items-center gap-2">
+              <Film size={15} strokeWidth={1.5} className="text-[#525252]" />
+              <span className="text-xs font-semibold text-[#171717]">
+                특별영상 전체화면 송출
+              </span>
               {currentMode === "SPECIAL_VIDEO" && (
-                <Tag color="purple" className="font-black text-[10px] ml-1 animate-pulse">
-                  🎬 특별영상 송출 중
-                </Tag>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-[11px] font-medium">
+                  <StatusDot status="live" live />
+                  <span>송출 중</span>
+                </span>
               )}
-            </span>
+            </div>
 
-            <Button
-              size="small"
-              type="primary"
-              icon={<CloudUploadOutlined />}
+            <button
+              type="button"
               onClick={() => setIsSpecialVideoModalOpen(true)}
-              className="text-xs bg-purple-600 hover:bg-purple-500 font-bold border-none rounded-lg"
+              className="inline-flex items-center gap-1.5 h-7 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
             >
-              + 특별영상 업로드 / 관리
-            </Button>
+              <Upload size={13} strokeWidth={1.5} />
+              <span>특별영상 업로드 및 관리</span>
+            </button>
           </div>
 
           {specialVideos.length === 0 ? (
-            <div className="text-xs text-slate-400 py-3 text-center border border-dashed border-purple-500/20 rounded-xl bg-purple-950/20">
-              등록된 특별영상이 없습니다. 오른쪽 [+ 특별영상 업로드 / 관리] 버튼을 눌러 영상을 추가하세요.
+            <div className="text-xs text-[#737373] py-2.5 text-center rounded-[6px] border border-dashed border-[#171717]/15 bg-white">
+              등록된 특별영상이 없습니다. 우측 상단 [특별영상 업로드 및 관리] 버튼으로 추가하세요.
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               {specialVideos.map((video, idx) => {
                 const isVideoActive =
                   currentMode === "SPECIAL_VIDEO" &&
-                  (currentSpecialVideoId === video.id || broadcastData?.specialVideoUrl === video.videoUrl);
+                  (currentSpecialVideoId === video.id ||
+                    broadcastData?.specialVideoUrl === video.videoUrl);
 
                 return (
                   <button
                     key={video.id || idx}
+                    type="button"
                     onClick={() => handleSendSpecialVideo(video)}
-                    className={`px-4 py-2 rounded-xl font-black text-xs transition-all cursor-pointer border flex items-center gap-2 ${
+                    className={`inline-flex items-center gap-2 h-8 px-3 rounded-[6px] text-xs font-medium border transition-colors cursor-pointer ${
                       isVideoActive
-                        ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white border-white shadow-lg shadow-purple-500/30 scale-105"
-                        : "bg-slate-800/90 hover:bg-slate-700 text-slate-100 border-purple-500/40"
+                        ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]"
+                        : "bg-white hover:bg-[#f4f4f5] text-[#171717] border-[#171717]/12"
                     }`}
                   >
-                    <VideoCameraOutlined />
-                    <span>{video.title}</span>
-                    {isVideoActive && (
-                      <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] text-white font-mono animate-pulse">
-                        ON AIR
-                      </span>
+                    {isVideoActive ? (
+                      <StatusDot status="live" live />
+                    ) : (
+                      <Film
+                        size={14}
+                        strokeWidth={1.5}
+                        className="text-[#737373]"
+                      />
                     )}
+                    <span>{video.title}</span>
                   </button>
                 );
               })}
@@ -1486,94 +1488,95 @@ const StageBroadcastController = ({
           )}
         </div>
 
-        {/* 🎮 [🎬 특별영상 실시간 원격 제어 바 (재생, 일시정지, 정지, 앞으로/뒤로 10초)] */}
+        {/* 특별영상 실시간 원격 재생 제어 바 */}
         {currentMode === "SPECIAL_VIDEO" && (
-          <div className="bg-gradient-to-r from-purple-950/95 via-slate-900 to-black p-3.5 rounded-2xl border-2 border-purple-400/70 flex flex-wrap items-center justify-between gap-3 shadow-2xl animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping" />
-              <span className="font-black text-xs sm:text-sm text-purple-200 flex items-center gap-1.5">
-                <VideoCameraOutlined className="text-purple-400" />
-                <span>[특별영상] {broadcastData?.specialVideoTitle || "영상 송출 중"}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-[8px] bg-[#f4f4f5] border border-[#2563eb]/30">
+            <div className="flex items-center gap-2">
+              <StatusDot status="live" live />
+              <Film size={15} strokeWidth={1.5} className="text-[#2563eb]" />
+              <span className="text-xs font-semibold text-[#171717]">
+                {broadcastData?.specialVideoTitle || "특별영상 재생 중"}
               </span>
-              <Tag color="purple" className="font-black text-xs m-0 animate-pulse">
-                ON AIR
-              </Tag>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* ⏪ 10초 뒤로 */}
-              <Button
-                icon={<BackwardOutlined />}
+              <button
+                type="button"
                 onClick={() => handleVideoCommand("SEEK_BACK_10")}
-                className="bg-slate-800 hover:bg-slate-700 text-purple-300 border-purple-500/50 font-bold text-xs shadow"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-mono font-medium tabular-nums cursor-pointer"
                 title="10초 뒤로 이동"
               >
-                -10초
-              </Button>
+                <RotateCcw size={13} strokeWidth={1.5} />
+                <span>-10s</span>
+              </button>
 
-              {/* ▶️ 재생 */}
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
+              <button
+                type="button"
                 onClick={() => handleVideoCommand("PLAY")}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs border-none shadow-lg"
+                className="inline-flex items-center gap-1 h-8 px-3 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer"
               >
-                재생
-              </Button>
+                <Play size={13} strokeWidth={1.5} />
+                <span>재생</span>
+              </button>
 
-              {/* ⏸️ 일시정지 */}
-              <Button
-                icon={<PauseCircleOutlined />}
+              <button
+                type="button"
                 onClick={() => handleVideoCommand("PAUSE")}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-black text-xs border-none shadow-lg"
+                className="inline-flex items-center gap-1 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium cursor-pointer"
               >
-                일시정지
-              </Button>
+                <Pause size={13} strokeWidth={1.5} />
+                <span>일시정지</span>
+              </button>
 
-              {/* ⏩ 10초 앞으로 */}
-              <Button
-                icon={<ForwardOutlined />}
+              <button
+                type="button"
                 onClick={() => handleVideoCommand("SEEK_FORWARD_10")}
-                className="bg-slate-800 hover:bg-slate-700 text-purple-300 border-purple-500/50 font-bold text-xs shadow"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-mono font-medium tabular-nums cursor-pointer"
                 title="10초 앞으로 이동"
               >
-                +10초
-              </Button>
+                <RotateCw size={13} strokeWidth={1.5} />
+                <span>+10s</span>
+              </button>
 
-              {/* ⏹️ 정지 / 처음으로 */}
-              <Button
-                danger
-                icon={<StopOutlined />}
+              <button
+                type="button"
                 onClick={() => handleVideoCommand("STOP")}
-                className="bg-red-600/80 hover:bg-red-600 text-white font-bold text-xs border-none shadow"
+                className="inline-flex items-center gap-1 h-8 px-3 rounded-[6px] border border-[#dc2626]/25 bg-white hover:bg-[#dc2626]/[0.05] text-[#dc2626] text-xs font-medium cursor-pointer"
               >
-                정지 (처음으로)
-              </Button>
+                <Square size={13} strokeWidth={1.5} />
+                <span>정지</span>
+              </button>
 
-              {/* 대기 화면 복귀 */}
-              <Button
-                icon={<ForwardOutlined />}
+              <button
+                type="button"
                 onClick={handleSetStandby}
-                className="bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700 font-bold text-xs ml-1"
+                className="inline-flex items-center gap-1 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#525252] text-xs font-medium cursor-pointer"
               >
-                송출 종료 (대기 복귀)
-              </Button>
+                <SkipForward size={13} strokeWidth={1.5} />
+                <span>송출 종료</span>
+              </button>
             </div>
           </div>
         )}
 
-        {/* 3. 선수 무대 입장 시 전체 화면 소개 송출 버튼 */}
+        {/* 선수 입장 전체화면 프로필 소개 버튼 바 */}
         {currentPlayers && currentPlayers.length > 0 && (
-          <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-400 flex items-center gap-1.5">
-                <UserOutlined className="text-amber-400" />
-                <span>선수 입장 전체화면 소개 (클릭 시 전광판에 선수 프로필 즉시 송출)</span>
+          <div className="p-3.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-1.5 font-semibold text-[#171717]">
+                <User size={15} strokeWidth={1.5} className="text-[#525252]" />
+                <span>선수 입장 프로필 송출</span>
+                <span className="font-normal text-[#737373]">
+                  (선택 시 전광판에 해당 선수 프로필 즉시 표시)
+                </span>
               </span>
               {activePlayer && currentMode === "ATHLETE_INTRO" && (
-                <Tag color="cyan" className="font-black text-xs mr-0 animate-pulse">
-                  {activePlayer.playerNumber}번 {activePlayer.playerName} 전체화면 송출 중
-                </Tag>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] font-medium tabular-nums">
+                  <StatusDot status="live" live />
+                  <span>
+                    #{activePlayer.playerNumber} {activePlayer.playerName} 송출 중
+                  </span>
+                </span>
               )}
             </div>
 
@@ -1591,26 +1594,29 @@ const StageBroadcastController = ({
                   return (
                     <button
                       key={player.playerUid || player.playerNumber}
+                      type="button"
                       onClick={() => handleIntroPlayer(player)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-2 ${
+                      className={`inline-flex items-center gap-2 h-9 px-3 rounded-[8px] text-xs font-medium border transition-colors cursor-pointer ${
                         isActive
-                          ? "bg-amber-400 text-slate-950 border-amber-300 shadow-lg scale-105"
-                          : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                          ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]"
+                          : "bg-white hover:bg-[#f4f4f5] text-[#171717] border-[#171717]/12"
                       }`}
                     >
                       {hasPhoto && (
                         <img
                           src={photos[0]}
                           alt={player.playerName}
-                          className="w-5 h-5 rounded-full object-cover border border-amber-400"
+                          className="w-5 h-5 rounded-full object-cover border border-[#171717]/15"
                         />
                       )}
-                      <span className="font-mono text-amber-400 bg-slate-950 px-1.5 py-0.5 rounded font-black">
-                        {player.playerNumber}번
-                      </span>
-                      <span className="text-sm">{player.playerName}</span>
+                      <BibTag
+                        number={player.playerNumber}
+                        variant={isActive ? "active" : "default"}
+                        size="sm"
+                      />
+                      <span>{player.playerName}</span>
                       {player.heightWeight && (
-                        <span className="text-[10px] text-slate-400 font-normal">
+                        <span className="text-[11px] font-mono tabular-nums text-[#737373]">
                           ({player.heightWeight})
                         </span>
                       )}
@@ -1622,45 +1628,64 @@ const StageBroadcastController = ({
         )}
       </div>
 
-      {/* ⚔️ 비교심사 호명 전용 모달 */}
+      {/* 비교심사 호명 전용 모달 */}
       <Modal
         title={
-          <div className="flex items-center gap-2">
-            <ThunderboltOutlined className="text-red-500 text-lg" />
-            <span className="font-black text-slate-900">비교심사 선수 호명 & 전광판 송출</span>
+          <div className="flex items-center gap-2 text-[#171717]">
+            <Users size={16} strokeWidth={1.5} className="text-[#2563eb]" />
+            <span className="text-sm font-semibold">
+              비교심사 선수 호명 및 전광판 송출
+            </span>
           </div>
         }
         open={isCalloutModalOpen}
         onCancel={() => setIsCalloutModalOpen(false)}
         onOk={handleSendCallout}
-        okText="전광판에 비교심사 즉시 송출"
+        okText="전광판에 비교심사 송출"
         cancelText="취소"
         width={720}
-        okButtonProps={{ className: "bg-red-600 font-black hover:bg-red-700" }}
+        okButtonProps={{
+          style: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+        }}
       >
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">
-                비교심사 라운드 차수 선택
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">
+                비교심사 라운드 차수
               </label>
               <Select
                 value={calloutRound}
                 onChange={(val) => setCalloutRound(val)}
                 className="w-full"
                 options={[
-                  { value: "1차 비교심사 (FIRST CALLOUT)", label: "1차 비교심사 (FIRST CALLOUT)" },
-                  { value: "2차 비교심사 (SECOND CALLOUT)", label: "2차 비교심사 (SECOND CALLOUT)" },
-                  { value: "3차 비교심사 (THIRD CALLOUT)", label: "3차 비교심사 (THIRD CALLOUT)" },
-                  { value: "TOP 4 최상위 비교심사", label: "TOP 4 최상위 비교심사" },
-                  { value: "최종 순위 결정 비교심사", label: "최종 순위 결정 비교심사" },
+                  {
+                    value: "1차 비교심사 (FIRST CALLOUT)",
+                    label: "1차 비교심사 (FIRST CALLOUT)",
+                  },
+                  {
+                    value: "2차 비교심사 (SECOND CALLOUT)",
+                    label: "2차 비교심사 (SECOND CALLOUT)",
+                  },
+                  {
+                    value: "3차 비교심사 (THIRD CALLOUT)",
+                    label: "3차 비교심사 (THIRD CALLOUT)",
+                  },
+                  {
+                    value: "TOP 4 최상위 비교심사",
+                    label: "TOP 4 최상위 비교심사",
+                  },
+                  {
+                    value: "최종 순위 결정 비교심사",
+                    label: "최종 순위 결정 비교심사",
+                  },
                 ]}
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">
-                포즈 안내 지시문 선택
+              <label className="text-xs font-medium text-[#525252] block mb-1.5">
+                포즈 안내 지시문
               </label>
               <Select
                 value={calloutPose}
@@ -1671,54 +1696,70 @@ const StageBroadcastController = ({
             </div>
           </div>
 
-          <Divider className="my-2">
-            <span className="text-xs text-slate-500 font-bold">호명 대상 선수 선택 (다중 선택 가능)</span>
-          </Divider>
+          <div className="border-t border-[#171717]/[0.08] pt-3">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-medium text-[#525252]">
+                호명 대상 선수 선택 (다중 선택 가능)
+              </span>
+              <span className="text-xs font-mono tabular-nums text-[#737373]">
+                선택됨: {selectedCalloutPlayers.length}명
+              </span>
+            </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-60 overflow-y-auto pr-1">
-            {currentPlayers
-              .filter((p) => !p.playerNoShow)
-              .map((p) => {
-                const isChecked = selectedCalloutPlayers.includes(p.playerNumber || p.playerUid);
-                return (
-                  <div
-                    key={p.playerUid || p.playerNumber}
-                    onClick={() => {
-                      const id = p.playerNumber || p.playerUid;
-                      if (isChecked) {
-                        setSelectedCalloutPlayers(selectedCalloutPlayers.filter((v) => v !== id));
-                      } else {
-                        setSelectedCalloutPlayers([...selectedCalloutPlayers, id]);
-                      }
-                    }}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                      isChecked
-                        ? "bg-red-50 border-red-500 text-red-900 font-black shadow-sm"
-                        : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`font-mono px-2 py-0.5 rounded text-xs font-black ${
-                        isChecked ? "bg-red-600 text-white" : "bg-slate-200 text-slate-800"
-                      }`}>
-                        #{p.playerNumber}
-                      </span>
-                      <span className="text-sm">{p.playerName}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+              {currentPlayers
+                .filter((p) => !p.playerNoShow)
+                .map((p) => {
+                  const id = p.playerNumber || p.playerUid;
+                  const isChecked = selectedCalloutPlayers.includes(id);
+                  return (
+                    <div
+                      key={p.playerUid || p.playerNumber}
+                      onClick={() => {
+                        if (isChecked) {
+                          setSelectedCalloutPlayers(
+                            selectedCalloutPlayers.filter((v) => v !== id)
+                          );
+                        } else {
+                          setSelectedCalloutPlayers([
+                            ...selectedCalloutPlayers,
+                            id,
+                          ]);
+                        }
+                      }}
+                      className={`p-2.5 rounded-[8px] border flex items-center justify-between cursor-pointer transition-colors ${
+                        isChecked
+                          ? "bg-[#2563eb]/[0.06] border-[#2563eb] text-[#171717]"
+                          : "bg-[#fafafa] border-[#171717]/10 hover:bg-[#f4f4f5] text-[#171717]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <BibTag
+                          number={p.playerNumber}
+                          variant={isChecked ? "active" : "default"}
+                          size="sm"
+                        />
+                        <span className="text-xs font-medium truncate">
+                          {p.playerName}
+                        </span>
+                      </div>
+                      <Checkbox checked={isChecked} />
                     </div>
-                    <Checkbox checked={isChecked} />
-                  </div>
-                );
-              })}
+                  );
+                })}
+            </div>
           </div>
         </div>
       </Modal>
 
-      {/* 🎬 특별영상 업로드 및 관리 모달 */}
+      {/* 특별영상 업로드 및 관리 모달 */}
       <Modal
         title={
-          <div className="flex items-center gap-2">
-            <VideoCameraOutlined className="text-purple-500 text-lg" />
-            <span className="font-black text-slate-900">특별영상 업로드 및 목록 관리</span>
+          <div className="flex items-center gap-2 text-[#171717]">
+            <Film size={16} strokeWidth={1.5} className="text-[#2563eb]" />
+            <span className="text-sm font-semibold">
+              특별영상 업로드 및 목록 관리
+            </span>
           </div>
         }
         open={isSpecialVideoModalOpen}
@@ -1728,28 +1769,26 @@ const StageBroadcastController = ({
         width={680}
       >
         <div className="space-y-4 pt-2">
-          {/* 새 영상 등록 섹션 */}
-          <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-3">
-            <div className="font-bold text-xs text-purple-900 flex items-center gap-1.5">
-              <CloudUploadOutlined className="text-purple-600" />
+          <div className="p-4 bg-[#fafafa] rounded-[10px] border border-[#171717]/[0.08] space-y-3">
+            <div className="text-xs font-semibold text-[#171717] flex items-center gap-1.5">
+              <Upload size={14} strokeWidth={1.5} className="text-[#525252]" />
               <span>새 특별영상 파일 업로드 (.mp4, .mov 등)</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  영상 제목 / 명칭
+                <label className="text-xs font-medium text-[#525252] block mb-1">
+                  영상 제목
                 </label>
                 <Input
-                  placeholder="예: 개회식 특별 오프닝 영상"
+                  placeholder="예: 개회식 오프닝 영상"
                   value={newVideoTitle}
                   onChange={(e) => setNewVideoTitle(e.target.value)}
-                  className="rounded-xl"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                <label className="text-xs font-medium text-[#525252] block mb-1">
                   동영상 파일 선택
                 </label>
                 <input
@@ -1762,56 +1801,68 @@ const StageBroadcastController = ({
                       handleUploadSpecialVideoFile(e.target.files[0]);
                     }
                   }}
-                  className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 file:cursor-pointer"
+                  className="w-full text-xs text-[#525252] file:mr-2 file:py-1.5 file:px-3 file:rounded-[6px] file:border-0 file:text-xs file:font-medium file:bg-[#2563eb] file:text-white hover:file:bg-[#1d4ed8] file:cursor-pointer"
                 />
               </div>
             </div>
 
             {isUploadingVideo && (
               <div className="space-y-1 pt-1">
-                <div className="flex justify-between text-xs font-bold text-purple-900">
+                <div className="flex justify-between text-xs font-medium text-[#171717]">
                   <span>Firebase Storage 업로드 중...</span>
-                  <span>{videoUploadProgress}%</span>
+                  <span className="font-mono tabular-nums">
+                    {videoUploadProgress}%
+                  </span>
                 </div>
                 <Progress
                   percent={videoUploadProgress}
                   status="active"
-                  strokeColor={{ "0%": "#a855f7", "100%": "#ec4899" }}
+                  strokeColor="#2563eb"
                 />
               </div>
             )}
 
-            {/* 또는 URL 직접 입력 */}
-            <Divider className="my-2 text-[11px] text-slate-400">또는 기존 영상 URL 직접 입력</Divider>
-            <div className="flex gap-2">
-              <Input
-                placeholder="https://... (직접 비디오 URL 입력)"
-                value={newVideoUrl}
-                onChange={(e) => setNewVideoUrl(e.target.value)}
-                prefix={<LinkOutlined className="text-slate-400" />}
-                className="rounded-xl text-xs flex-1"
-              />
-              <Button
-                type="primary"
-                onClick={handleAddVideoByUrl}
-                className="bg-purple-600 font-bold rounded-xl text-xs"
-              >
-                URL 등록
-              </Button>
+            <div className="border-t border-[#171717]/[0.08] pt-3 space-y-1.5">
+              <span className="text-xs font-medium text-[#525252] block">
+                또는 외부 영상 URL 직접 입력
+              </span>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://... (직접 비디오 URL 입력)"
+                  value={newVideoUrl}
+                  onChange={(e) => setNewVideoUrl(e.target.value)}
+                  prefix={
+                    <Link2
+                      size={14}
+                      strokeWidth={1.5}
+                      className="text-[#737373]"
+                    />
+                  }
+                  className="text-xs flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddVideoByUrl}
+                  className="h-8 px-3.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium shrink-0 cursor-pointer"
+                >
+                  URL 등록
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* 등록된 특별영상 목록 */}
           <div className="space-y-2">
-            <div className="font-bold text-xs text-slate-700 flex items-center justify-between">
-              <span>등록된 특별영상 목록 ({specialVideos.length}개)</span>
-              <span className="text-[11px] text-slate-400 font-normal">
-                클릭 시 즉시 전광판 전체화면으로 송출됩니다
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-[#171717] tabular-nums">
+                등록된 특별영상 목록 ({specialVideos.length}개)
+              </span>
+              <span className="text-[#737373]">
+                송출 시 전광판 전체화면으로 재생됩니다
               </span>
             </div>
 
             {specialVideos.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border">
+              <div className="p-6 text-center text-xs text-[#737373] bg-[#fafafa] rounded-[8px] border border-[#171717]/[0.08]">
                 등록된 특별영상이 없습니다.
               </div>
             ) : (
@@ -1819,35 +1870,32 @@ const StageBroadcastController = ({
                 {specialVideos.map((vid, idx) => (
                   <div
                     key={vid.id || idx}
-                    className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3 shadow-2xs hover:border-purple-300 transition-all"
+                    className="p-3 bg-white rounded-[8px] border border-[#171717]/10 flex items-center justify-between gap-3 hover:border-[#171717]/25 transition-colors"
                   >
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <Tag color="purple" className="font-mono text-xs m-0">
-                          #{idx + 1}
-                        </Tag>
-                        <span className="text-xs font-bold text-slate-800 truncate">
+                        <BibTag prefix="#" number={idx + 1} size="sm" />
+                        <span className="text-xs font-medium text-[#171717] truncate">
                           {vid.title}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono truncate max-w-md">
+                      <div className="text-[11px] text-[#737373] font-mono truncate max-w-md">
                         {vid.videoUrl}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <Button
-                        size="small"
-                        type="primary"
-                        icon={<PlayCircleOutlined />}
+                      <button
+                        type="button"
                         onClick={() => {
                           handleSendSpecialVideo(vid);
                           setIsSpecialVideoModalOpen(false);
                         }}
-                        className="bg-purple-600 font-bold text-xs rounded-lg"
+                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer"
                       >
-                        송출하기
-                      </Button>
+                        <Play size={12} strokeWidth={1.5} />
+                        <span>송출</span>
+                      </button>
 
                       <Popconfirm
                         title="이 특별영상을 삭제하시겠습니까?"
@@ -1855,12 +1903,13 @@ const StageBroadcastController = ({
                         okText="삭제"
                         cancelText="취소"
                       >
-                        <Button
-                          size="small"
-                          danger
-                          type="text"
-                          icon={<DeleteOutlined />}
-                        />
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#737373] hover:bg-[#dc2626]/[0.08] hover:text-[#dc2626] transition-colors cursor-pointer"
+                          aria-label="삭제"
+                        >
+                          <Trash2 size={14} strokeWidth={1.5} />
+                        </button>
                       </Popconfirm>
                     </div>
                   </div>
@@ -1869,12 +1918,12 @@ const StageBroadcastController = ({
             )}
           </div>
 
-          <div className="text-[11px] text-slate-400 text-center pt-2 border-t">
-            💡 등록된 특별영상은 '사전 다운로드(P)' 매니저에도 자동 등록되어 오프라인에서도 끊김 없이 재생됩니다.
+          <div className="text-[11px] text-[#737373] text-center pt-2 border-t border-[#171717]/[0.08]">
+            등록된 특별영상은 사전 다운로드 매니저에도 자동 등록되어 오프라인 환경에서도 재생됩니다.
           </div>
         </div>
       </Modal>
-    </Card>
+    </div>
   );
 };
 

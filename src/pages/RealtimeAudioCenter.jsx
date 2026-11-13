@@ -4,47 +4,49 @@ import React, { useEffect, useState, useContext, useRef } from "react";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import {
-  Layout,
-  Card,
-  List,
-  Typography,
-  Space,
-  Spin,
-  Alert,
-  Button,
-  Slider,
-  Row,
-  Col,
-  message,
-  Switch,
-} from "antd";
+import { Slider, message, Switch } from "antd";
 import { where, collection, getDocs } from "firebase/firestore";
 import { db, database } from "../firebase";
-import { UpOutlined, DownOutlined, CloudSyncOutlined } from "@ant-design/icons";
 import { ref, set } from "firebase/database";
+import {
+  Radio,
+  Volume2,
+  Play,
+  Pause,
+  ListMusic,
+  ChevronUp,
+  ChevronDown,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import { BibTag, StatusDot } from "../components/ui/BibTag";
 
-const { Title } = Typography;
-const { Sider, Content } = Layout;
+const formatClock = (sec) => {
+  if (!sec || isNaN(sec)) return "00:00";
+  const m = Math.floor(sec / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = Math.floor(sec % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${s}`;
+};
 
 export default function RealtimeAudioCenter() {
   const { currentContest } = useContext(CurrentContestContext);
 
   const [contestPlayList, setContestPlayList] = useState(null);
-  const [trackPlayList, setTrackPlayList] = useState([]);
+  const [, setTrackPlayList] = useState([]);
   const [tracks, setTracks] = useState([]);
 
-  // 카테고리별 트랙
   const [entryTracks, setEntryTracks] = useState([]);
   const [lineupTracks, setLineupTracks] = useState([]);
   const [poseDownTracks, setPoseDownTracks] = useState([]);
 
-  // 공통 트랙
   const [awardsMusic, setAwardsMusic] = useState([]);
   const [resultAnnouncementTracks, setResultAnnouncementTracks] = useState([]);
   const [waitingTracks, setWaitingTracks] = useState([]);
 
-  // 오디오 플레이어 상태
   const [audioPlaylist, setAudioPlaylist] = useState([]);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -52,7 +54,6 @@ export default function RealtimeAudioCenter() {
   const [trackDuration, setTrackDuration] = useState(0);
   const [currentPlaylistType, setCurrentPlaylistType] = useState(null);
 
-  // ✅ Volume 상태
   const [volume, setVolume] = useState(1);
 
   const [showEntryTracks, setShowEntryTracks] = useState(false);
@@ -60,7 +61,6 @@ export default function RealtimeAudioCenter() {
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState(null);
 
-  // ✅ Remote Sync 상태
   const [isRemoteSync, setIsRemoteSync] = useState(true);
   const [lastProcessedSelectedAt, setLastProcessedSelectedAt] = useState(0);
 
@@ -87,7 +87,6 @@ export default function RealtimeAudioCenter() {
   const categoryId = realtimeData?.categoryId;
   const categoryTitle = realtimeData?.categoryTitle;
 
-  // ✅ nowPlaying 구독 (VibeFlow Remote 명세)
   const { data: nowPlaying } = useFirebaseRealtimeGetDocument("nowPlaying");
 
   useEffect(() => {
@@ -96,7 +95,6 @@ export default function RealtimeAudioCenter() {
     const { downloadURL, status, selectedAt } = nowPlaying;
     if (!downloadURL && status !== "stop") return;
 
-    // 이미 처리한 타임스탬프이고 상태도 같은 경우 무시
     if (selectedAt === lastProcessedSelectedAt) {
       if (status === "play" && audioRef.current.paused) {
         audioRef.current.play().catch(() => {});
@@ -112,7 +110,6 @@ export default function RealtimeAudioCenter() {
       return;
     }
 
-    // 새로운 곡이거나 강제 재시작 타임스탬프인 경우
     setLastProcessedSelectedAt(selectedAt);
 
     if (status === "play") {
@@ -132,7 +129,9 @@ export default function RealtimeAudioCenter() {
           startTracking();
         })
         .catch(() =>
-          message.warning("원격 재생이 차단되었습니다. 수동으로 재생을 눌러주세요.")
+          message.warning(
+            "원격 재생이 차단되었습니다. 수동으로 재생을 눌러주세요"
+          )
         );
     } else if (status === "stop") {
       audioRef.current.pause();
@@ -146,7 +145,6 @@ export default function RealtimeAudioCenter() {
     }
   }, [nowPlaying, isRemoteSync]);
 
-  // ✅ Remote Control 업데이트 함수
   const updateRemoteControl = (track, status) => {
     if (!isRemoteSync || !track) return;
     const timestamp = Date.now();
@@ -155,16 +153,14 @@ export default function RealtimeAudioCenter() {
     const data = {
       fileName: track.name || track.fileName || "Unknown",
       filePath: track.path || track.filePath || "",
-      downloadURL: track.url || track.path || track.downloadURL || track.fileUrl || "",
+      downloadURL:
+        track.url || track.path || track.downloadURL || track.fileUrl || "",
       selectedAt: timestamp,
       status: status,
     };
     set(ref(database, "nowPlaying"), data);
   };
 
-  // =============================
-  // Firestore 데이터 로드
-  // =============================
   useEffect(() => {
     let isCancelled = false;
 
@@ -244,7 +240,6 @@ export default function RealtimeAudioCenter() {
     };
   }, [contestId]);
 
-  // ✅ 음악 분류 (공통)
   useEffect(() => {
     if (!contestPlayList?.id || !tracks.length) {
       setAwardsMusic([]);
@@ -272,7 +267,6 @@ export default function RealtimeAudioCenter() {
     setList(commonMusic.waitingMusic, setWaitingTracks);
   }, [contestPlayList, tracks]);
 
-  // ✅ 음악 분류 (카테고리별)
   useEffect(() => {
     if (!categoryId || !contestPlayList?.id || !tracks.length) {
       setEntryTracks([]);
@@ -307,10 +301,6 @@ export default function RealtimeAudioCenter() {
     setList(cfg.poseDownPlaylistId || cfg.poseDownMusic, setPoseDownTracks);
   }, [categoryId, contestPlayList, tracks]);
 
-  // =============================
-  // 오디오 관련
-  // =============================
-
   const updateProgress = () => {
     if (audioRef.current && !audioRef.current.paused) {
       setCurrentTime(audioRef.current.currentTime);
@@ -331,7 +321,7 @@ export default function RealtimeAudioCenter() {
       track.url || track.path || track.downloadURL || track.fileUrl;
 
     if (!playableURL) {
-      message.error("URL이 존재하지 않습니다.");
+      message.error("음원 URL이 존재하지 않습니다");
       return;
     }
 
@@ -348,7 +338,7 @@ export default function RealtimeAudioCenter() {
         startTracking();
       })
       .catch(() =>
-        message.warning("재생이 차단되었습니다. 수동으로 재생을 눌러주세요.")
+        message.warning("재생이 차단되었습니다. 수동으로 재생을 눌러주세요")
       );
   };
 
@@ -361,7 +351,7 @@ export default function RealtimeAudioCenter() {
   };
 
   const handleAddAllToPlaylistAndPlay = (list, type) => {
-    if (!list?.length) return message.info("트랙이 없습니다.");
+    if (!list?.length) return message.info("재생할 트랙이 없습니다");
     setCurrentPlaylistType(type);
     setAudioPlaylist(list);
     setCurrentTrackIndex(0);
@@ -404,7 +394,7 @@ export default function RealtimeAudioCenter() {
           }
         })
         .catch(() =>
-          message.warning("재생이 차단되었습니다. 수동으로 재생을 눌러주세요.")
+          message.warning("재생이 차단되었습니다. 수동으로 재생을 눌러주세요")
         );
     }
   };
@@ -416,7 +406,6 @@ export default function RealtimeAudioCenter() {
     if (!audioRef.current.paused) startTracking();
   };
 
-  // ✅ Volume 컨트롤 함수
   const handleVolumeChange = (value) => {
     setVolume(value);
     if (audioRef.current) audioRef.current.volume = value;
@@ -436,355 +425,441 @@ export default function RealtimeAudioCenter() {
     };
   }, []);
 
+  const renderTrackGroupCard = ({
+    title,
+    typeKey,
+    list,
+    collapsible = false,
+    expanded = true,
+    onToggleExpand,
+  }) => {
+    const isGroupActive = currentPlaylistType === typeKey;
+
+    return (
+      <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="bg-[#f4f4f5] px-4 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {isGroupActive && isPlaying && <StatusDot status="live" live />}
+            <span className="text-[14px] leading-5 font-medium text-[#171717] truncate">
+              {title}
+            </span>
+            <span className="text-xs font-mono tabular-nums text-[#737373] shrink-0">
+              {list.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {collapsible && (
+              <button
+                type="button"
+                aria-label={expanded ? "접기" : "펼치기"}
+                onClick={onToggleExpand}
+                className="h-8 w-8 rounded-[6px] bg-[#ffffff] hover:bg-[#fafafa] border border-[#171717]/[0.10] text-[#525252] hover:text-[#171717] inline-flex items-center justify-center cursor-pointer transition-colors duration-150"
+              >
+                {expanded ? (
+                  <ChevronUp size={15} strokeWidth={1.5} />
+                ) : (
+                  <ChevronDown size={15} strokeWidth={1.5} />
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={!list.length}
+              onClick={() => handleAddAllToPlaylistAndPlay(list, typeKey)}
+              className="h-8 px-3 rounded-[6px] bg-[#ffffff] hover:bg-[#2563eb] border border-[#171717]/[0.10] hover:border-[#2563eb] text-xs font-medium text-[#171717] hover:text-white inline-flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,opacity] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Play size={14} strokeWidth={1.5} />
+              <span>전체 재생</span>
+            </button>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="divide-y divide-[#171717]/[0.06]">
+            {list.length === 0 ? (
+              <div className="py-8 px-4 text-center text-xs text-[#737373]">
+                배정된 음원이 없습니다
+              </div>
+            ) : (
+              list.map((track, idx) => {
+                const isSelected =
+                  isGroupActive &&
+                  audioPlaylist[currentTrackIndex]?.id === track.id;
+
+                return (
+                  <button
+                    key={track.id || idx}
+                    type="button"
+                    onClick={() => handlePlaySingleTrack(track, typeKey)}
+                    className={`w-full h-10 px-4 text-left flex items-center justify-between gap-3 cursor-pointer transition-colors duration-150 ${
+                      isSelected
+                        ? "bg-[#2563eb]/[0.08] text-[#2563eb]"
+                        : "bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <BibTag
+                        number={String(idx + 1).padStart(2, "0")}
+                        variant={isSelected ? "active" : "default"}
+                        size="sm"
+                      />
+                      <span className="text-[13px] leading-5 truncate font-medium">
+                        {track.name}
+                      </span>
+                    </div>
+                    {isSelected && isPlaying && (
+                      <StatusDot status="live" live />
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderMainView = () => {
-    if (realtimeLoading || isDataLoading) return <Spin tip="Loading..." />;
-    if (realtimeError || dataError) {
+    if (realtimeLoading || isDataLoading) {
       return (
-        <Alert
-          message="Error"
-          description={
-            (realtimeError || dataError)?.message ||
-            "데이터 로드 중 오류가 발생했습니다."
-          }
-          type="error"
-          showIcon
-        />
+        <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+          <div className="inline-flex items-center gap-2 text-xs text-[#525252]">
+            <RefreshCw
+              size={16}
+              strokeWidth={1.5}
+              className="animate-spin text-[#737373]"
+            />
+            <span>음원 설정을 불러오는 중</span>
+          </div>
+        </div>
       );
     }
 
-    return (
-      <Layout style={{ height: "100vh" }}>
-        {/* ─────────────────────────────────────────────── */}
-        {/* LEFT: Audio Player */}
-        {/* ─────────────────────────────────────────────── */}
-
-        <Sider
-          width="30%"
-          style={{
-            backgroundColor: "#1a1a1a",
-            padding: "20px",
-            color: "white",
-          }}
-        >
-          <Title level={4} style={{ color: "#fff", marginBottom: 16 }}>
-            🎧 Audio Player
-          </Title>
-
-        {/* ✅ Remote Sync Toggle */}
-        <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color: "#fff" }}><CloudSyncOutlined /> Remote Sync</span>
-          <Switch 
-            checked={isRemoteSync} 
-            onChange={(val) => setIsRemoteSync(val)} 
-            size="small"
-          />
-        </div>
-
-        {/* ✅ Volume Control */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ color: "#fff", marginBottom: 6 }}>🔊 Volume</div>
-
-          <Slider
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={handleVolumeChange}
-            tooltipVisible={false}
-          />
-
-          <div
-            style={{
-              marginTop: 8,
-              width: "100%",
-              display: "grid",
-              gridTemplateColumns: "repeat(6, 1fr)",
-              gap: 4,
-            }}
-          >
-            <Button size="small" onClick={() => setQuickVolume(0)}>
-              0
-            </Button>
-            <Button size="small" onClick={() => setQuickVolume(0.1)}>
-              10
-            </Button>
-            <Button size="small" type="dashed" onClick={() => setQuickVolume(0.2)}>
-              20
-            </Button>
-            <Button size="small" onClick={() => setQuickVolume(0.5)}>
-              50
-            </Button>
-            <Button size="small" onClick={() => setQuickVolume(0.8)}>
-              80
-            </Button>
-            <Button size="small" type="primary" onClick={() => setQuickVolume(1)}>
-              100
-            </Button>
-          </div>
-        </div>
-
-        {/* ✅ Playlist (현재 재생 목록) */}
-        <List
-          dataSource={audioPlaylist}
-          renderItem={(track, i) => (
-            <List.Item
-              onClick={() => {
-                setCurrentTrackIndex(i);
-                playTrack(track);
-              }}
-              style={{
-                cursor: "pointer",
-                backgroundColor:
-                  i === currentTrackIndex
-                    ? "rgba(24,144,255,0.3)"
-                    : "transparent",
-                color: "white",
-                borderRadius: 6,
-              }}
-            >
-              {i === currentTrackIndex ? "▶️ " : ""}
-              {track.name}
-            </List.Item>
-          )}
-        />
-
-        {/* ✅ 현재 트랙 컨트롤 UI */}
-        {audioPlaylist.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ color: "#fff", marginBottom: 10 }}>
-              {audioPlaylist[currentTrackIndex]?.name}
-            </div>
-
-            <Button
-              type="primary"
-              onClick={handlePlayPause}
-              style={{ width: "100%", marginBottom: 10 }}
-            >
-              {isPlaying ? "⏸ 일시정지" : "▶️ 재생"}
-            </Button>
-
-            <Slider
-              min={0}
-              max={trackDuration || 0}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSliderChange}
-              tooltipVisible={false}
+    if (realtimeError || dataError) {
+      return (
+        <div className="min-h-screen bg-[#fafafa] p-6">
+          <div className="max-w-xl mx-auto p-4 rounded-[12px] bg-[#ffffff] border border-[#dc2626]/30 flex items-start gap-3">
+            <AlertCircle
+              size={18}
+              strokeWidth={1.5}
+              className="text-[#dc2626] shrink-0 mt-0.5"
             />
-
-            <div style={{ color: "#aaa", textAlign: "center", fontSize: 12 }}>
-              {`${Math.floor(currentTime / 60)
-                .toString()
-                .padStart(2, "0")}:${Math.floor(currentTime % 60)
-                .toString()
-                .padStart(2, "0")} / ${Math.floor(trackDuration / 60)
-                .toString()
-                .padStart(2, "0")}:${Math.floor(trackDuration % 60)
-                .toString()
-                .padStart(2, "0")}`}
+            <div>
+              <div className="text-[14px] font-medium text-[#171717]">
+                데이터 로드 오류
+              </div>
+              <div className="text-xs text-[#525252] mt-1">
+                {(realtimeError || dataError)?.message ||
+                  "데이터를 불러오는 중 오류가 발생했습니다"}
+              </div>
             </div>
           </div>
-        )}
-      </Sider>
+        </div>
+      );
+    }
 
-      {/* ─────────────────────────────────────────────── */}
-      {/* RIGHT: Music List UI */}
-      {/* ─────────────────────────────────────────────── */}
+    const volumePercent = Math.round(volume * 100);
+    const activeTrack = audioPlaylist[currentTrackIndex];
 
-      <Content style={{ padding: 20, overflowY: "auto" }}>
-        {!contestId && (
-          <Alert
-            style={{ marginBottom: 16 }}
-            message="선택된 대회가 없습니다"
-            description="대회를 선택하면 종목별/공통 음악 목록이 표시됩니다."
-            type="warning"
-            showIcon
-          />
-        )}
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12}>
-            <Card
-              title="🏆 시상식 음악"
-              extra={
-                <Button
-                  onClick={() =>
-                    handleAddAllToPlaylistAndPlay(awardsMusic, "awards")
-                  }
-                >
-                  전체 재생
-                </Button>
-              }
-            >
-              <List
-                dataSource={awardsMusic}
-                renderItem={(track) => (
-                  <List.Item
-                    onClick={() => handlePlaySingleTrack(track, "awards")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {track.name}
-                  </List.Item>
-                )}
-              />
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Card
-              title="📊 점수공개 음악"
-              extra={
-                <Button
-                  onClick={() =>
-                    handleAddAllToPlaylistAndPlay(
-                      resultAnnouncementTracks,
-                      "result"
-                    )
-                  }
-                >
-                  전체 재생
-                </Button>
-              }
-            >
-              <List
-                dataSource={resultAnnouncementTracks}
-                renderItem={(track) => (
-                  <List.Item
-                    onClick={() => handlePlaySingleTrack(track, "result")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {track.name}
-                  </List.Item>
-                )}
-              />
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Card
-              title="⏳ 대기 음악"
-              extra={
-                <Button
-                  onClick={() =>
-                    handleAddAllToPlaylistAndPlay(waitingTracks, "waiting")
-                  }
-                >
-                  전체 재생
-                </Button>
-              }
-            >
-              <List
-                dataSource={waitingTracks}
-                renderItem={(track) => (
-                  <List.Item
-                    onClick={() => handlePlaySingleTrack(track, "waiting")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {track.name}
-                  </List.Item>
-                )}
-              />
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Card
-              title={`${categoryTitle || "현재 종목"} - 입장 음악`}
-              extra={
-                <Space>
-                  <Button
-                    icon={showEntryTracks ? <UpOutlined /> : <DownOutlined />}
-                    onClick={() => setShowEntryTracks(!showEntryTracks)}
-                  />
-                  <Button
-                    onClick={() =>
-                      handleAddAllToPlaylistAndPlay(entryTracks, "entry")
-                    }
-                  >
-                    전체 재생
-                  </Button>
-                </Space>
-              }
-            >
-              {showEntryTracks && (
-                <List
-                  dataSource={entryTracks}
-                  renderItem={(track) => (
-                    <List.Item
-                      onClick={() => handlePlaySingleTrack(track, "entry")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {track.name}
-                    </List.Item>
+    return (
+      <div className="min-h-screen bg-[#fafafa] text-[#171717]">
+        <header className="bg-[#ffffff] border-b border-[#171717]/[0.08]">
+          <div className="max-w-[1600px] mx-auto px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center text-[#525252] shrink-0">
+                <Radio size={18} strokeWidth={1.5} />
+              </div>
+              <div>
+                <h1 className="text-[18px] leading-6 font-medium text-[#171717] m-0">
+                  실시간 무대 음향 센터
+                </h1>
+                <div className="text-xs text-[#525252] flex items-center gap-2 mt-0.5">
+                  {categoryTitle ? (
+                    <>
+                      <StatusDot status="live" live />
+                      <span>현재 진행 종목: {categoryTitle}</span>
+                    </>
+                  ) : (
+                    <span className="text-[#737373]">
+                      종목별 지정 플레이리스트 및 원격 음원 수신기
+                    </span>
                   )}
-                />
-              )}
-            </Card>
-          </Col>
+                </div>
+              </div>
+            </div>
 
-          <Col xs={24} sm={12}>
-            <Card
-              title="📋 라인업 음악"
-              extra={
-                <Space>
-                  <Button
-                    icon={showLineupTracks ? <UpOutlined /> : <DownOutlined />}
-                    onClick={() => setShowLineupTracks(!showLineupTracks)}
-                  />
-                  <Button
-                    onClick={() =>
-                      handleAddAllToPlaylistAndPlay(lineupTracks, "lineup")
-                    }
-                  >
-                    전체 재생
-                  </Button>
-                </Space>
-              }
-            >
-              {showLineupTracks && (
-                <List
-                  dataSource={lineupTracks}
-                  renderItem={(track) => (
-                    <List.Item
-                      onClick={() => handlePlaySingleTrack(track, "lineup")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {track.name}
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12}>
-            <Card
-              title="🔥 포즈다운 음악"
-              extra={
-                <Button
-                  onClick={() =>
-                    handleAddAllToPlaylistAndPlay(poseDownTracks, "posedown")
-                  }
-                >
-                  전체 재생
-                </Button>
-              }
-            >
-              <List
-                dataSource={poseDownTracks}
-                renderItem={(track) => (
-                  <List.Item
-                    onClick={() => handlePlaySingleTrack(track, "posedown")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {track.name}
-                  </List.Item>
-                )}
+            <div className="h-9 px-3 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] inline-flex items-center gap-2.5 self-start sm:self-auto">
+              <StatusDot
+                status={isRemoteSync ? "live" : "idle"}
+                live={isRemoteSync}
               />
-            </Card>
-          </Col>
-        </Row>
-      </Content>
-    </Layout>
+              <span className="text-xs font-medium text-[#525252]">
+                원격 동기화 수신
+              </span>
+              <Switch
+                checked={isRemoteSync}
+                onChange={(val) => setIsRemoteSync(val)}
+                size="small"
+              />
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <div className="lg:col-span-4 space-y-4">
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between">
+                <span className="text-[13px] leading-5 font-medium text-[#171717]">
+                  오디오 플레이어
+                </span>
+                <div className="inline-flex items-center gap-1.5 text-xs text-[#525252]">
+                  <StatusDot
+                    status={isPlaying ? "live" : "idle"}
+                    live={isPlaying}
+                  />
+                  <span>{isPlaying ? "재생 중" : "대기"}</span>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-5">
+                <div className="space-y-3">
+                  <div className="p-3 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08]">
+                    <div className="text-[11px] leading-4 text-[#737373]">
+                      선택된 트랙
+                    </div>
+                    <div className="text-[14px] leading-5 font-medium text-[#171717] truncate mt-0.5">
+                      {activeTrack?.name ||
+                        nowPlaying?.fileName ||
+                        "재생 대기 중"}
+                    </div>
+                  </div>
+
+                  {audioPlaylist.length > 0 && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={handlePlayPause}
+                        className="w-full h-10 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center justify-center gap-2 cursor-pointer transition-[background-color,transform] duration-150 active:scale-[0.98]"
+                      >
+                        {isPlaying ? (
+                          <>
+                            <Pause size={16} strokeWidth={1.5} />
+                            <span>일시정지</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play size={16} strokeWidth={1.5} />
+                            <span>재생</span>
+                          </>
+                        )}
+                      </button>
+
+                      <Slider
+                        min={0}
+                        max={trackDuration || 0}
+                        step={0.1}
+                        value={currentTime}
+                        onChange={handleSliderChange}
+                        tooltip={{ open: false }}
+                        className="m-0"
+                      />
+
+                      <div className="flex items-center justify-between text-xs font-mono tabular-nums text-[#737373]">
+                        <span className="text-[#171717]">
+                          {formatClock(currentTime)}
+                        </span>
+                        <span>
+                          {formatClock(currentTime)} /{" "}
+                          {formatClock(trackDuration)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-[#171717]/[0.08] space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-medium text-[#525252]">
+                      <Volume2
+                        size={16}
+                        strokeWidth={1.5}
+                        className="text-[#737373]"
+                      />
+                      <span>출력 볼륨</span>
+                    </span>
+                    <span className="font-mono tabular-nums font-medium text-[#171717]">
+                      {volumePercent}%
+                    </span>
+                  </div>
+
+                  <Slider
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    tooltip={{ open: false }}
+                    className="m-0"
+                  />
+
+                  <div className="grid grid-cols-6 gap-1.5 pt-1">
+                    {[
+                      { val: 0, label: "0" },
+                      { val: 0.1, label: "10" },
+                      { val: 0.2, label: "20" },
+                      { val: 0.5, label: "50" },
+                      { val: 0.8, label: "80" },
+                      { val: 1, label: "100" },
+                    ].map((preset) => {
+                      const active =
+                        Math.abs(volumePercent - Math.round(preset.val * 100)) <=
+                        3;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setQuickVolume(preset.val)}
+                          className={`h-8 rounded-[6px] border font-mono tabular-nums text-xs font-medium cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                            active
+                              ? "bg-[#2563eb] border-[#2563eb] text-white"
+                              : "bg-[#f4f4f5] hover:bg-[#e4e4e7] border-[#171717]/[0.08] text-[#171717]"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between">
+                <span className="text-[13px] leading-5 font-medium text-[#171717] flex items-center gap-2">
+                  <ListMusic
+                    size={16}
+                    strokeWidth={1.5}
+                    className="text-[#737373]"
+                  />
+                  <span>현재 재생 대기열</span>
+                </span>
+                <span className="text-xs font-mono tabular-nums text-[#737373]">
+                  {audioPlaylist.length}곡
+                </span>
+              </div>
+
+              <div className="divide-y divide-[#171717]/[0.06] max-h-[320px] overflow-y-auto">
+                {audioPlaylist.length === 0 ? (
+                  <div className="py-8 px-4 text-center text-xs text-[#737373]">
+                    우측 목록에서 음원을 선택하면 대기열에 추가됩니다
+                  </div>
+                ) : (
+                  audioPlaylist.map((track, i) => {
+                    const active = i === currentTrackIndex;
+                    return (
+                      <button
+                        key={track.id || i}
+                        type="button"
+                        onClick={() => {
+                          setCurrentTrackIndex(i);
+                          playTrack(track);
+                        }}
+                        className={`w-full h-10 px-4 text-left flex items-center justify-between gap-2.5 cursor-pointer transition-colors duration-150 ${
+                          active
+                            ? "bg-[#2563eb]/[0.08] text-[#2563eb]"
+                            : "bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <BibTag
+                            number={String(i + 1).padStart(2, "0")}
+                            variant={active ? "active" : "default"}
+                            size="sm"
+                          />
+                          <span className="text-xs font-medium truncate">
+                            {track.name}
+                          </span>
+                        </div>
+                        {active && isPlaying && (
+                          <StatusDot status="live" live />
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-8 space-y-4">
+            {!contestId && (
+              <div className="p-4 rounded-[12px] bg-[#ffffff] border border-[#b45309]/25 flex items-start gap-3">
+                <AlertCircle
+                  size={18}
+                  strokeWidth={1.5}
+                  className="text-[#b45309] shrink-0 mt-0.5"
+                />
+                <div>
+                  <div className="text-[13px] font-medium text-[#171717]">
+                    선택된 대회가 없습니다
+                  </div>
+                  <div className="text-xs text-[#525252] mt-0.5">
+                    대회를 선택하면 종목별 및 공통 음악 목록이 표시됩니다
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {renderTrackGroupCard({
+                title: "시상식 음악",
+                typeKey: "awards",
+                list: awardsMusic,
+              })}
+
+              {renderTrackGroupCard({
+                title: "점수 공개 음악",
+                typeKey: "result",
+                list: resultAnnouncementTracks,
+              })}
+
+              {renderTrackGroupCard({
+                title: "대기 음악",
+                typeKey: "waiting",
+                list: waitingTracks,
+              })}
+
+              {renderTrackGroupCard({
+                title: `${categoryTitle || "현재 종목"} 입장 음악`,
+                typeKey: "entry",
+                list: entryTracks,
+                collapsible: true,
+                expanded: showEntryTracks,
+                onToggleExpand: () => setShowEntryTracks(!showEntryTracks),
+              })}
+
+              {renderTrackGroupCard({
+                title: "라인업 음악",
+                typeKey: "lineup",
+                list: lineupTracks,
+                collapsible: true,
+                expanded: showLineupTracks,
+                onToggleExpand: () => setShowLineupTracks(!showLineupTracks),
+              })}
+
+              {renderTrackGroupCard({
+                title: "포즈다운 음악",
+                typeKey: "posedown",
+                list: poseDownTracks,
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     );
   };
 

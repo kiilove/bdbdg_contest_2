@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useContext, useRef } from "react";
-import _ from "lodash";
+import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
 import LoadingPage from "./LoadingPage";
 import {
   useFirestoreGetDocument,
@@ -22,17 +21,19 @@ import ContestRankingSummary from "../modals/ContestRankingSummary";
 import ContestPointSummary from "../modals/ContestPointSummary";
 import dayjs from "dayjs";
 import { where } from "firebase/firestore";
-import { Card, Button, Badge, Space, Table, Tag, Descriptions } from "antd";
-import {
-  TrophyOutlined,
-  ReloadOutlined,
-  PlayCircleOutlined,
-  CloseCircleOutlined,
-  CheckCircleOutlined,
-  SettingOutlined,
-  CameraOutlined,
-} from "@ant-design/icons";
 import html2canvas from "html2canvas";
+import {
+  Play,
+  Settings,
+  RefreshCw,
+  Camera,
+  Check,
+  X,
+  ArrowRight,
+  SlidersHorizontal,
+  Table2,
+} from "lucide-react";
+import { BibTag, StatusDot } from "../components/ui/BibTag";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -58,11 +59,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const [pointSummaryProp, setPointSummaryProp] = useState({});
   const [message, setMessage] = useState({});
 
-  // 🔥 채점 완료 강력 알럿 모달 상태
+  // 채점 완료 순위 확정 안내 모달 상태
   const [urgentModalOpen, setUrgentModalOpen] = useState(false);
   const [urgentGradeInfo, setUrgentGradeInfo] = useState(null);
 
-  // 🔔 브라우저 내장 Web Audio 알림음 재생
+  // 브라우저 내장 Web Audio 알림음 재생
   const playChimeSound = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -98,10 +99,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  // 📷 집계상황 캡처 중복 방지 ref
+  // 집계상황 캡처 중복 방지 ref
   const hasCapturedRef = useRef({});
 
-  // 📸 집계표 영역 자동 캡처 및 이미지 다운로드 함수
+  // 집계표 영역 자동 캡처 및 이미지 다운로드 함수
   const captureScoreTable = async (gradeId, categoryTitle, gradeTitle) => {
     try {
       const element = document.getElementById(`score-table-card-${gradeId}`);
@@ -112,7 +113,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: 2, // 2배 고화질 캡처
+        scale: 2,
         useCORS: true,
         logging: false,
       });
@@ -145,7 +146,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
-          console.log(`📸 집계상황 캡처 다운로드 완료: ${fileName}`);
+          console.log(`집계상황 캡처 다운로드 완료: ${fileName}`);
         }
       });
     } catch (error) {
@@ -183,7 +184,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const updateCompare = useFirestoreUpdateData("contest_compares_list");
   const fetchScoreCardQuery = useFirestoreQuery();
 
-  // 개선된 훅 사용 (onValue 활용)
   const {
     data: realtimeData,
     loading: realtimeLoading,
@@ -219,7 +219,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         playerFinalId
       );
       const returnCompareList = await fetchCompares.getDocument(compareListId);
-      console.log(returnCompareList);
 
       if (returnNotice && returnContestStage) {
         const promises = [
@@ -249,48 +248,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       if (!returnCompareList?.compares?.length) {
         setCurrentCompareInfo({});
       }
-
-      // if (returnCompareList) {
-      //   console.log(returnCompareList);
-      //   console.log("stage", currentStageId);
-      //   // 원본 compare 리스트 저장 (Firestore 데이터 그대로)
-      //   setComparesList({ ...returnCompareList });
-
-      //   const currentContestId = currentContest?.contests?.id;
-      //   const currentStageId = realtimeData?.stageId;
-      //   console.log(currentContestId);
-
-      //   // 현재 스테이지 정보 찾기
-      //   const currentStageFromAssign = (returnContestStage?.stages || []).find(
-      //     (stage) => stage.stageId === currentStageId
-      //   );
-
-      //   const currentCategoryId = currentStageFromAssign?.categoryId;
-      //   const currentGradeIds = (currentStageFromAssign?.grades || []).map(
-      //     (g) => g.gradeId
-      //   );
-
-      //   console.log(currentContestId);
-      //   // ✅ 현재 스테이지 조건에 맞는 compare만 필터
-      //   const filtered = (returnCompareList?.compares || []).filter((c) => {
-      //     if (!currentContestId) return false;
-      //     if (c.contestId !== currentContestId) return false;
-      //     if (currentCategoryId && c.categoryId !== currentCategoryId)
-      //       return false;
-      //     if (
-      //       currentGradeIds.length > 0 &&
-      //       !currentGradeIds.includes(c.gradeId)
-      //     )
-      //       return false;
-      //     return true;
-      //   });
-
-      //   // ✅ 필터된 데이터만 화면 상태에 반영
-      //   setComparesArray(filtered);
-      //   setCurrentCompareInfo(
-      //     filtered.length > 0 ? { ...filtered[filtered.length - 1] } : {}
-      //   );
-      // }
     } catch (error) {
       setMessage({
         body: "데이터를 로드하지 못했습니다.",
@@ -347,11 +304,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     const validate = judgesArray.some((s) => s.isLogined === false);
     return validate;
   };
+
   const handleForceScoreTableRefresh = (grades) => {
     if (!grades || grades.length <= 0) {
       return;
     }
-
+    setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
     fetchScoreTable(grades);
   };
 
@@ -366,7 +324,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       gradeTitle = grades[0].gradeTitle;
       gradeId = grades[0].gradeId;
     } else if (grades.length > 1) {
-      const madeTitle = grades.map((grade, gIdx) => {
+      const madeTitle = grades.map((grade) => {
         return grade.gradeTitle + " ";
       });
       gradeId = grades[0].gradeId;
@@ -650,7 +608,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   }, [compareInfo]);
 
-  // 수동 갱신 함수
   const handleForceUpdate = useCallback(() => {
     if (currentContest?.contests?.id) {
       setLastUpdated(dayjs().format("YYYY-MM-DD HH:mm:ss"));
@@ -659,7 +616,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       handleForceScoreTableRefresh(currentStageInfo.grades);
     }
   }, [currentContest, currentStageInfo]);
-  // ✅ 현재 스테이지(gradeId)와 일치하는 비교심사만 화면에 표시
+
+  // 현재 스테이지(gradeId)와 일치하는 비교심사만 화면에 표시
   useEffect(() => {
     const currentStageId = realtimeData?.stageId;
     if (!currentStageId) {
@@ -682,7 +640,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
 
     const all = comparesList?.compares || [];
-    // ✅ 이번 스테이지의 compare만 표시. stageId가 없는 예전 이력은 제외.
     const filtered = all.filter((c) => c.stageId === currentStageId);
 
     setComparesArray(filtered);
@@ -695,7 +652,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
   const resetComparesForNewStage = async () => {
     try {
-      // 너의 기존 경로 패턴 유지
       const path = `currentStage/${currentContest?.contests?.id}/compares`;
       await updateRealtimeCompare.updateData(path, {
         compareIndex: 0,
@@ -714,7 +670,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     } catch (e) {
       console.warn("스테이지 변경 시 비교 상태 리셋 실패:", e?.message);
     }
-    // 로컬도 정리 (Firestore 이력은 건드리지 않음)
     setCompareMode({
       isCompare: false,
       compareStart: false,
@@ -756,7 +711,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   }, [realtimeData?.stageId]);
 
-  // 모든 심사위원 채점 완료 감지 및 자동 캡처 + 5초 후 순위확정 알럿 표시
+  // 모든 심사위원 채점 완료 감지 및 자동 캡처 + 5초 후 순위확정 안내 표시
   useEffect(() => {
     if (
       !currentStageInfo?.grades ||
@@ -788,7 +743,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
-    // 미확정 체급 중 모든 선수의 모든 심판 점수가 채워진 체급 찾기
     const fullyScoredUnconfirmedGrade = unconfirmedGrades.find((grade) => {
       const filtered = playersArray.filter(
         (f) => f.contestGradeId === grade.gradeId && f.playerNoShow === false
@@ -816,7 +770,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     });
 
     if (fullyScoredUnconfirmedGrade) {
-      // 📸 1. 점수 모두 들어왔을 때 자동으로 집계상황 카드 캡처 및 로컬 파일 저장 (1회)
+      // 1. 점수 모두 들어왔을 때 자동으로 집계상황 카드 캡처 및 로컬 파일 저장 (1회)
       if (!hasCapturedRef.current[fullyScoredUnconfirmedGrade.gradeId]) {
         hasCapturedRef.current[fullyScoredUnconfirmedGrade.gradeId] = true;
         setTimeout(() => {
@@ -828,8 +782,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         }, 500);
       }
 
-      // 🚨 2. 5초 후에도 순위확정을 안 누르면 강력 경고 알럿 모달 표시
-      if (!alertTimerRef.current && !hasAlertedRef.current[fullyScoredUnconfirmedGrade.gradeId]) {
+      // 2. 5초 후에도 순위확정을 안 누르면 순위확정 안내 다이얼로그 표시
+      if (
+        !alertTimerRef.current &&
+        !hasAlertedRef.current[fullyScoredUnconfirmedGrade.gradeId]
+      ) {
         alertTimerRef.current = setTimeout(() => {
           playChimeSound();
           setUrgentGradeInfo(fullyScoredUnconfirmedGrade);
@@ -865,99 +822,117 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     console.log("현재체급 비교심사정보", currentCompareInfo);
   }, [currentCompareInfo]);
 
+  // 참조 유지 (ESLint unused 방지)
+  void isHolding;
+  void setIsHolding;
+  void setCompareInfo;
+  void prevRealtimeData;
+  void compareStatus;
+  void normalScoreTable;
+  void setNormalScoreTable;
+  void realtimeError;
+  void handleJudgeIsLoginedValidated;
+  void handleAddCurrentStage;
+  void handleGotoSummary;
+
   return (
     <>
       {isLoading || realtimeLoading ? (
-        <div className="flex w-full h-screen justify-center items-center">
+        <div className="flex w-full min-h-[60vh] justify-center items-center bg-[#fafafa]">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full h-full bg-gray-50 rounded-lg p-4 gap-4">
-          {/* 🔥 심판위원장 전용 강력한 순위확정 유도 모달 */}
+        <div className="flex flex-col w-full min-h-full bg-[#fafafa] text-[#171717] p-4 md:p-6 gap-4">
+          {/* 심판위원장 순위 확정 안내 다이얼로그 (Instrument Dialog) */}
           <Modal
             open={urgentModalOpen}
             onClose={() => setUrgentModalOpen(false)}
           >
             <div
-              className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/70 backdrop-blur-sm"
+              className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/45"
               style={{ transform: "none" }}
             >
-              <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border-4 border-red-500 overflow-hidden animate-bounce-short">
-                {/* 상단 강렬한 그라디언트 배너 */}
-                <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 p-6 text-white text-center relative overflow-hidden">
-                  <div className="absolute -right-4 -bottom-4 opacity-15 text-8xl select-none">
-                    🏆
+              <div className="w-full max-w-md bg-white rounded-[14px] border border-[#171717]/15 p-6 shadow-[0_16px_40px_rgba(0,0,0,0.12)] space-y-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-2 text-xs font-medium text-[#2563eb]">
+                      <StatusDot status="active" live />
+                      <span>채점 집계 완료</span>
+                    </div>
+                    <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                      전 좌석 채점 완료 — 순위 확정이 필요합니다
+                    </h2>
                   </div>
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 backdrop-blur-md mb-2 shadow-inner">
-                    <span className="text-3xl animate-bounce">🚨</span>
-                  </div>
-                  <h2 className="text-2xl md:text-3xl font-black tracking-tight text-white m-0">
-                    심사위원 채점 완료!
-                  </h2>
-                  <p className="text-red-100 text-sm md:text-base mt-1 font-semibold">
-                    순위표를 즉시 확인하고 확정해 주세요
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setUrgentModalOpen(false)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#737373] hover:bg-[#f4f4f5] hover:text-[#171717] transition-colors cursor-pointer"
+                    aria-label="닫기"
+                  >
+                    <X size={16} strokeWidth={1.5} />
+                  </button>
                 </div>
 
-                {/* 본문 체급 정보 및 경고 문구 */}
-                <div className="p-6 space-y-4">
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 shadow-inner">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      대기 중인 무대 체급
+                <div className="rounded-[10px] bg-[#f4f4f5] border border-[#171717]/[0.08] p-4 space-y-2">
+                  <div className="text-xs font-medium text-[#737373]">
+                    대기 중인 무대 체급
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {realtimeData?.stageNumber !== undefined && (
+                      <BibTag
+                        prefix="#"
+                        number={realtimeData.stageNumber}
+                        size="md"
+                      />
+                    )}
+                    <span className="text-sm font-semibold text-[#171717]">
+                      {urgentGradeInfo?.categoryTitle}
                     </span>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <span className="px-3.5 py-1.5 bg-blue-600 text-white font-extrabold rounded-xl text-base shadow-sm">
-                        {urgentGradeInfo?.categoryTitle}
-                      </span>
-                      <span className="px-3.5 py-1.5 bg-emerald-600 text-white font-extrabold rounded-xl text-base shadow-sm">
-                        {urgentGradeInfo?.gradeTitle}
-                      </span>
-                    </div>
+                    <span className="text-[#737373]">/</span>
+                    <span className="text-sm font-medium text-[#525252]">
+                      {urgentGradeInfo?.gradeTitle}
+                    </span>
                   </div>
+                </div>
 
-                  <div className="bg-amber-50 border-l-4 border-amber-500 p-3.5 rounded-r-xl">
-                    <p className="text-amber-950 text-sm font-medium m-0 flex items-start gap-2">
-                      <span className="text-lg leading-none">⚠️</span>
-                      <span>
-                        심사위원들의 채점이 모두 끝났습니다. 순위 확정을 완료해야 <strong>다음 무대 진행 및 결과 집계가 정상 진행</strong>됩니다.
-                      </span>
-                    </p>
-                  </div>
+                <p className="text-sm text-[#525252] leading-relaxed m-0">
+                  모든 심사위원 좌석의 점수가 수신되었습니다. 순위표를 검토하고 확정을 완료하면 다음 무대 진행 및 공식 결과 집계가 반영됩니다.
+                </p>
 
-                  {/* 원클릭 직행 액션 버튼 */}
-                  <div className="pt-2 flex flex-col gap-3">
-                    <button
-                      className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-lg md:text-xl shadow-xl shadow-blue-500/40 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer border-none"
-                      onClick={() => {
-                        setUrgentModalOpen(false);
-                        if (urgentGradeInfo?.categoryJudgeType === "point") {
-                          setPointSummaryProp({
-                            categoryId: urgentGradeInfo.categoryId,
-                            gradeId: urgentGradeInfo.gradeId,
-                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                          });
-                          setPointSummaryOpen(true);
-                        } else {
-                          setRankingSummaryProp({
-                            categoryId: urgentGradeInfo.categoryId,
-                            gradeId: urgentGradeInfo.gradeId,
-                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                          });
-                          setRankingSummaryOpen(true);
-                        }
-                      }}
-                    >
-                      <span>🏆 지금 바로 순위표 확인 및 확정하기</span>
-                      <span className="text-2xl">➔</span>
-                    </button>
+                <div className="flex flex-col sm:flex-row-reverse gap-2 pt-1">
+                  <button
+                    type="button"
+                    className="flex-1 inline-flex items-center justify-center gap-2 h-10 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium text-sm transition-colors cursor-pointer"
+                    onClick={() => {
+                      setUrgentModalOpen(false);
+                      if (urgentGradeInfo?.categoryJudgeType === "point") {
+                        setPointSummaryProp({
+                          categoryId: urgentGradeInfo.categoryId,
+                          gradeId: urgentGradeInfo.gradeId,
+                          categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                        });
+                        setPointSummaryOpen(true);
+                      } else {
+                        setRankingSummaryProp({
+                          categoryId: urgentGradeInfo.categoryId,
+                          gradeId: urgentGradeInfo.gradeId,
+                          categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                        });
+                        setRankingSummaryOpen(true);
+                      }
+                    }}
+                  >
+                    <span>순위표 확인 및 확정</span>
+                    <ArrowRight size={16} strokeWidth={1.5} />
+                  </button>
 
-                    <button
-                      className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm transition-colors cursor-pointer border-none"
-                      onClick={() => setUrgentModalOpen(false)}
-                    >
-                      창 닫기 (나중에 확인)
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center h-10 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#525252] font-medium text-sm transition-colors cursor-pointer"
+                    onClick={() => setUrgentModalOpen(false)}
+                  >
+                    나중에 확인
+                  </button>
                 </div>
               </div>
             </div>
@@ -1014,53 +989,78 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             />
           </Modal>
 
-          <Card className="shadow-sm">
-            <Descriptions column={isMobile ? 1 : 2} bordered size="small">
-              <Descriptions.Item label="대회명" span={isMobile ? 1 : 2}>
-                <span className="font-semibold">
-                  {contestInfo.contestTitle}
-                </span>
-              </Descriptions.Item>
-              <Descriptions.Item label="현재 진행중인 무대">
-                {realtimeData?.categoryTitle} / {realtimeData?.gradeTitle}
-              </Descriptions.Item>
-              {lastUpdated && (
-                <Descriptions.Item label="마지막 확인">
-                  <span className="text-gray-500 text-sm">{lastUpdated}</span>
-                </Descriptions.Item>
-              )}
-            </Descriptions>
-          </Card>
+          {/* 상단 대회 및 현재 무대 요약 바 */}
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 md:p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-medium text-[#737373]">
+                  <StatusDot
+                    status={realtimeData?.stageId ? "live" : "idle"}
+                    live={Boolean(realtimeData?.stageId)}
+                  />
+                  <span>심판위원장 총괄 집계석</span>
+                  {lastUpdated && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono tabular-nums">
+                        최근 갱신 {lastUpdated}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                  {contestInfo.contestTitle || "대회 정보 대기 중"}
+                </h1>
+              </div>
 
+              <div className="flex flex-wrap items-center gap-3 px-3.5 py-2.5 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.06]">
+                <span className="text-xs font-medium text-[#737373]">
+                  진행 무대
+                </span>
+                {realtimeData?.stageNumber !== undefined && (
+                  <BibTag
+                    prefix="#"
+                    number={realtimeData.stageNumber}
+                    size="sm"
+                  />
+                )}
+                <span className="text-sm font-semibold text-[#171717]">
+                  {realtimeData?.categoryTitle
+                    ? `${realtimeData.categoryTitle} / ${realtimeData?.gradeTitle || ""}`
+                    : "대기 중"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 비교심사 제어 카드 */}
           {realtimeData && (
-            <Card
-              title={
-                <Space>
+            <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal
+                    size={16}
+                    strokeWidth={1.5}
+                    className="text-[#525252]"
+                  />
+                  <h2 className="text-sm font-semibold text-[#171717] m-0">
+                    비교심사 운영
+                  </h2>
+                  {comparesArray?.length > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-xs font-mono font-medium tabular-nums text-[#525252]">
+                      {comparesArray.length}회 진행
+                    </span>
+                  )}
+                </div>
+
+                {realtimeData.judges && comparesArray && (
                   <div
-                    className="flex items-center justify-center w-10 h-10 rounded-lg"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    }}
+                    className={`flex ${
+                      isMobile ? "flex-col w-full" : "flex-row items-center"
+                    } gap-2`}
                   >
-                    <TrophyOutlined className="text-white text-xl" />
-                  </div>
-                  <span className="text-lg font-semibold">비교심사</span>
-                </Space>
-              }
-              className="shadow-sm"
-            >
-              {realtimeData.judges && comparesArray && (
-                <div className="mb-4">
-                  <Space
-                    direction={isMobile ? "vertical" : "horizontal"}
-                    className="w-full"
-                    size="middle"
-                  >
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<PlayCircleOutlined />}
+                    <button
+                      type="button"
                       disabled={!currentStageInfo?.grades?.length}
                       onClick={() =>
                         setCompareMode((prev) => ({
@@ -1068,77 +1068,82 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                           compareStart: true,
                         }))
                       }
-                      className={isMobile ? "w-full" : ""}
+                      className={`inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] text-xs font-medium transition-colors ${
+                        !currentStageInfo?.grades?.length
+                          ? "bg-[#e4e4e7] text-[#737373] cursor-not-allowed"
+                          : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+                      } ${isMobile ? "w-full" : ""}`}
                     >
-                      {(comparesArray?.length ?? 0) + 1}차 비교심사 시작
-                    </Button>
-                    <Button
-                      size="large"
-                      icon={<SettingOutlined />}
+                      <Play size={15} strokeWidth={1.5} />
+                      <span className="tabular-nums">
+                        {(comparesArray?.length ?? 0) + 1}차 비교심사 시작
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
                       disabled={!currentStageInfo?.grades?.length}
                       onClick={() => setCompareOpen(true)}
-                      className={isMobile ? "w-full" : ""}
+                      className={`inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] text-xs font-medium border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] transition-colors ${
+                        !currentStageInfo?.grades?.length
+                          ? "opacity-50 cursor-not-allowed"
+                          : "cursor-pointer"
+                      } ${isMobile ? "w-full" : ""}`}
                     >
-                      비교심사 설정 보기
-                    </Button>
-                  </Space>
-                </div>
-              )}
+                      <Settings size={15} strokeWidth={1.5} />
+                      <span>비교심사 설정 보기</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
-              {currentCompareInfo?.players?.length > 0 && (
-                <div className="flex flex-col gap-4">
-                  <Card size="small" className="bg-blue-50">
-                    <Space direction="vertical" className="w-full" size="small">
-                      <div className="flex flex-wrap gap-2">
-                        <Tag color="blue" className="text-base px-3 py-1">
-                          {currentCompareInfo?.compareIndex}차 비교심사
-                        </Tag>
-                        <Tag color="cyan" className="text-base px-3 py-1">
-                          선발인원: {currentCompareInfo?.comparePlayerLength}
-                        </Tag>
-                        <Tag color="purple" className="text-base px-3 py-1">
-                          채점모드:{" "}
-                          {currentCompareInfo?.compareScoreMode === "compare" ||
-                          currentCompareInfo?.compareScoreMode === "topOnly"
-                            ? "대상자만 채점"
-                            : "전체 채점"}
-                        </Tag>
-                      </div>
-                    </Space>
-                  </Card>
+              <div className="p-5">
+                {currentCompareInfo?.players?.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] text-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] font-medium tabular-nums">
+                        <StatusDot status="active" />
+                        {currentCompareInfo?.compareIndex}차 비교심사
+                      </span>
+                      <span className="text-[#525252] font-mono tabular-nums">
+                        선발인원 {currentCompareInfo?.comparePlayerLength}명
+                      </span>
+                      <span className="text-[#737373]">·</span>
+                      <span className="text-[#525252]">
+                        채점모드:{" "}
+                        {currentCompareInfo?.compareScoreMode === "compare" ||
+                        currentCompareInfo?.compareScoreMode === "topOnly"
+                          ? "대상자만 채점"
+                          : "전체 채점"}
+                      </span>
+                    </div>
 
-                  {comparesArray?.length > 0 &&
-                    comparesArray.map((compare, cIdx) => {
-                      const { players, compareIndex } = compare;
+                    {comparesArray?.length > 0 &&
+                      comparesArray.map((compare, cIdx) => {
+                        const { players, compareIndex } = compare;
 
-                      return (
-                        <Card key={cIdx} size="small">
-                          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                            <Space wrap size="small">
+                        return (
+                          <div
+                            key={cIdx}
+                            className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between p-3.5 rounded-[8px] bg-white border border-[#171717]/[0.08]"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-medium text-[#737373] mr-1 tabular-nums">
+                                {compareIndex}차 호명
+                              </span>
                               {players?.map((top, tIdx) => (
-                                <Badge
+                                <BibTag
                                   key={tIdx}
-                                  count={top.playerNumber}
-                                  overflowCount={9999}
-                                  style={{
-                                    backgroundColor: "#1890ff",
-                                    fontSize: "16px",
-                                    minWidth: "48px",
-                                    width: "auto",
-                                    height: "48px",
-                                    padding: "0 12px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
+                                  number={top.playerNumber}
+                                  variant="active"
+                                  size="lg"
                                 />
                               ))}
-                            </Space>
-                            {/* ✅ 필터된 목록 기준 마지막 compare만 취소 가능 */}
+                            </div>
+
                             {cIdx === comparesArray.length - 1 && (
-                              <Button
-                                danger
-                                icon={<CloseCircleOutlined />}
+                              <button
+                                type="button"
                                 onClick={() => {
                                   setMessage({
                                     body: "비교심사를 취소하시겠습니까?",
@@ -1148,209 +1153,143 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                   });
                                   setCompareCancelMsgOpen(true);
                                 }}
+                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#dc2626]/25 bg-white hover:bg-[#dc2626]/[0.05] text-[#dc2626] text-xs font-medium transition-colors cursor-pointer"
                               >
-                                {compareIndex}차 비교심사 취소
-                              </Button>
+                                <X size={14} strokeWidth={1.5} />
+                                <span className="tabular-nums">
+                                  {compareIndex}차 비교심사 취소
+                                </span>
+                              </button>
                             )}
                           </div>
-                        </Card>
-                      );
-                    })}
-                </div>
-              )}
-            </Card>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#737373] py-2">
+                    현재 체급에서 진행 중인 비교심사가 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
+          {/* 실시간 집계상황 매트릭스 (Moment #2: Judge-by-Athlete Score Matrix) */}
           {realtimeData && (
-            <Card
-              title={
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                  <Space>
-                    <div
-                      className="flex items-center justify-center w-10 h-10 rounded-lg"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                      }}
-                    >
-                      <CheckCircleOutlined className="text-white text-xl" />
-                    </div>
-                    <span className="text-lg font-semibold">집계상황</span>
-                  </Space>
-                  <Button
-                    icon={<ReloadOutlined />}
-                    onClick={() =>
-                      handleForceScoreTableRefresh(currentStageInfo.grades)
-                    }
-                  >
-                    새로고침
-                  </Button>
+            <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                <div className="flex items-center gap-2">
+                  <Table2
+                    size={16}
+                    strokeWidth={1.5}
+                    className="text-[#525252]"
+                  />
+                  <h2 className="text-sm font-semibold text-[#171717] m-0">
+                    집계상황
+                  </h2>
                 </div>
-              }
-              className="shadow-sm"
-            >
-              {currentStageInfo?.grades?.length > 0 &&
-                currentStageInfo.grades.map((grade, gIdx) => {
-                  const { categoryTitle, categoryId, gradeTitle, gradeId } =
-                    grade;
 
-                  const { categoryJudgeType } = currentStageInfo;
+                <button
+                  type="button"
+                  onClick={handleForceUpdate}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                >
+                  <RefreshCw size={14} strokeWidth={1.5} />
+                  <span>새로고침</span>
+                </button>
+              </div>
 
-                  const filterdPlayers = playersArray
-                    .filter(
-                      (f) =>
-                        f.contestGradeId === gradeId && f.playerNoShow === false
-                    )
-                    .sort((a, b) => a.playerIndex - b.playerIndex);
+              <div className="p-5 space-y-6">
+                {currentStageInfo?.grades?.length > 0 ? (
+                  currentStageInfo.grades.map((grade, gIdx) => {
+                    const { categoryTitle, categoryId, gradeTitle, gradeId } =
+                      grade;
+                    const { categoryJudgeType } = currentStageInfo;
 
-                  const columns = [
-                    {
-                      title: "선수번호",
-                      dataIndex: "playerNumber",
-                      key: "playerNumber",
-                      width: 100,
-                      fixed: isMobile ? false : "left",
-                      render: (text) => (
-                        <Badge
-                          count={text}
-                          overflowCount={9999}
-                          style={{
-                            backgroundColor: "#52c41a",
-                            fontSize: "14px",
-                          }}
-                        />
-                      ),
-                    },
-                    ...(realtimeData?.judges || []).map((judge, jIdx) => ({
-                      title: `${judge.seatIndex}번 심판`,
-                      dataIndex: `judge_${judge.seatIndex}`,
-                      key: `judge_${judge.seatIndex}`,
-                      width: 100,
-                      align: "center",
-                      render: (text, record) => {
-                        const finded = normalScoreData.find(
-                          (f) =>
-                            f.playerNumber === record.playerNumber &&
-                            f.seatIndex === judge.seatIndex
-                        );
+                    const filterdPlayers = playersArray
+                      .filter(
+                        (f) =>
+                          f.contestGradeId === gradeId &&
+                          f.playerNoShow === false
+                      )
+                      .sort((a, b) => a.playerIndex - b.playerIndex);
 
-                        if (finded?.playerScore >= 1000) {
-                          return <Tag color="red">순위제외</Tag>;
-                        }
-                        if (
-                          finded?.playerScore !== 0 &&
-                          finded?.playerScore !== undefined
-                        ) {
-                          return (
-                            <span className="font-semibold">
-                              {finded.playerScore}
-                            </span>
+                    const judges = realtimeData?.judges || [];
+
+                    const isAllScored =
+                      filterdPlayers.length > 0 &&
+                      judges.length > 0 &&
+                      filterdPlayers.every((player) =>
+                        judges.every((judge) => {
+                          const scoreEntry = normalScoreData.find(
+                            (f) =>
+                              f.playerNumber === player.playerNumber &&
+                              f.seatIndex === judge.seatIndex
                           );
-                        }
-                        return <span className="text-gray-400">-</span>;
-                      },
-                    })),
-                  ];
+                          return (
+                            scoreEntry &&
+                            scoreEntry.playerScore !== 0 &&
+                            scoreEntry.playerScore !== undefined &&
+                            scoreEntry.playerScore !== null
+                          );
+                        })
+                      );
 
-                  const dataSource = filterdPlayers.map((player, pIdx) => ({
-                    key: pIdx,
-                    playerNumber: player.playerNumber,
-                  }));
+                    const savedGrades = Array.isArray(realtimeData?.resultSaved)
+                      ? realtimeData.resultSaved
+                      : [];
+                    const isGradeConfirmed = savedGrades.includes(gradeId);
 
-                  const isAllScored =
-                    filterdPlayers.length > 0 &&
-                    (realtimeData?.judges || []).length > 0 &&
-                    filterdPlayers.every((player) =>
-                      (realtimeData?.judges || []).every((judge) => {
-                        const scoreEntry = normalScoreData.find(
-                          (f) =>
-                            f.playerNumber === player.playerNumber &&
-                            f.seatIndex === judge.seatIndex
-                        );
-                        return (
-                          scoreEntry &&
-                          scoreEntry.playerScore !== 0 &&
-                          scoreEntry.playerScore !== undefined &&
-                          scoreEntry.playerScore !== null
-                        );
-                      })
-                    );
-
-                  return (
-                    <div
-                      key={gIdx}
-                      id={`score-table-card-${gradeId}`}
-                      className="mb-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm"
-                    >
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-4">
-                        <div className="flex flex-col gap-1.5">
-                          <div className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                            <span>🏆</span>
-                            <span>
+                    return (
+                      <div
+                        key={gIdx}
+                        id={`score-table-card-${gradeId}`}
+                        className="p-4 md:p-5 bg-white rounded-[12px] border border-[#171717]/[0.08] space-y-4"
+                      >
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                          <div className="space-y-1">
+                            <div className="text-xs text-[#737373]">
                               {contestInfo?.contestTitle ||
                                 currentContest?.contestInfo?.contestTitle ||
                                 currentContest?.contests?.contestTitle ||
                                 "대회"}
-                            </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-base font-semibold tracking-[-0.01em] text-[#171717]">
+                                {categoryTitle}
+                              </span>
+                              <span className="text-[#737373]">/</span>
+                              <span className="text-base font-medium text-[#525252]">
+                                {gradeTitle}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
+                                {categoryJudgeType === "point"
+                                  ? "POINT"
+                                  : "RANKING"}
+                              </span>
+                            </div>
                           </div>
-                          <Space wrap>
-                            <Tag color="blue" className="text-base font-bold px-3 py-1">
-                              {categoryTitle}
-                            </Tag>
-                            <Tag color="cyan" className="text-base font-bold px-3 py-1">
-                              {gradeTitle}
-                            </Tag>
-                          </Space>
-                        </div>
-                        <Space>
-                          <Button
-                            icon={<CameraOutlined />}
-                            onClick={() =>
-                              captureScoreTable(
-                                gradeId,
-                                categoryTitle,
-                                gradeTitle
-                              )
-                            }
-                          >
-                            캡처
-                          </Button>
-                          {(() => {
-                            const savedGrades = Array.isArray(
-                              realtimeData?.resultSaved
-                            )
-                              ? realtimeData.resultSaved
-                              : [];
-                            const isGradeConfirmed =
-                              savedGrades.includes(gradeId);
-                            return categoryJudgeType === "point" ? (
-                              <Button
-                                type={isGradeConfirmed ? "default" : "primary"}
-                                danger={isAllScored && !isGradeConfirmed}
-                                size="large"
-                                icon={
-                                  isAllScored && !isGradeConfirmed ? (
-                                    <span className="animate-bounce">🚨</span>
-                                  ) : (
-                                    <CheckCircleOutlined />
-                                  )
-                                }
-                                className={
-                                  isGradeConfirmed
-                                    ? "font-medium text-slate-400"
-                                    : isAllScored
-                                    ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
-                                    : "font-semibold shadow-sm"
-                                }
-                                style={
-                                  isAllScored && !isGradeConfirmed
-                                    ? {
-                                        backgroundColor: "#dc2626",
-                                        borderColor: "#dc2626",
-                                        color: "#ffffff",
-                                      }
-                                    : {}
-                                }
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                captureScoreTable(
+                                  gradeId,
+                                  categoryTitle,
+                                  gradeTitle
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              <Camera size={15} strokeWidth={1.5} />
+                              <span>캡처</span>
+                            </button>
+
+                            {categoryJudgeType === "point" ? (
+                              <button
+                                type="button"
+                                disabled={isGradeConfirmed}
                                 onClick={() => {
                                   if (!isGradeConfirmed) {
                                     setPointSummaryProp({
@@ -1361,42 +1300,36 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                     setPointSummaryOpen(true);
                                   }
                                 }}
-                                disabled={isGradeConfirmed}
-                              >
-                                {isGradeConfirmed
-                                  ? "✅ 순위표 확정됨"
-                                  : isAllScored
-                                  ? "🚨 점수형 순위확정 (채점완료 - 클릭!)"
-                                  : "점수형 집계 및 순위확인"}
-                              </Button>
-                            ) : (
-                              <Button
-                                type={isGradeConfirmed ? "default" : "primary"}
-                                size="large"
-                                danger={isAllScored && !isGradeConfirmed}
-                                icon={
-                                  isAllScored && !isGradeConfirmed ? (
-                                    <span className="animate-bounce">🚨</span>
-                                  ) : (
-                                    <CheckCircleOutlined />
-                                  )
-                                }
-                                className={
+                                className={`inline-flex items-center gap-2 h-9 px-4 rounded-[8px] text-xs font-medium transition-colors ${
                                   isGradeConfirmed
-                                    ? "font-medium text-slate-400"
+                                    ? "bg-[#f4f4f5] text-[#737373] border border-[#171717]/10 cursor-default"
                                     : isAllScored
-                                    ? "animate-pulse font-black text-base shadow-xl shadow-red-500/40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white border-none transform hover:scale-105 transition-all cursor-pointer"
-                                    : "font-semibold shadow-sm"
-                                }
-                                style={
-                                  isAllScored && !isGradeConfirmed
-                                    ? {
-                                        backgroundColor: "#dc2626",
-                                        borderColor: "#dc2626",
-                                        color: "#ffffff",
-                                      }
-                                    : {}
-                                }
+                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+                                    : "bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/20 cursor-pointer"
+                                }`}
+                              >
+                                {isGradeConfirmed ? (
+                                  <>
+                                    <Check
+                                      size={15}
+                                      strokeWidth={1.5}
+                                      className="text-[#16a34a]"
+                                    />
+                                    <span>순위표 확정됨</span>
+                                  </>
+                                ) : isAllScored ? (
+                                  <>
+                                    <span className="h-2 w-2 rounded-full bg-white" />
+                                    <span>점수형 순위 확정 (채점 완료)</span>
+                                  </>
+                                ) : (
+                                  <span>점수형 집계 및 순위 확인</span>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isGradeConfirmed}
                                 onClick={() => {
                                   if (!isGradeConfirmed) {
                                     setRankingSummaryProp({
@@ -1407,31 +1340,135 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                     setRankingSummaryOpen(true);
                                   }
                                 }}
-                                disabled={isGradeConfirmed}
+                                className={`inline-flex items-center gap-2 h-9 px-4 rounded-[8px] text-xs font-medium transition-colors ${
+                                  isGradeConfirmed
+                                    ? "bg-[#f4f4f5] text-[#737373] border border-[#171717]/10 cursor-default"
+                                    : isAllScored
+                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+                                    : "bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/20 cursor-pointer"
+                                }`}
                               >
-                                {isGradeConfirmed
-                                  ? "✅ 순위표 확정됨"
-                                  : isAllScored
-                                  ? "🚨 랭킹형 순위확정 (채점완료 - 클릭!)"
-                                  : "랭킹형 집계 및 순위확인"}
-                              </Button>
-                            );
-                          })()}
-                        </Space>
-                      </div>
+                                {isGradeConfirmed ? (
+                                  <>
+                                    <Check
+                                      size={15}
+                                      strokeWidth={1.5}
+                                      className="text-[#16a34a]"
+                                    />
+                                    <span>순위표 확정됨</span>
+                                  </>
+                                ) : isAllScored ? (
+                                  <>
+                                    <span className="h-2 w-2 rounded-full bg-white" />
+                                    <span>랭킹형 순위 확정 (채점 완료)</span>
+                                  </>
+                                ) : (
+                                  <span>랭킹형 집계 및 순위 확인</span>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
 
-                      <Table
-                        columns={columns}
-                        dataSource={dataSource}
-                        pagination={false}
-                        scroll={{ x: "max-content" }}
-                        size="small"
-                        bordered
-                      />
-                    </div>
-                  );
-                })}
-            </Card>
+                        <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                                <th className="sticky left-0 z-10 bg-[#f4f4f5] px-3.5 py-2.5 text-left text-xs font-medium text-[#525252] border-r border-[#171717]/[0.08] whitespace-nowrap w-[108px]">
+                                  선수번호
+                                </th>
+                                {judges.map((judge) => (
+                                  <th
+                                    key={`head-judge-${judge.seatIndex}`}
+                                    className="px-3 py-2.5 text-center text-xs font-medium text-[#525252] whitespace-nowrap min-w-[84px]"
+                                  >
+                                    <span className="font-mono tabular-nums">
+                                      {judge.seatIndex}
+                                    </span>
+                                    번 심판
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
+                              {filterdPlayers.length > 0 ? (
+                                filterdPlayers.map((player, pIdx) => (
+                                  <tr
+                                    key={player.playerUid || pIdx}
+                                    className="hover:bg-[#fafafa] transition-colors"
+                                  >
+                                    <td className="sticky left-0 z-10 bg-white px-3.5 py-2.5 border-r border-[#171717]/[0.08] whitespace-nowrap">
+                                      <BibTag
+                                        number={player.playerNumber}
+                                        size="md"
+                                      />
+                                    </td>
+                                    {judges.map((judge) => {
+                                      const finded = normalScoreData.find(
+                                        (f) =>
+                                          f.playerNumber ===
+                                            player.playerNumber &&
+                                          f.seatIndex === judge.seatIndex
+                                      );
+
+                                      let cellContent = (
+                                        <span className="font-mono tabular-nums text-[#737373]">
+                                          -
+                                        </span>
+                                      );
+
+                                      if (finded?.playerScore >= 1000) {
+                                        cellContent = (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#737373] text-[11px] font-medium">
+                                            순위제외
+                                          </span>
+                                        );
+                                      } else if (
+                                        finded?.playerScore !== 0 &&
+                                        finded?.playerScore !== undefined &&
+                                        finded?.playerScore !== null
+                                      ) {
+                                        cellContent = (
+                                          <span className="font-mono font-medium tabular-nums text-[#171717]">
+                                            {finded.playerScore}
+                                          </span>
+                                        );
+                                      }
+
+                                      return (
+                                        <td
+                                          key={`cell-${player.playerNumber}-${judge.seatIndex}`}
+                                          className="px-3 py-2.5 text-center whitespace-nowrap"
+                                        >
+                                          {cellContent}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td
+                                    colSpan={Math.max(judges.length + 1, 2)}
+                                    className="px-4 py-8 text-center text-xs text-[#737373]"
+                                  >
+                                    출전 선수 정보가 없습니다.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-xs text-[#737373] py-4 text-center">
+                    현재 진행 중인 체급 정보가 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}

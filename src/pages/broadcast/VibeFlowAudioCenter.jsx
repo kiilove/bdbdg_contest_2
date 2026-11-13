@@ -4,7 +4,7 @@ import React, { useEffect, useState, useContext, useRef, useMemo } from "react";
 import { useFirebaseRealtimeGetDocument } from "../../hooks/useFirebaseRealtime";
 import { useFirestoreGetDocument } from "../../hooks/useFirestores";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
-import { Row, Col, Card, message } from "antd";
+import { ConfigProvider, theme, message } from "antd";
 import { db, database, storage } from "../../firebase";
 import { collection, getDocs, where, query } from "firebase/firestore";
 import { ref as dbRef, set, remove, onValue } from "firebase/database";
@@ -793,7 +793,7 @@ export const VibeFlowAudioCenter = () => {
         setToken(newToken);
         setUser(newUser);
         setIsLoginModalOpen(false);
-        message.success(`반갑습니다, ${newUser?.name || newUser?.email}님!`);
+        message.success(`${newUser?.name || newUser?.email} 계정으로 연결되었습니다`);
         loadVibeFlowTracks(newToken);
       } else {
         message.error(res?.error || "로그인에 실패했습니다.");
@@ -1947,141 +1947,151 @@ export const VibeFlowAudioCenter = () => {
   }, []);
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen text-slate-800 space-y-6">
-      {/* 🔝 상단 타이틀 & 컨트롤 헤더 바 */}
-      <AudioHeader
-        currentStageCategory={currentStageCategory}
-        isRemoteSync={isRemoteSync}
-        setIsRemoteSync={setIsRemoteSync}
-        rawApiResponse={rawApiResponse}
-        setIsRawModalOpen={setIsRawModalOpen}
-        isLoadingTracks={isLoadingTracks}
-        loadVibeFlowTracks={loadVibeFlowTracks}
-        token={token}
-        user={user}
-        handleLogout={handleLogout}
-        setIsLoginModalOpen={setIsLoginModalOpen}
-      />
+    <ConfigProvider
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: {
+          colorPrimary: "#2563eb",
+          colorBgContainer: "#19191b",
+          colorBgElevated: "#232325",
+          colorBorder: "rgba(237,237,237,0.10)",
+          colorText: "#ededed",
+          colorTextSecondary: "#a1a1a6",
+          colorTextTertiary: "#85858b",
+          borderRadius: 8,
+          fontFamily: "var(--font-sans)",
+        },
+      }}
+    >
+      <div className="min-h-screen bg-[#141415] text-[#ededed]">
+        <AudioHeader
+          currentStageCategory={currentStageCategory}
+          isRemoteSync={isRemoteSync}
+          setIsRemoteSync={setIsRemoteSync}
+          rawApiResponse={rawApiResponse}
+          setIsRawModalOpen={setIsRawModalOpen}
+          isLoadingTracks={isLoadingTracks}
+          loadVibeFlowTracks={loadVibeFlowTracks}
+          token={token}
+          user={user}
+          handleLogout={handleLogout}
+          setIsLoginModalOpen={setIsLoginModalOpen}
+        />
 
-      {/* 🎛️ 메인 본문 (좌측: 마스터 플레이어 & 컨트롤 / 우측: 음원 리스트 & 탭) */}
-      <Row gutter={[20, 20]}>
-        {/* 좌측: 마스터 오디오 플레이어 & 탭별 설정 & 오토파일럿 */}
-        <Col xs={24} lg={8} xl={7}>
-          <div className="space-y-4">
-            <AudioPlayerCard
-              activeDeck={activeDeck}
-              isPlaying={isPlaying}
-              currentTrack={currentTrack}
-              preCuedTrack={preCuedTrack}
-              deckAVolume={deckAVolume}
-              deckBVolume={deckBVolume}
-              currentTabConfig={currentTabConfig}
-              currentTime={currentTime}
-              trackDuration={trackDuration}
-              volume={volume}
-              handleVolumeChange={handleVolumeChange}
-              handleSmoothVolumeChange={handleSmoothVolumeChange}
-              handleSliderChange={handleSliderChange}
-              handlePlayTrack={handlePlayTrack}
-              handlePrevTrack={handlePrevTrack}
-              handleNextTrack={handleNextTrack}
-            />
+        <div className="max-w-[1600px] mx-auto p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+              <AudioPlayerCard
+                activeDeck={activeDeck}
+                isPlaying={isPlaying}
+                currentTrack={currentTrack}
+                preCuedTrack={preCuedTrack}
+                deckAVolume={deckAVolume}
+                deckBVolume={deckBVolume}
+                currentTabConfig={currentTabConfig}
+                currentTime={currentTime}
+                trackDuration={trackDuration}
+                volume={volume}
+                handleVolumeChange={handleVolumeChange}
+                handleSmoothVolumeChange={handleSmoothVolumeChange}
+                handleSliderChange={handleSliderChange}
+                handlePlayTrack={handlePlayTrack}
+                handlePrevTrack={handlePrevTrack}
+                handleNextTrack={handleNextTrack}
+              />
 
-            <AudioTabControls
-              volume={volume}
-              handleVolumeChange={handleVolumeChange}
-              handleSmoothVolumeChange={handleSmoothVolumeChange}
-              selectedCategoryTab={selectedCategoryTab}
-              currentTabConfig={currentTabConfig}
-              updateTabFadeDuration={updateTabFadeDuration}
-              updateTabAutoNext={updateTabAutoNext}
-            />
+              <AudioTabControls
+                volume={volume}
+                handleVolumeChange={handleVolumeChange}
+                handleSmoothVolumeChange={handleSmoothVolumeChange}
+                selectedCategoryTab={selectedCategoryTab}
+                currentTabConfig={currentTabConfig}
+                updateTabFadeDuration={updateTabFadeDuration}
+                updateTabAutoNext={updateTabAutoNext}
+              />
 
-            <AutopilotCard
-              isAutoPlayOnStageChange={isAutoPlayOnStageChange}
-              setIsAutoPlayOnStageChange={setIsAutoPlayOnStageChange}
-              currentStageCategory={currentStageCategory}
-              currentStageGrade={currentStageGrade}
-              currentStageGender={currentStageGender}
-              seed1Pool={seed1Pool}
-              seed2Pool={seed2Pool}
-              playedTrackIds={playedTrackIds}
-              activeSeedLevel={activeSeedLevel}
-              currentTrack={currentTrack}
-              isPlaying={isPlaying}
-              handlePlayTrack={handlePlayTrack}
-              playNextSeedTrack={playNextSeedTrack}
-              onOpenGuideModal={() => setIsGuideModalOpen(true)}
-            />
+              <AutopilotCard
+                isAutoPlayOnStageChange={isAutoPlayOnStageChange}
+                setIsAutoPlayOnStageChange={setIsAutoPlayOnStageChange}
+                currentStageCategory={currentStageCategory}
+                currentStageGrade={currentStageGrade}
+                currentStageGender={currentStageGender}
+                seed1Pool={seed1Pool}
+                seed2Pool={seed2Pool}
+                playedTrackIds={playedTrackIds}
+                activeSeedLevel={activeSeedLevel}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                handlePlayTrack={handlePlayTrack}
+                playNextSeedTrack={playNextSeedTrack}
+                onOpenGuideModal={() => setIsGuideModalOpen(true)}
+              />
+            </div>
+
+            <div className="lg:col-span-7 xl:col-span-8 bg-[#19191b] border border-[#ededed]/[0.08] rounded-[12px] p-5 space-y-5">
+              <AudioCategoryTabs
+                categoryTabs={categoryTabs}
+                selectedCategoryTab={selectedCategoryTab}
+                setSelectedCategoryTab={setSelectedCategoryTab}
+                selectedDivision={selectedDivision}
+                setSelectedDivision={setSelectedDivision}
+                searchText={searchText}
+                setSearchText={setSearchText}
+                tracks={tracks}
+                allAvailableTracks={allAvailableTracks}
+                currentStageCategory={currentStageCategory}
+                currentStageGrade={currentStageGrade}
+                currentStageGender={currentStageGender}
+                matchedVibeCategory={matchedVibeCategory}
+                availableDivisions={availableDivisions}
+                handleFilterCurrentStage={handleFilterCurrentStage}
+                fileInputRef={fileInputRef}
+                isUploading={isUploading}
+                uploadProgress={uploadProgress}
+                handleUploadCustomMusic={handleUploadCustomMusic}
+              />
+
+              <AudioTrackTable
+                filteredTracks={filteredTracks}
+                allAvailableTracks={allAvailableTracks}
+                isLoadingTracks={isLoadingTracks}
+                searchText={searchText}
+                setSearchText={setSearchText}
+                selectedCategoryTab={selectedCategoryTab}
+                setSelectedCategoryTab={setSelectedCategoryTab}
+                selectedDivision={selectedDivision}
+                setSelectedDivision={setSelectedDivision}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                handlePlayTrack={handlePlayTrack}
+                handleDeleteCustomMusic={handleDeleteCustomMusic}
+                seed1Pool={seed1Pool}
+                seed2Pool={seed2Pool}
+                token={token}
+              />
+            </div>
           </div>
-        </Col>
+        </div>
 
-        {/* 우측: 카테고리 탭 네비게이션 & 음원 목록 테이블 */}
-        <Col xs={24} lg={16} xl={17}>
-          <Card className="shadow-sm rounded-2xl border-slate-200 bg-white space-y-4">
-            <AudioCategoryTabs
-              categoryTabs={categoryTabs}
-              selectedCategoryTab={selectedCategoryTab}
-              setSelectedCategoryTab={setSelectedCategoryTab}
-              selectedDivision={selectedDivision}
-              setSelectedDivision={setSelectedDivision}
-              searchText={searchText}
-              setSearchText={setSearchText}
-              tracks={tracks}
-              allAvailableTracks={allAvailableTracks}
-              currentStageCategory={currentStageCategory}
-              currentStageGrade={currentStageGrade}
-              currentStageGender={currentStageGender}
-              matchedVibeCategory={matchedVibeCategory}
-              availableDivisions={availableDivisions}
-              handleFilterCurrentStage={handleFilterCurrentStage}
-              fileInputRef={fileInputRef}
-              isUploading={isUploading}
-              uploadProgress={uploadProgress}
-              handleUploadCustomMusic={handleUploadCustomMusic}
-            />
-
-            <AudioTrackTable
-              filteredTracks={filteredTracks}
-              allAvailableTracks={allAvailableTracks}
-              isLoadingTracks={isLoadingTracks}
-              searchText={searchText}
-              setSearchText={setSearchText}
-              selectedCategoryTab={selectedCategoryTab}
-              setSelectedCategoryTab={setSelectedCategoryTab}
-              selectedDivision={selectedDivision}
-              setSelectedDivision={setSelectedDivision}
-              currentTrack={currentTrack}
-              isPlaying={isPlaying}
-              handlePlayTrack={handlePlayTrack}
-              handleDeleteCustomMusic={handleDeleteCustomMusic}
-              seed1Pool={seed1Pool}
-              seed2Pool={seed2Pool}
-              token={token}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* 🔐 모달 모음 (로그인 / API 검사 / 가이드) */}
-      <AudioModals
-        isLoginModalOpen={isLoginModalOpen}
-        setIsLoginModalOpen={setIsLoginModalOpen}
-        handleLogin={handleLogin}
-        loginEmail={loginEmail}
-        setLoginEmail={setLoginEmail}
-        loginPassword={loginPassword}
-        setLoginPassword={setLoginPassword}
-        rememberLogin={rememberLogin}
-        setRememberLogin={setRememberLogin}
-        isLoggingIn={isLoggingIn}
-        isRawModalOpen={isRawModalOpen}
-        setIsRawModalOpen={setIsRawModalOpen}
-        rawApiResponse={rawApiResponse}
-        isGuideModalOpen={isGuideModalOpen}
-        setIsGuideModalOpen={setIsGuideModalOpen}
-      />
-    </div>
+        <AudioModals
+          isLoginModalOpen={isLoginModalOpen}
+          setIsLoginModalOpen={setIsLoginModalOpen}
+          handleLogin={handleLogin}
+          loginEmail={loginEmail}
+          setLoginEmail={setLoginEmail}
+          loginPassword={loginPassword}
+          setLoginPassword={setLoginPassword}
+          rememberLogin={rememberLogin}
+          setRememberLogin={setRememberLogin}
+          isLoggingIn={isLoggingIn}
+          isRawModalOpen={isRawModalOpen}
+          setIsRawModalOpen={setIsRawModalOpen}
+          rawApiResponse={rawApiResponse}
+          isGuideModalOpen={isGuideModalOpen}
+          setIsGuideModalOpen={setIsGuideModalOpen}
+        />
+      </div>
+    </ConfigProvider>
   );
 };
 

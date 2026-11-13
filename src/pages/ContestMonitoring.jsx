@@ -1,24 +1,18 @@
-import React, { useEffect } from "react";
-import { useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { Monitor, Scale, Mic } from "lucide-react";
 import LoadingPage from "./LoadingPage";
-import { TbHeartRateMonitor } from "react-icons/tb";
-
-import { useContext } from "react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-
 import ContestMonitoringBasecamp from "./ContestMonitoringBasecamp";
 import ContestMonitoringJudgeHead from "./ContestMonitoringJudgeHead";
 import StandingTableType1 from "./StandingTableType1";
-import ContestMonitoringStage from "./ContestMonitoringStage";
-import { useParams } from "react-router-dom";
-import ContestMonitoringMC from "./ContestMonitoringMC";
 import ContestMonitoringHost from "./ContestMonitoringHost";
 
 const ContestMonitoring = () => {
   const { currentContest } = useContext(CurrentContestContext);
   const params = useParams();
   const [currentTab, setCurrentTab] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
 
   useEffect(() => {
@@ -34,7 +28,6 @@ const ContestMonitoring = () => {
       case "MC":
         setCurrentTab(2);
         break;
-
       default:
         break;
     }
@@ -44,84 +37,91 @@ const ContestMonitoring = () => {
     {
       id: 0,
       title: "본부석 화면",
+      icon: Monitor,
       children: "",
-      visible:
-        params.target === "all" || params.target === "main" ? true : false,
+      visible: params.target === "all" || params.target === "main",
     },
     {
       id: 1,
       title: "심판위원장 화면",
+      icon: Scale,
       children: "",
-      visible:
-        params.target === "all" || params.target === "judgeHead" ? true : false,
+      visible: params.target === "all" || params.target === "judgeHead",
     },
     {
       id: 2,
       title: "사회자 화면",
+      icon: Mic,
       children: "",
-      visible: params.target === "all" || params.target === "MC" ? true : false,
+      visible: params.target === "all" || params.target === "MC",
     },
   ];
 
-  // ⏳ 대회 정보가 완전히 불러와질 때까지 대기
-  const isContestLoaded = Boolean(currentContest?.contests?.id || currentContest?.id);
+  // 대회 정보가 완전히 불러와질 때까지 대기
+  const isContestLoaded = Boolean(
+    currentContest?.contests?.id || currentContest?.id
+  );
 
   if (isLoading || !isContestLoaded) {
     return <LoadingPage />;
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-0 gap-y-2">
-      <div className="flex w-full h-full">
-        <div className="flex w-full justify-start items-center">
-          <div className="flex w-full h-full justify-start p-0 flex-col bg-gray-100 rounded-lg">
-            <div className="flex w-full">
-              {tabArray.map((tab, tIdx) => {
-                if (!tab.visible) return null;
-                if (params.target === "all") {
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`${
-                        currentTab === tab.id
-                          ? "flex w-auto h-10 bg-white px-4"
-                          : "flex w-auto h-10 bg-gray-100 px-4"
-                      } h-14 rounded-t-lg justify-center items-center`}
-                      onClick={() => setCurrentTab(tIdx)}
-                    >
-                      <span>{tab.title}</span>
-                    </button>
-                  );
-                }
-                return null;
-              })}
-            </div>
-            {params.target === "all" && currentTab === 0 && (
-              <ContestMonitoringBasecamp
-                isHolding={isHolding}
-                setIsHolding={setIsHolding}
-              />
-            )}
-            {params.target === "main" && currentTab === 0 && (
-              <ContestMonitoringBasecamp
-                isHolding={isHolding}
-                setIsHolding={setIsHolding}
-              />
-            )}
-            {currentTab === 1 && (
-              <ContestMonitoringJudgeHead
-                isHolding={isHolding}
-                setIsHolding={setIsHolding}
-              />
-            )}
-            {currentTab === 2 && (
-              <ContestMonitoringHost
-                contestId={currentContest?.contests?.id || currentContest?.id || ""}
-              />
-            )}
-            {currentTab === 3 && <StandingTableType1 />}
-          </div>
+    <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      {params.target === "all" && (
+        <div className="flex items-center gap-1 w-full bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-6 pt-2">
+          {tabArray.map((tab, tIdx) => {
+            if (!tab.visible) return null;
+            const Icon = tab.icon;
+            const isActive = currentTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setCurrentTab(tIdx)}
+                className={`inline-flex items-center gap-2 h-10 px-4 rounded-t-[8px] text-sm font-medium transition-colors cursor-pointer ${
+                  isActive
+                    ? "bg-[#fafafa] text-[#171717] border border-b-0 border-[#171717]/[0.08]"
+                    : "bg-transparent text-[#525252] hover:text-[#171717]"
+                }`}
+              >
+                <Icon
+                  size={16}
+                  strokeWidth={1.5}
+                  className={isActive ? "text-[#2563eb]" : "text-[#737373]"}
+                />
+                <span>{tab.title}</span>
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      <div className="flex-1 w-full">
+        {params.target === "all" && currentTab === 0 && (
+          <ContestMonitoringBasecamp
+            isHolding={isHolding}
+            setIsHolding={setIsHolding}
+          />
+        )}
+        {params.target === "main" && currentTab === 0 && (
+          <ContestMonitoringBasecamp
+            isHolding={isHolding}
+            setIsHolding={setIsHolding}
+          />
+        )}
+        {currentTab === 1 && (
+          <ContestMonitoringJudgeHead
+            isHolding={isHolding}
+            setIsHolding={setIsHolding}
+          />
+        )}
+        {currentTab === 2 && (
+          <ContestMonitoringHost
+            contestId={currentContest?.contests?.id || currentContest?.id || ""}
+          />
+        )}
+        {currentTab === 3 && <StandingTableType1 />}
       </div>
     </div>
   );

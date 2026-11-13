@@ -1,13 +1,15 @@
-import React from "react";
-import { Table, Input, Tag, Button, Tooltip, Space } from "antd";
+import React, { useState, useEffect } from "react";
+import { Input, Tooltip } from "antd";
 import {
-  SearchOutlined,
-  PlayCircleFilled,
-  PauseCircleFilled,
-  DeleteOutlined,
-  CustomerServiceOutlined,
-  SoundOutlined,
-} from "@ant-design/icons";
+  Search,
+  Play,
+  Pause,
+  Trash2,
+  Music,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+} from "lucide-react";
 import {
   CUSTOM_CATEGORIES,
   extractGender,
@@ -16,6 +18,7 @@ import {
   formatSeconds,
   isMatchingCustomTab,
 } from "./constants";
+import { BibTag, StatusDot } from "../../../components/ui/BibTag";
 
 export const AudioTrackTable = ({
   filteredTracks = [],
@@ -33,13 +36,20 @@ export const AudioTrackTable = ({
   handleDeleteCustomMusic,
   seed1Pool = [],
   seed2Pool = [],
-  token,
 }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategoryTab, selectedDivision, searchText, filteredTracks.length]);
+
   const seed1Set = new Set(seed1Pool.map((t) => getTrackKey(t)).filter(Boolean));
   const seed2Set = new Set(seed2Pool.map((t) => getTrackKey(t)).filter(Boolean));
 
   const totalAllCount = allAvailableTracks.length;
-  const isFiltered = selectedCategoryTab !== "ALL" || selectedDivision !== "ALL" || !!searchText;
+  const isFiltered =
+    selectedCategoryTab !== "ALL" || selectedDivision !== "ALL" || !!searchText;
 
   const handleResetFilters = () => {
     if (setSelectedCategoryTab) setSelectedCategoryTab("ALL");
@@ -47,271 +57,335 @@ export const AudioTrackTable = ({
     if (setSearchText) setSearchText("");
   };
 
-  const columns = [
-    {
-      title: "No / 시드",
-      key: "index",
-      width: 90,
-      align: "center",
-      render: (_, record, idx) => {
-        const key = getTrackKey(record);
-        const isSeed1 = key && seed1Set.has(key);
-        const isSeed2 = key && seed2Set.has(key);
-        const isThisTrackActive = isTrackEqual(currentTrack, record);
-
-        if (isThisTrackActive) {
-          return (
-            <div className="flex justify-center">
-              <span className="flex h-5 w-5 relative items-center justify-center">
-                {isPlaying && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                )}
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-600"></span>
-              </span>
-            </div>
-          );
-        }
-
-        if (isSeed1) {
-          return (
-            <Tag color="green" className="font-bold text-[10px] m-0">
-              시드 1
-            </Tag>
-          );
-        }
-        if (isSeed2) {
-          return (
-            <Tag color="blue" className="font-bold text-[10px] m-0">
-              시드 2
-            </Tag>
-          );
-        }
-        return <span className="text-slate-400 font-mono text-xs">{idx + 1}</span>;
-      },
-    },
-    {
-      title: "음원 정보",
-      key: "track_info",
-      render: (_, record) => {
-        const isThisTrackActive = isTrackEqual(currentTrack, record);
-        return (
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span
-                className={`text-xs font-bold ${
-                  isThisTrackActive ? "text-indigo-600" : "text-slate-800"
-                }`}
-              >
-                {record.title || record.name || "Untitled"}
-              </span>
-              {isThisTrackActive && isPlaying && (
-                <Tag color="processing" className="text-[10px] font-bold">
-                  재생중
-                </Tag>
-              )}
-            </div>
-            <div className="text-xs text-slate-500">
-              {record.artist || "Unknown Artist"}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      title: "대회 종목 (Category)",
-      dataIndex: "contest_category_kr",
-      key: "category",
-      width: 170,
-      render: (cat, record) => {
-        const categoryName = cat || record.category || record.folder || "";
-        if (record.is_custom) {
-          const customObj = CUSTOM_CATEGORIES.find((c) =>
-            isMatchingCustomTab(record, c.name)
-          );
-          return (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-sm">{customObj?.icon || "🎵"}</span>
-              <Tag
-                color={customObj?.tagColor || "geekblue"}
-                className="font-bold rounded-md text-[10px] m-0 px-1.5 py-0"
-              >
-                자체음원
-              </Tag>
-              <span className="font-bold text-xs text-slate-800">
-                {categoryName || customObj?.name || "특별 연출"}
-              </span>
-            </div>
-          );
-        }
-        if (!categoryName) return <span className="text-slate-400 text-xs">-</span>;
-        const g = extractGender(categoryName);
-        return (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {g === "FEMALE" ? (
-              <Tag
-                color="magenta"
-                className="font-bold rounded-md text-[10px] m-0 px-1.5 py-0"
-              >
-                ♀️ 여성
-              </Tag>
-            ) : g === "MALE" ? (
-              <Tag
-                color="blue"
-                className="font-bold rounded-md text-[10px] m-0 px-1.5 py-0"
-              >
-                ♂️ 남성
-              </Tag>
-            ) : null}
-            <span className="font-bold text-xs text-slate-800">{categoryName}</span>
-          </div>
-        );
-      },
-    },
-    {
-      title: "부문 / 체급 (Division)",
-      dataIndex: "contest_division_kr",
-      key: "division",
-      width: 150,
-      render: (div) =>
-        div && div !== "공통 / 전체" ? (
-          <Tooltip title={`클릭 시 '${div}' 체급 음원만 필터링`}>
-            <Tag
-              color="purple"
-              className="font-bold rounded-md cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setSelectedDivision && setSelectedDivision(div)}
-            >
-              {div}
-            </Tag>
-          </Tooltip>
-        ) : (
-          <span className="text-slate-400 text-xs font-mono">공통 / 전체</span>
-        ),
-    },
-    {
-      title: "재생시간",
-      dataIndex: "duration",
-      key: "duration",
-      width: 90,
-      align: "center",
-      render: (dur) => (
-        <span className="font-mono text-xs text-slate-600 font-medium">
-          {formatSeconds(dur)}
-        </span>
-      ),
-    },
-    {
-      title: "재생 제어 (수동 선곡)",
-      key: "action",
-      width: 140,
-      align: "center",
-      render: (_, record) => {
-        const isThisTrackActive = isTrackEqual(currentTrack, record);
-        const activePlaying = isThisTrackActive && isPlaying;
-
-        return (
-          <Space size="small">
-            <Button
-              type={activePlaying ? "default" : "primary"}
-              size="middle"
-              icon={
-                activePlaying ? (
-                  <PauseCircleFilled className="text-amber-500" />
-                ) : (
-                  <PlayCircleFilled />
-                )
-              }
-              onClick={() => handlePlayTrack(record)}
-              className={
-                activePlaying
-                  ? "font-bold rounded-lg border-amber-400 text-amber-600 bg-amber-50 shadow-xs"
-                  : "bg-indigo-600 hover:bg-indigo-500 font-bold rounded-lg shadow-xs"
-              }
-            >
-              {activePlaying ? "정지" : "재생"}
-            </Button>
-            {record.is_custom && (
-              <Tooltip title="자체 음원 삭제">
-                <Button
-                  danger
-                  type="text"
-                  size="middle"
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDeleteCustomMusic(record)}
-                  className="rounded-lg hover:bg-red-50"
-                />
-              </Tooltip>
-            )}
-          </Space>
-        );
-      },
-    },
-  ];
+  const totalPages = Math.max(1, Math.ceil(filteredTracks.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const pageItems = filteredTracks.slice(startIndex, startIndex + pageSize);
 
   return (
-    <div className="space-y-3">
-      {/* 상단 검색 및 퀵 선곡 툴바 */}
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex-1 min-w-[240px] max-w-md">
           <Input
-            prefix={<SearchOutlined className="text-slate-400" />}
-            placeholder="곡 제목, 아티스트, 종목명, 체급 검색..."
+            prefix={<Search size={16} strokeWidth={1.5} className="text-[#85858b]" />}
+            placeholder="곡 제목, 아티스트, 종목명, 체급 검색"
             value={searchText}
             onChange={(e) => setSearchText && setSearchText(e.target.value)}
             allowClear
-            className="rounded-xl"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {isFiltered && (
-            <Button
-              size="small"
+            <button
+              type="button"
               onClick={handleResetFilters}
-              className="rounded-lg text-xs font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+              className="h-8 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.08] text-xs font-medium text-[#ededed] cursor-pointer transition-colors duration-150"
             >
-              전체 목록 보기 ({totalAllCount}곡)
-            </Button>
+              전체 목록 보기 ({totalAllCount})
+            </button>
           )}
-          <div className="text-xs text-slate-500 font-medium">
-            표시 중 <strong className="text-indigo-600 font-mono text-sm">{filteredTracks.length}</strong> / 전체 {totalAllCount}곡
+          <div className="text-xs text-[#85858b]">
+            표시{" "}
+            <span className="font-mono tabular-nums text-[#ededed] font-medium">
+              {filteredTracks.length}
+            </span>{" "}
+            / 전체{" "}
+            <span className="font-mono tabular-nums text-[#a1a1a6]">
+              {totalAllCount}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 테이블 */}
-      <Table
-        dataSource={filteredTracks}
-        columns={columns}
-        rowKey={(record, idx) => getTrackKey(record) || idx}
-        loading={isLoadingTracks}
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          pageSizeOptions: ["10", "20", "50", "100"],
-          className: "pt-2",
-        }}
-        locale={{
-          emptyText: (
-            <div className="py-12 text-center text-slate-400 space-y-3">
-              <CustomerServiceOutlined className="text-4xl text-slate-300" />
-              <div className="text-sm font-medium text-slate-600">
-                선택하신 조건에 일치하는 음원이 없습니다.
-              </div>
-              {totalAllCount > 0 && (
-                <div>
-                  <Button
-                    type="primary"
-                    onClick={handleResetFilters}
-                    className="bg-indigo-600 hover:bg-indigo-500 font-bold rounded-xl"
-                  >
-                    🎵 전체 음원 목록 ({totalAllCount}곡) 모두 보기
-                  </Button>
-                </div>
+      <div className="rounded-[8px] border border-[#ededed]/[0.08] overflow-hidden bg-[#141415]">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] text-xs font-medium text-[#85858b]">
+                <th className="py-2.5 px-3 w-[96px] font-medium">번호 · 시드</th>
+                <th className="py-2.5 px-3 font-medium">음원 정보</th>
+                <th className="py-2.5 px-3 w-[180px] font-medium">대회 종목</th>
+                <th className="py-2.5 px-3 w-[148px] font-medium">부문 · 체급</th>
+                <th className="py-2.5 px-3 w-[88px] text-right font-medium">
+                  재생시간
+                </th>
+                <th className="py-2.5 px-3 w-[132px] text-right font-medium">
+                  제어
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#ededed]/[0.06]">
+              {isLoadingTracks ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <div className="inline-flex items-center gap-2 text-xs text-[#a1a1a6]">
+                      <RefreshCw
+                        size={16}
+                        strokeWidth={1.5}
+                        className="animate-spin text-[#85858b]"
+                      />
+                      <span>음원 목록을 불러오는 중</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : pageItems.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <div className="space-y-3 flex flex-col items-center">
+                      <div className="w-10 h-10 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08] flex items-center justify-center text-[#85858b]">
+                        <Music size={18} strokeWidth={1.5} />
+                      </div>
+                      <div className="text-xs text-[#a1a1a6]">
+                        선택한 조건에 일치하는 음원이 없습니다
+                      </div>
+                      {totalAllCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="h-9 px-4 rounded-[8px] bg-[#ededed] hover:bg-white text-[#141415] text-xs font-medium cursor-pointer transition-colors duration-150"
+                        >
+                          전체 음원 목록 보기 ({totalAllCount})
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pageItems.map((record, idx) => {
+                  const globalIdx = startIndex + idx;
+                  const key = getTrackKey(record) || globalIdx;
+                  const isSeed1 = key && seed1Set.has(key);
+                  const isSeed2 = key && seed2Set.has(key);
+                  const isThisTrackActive = isTrackEqual(currentTrack, record);
+                  const activePlaying = isThisTrackActive && isPlaying;
+                  const categoryName =
+                    record.contest_category_kr ||
+                    record.category ||
+                    record.folder ||
+                    "";
+                  const customObj = record.is_custom
+                    ? CUSTOM_CATEGORIES.find((c) =>
+                        isMatchingCustomTab(record, c.name)
+                      )
+                    : null;
+                  const gender = !record.is_custom
+                    ? extractGender(categoryName)
+                    : "ANY";
+                  const div = record.contest_division_kr;
+
+                  return (
+                    <tr
+                      key={key}
+                      className={`h-12 transition-colors duration-150 focus-within:bg-[#232325]/90 ${
+                        isThisTrackActive
+                          ? "bg-[#232325] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                          : "bg-[#19191b] hover:bg-[#232325]/60"
+                      }`}
+                    >
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <BibTag
+                            number={String(globalIdx + 1).padStart(2, "0")}
+                            variant={isThisTrackActive ? "active" : "dark"}
+                            size="sm"
+                          />
+                          {isThisTrackActive ? (
+                            <StatusDot status="live" live={isPlaying} />
+                          ) : isSeed1 ? (
+                            <span className="text-[11px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/15 text-[#60a5fa] border border-[#2563eb]/30">
+                              S1
+                            </span>
+                          ) : isSeed2 ? (
+                            <span className="text-[11px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#232325] text-[#a1a1a6] border border-[#ededed]/[0.08]">
+                              S2
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3 min-w-[180px]">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[13px] leading-5 font-medium truncate max-w-[280px] ${
+                              isThisTrackActive
+                                ? "text-[#ededed]"
+                                : "text-[#ededed]"
+                            }`}
+                          >
+                            {record.title || record.name || "Untitled"}
+                          </span>
+                          {activePlaying && (
+                            <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/35 shrink-0">
+                              출력 중
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#85858b] truncate max-w-[280px]">
+                          {record.artist || "Unknown Artist"}
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        {record.is_custom ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.10] text-[#a1a1a6]">
+                              자체음원
+                            </span>
+                            <span className="text-xs text-[#ededed]">
+                              {categoryName || customObj?.name || "특별 연출"}
+                            </span>
+                          </div>
+                        ) : categoryName ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {gender === "FEMALE" ? (
+                              <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08] text-[#a1a1a6]">
+                                여성
+                              </span>
+                            ) : gender === "MALE" ? (
+                              <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08] text-[#a1a1a6]">
+                                남성
+                              </span>
+                            ) : null}
+                            <span className="text-xs text-[#ededed]">
+                              {categoryName}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-[#85858b]">-</span>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        {div && div !== "공통 / 전체" ? (
+                          <Tooltip title={`클릭 시 '${div}' 체급 필터링`}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedDivision && setSelectedDivision(div)
+                              }
+                              className="text-xs px-2 py-0.5 rounded-[4px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.08] text-[#a1a1a6] hover:text-[#ededed] cursor-pointer transition-colors duration-150"
+                            >
+                              {div}
+                            </button>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-[#85858b] font-mono">
+                            공통 / 전체
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right">
+                        <span className="font-mono tabular-nums text-xs text-[#a1a1a6]">
+                          {formatSeconds(record.duration)}
+                        </span>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handlePlayTrack(record)}
+                            className={`h-8 px-3 rounded-[6px] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] ${
+                              activePlaying
+                                ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-[#2563eb]"
+                                : "bg-[#232325] hover:bg-[#ededed] text-[#ededed] hover:text-[#141415] border border-[#ededed]/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                            }`}
+                          >
+                            {activePlaying ? (
+                              <>
+                                <Pause size={14} strokeWidth={1.5} />
+                                <span>정지</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play size={14} strokeWidth={1.5} />
+                                <span>재생</span>
+                              </>
+                            )}
+                          </button>
+
+                          {record.is_custom && (
+                            <Tooltip title="자체 음원 삭제">
+                              <button
+                                type="button"
+                                aria-label="자체 음원 삭제"
+                                onClick={() => handleDeleteCustomMusic(record)}
+                                className="h-8 w-8 rounded-[6px] bg-transparent hover:bg-[#e5484d]/15 text-[#85858b] hover:text-[#e5484d] inline-flex items-center justify-center cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e5484d]"
+                              >
+                                <Trash2 size={15} strokeWidth={1.5} />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredTracks.length > 0 && (
+          <div className="px-4 py-2.5 bg-[#0f0f10] border-t border-[#ededed]/[0.08] flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-[#85858b] mr-1">페이지당</span>
+              {[10, 20, 50, 100].map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => {
+                    setPageSize(sz);
+                    setCurrentPage(1);
+                  }}
+                  className={`h-7 px-2 rounded-[4px] font-mono tabular-nums text-xs cursor-pointer transition-colors duration-150 ${
+                    pageSize === sz
+                      ? "bg-[#232325] text-[#ededed] border border-[#ededed]/[0.14]"
+                      : "text-[#85858b] hover:text-[#ededed]"
+                  }`}
+                >
+                  {sz}
+                </button>
+              ))}
             </div>
-          ),
-        }}
-      />
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono tabular-nums text-[#85858b]">
+                {startIndex + 1}–
+                {Math.min(startIndex + pageSize, filteredTracks.length)} /{" "}
+                {filteredTracks.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  aria-label="이전 페이지"
+                  className="h-7 w-7 rounded-[4px] bg-[#19191b] hover:bg-[#232325] border border-[#ededed]/[0.08] text-[#ededed] flex items-center justify-center cursor-pointer transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={15} strokeWidth={1.5} />
+                </button>
+                <span className="px-2 text-xs font-mono tabular-nums text-[#ededed]">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  aria-label="다음 페이지"
+                  className="h-7 w-7 rounded-[4px] bg-[#19191b] hover:bg-[#232325] border border-[#ededed]/[0.08] text-[#ededed] flex items-center justify-center cursor-pointer transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={15} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

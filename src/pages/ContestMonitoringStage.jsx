@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useContext } from "react";
+import { Play, Minus, Plus, Monitor, List } from "lucide-react";
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
-import { PiSpinner } from "react-icons/pi";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
+import LoadingPage from "./LoadingPage";
+import { BibTag, StatusDot } from "../components/ui/BibTag";
 
 const ContestMonitoringStage = () => {
   const [stagesArray, setStagesArray] = useState([]);
   const [introAuto, setIntroAuto] = useState(false);
-  const [isHolding, setIsHolding] = useState(false);
+  const [isHolding] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentSubTab, setCurrentSubTab] = useState("0");
   const [autoCount, setAutoCount] = useState(0);
@@ -20,8 +23,8 @@ const ContestMonitoringStage = () => {
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
   const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
-  const [currentPlayersInfo, setCurrentPlayersInfo] = useState([]);
   const [currentGradesInfo, setCurrentGradesInfo] = useState([]);
+
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
   const { currentContest } = useContext(CurrentContestContext);
@@ -51,11 +54,13 @@ const ContestMonitoringStage = () => {
       }
     } catch (error) {
       setMessage({
-        body: "데이터를 로드하지 못했습니다.",
+        body: "데이터를 로드하지 못했습니다",
         body4: error.message,
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+      setIsLoading(false);
     }
   };
 
@@ -65,6 +70,7 @@ const ContestMonitoringStage = () => {
     if (contestId && playerInfo) {
       handlePlayerInfoUpdate(contestId, playerInfo);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoCount, currentContest?.contests?.id, playersArray]);
 
   useEffect(() => {
@@ -101,13 +107,11 @@ const ContestMonitoringStage = () => {
       playerIntroAuto: false,
     };
 
-    let players = playersArray[0] ? { ...playersArray[0] } : {};
+    const players = playersArray[0] ? { ...playersArray[0] } : {};
     switch (actionType) {
       case "playerIntroStart":
         status = { playerIntro: true, playerIntroAuto: introAuto, players };
-
         break;
-
       default:
         break;
     }
@@ -127,7 +131,7 @@ const ContestMonitoringStage = () => {
 
     if (!grades || grades.length === 0) {
       return {
-        gradeTitle: "오류발생",
+        gradeTitle: "미지정",
         gradeId: "",
         matchedJudgesCount: 0,
         matchedPlayersCount: 0,
@@ -161,6 +165,7 @@ const ContestMonitoringStage = () => {
         currentContest.contests.contestPlayersFinalId
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests]);
 
   useEffect(() => {
@@ -194,216 +199,231 @@ const ContestMonitoringStage = () => {
     setCurrentStageInfo(found ? { ...found } : { stageId: null });
   }, [realtimeData, stagesArray]);
 
+  if (isLoading) {
+    return <LoadingPage />;
+  }
+
   return (
-    <div className="flex w-full h-auto flex-col justify-start items-center bg-blue-100 rounded-tr-lg rounded-b-lg p-2">
-      <div className="flex w-full h-auto justify-start items-center">
+    <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] p-6 space-y-4">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={message}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
+
+      <div className="inline-flex items-center gap-1 p-1 bg-[#f4f4f5] border border-[#171717]/[0.08] rounded-[10px] self-start">
         <button
+          type="button"
           onClick={() => setCurrentSubTab("0")}
-          className={`${
+          className={`inline-flex items-center gap-2 h-8 px-3.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
             currentSubTab === "0"
-              ? "w-40 h-10 bg-blue-500 text-gray-100 rounded-t-lg"
-              : "w-40 h-10 bg-white text-gray-700 rounded-t-lg border-t border-r"
+              ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+              : "text-[#525252] hover:text-[#171717]"
           }`}
         >
-          현재 무대상황
+          <Monitor size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>현재 무대 현황</span>
         </button>
         <button
+          type="button"
           onClick={() => setCurrentSubTab("1")}
-          className={`${
+          className={`inline-flex items-center gap-2 h-8 px-3.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
             currentSubTab === "1"
-              ? "w-40 h-10 bg-blue-500 text-gray-100 rounded-t-lg"
-              : "w-40 h-10 bg-white text-gray-700 rounded-t-lg border-t border-r"
+              ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+              : "text-[#525252] hover:text-[#171717]"
           }`}
         >
-          전체 무대목록
+          <List size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>전체 무대 목록</span>
         </button>
       </div>
-      {currentSubTab === "0" && (
-        <>
-          {realtimeData && (
-            <div className="flex w-full flex-col h-auto gap-y-2">
-              <div className="flex bg-white p-2 w-full h-auto rounded-lg flex-col justify-center items-start">
-                <div className="flex w-full h-14 justify-between items-center gap-x-2 px-2">
-                  <div className="flex w-full justify-start items-center gap-x-2">
-                    <span className="font-bold text-lg">종목명</span>
-                    <span className="font-bold text-lg mx-2">:</span>
-                    <span className="font-bold text-lg">
-                      {realtimeData.categoryTitle}({realtimeData.gradeTitle})
-                    </span>
-                    <button
-                      className="bg-blue-300 px-4 py-2 rounded-lg"
-                      onClick={() => {
-                        handlePlayerIntroUpdate(
-                          currentContest?.contests?.id,
-                          "playerIntroStart"
-                        );
-                        setAutoCount(0);
-                      }}
-                    >
-                      화면소개시작
-                    </button>
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5"
-                      onChange={(e) => setIntroAuto(() => e.target.checked)}
-                    />
-                    <span>자동화면넘김</span>
 
-                    <button
-                      className="text-2xl"
-                      onClick={() => setAutoInterval(() => autoInterval - 1000)}
-                    >
-                      ㅡ
-                    </button>
-                    <span>{autoInterval / 1000}초</span>
-                    <button
-                      className="text-2xl"
-                      onClick={() => setAutoInterval(() => autoInterval + 1000)}
-                    >
-                      +
-                    </button>
-                  </div>
+      {currentSubTab === "0" && realtimeData && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <StatusDot status="live" live />
+              <div>
+                <div className="text-xs text-[#737373]">현재 진행 종목</div>
+                <div className="text-base font-semibold text-[#171717]">
+                  {realtimeData.categoryTitle}{" "}
+                  <span className="text-[#525252] font-normal">
+                    ({realtimeData.gradeTitle})
+                  </span>
                 </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-2 bg-white rounded-lg p-2">
-                {currentGradesInfo?.length > 0 &&
-                  currentGradesInfo.map((grade, gIdx) => {
-                    const { players } = grade;
-                    return (
-                      <div
-                        key={grade.gradeId || gIdx}
-                        className="flex w-full h-full  gap-2 flex-wrap"
-                      >
-                        {players?.length > 0 &&
-                          players.map((pInfo, pIdx) => {
-                            return (
-                              <div
-                                key={
-                                  pInfo.playerUid || pInfo.playerNumber || pIdx
-                                }
-                                className={
-                                  autoCount === pIdx
-                                    ? "flex flex-col w-44 h-60 gap-y-1 bg-blue-700 p-5 rounded-lg text-white"
-                                    : "flex flex-col w-44 h-60 gap-y-1 bg-blue-200 p-5 rounded-lg"
-                                }
-                              >
-                                <div className="flex font-semibold">
-                                  <span>{pInfo.playerNumber}</span>
-                                  <span>.</span>
-                                  <span>{pInfo.playerName}</span>
-                                </div>
-                                <div className="flex font-semibold">
-                                  <span>{pInfo.playerGym}</span>
-                                </div>
-                                <div className="flex font-semibold">
-                                  <span>{pInfo.playerBirth}</span>
-                                </div>
-                                <div className="flex flex-wrap box-border overflow-auto font-normal">
-                                  <span>{pInfo.playerText}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    );
-                  })}
               </div>
             </div>
-          )}
-        </>
-      )}
-      {currentSubTab === "1" && (
-        <>
-          {realtimeData && stagesArray?.length > 0 && (
-            <div className="flex w-full flex-col h-auto gap-y-2">
-              <div className="flex bg-white p-2 w-full h-auto rounded-lg flex-col justify-center items-start">
-                <div className="flex w-full h-14 justify-between items-center gap-x-2 px-2">
-                  <div className="flex w-full justify-start items-center gap-x-2">
-                    <span className="font-bold text-lg">무대목록</span>
-                  </div>
-                </div>
-                <div className="flex flex-col w-full h-auto gap-y-2 p-2">
-                  {stagesArray
-                    .sort((a, b) => a.stageNumber - b.stageNumber)
-                    .map((stage, sIdx) => {
-                      const {
-                        grades,
-                        stageNumber,
-                        stageId,
-                        categoryTitle,
-                        categoryJudgeType,
-                        categoryId,
-                      } = stage;
-                      const gradeTitle = handleGradeInfo(grades).gradeTitle;
-                      const playersCount =
-                        handleGradeInfo(grades).matchedPlayersCount;
 
-                      const judgesCount =
-                        handleGradeInfo(grades).matchedJudgesCount;
-                      return (
-                        <div
-                          key={stageId || sIdx}
-                          className={`${
-                            realtimeData.stageId === stageId
-                              ? "flex w-full h-24 justify-start items-center px-5 bg-blue-400 rounded-lg text-gray-100"
-                              : "flex w-full h-20 justify-start items-center px-5 bg-blue-100 rounded-lg"
-                          }`}
-                        >
-                          <div className="flex w-full justify-start items-center flex-wrap">
-                            <div className="flex w-10  h-auto items-center">
-                              <span className="font-semibold">
-                                {stageNumber}
-                              </span>
-                            </div>
-                            <div
-                              className="flex w-auto px-2 h-auto items-center"
-                              style={{ minWidth: "450px" }}
-                            >
-                              <span className="font-semibold mr-2">
-                                {categoryTitle}
-                              </span>
-                              <span className="font-semibold">
-                                ({gradeTitle})
-                              </span>
-                              <div className="flex w-14 justify-center items-center">
-                                {categoryJudgeType === "point" ? (
-                                  <span className="bg-blue-400 w-10 flex justify-center rounded-lg text-gray-100">
-                                    P
-                                  </span>
-                                ) : (
-                                  <span className="bg-green-500 w-10 flex justify-center rounded-lg text-gray-100">
-                                    R
-                                  </span>
-                                )}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors active:scale-[0.98] cursor-pointer"
+                onClick={() => {
+                  handlePlayerIntroUpdate(
+                    currentContest?.contests?.id,
+                    "playerIntroStart"
+                  );
+                  setAutoCount(0);
+                }}
+              >
+                <Play size={16} strokeWidth={1.5} />
+                <span>화면 소개 시작</span>
+              </button>
+
+              <label className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={introAuto}
+                  className="w-4 h-4 accent-[#2563eb]"
+                  onChange={(e) => setIntroAuto(() => e.target.checked)}
+                />
+                <span>자동 화면 전환</span>
+              </label>
+
+              <div className="inline-flex items-center gap-1 h-9 px-2 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08]">
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[#525252] hover:bg-white hover:text-[#171717] transition-colors cursor-pointer"
+                  onClick={() =>
+                    setAutoInterval(() => Math.max(1000, autoInterval - 1000))
+                  }
+                >
+                  <Minus size={16} strokeWidth={1.5} />
+                </button>
+                <span className="min-w-[44px] text-center font-mono tabular-nums text-xs font-medium text-[#171717]">
+                  {autoInterval / 1000}초
+                </span>
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[#525252] hover:bg-white hover:text-[#171717] transition-colors cursor-pointer"
+                  onClick={() => setAutoInterval(() => autoInterval + 1000)}
+                >
+                  <Plus size={16} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {currentGradesInfo?.length > 0 &&
+              currentGradesInfo.map((grade, gIdx) => {
+                const { players } = grade;
+                return (
+                  <div
+                    key={grade.gradeId || gIdx}
+                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"
+                  >
+                    {players?.length > 0 &&
+                      players.map((pInfo, pIdx) => {
+                        const isActive = autoCount === pIdx;
+                        return (
+                          <div
+                            key={pInfo.playerUid || pInfo.playerNumber || pIdx}
+                            className={`flex flex-col gap-2 rounded-[12px] p-4 border transition-colors ${
+                              isActive
+                                ? "bg-white border-[#2563eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                                : "bg-white border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <BibTag
+                                  number={pInfo.playerNumber}
+                                  variant={isActive ? "active" : "default"}
+                                />
+                                <span className="text-sm font-medium text-[#171717]">
+                                  {pInfo.playerName}
+                                </span>
                               </div>
-                              {realtimeData.stageId === stageId && (
-                                <div className="flex w-auto px-2">
-                                  <PiSpinner
-                                    className="animate-spin w-8 h-8 "
-                                    style={{ animationDuration: "1.5s" }}
-                                  />
-                                </div>
+                              {isActive && (
+                                <StatusDot status="active" live={introAuto} />
                               )}
                             </div>
 
-                            <div className="flex w-auto px-2 text-base font-normal">
-                              <span className="mx-10">출전인원수 : </span>
-                              <span className="font-semibold">
-                                {playersCount}
-                              </span>
+                            <div className="text-xs text-[#525252]">
+                              {pInfo.playerGym || "무소속"}
+                              {pInfo.playerBirth ? ` · ${pInfo.playerBirth}` : ""}
                             </div>
+
+                            {pInfo.playerText && (
+                              <div className="text-xs text-[#737373] bg-[#f4f4f5] rounded-[8px] p-2.5 max-h-28 overflow-y-auto leading-5">
+                                {pInfo.playerText}
+                              </div>
+                            )}
                           </div>
-                          <div className="flex w-1/2 justify-end items-center flex-wrap py-2">
-                            <div className="flex w-full gap-x-2 justify-end items-center"></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+                        );
+                      })}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {currentSubTab === "1" && realtimeData && stagesArray?.length > 0 && (
+        <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+          <div className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-[#171717]">
+              전체 무대 목록
+            </span>
+            <span className="font-mono tabular-nums text-xs text-[#737373]">
+              총 {stagesArray.length}개 무대
+            </span>
+          </div>
+
+          <div className="divide-y divide-[#171717]/[0.06]">
+            {[...stagesArray]
+              .sort((a, b) => a.stageNumber - b.stageNumber)
+              .map((stage, sIdx) => {
+                const {
+                  grades,
+                  stageNumber,
+                  stageId,
+                  categoryTitle,
+                  categoryJudgeType,
+                } = stage;
+                const info = handleGradeInfo(grades);
+                const isCurrent = realtimeData.stageId === stageId;
+
+                return (
+                  <div
+                    key={stageId || sIdx}
+                    className={`flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 transition-colors ${
+                      isCurrent ? "bg-[#2563eb]/[0.05]" : "hover:bg-[#fafafa]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <BibTag
+                        number={stageNumber}
+                        size="sm"
+                        variant={isCurrent ? "active" : "default"}
+                      />
+                      <span className="text-sm font-medium text-[#171717]">
+                        {categoryTitle}
+                      </span>
+                      <span className="text-sm text-[#525252]">
+                        ({info.gradeTitle})
+                      </span>
+                      <span className="px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] font-mono text-[11px] font-medium text-[#525252]">
+                        {categoryJudgeType === "point" ? "P" : "R"}
+                      </span>
+                      {isCurrent && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2563eb]">
+                          <StatusDot status="live" live />
+                          <span>진행 중</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="font-mono tabular-nums text-xs text-[#525252]">
+                      출전 인원 {info.matchedPlayersCount}명
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
       )}
     </div>
   );

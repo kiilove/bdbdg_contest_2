@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import _ from "lodash";
 import LoadingPage from "./LoadingPage";
 import {
   useFirestoreGetDocument,
@@ -19,37 +18,28 @@ import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintA
 import ContestAwardCreator from "./ContestAwardCreator";
 import StageBroadcastController from "../components/broadcast/StageBroadcastController";
 import { useDevice } from "../contexts/DeviceContext";
-import {
-  Card,
-  Button,
-  Tabs,
-  Table,
-  Tag,
-  Space,
-  Typography,
-  Spin,
-  Divider,
-  message as antMessage,
-} from "antd";
-import {
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  ReloadOutlined,
-  PrinterOutlined,
-  EyeOutlined,
-  CloseCircleOutlined,
-  FastForwardOutlined,
-  RedoOutlined,
-  UnorderedListOutlined,
-  AppstoreOutlined,
-  CalendarOutlined,
-} from "@ant-design/icons";
+import { message as antMessage } from "antd";
 import { where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import {
+  Play,
+  Pause,
+  RefreshCw,
+  Printer,
+  Eye,
+  XCircle,
+  SkipForward,
+  RotateCcw,
+  Activity,
+  List,
+  LayoutGrid,
+  Layers,
+  AlertCircle,
+  Check,
+} from "lucide-react";
+import { BibTag, StatusDot } from "../components/ui/BibTag";
 
-const { Title, Text } = Typography;
-
-// 🛡️ 본부석 실시간 렌더링 에러 바운더리 (에러 발생 시 즉시 화면에 상세 디버그 표시)
+// 본부석 실시간 렌더링 에러 바운더리
 class BasecampErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -65,27 +55,32 @@ class BasecampErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-6 m-4 bg-red-50 border-2 border-red-300 rounded-2xl shadow-xl">
-          <h2 className="text-xl font-black text-red-600 mb-2">⚠️ 본부석 화면 렌더링 오류 감지</h2>
-          <p className="text-sm text-red-700 font-bold mb-3">
-            화면 구성 요소를 렌더링하는 중 예외가 발생했습니다. 아래 디버그 정보를 확인해 주세요.
+        <div className="p-6 m-4 bg-white border border-[#dc2626]/30 rounded-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] space-y-4">
+          <div className="flex items-center gap-2 text-[#dc2626]">
+            <AlertCircle size={18} strokeWidth={1.5} />
+            <h2 className="text-base font-semibold m-0">
+              본부석 화면 렌더링 오류가 감지되었습니다
+            </h2>
+          </div>
+          <p className="text-sm text-[#525252] m-0">
+            화면 구성 요소를 표시하는 중 예외가 발생했습니다. 아래 디버그 로그를 확인해 주세요.
           </p>
-          <div className="text-xs font-mono text-red-950 bg-white p-4 rounded-xl border border-red-200 overflow-auto max-h-72 mb-4 whitespace-pre-wrap select-all">
+          <div className="text-xs font-mono text-[#171717] bg-[#fafafa] p-4 rounded-[8px] border border-[#171717]/[0.08] overflow-auto max-h-72 whitespace-pre-wrap select-all">
             {this.state.error?.toString()}
             {"\n\n[Component Stack]:\n"}
             {this.state.errorInfo?.componentStack || "No stack trace available"}
           </div>
-          <Button
-            type="primary"
-            danger
-            icon={<ReloadOutlined />}
+          <button
+            type="button"
             onClick={() => {
               this.setState({ hasError: false, error: null, errorInfo: null });
               window.location.reload();
             }}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
           >
-            본부석 화면 새로고침
-          </Button>
+            <RefreshCw size={14} strokeWidth={1.5} />
+            <span>본부석 화면 새로고침</span>
+          </button>
         </div>
       );
     }
@@ -103,6 +98,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const [contestInfo, setContestInfo] = useState({});
   const [judgesIsEndValidated, setJudgesIsEndValidated] = useState(true);
   const [currentSubTab, setCurrentSubTab] = useState("0");
+  const [selectedSectionTab, setSelectedSectionTab] = useState("");
 
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
@@ -143,25 +139,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     playerFinalId,
     judgeAssignId
   ) => {
-    console.log("[ContestMonitoringBasecamp] 📡 fetchPool 시작:", {
-      noticeId,
-      stageAssignId,
-      playerFinalId,
-      judgeAssignId,
-    });
-
     try {
-      const returnNotice = noticeId ? await fetchNotice.getDocument(noticeId) : null;
-      const returnContestStage = stageAssignId ? await fetchStages.getDocument(stageAssignId) : null;
-      const returnPlayersFinal = playerFinalId ? await fetchFinalPlayers.getDocument(playerFinalId) : null;
-      const returnJudgesAssign = judgeAssignId ? await fetchJudgesAssign.getDocument(judgeAssignId) : null;
-
-      console.log("[ContestMonitoringBasecamp] 📦 Firestore 데이터 수신 성공:", {
-        noticeTitle: returnNotice?.contestTitle,
-        stagesCount: returnContestStage?.stages?.length || 0,
-        playersCount: returnPlayersFinal?.players?.length || 0,
-        judgesCount: returnJudgesAssign?.judges?.length || 0,
-      });
+      const returnNotice = noticeId
+        ? await fetchNotice.getDocument(noticeId)
+        : null;
+      const returnContestStage = stageAssignId
+        ? await fetchStages.getDocument(stageAssignId)
+        : null;
+      const returnPlayersFinal = playerFinalId
+        ? await fetchFinalPlayers.getDocument(playerFinalId)
+        : null;
+      const returnJudgesAssign = judgeAssignId
+        ? await fetchJudgesAssign.getDocument(judgeAssignId)
+        : null;
 
       if (returnNotice) {
         setContestInfo({ ...returnNotice });
@@ -184,7 +174,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         setJudgesArray(returnJudgesAssign.judges || []);
       }
     } catch (error) {
-      console.error("[ContestMonitoringBasecamp] ❌ fetchPool 예외 발생:", error);
+      console.error("[ContestMonitoringBasecamp] fetchPool 예외 발생:", error);
       setMessage({
         body: "데이터를 로드하지 못했습니다.",
         body4: error.message,
@@ -197,8 +187,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  // 📡 [계측 파이널 및 사진 변경 실시간 Live-Sync 리스너]
-  // 계측대에서 무대 사진(1번, 2번)이나 선수 정보를 변경하면 본부석에서도 즉시 실시간 동기화!
+  // 계측 파이널 및 사진 변경 실시간 Live-Sync 리스너
   useEffect(() => {
     const finalDocId = currentContest?.contests?.contestPlayersFinalId;
     if (!finalDocId) return;
@@ -218,7 +207,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         }
       },
       (err) => {
-        console.warn("[Basecamp] contest_players_final 실시간 리스너 오류:", err);
+        console.warn(
+          "[Basecamp] contest_players_final 실시간 리스너 오류:",
+          err
+        );
       }
     );
 
@@ -324,7 +316,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       ).length;
       matchedPlayersCount = Number(grades[0]?.playerCount) || 0;
     } else if (grades.length > 1) {
-      const madeTitle = grades.map((grade) => (grade?.gradeTitle || "") + " ").join("");
+      const madeTitle = grades
+        .map((grade) => (grade?.gradeTitle || "") + " ")
+        .join("");
       matchedJudgesCount = Number(grades[0]?.categoryJudgeCount) || 0;
 
       matchedJudgeAssignCount = (judgesArray || []).filter(
@@ -366,7 +360,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const handleUpdateCurrentStage = async (currentStageId) => {
     if (!stagesArray || stagesArray.length === 0) {
       antMessage.warning(
-        "무대 설정(타임테이블) 데이터가 없습니다. [무대설정(4단계)] 메뉴에서 먼저 무대를 저장해 주세요."
+        "무대 설정(타임테이블) 데이터가 없습니다. 무대설정 메뉴에서 먼저 무대를 저장해 주세요."
       );
       return;
     }
@@ -422,9 +416,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
 
     try {
-      await deleteCompare.deleteData(
-        `currentStage/${contestId}/compares`
-      );
+      await deleteCompare.deleteData(`currentStage/${contestId}/compares`);
     } catch (e) {
       console.warn("compares 삭제 에러:", e);
     }
@@ -459,27 +451,32 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         ...newCurrentStateInfo,
       });
 
-      // 🎯 종목/체급 변경 시 전광판 스크린 화면을 무조건 [대기 및 종목/체급 안내(STANDBY)]로 즉각 강제 전환!
-      await updateCurrentStage.updateData(`currentBroadcast/${contestId}`, {
-        mode: "STANDBY",
-        contestTitle: currentContest?.contestInfo?.contestTitle || currentContest?.contests?.contestTitle || "",
-        stageInfo: {
-          categoryTitle: categoryTitle || "",
-          gradeTitle: gradeTitle || "",
-          gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
-          stageNumber: newCurrentStateInfo.stageNumber || "",
-          playerCount: targetStage?.players?.length || 0,
-        },
-        activePlayer: null,
-        specialScreenData: null,
-        calloutData: null,
-        updatedAt: Date.now(),
-      }).catch(() => {});
+      // 종목/체급 변경 시 전광판 스크린 화면을 대기 및 종목/체급 안내(STANDBY)로 전환
+      await updateCurrentStage
+        .updateData(`currentBroadcast/${contestId}`, {
+          mode: "STANDBY",
+          contestTitle:
+            currentContest?.contestInfo?.contestTitle ||
+            currentContest?.contests?.contestTitle ||
+            "",
+          stageInfo: {
+            categoryTitle: categoryTitle || "",
+            gradeTitle: gradeTitle || "",
+            gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
+            stageNumber: newCurrentStateInfo.stageNumber || "",
+            playerCount: targetStage?.players?.length || 0,
+          },
+          activePlayer: null,
+          specialScreenData: null,
+          calloutData: null,
+          updatedAt: Date.now(),
+        })
+        .catch(() => {});
 
       if (res) {
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
         antMessage.success(
-          `대회가 시작되었습니다. (${newCurrentStateInfo.stageNumber}번: ${categoryTitle} - ${gradeTitle})`
+          `무대가 시작되었습니다 (${newCurrentStateInfo.stageNumber}번: ${categoryTitle} - ${gradeTitle})`
         );
       } else {
         antMessage.error(
@@ -513,19 +510,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       currentContest?.contests?.contestJudgesAssignId ||
       currentContest?.contestJudgesAssignId;
 
-    console.log("[ContestMonitoringBasecamp] 🔄 useEffect [currentContest] 트리거:", {
-      currentContest,
-      noticeId,
-      stageAssignId,
-      playerFinalId,
-      judgeAssignId,
-    });
-
     if (noticeId || stageAssignId || playerFinalId) {
       setIsLoading(true);
       fetchPool(noticeId, stageAssignId, playerFinalId, judgeAssignId);
     } else if (currentContest) {
-      console.warn("[ContestMonitoringBasecamp] ⚠️ 유효한 무대/선수 ID를 찾을 수 없어 로딩을 종료합니다:", currentContest);
       setIsLoading(false);
     }
   }, [currentContest]);
@@ -535,9 +523,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       (f) => f.stageId === realtimeData?.stageId
     );
     setCurrentStageInfo(foundStage ? { ...foundStage } : { stageId: null });
-    setJudgesIsEndValidated(
-      handleJudgeIsEndValidated(realtimeData?.judges)
-    );
+    setJudgesIsEndValidated(handleJudgeIsEndValidated(realtimeData?.judges));
   }, [realtimeData, stagesArray]);
 
   // 무대 변경 시 이전 점수 초기화
@@ -598,260 +584,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     judgesSignature,
   ]);
 
-  const JudgeCardView = ({ judges }) => {
-    return (
-      <div className="space-y-3">
-        {judges?.map((judge, index) => {
-          const {
-            isEnd,
-            isLogined,
-            seatIndex,
-            judgeName,
-            judgeUid,
-            onedayPassword,
-          } = judge;
-          let statusColor = "default";
-          let statusText = "로그인대기";
-
-          if (isEnd && isLogined) {
-            statusColor = "success";
-            statusText = "심사종료";
-          } else if (!isEnd && isLogined) {
-            statusColor = "processing";
-            statusText = "심사중";
-          }
-
-          return (
-            <Card key={index} size="small" className="shadow-sm">
-              <div className="flex justify-between items-center">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Text strong className="text-base">
-                      {seatIndex}번 심판석
-                    </Text>
-                    <Tag color={statusColor}>{statusText}</Tag>
-                  </div>
-
-                  {judgeName ? (
-                    <div className="flex flex-col">
-                      <Text strong>{judgeName}</Text>
-                      {judgeUid && (
-                        <Text type="secondary" className="text-xs">
-                          {judgeUid} / {onedayPassword}
-                        </Text>
-                      )}
-                    </div>
-                  ) : (
-                    <Text type="secondary">정보 없음</Text>
-                  )}
-                </div>
-
-                <Button
-                  size="small"
-                  icon={<RedoOutlined />}
-                  onClick={() =>
-                    handleForceReStart(index, currentContest.contests.id)
-                  }
-                >
-                  재시작
-                </Button>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const StageCardView = ({ stages }) => (
-    <div className="space-y-3">
-      {stages?.map((stage) => {
-        const {
-          categoryTitle,
-          grades,
-          categoryJudgeType,
-          stageId,
-          stageNumber,
-        } = stage;
-        const gradeTitle = handleGradeInfo(grades).gradeTitle;
-        const playersCount = handleGradeInfo(grades).matchedPlayersCount;
-        const judgesAssignCount =
-          handleGradeInfo(grades).matchedJudgeAssignCount;
-        const isCurrentStage = realtimeData?.stageId === stageId;
-        const globalIndex = stagesArray.findIndex((s) => s.stageId === stageId);
-
-        return (
-          <Card key={stageId} size="small" className="shadow-sm">
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Text strong className="text-base">
-                      {stageNumber}. {categoryTitle}
-                    </Text>
-                    <Tag
-                      color={categoryJudgeType === "point" ? "blue" : "green"}
-                    >
-                      {categoryJudgeType === "point" ? "P" : "R"}
-                    </Tag>
-                    {isCurrentStage && (
-                      <Tag icon={<Spin size="small" />} color="processing">
-                        진행중
-                      </Tag>
-                    )}
-                  </div>
-                  <Text type="secondary" className="text-sm block mb-1">
-                    {gradeTitle}
-                  </Text>
-                  <Text type="secondary" className="text-xs">
-                    출전: {playersCount}명 | 심판: {judgesAssignCount}명
-                  </Text>
-                </div>
-                <Button
-                  type={isCurrentStage ? "default" : "primary"}
-                  icon={
-                    isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />
-                  }
-                  onClick={() =>
-                    globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
-                  }
-                  size="small"
-                >
-                  {isCurrentStage ? "재시작" : "시작"}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-
-  const ScoreCardView = ({ players, judges }) => (
-    <div className="space-y-3">
-      {players?.map((player, pIdx) => {
-        const playerNumber = player.playerNumber;
-
-        return (
-          <Card key={pIdx} size="small" className="shadow-sm">
-            <div className="space-y-2">
-              <Text strong className="text-base block">
-                선수번호: {playerNumber}
-              </Text>
-              <Divider className="my-2" />
-              <div className="grid grid-cols-2 gap-2">
-                {judges?.map((judge, jIdx) => {
-                  const finded = normalScoreData.find(
-                    (f) =>
-                      f.playerNumber === playerNumber &&
-                      f.seatIndex === judge.seatIndex
-                  );
-
-                  let scoreDisplay = "-";
-                  if (finded?.playerScore >= 1000) {
-                    scoreDisplay = <Tag color="error">순위제외</Tag>;
-                  } else if (
-                    finded?.playerScore !== 0 &&
-                    finded?.playerScore !== undefined
-                  ) {
-                    scoreDisplay = (
-                      <Text strong className="text-base">
-                        {finded.playerScore}
-                      </Text>
-                    );
-                  } else {
-                    scoreDisplay = <Text type="secondary">-</Text>;
-                  }
-
-                  return (
-                    <div
-                      key={jIdx}
-                      className="flex justify-between items-center p-2 bg-gray-50 rounded"
-                    >
-                      <Text type="secondary" className="text-sm">
-                        {judge.seatIndex}번
-                      </Text>
-                      {scoreDisplay}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-
-  const stageColumns = [
-    {
-      title: "순서",
-      dataIndex: "stageNumber",
-      key: "stageNumber",
-      align: "center",
-      width: 80,
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: "종목 정보",
-      key: "info",
-      render: (_, record) => {
-        const { categoryTitle, grades, categoryJudgeType, stageId } = record;
-        const gradeTitle = handleGradeInfo(grades).gradeTitle;
-        const playersCount = handleGradeInfo(grades).matchedPlayersCount;
-        const judgesAssignCount =
-          handleGradeInfo(grades).matchedJudgeAssignCount;
-
-        return (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Text strong className="text-base">
-                {categoryTitle} ({gradeTitle})
-              </Text>
-              <Tag color={categoryJudgeType === "point" ? "blue" : "green"}>
-                {categoryJudgeType === "point" ? "P" : "R"}
-              </Tag>
-              {realtimeData?.stageId === stageId && (
-                <Tag icon={<Spin size="small" />} color="processing">
-                  진행중
-                </Tag>
-              )}
-            </div>
-            <Text type="secondary" className="text-sm">
-              출전인원: {playersCount}명 | 배정심판: {judgesAssignCount}명
-            </Text>
-          </div>
-        );
-      },
-    },
-    {
-      title: "관리",
-      key: "action",
-      align: "center",
-      width: isTabletOrMobile ? 120 : 150,
-      render: (_, record) => {
-        const isCurrentStage = realtimeData?.stageId === record.stageId;
-        const globalIndex = stagesArray.findIndex(
-          (s) => s.stageId === record.stageId
-        );
-        return (
-          <Button
-            type={isCurrentStage ? "default" : "primary"}
-            icon={isCurrentStage ? <RedoOutlined /> : <PlayCircleOutlined />}
-            onClick={() =>
-              globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
-            }
-          >
-            {isCurrentStage ? "재시작" : "시작"}
-          </Button>
-        );
-      },
-    },
-  ];
-
-  /** -----------------------------
-   *  ✅ 섹션(=categorySection) 그룹핑 & 다가올 섹션 계산
-   *  ----------------------------- */
+  /** 섹션(=categorySection) 그룹핑 & 다가올 섹션 계산 */
   const sectionsWithOrder = useMemo(() => {
     const map = new Map();
     (stagesArray || [])
@@ -889,6 +622,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     return sectionsWithOrder[idx + 1]?.section ?? null;
   }, [currentSectionKey, sectionsWithOrder]);
 
+  useEffect(() => {
+    if (!selectedSectionTab && sectionsWithOrder.length > 0) {
+      setSelectedSectionTab(
+        String(currentSectionKey || sectionsWithOrder[0].section)
+      );
+    }
+  }, [sectionsWithOrder, currentSectionKey, selectedSectionTab]);
+
   const currentStageIdx = useMemo(
     () => stagesArray.findIndex((s) => s.stageId === realtimeData?.stageId),
     [stagesArray, realtimeData?.stageId]
@@ -909,14 +650,343 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  void prevRealtimeData;
+  void setAwardProp;
+
+  const JudgeCardView = ({ judges }) => (
+    <div className="space-y-2.5">
+      {judges?.map((judge, index) => {
+        const {
+          isEnd,
+          isLogined,
+          seatIndex,
+          judgeName,
+          judgeUid,
+          onedayPassword,
+        } = judge;
+
+        let dotStatus = "idle";
+        let statusText = "로그인 대기";
+        if (isEnd && isLogined) {
+          dotStatus = "live";
+          statusText = "심사 종료";
+        } else if (!isEnd && isLogined) {
+          dotStatus = "active";
+          statusText = "심사 중";
+        }
+
+        return (
+          <div
+            key={index}
+            className="p-3.5 rounded-[8px] bg-white border border-[#171717]/[0.08] flex justify-between items-center gap-3"
+          >
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <BibTag number={seatIndex} size="sm" />
+                <span className="text-xs font-medium text-[#525252]">
+                  심판석
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs font-medium text-[#171717]">
+                  <StatusDot
+                    status={dotStatus}
+                    live={!isEnd && Boolean(isLogined)}
+                  />
+                  <span>{statusText}</span>
+                </span>
+              </div>
+
+              {judgeName ? (
+                <div>
+                  <div className="text-sm font-semibold text-[#171717]">
+                    {judgeName}
+                  </div>
+                  {judgeUid && (
+                    <div className="text-xs font-mono tabular-nums text-[#737373]">
+                      {judgeUid} / {onedayPassword}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-[#737373]">배정 정보 없음</div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                handleForceReStart(index, currentContest.contests.id)
+              }
+              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium shrink-0 cursor-pointer"
+            >
+              <RotateCcw size={13} strokeWidth={1.5} />
+              <span>재시작</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const StageCardView = ({ stages }) => (
+    <div className="space-y-2.5">
+      {stages?.map((stage) => {
+        const {
+          categoryTitle,
+          grades,
+          categoryJudgeType,
+          stageId,
+          stageNumber,
+        } = stage;
+        const info = handleGradeInfo(grades);
+        const isCurrentStage = realtimeData?.stageId === stageId;
+        const globalIndex = stagesArray.findIndex((s) => s.stageId === stageId);
+
+        return (
+          <div
+            key={stageId}
+            className={`p-3.5 rounded-[8px] border flex items-start justify-between gap-3 ${
+              isCurrentStage
+                ? "bg-[#2563eb]/[0.04] border-[#2563eb]/40"
+                : "bg-white border-[#171717]/[0.08]"
+            }`}
+          >
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <BibTag
+                  prefix="#"
+                  number={stageNumber}
+                  variant={isCurrentStage ? "active" : "default"}
+                  size="sm"
+                />
+                <span className="text-sm font-semibold text-[#171717]">
+                  {categoryTitle}
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
+                  {categoryJudgeType === "point" ? "P" : "R"}
+                </span>
+                {isCurrentStage && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-xs font-medium">
+                    <StatusDot status="live" live />
+                    <span>진행 중</span>
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-[#525252]">{info.gradeTitle}</div>
+              <div className="text-xs font-mono tabular-nums text-[#737373]">
+                출전 {info.matchedPlayersCount}명 · 심판{" "}
+                {info.matchedJudgeAssignCount}명
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
+              }
+              className={`inline-flex items-center gap-1 h-8 px-3 rounded-[6px] text-xs font-medium shrink-0 cursor-pointer transition-colors ${
+                isCurrentStage
+                  ? "border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717]"
+                  : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
+              }`}
+            >
+              {isCurrentStage ? (
+                <>
+                  <RotateCcw size={13} strokeWidth={1.5} />
+                  <span>재시작</span>
+                </>
+              ) : (
+                <>
+                  <Play size={13} strokeWidth={1.5} />
+                  <span>시작</span>
+                </>
+              )}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const ScoreCardView = ({ players, judges }) => (
+    <div className="space-y-2.5">
+      {players?.map((player, pIdx) => {
+        const playerNumber = player.playerNumber;
+
+        return (
+          <div
+            key={pIdx}
+            className="p-3.5 rounded-[8px] bg-white border border-[#171717]/[0.08] space-y-2.5"
+          >
+            <div className="flex items-center gap-2 pb-2 border-b border-[#171717]/[0.06]">
+              <span className="text-xs font-medium text-[#737373]">
+                선수번호
+              </span>
+              <BibTag number={playerNumber} size="md" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {judges?.map((judge, jIdx) => {
+                const finded = normalScoreData.find(
+                  (f) =>
+                    f.playerNumber === playerNumber &&
+                    f.seatIndex === judge.seatIndex
+                );
+
+                let scoreDisplay = (
+                  <span className="font-mono tabular-nums text-[#737373]">
+                    -
+                  </span>
+                );
+                if (finded?.playerScore >= 1000) {
+                  scoreDisplay = (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#737373] text-[11px] font-medium">
+                      순위제외
+                    </span>
+                  );
+                } else if (
+                  finded?.playerScore !== 0 &&
+                  finded?.playerScore !== undefined &&
+                  finded?.playerScore !== null
+                ) {
+                  scoreDisplay = (
+                    <span className="font-mono font-semibold tabular-nums text-[#171717]">
+                      {finded.playerScore}
+                    </span>
+                  );
+                }
+
+                return (
+                  <div
+                    key={jIdx}
+                    className="flex justify-between items-center px-2.5 py-2 bg-[#fafafa] rounded-[6px] border border-[#171717]/[0.06]"
+                  >
+                    <span className="text-xs font-mono tabular-nums text-[#525252]">
+                      {judge.seatIndex}번
+                    </span>
+                    {scoreDisplay}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderStageTable = (items) => (
+    <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+            <th className="px-3.5 py-2.5 text-center text-xs font-medium text-[#525252] w-[84px] whitespace-nowrap">
+              순서
+            </th>
+            <th className="px-4 py-2.5 text-left text-xs font-medium text-[#525252]">
+              종목 및 체급 정보
+            </th>
+            <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[140px] whitespace-nowrap">
+              관리
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
+          {items.map((record) => {
+            const { categoryTitle, grades, categoryJudgeType, stageId } =
+              record;
+            const info = handleGradeInfo(grades);
+            const isCurrentStage = realtimeData?.stageId === stageId;
+            const globalIndex = stagesArray.findIndex(
+              (s) => s.stageId === stageId
+            );
+
+            return (
+              <tr
+                key={stageId}
+                className={`transition-colors ${
+                  isCurrentStage
+                    ? "bg-[#2563eb]/[0.04]"
+                    : "hover:bg-[#fafafa]"
+                }`}
+              >
+                <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                  <BibTag
+                    prefix="#"
+                    number={record.stageNumber}
+                    variant={isCurrentStage ? "active" : "default"}
+                    size="sm"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-[#171717]">
+                        {categoryTitle} ({info.gradeTitle})
+                      </span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
+                        {categoryJudgeType === "point" ? "P" : "R"}
+                      </span>
+                      {isCurrentStage && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-xs font-medium">
+                          <StatusDot status="live" live />
+                          <span>진행 중</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-mono tabular-nums text-[#737373]">
+                      출전인원: {info.matchedPlayersCount}명 · 배정심판:{" "}
+                      {info.matchedJudgeAssignCount}명
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      globalIndex > -1 && handleUpdateCurrentStage(globalIndex)
+                    }
+                    className={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
+                      isCurrentStage
+                        ? "border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717]"
+                        : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
+                    }`}
+                  >
+                    {isCurrentStage ? (
+                      <>
+                        <RotateCcw size={13} strokeWidth={1.5} />
+                        <span>재시작</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={13} strokeWidth={1.5} />
+                        <span>시작</span>
+                      </>
+                    )}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const subTabs = [
+    { key: "0", label: "현재 무대상황", icon: Activity },
+    { key: "1", label: "전체 무대목록", icon: List },
+    { key: "2", label: "섹션별 한눈에", icon: LayoutGrid },
+    { key: "3", label: "섹션별 탭", icon: Layers },
+  ];
+
   return (
     <BasecampErrorBoundary>
       {isLoading || realtimeLoading ? (
-        <div className="flex w-full h-screen justify-center items-center">
+        <div className="flex w-full min-h-[60vh] justify-center items-center bg-[#fafafa]">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full h-full bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen p-4 md:p-6">
+        <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] p-4 md:p-6 gap-4">
           <ConfirmationModal
             isOpen={msgOpen}
             message={message}
@@ -937,376 +1007,357 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             />
           </Modal>
 
-          <Card className="mb-4 shadow-md">
+          {/* 상단 대회 본부석 요약 바 */}
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 md:p-5">
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-              <div className="flex-1 space-y-2">
-                <Title level={4} className="!mb-1">
-                  {contestInfo.contestTitle}
-                </Title>
-                <div className="space-y-1">
-                  <Text type="secondary" className="block text-sm">
-                    채점표DB: {contestInfo.contestCollectionName}
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <Text type="secondary" className="text-sm">
-                      모니터링 상태:
-                    </Text>
-                    {realtimeData?.stageId && !isHolding && (
-                      <Tag color="success" icon={<PlayCircleOutlined />}>
-                        실시간 모니터링중
-                      </Tag>
-                    )}
-                    {isHolding && (
-                      <Tag color="warning" icon={<PauseCircleOutlined />}>
-                        일시정지
-                      </Tag>
-                    )}
-                    {!realtimeData?.stageId && !isHolding && (
-                      <Tag color="default">대회 시작 전</Tag>
-                    )}
-                  </div>
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs font-medium text-[#171717]">
+                    <StatusDot
+                      status={
+                        realtimeData?.stageId && !isHolding
+                          ? "live"
+                          : isHolding
+                          ? "warning"
+                          : "idle"
+                      }
+                      live={Boolean(realtimeData?.stageId && !isHolding)}
+                    />
+                    <span>
+                      {realtimeData?.stageId && !isHolding
+                        ? "실시간 모니터링 중"
+                        : isHolding
+                        ? "모니터링 일시정지"
+                        : "대회 시작 전"}
+                    </span>
+                  </span>
+
+                  {contestInfo.contestCollectionName && (
+                    <span className="text-xs font-mono text-[#737373]">
+                      DB: {contestInfo.contestCollectionName}
+                    </span>
+                  )}
+
                   {lastUpdated && (
-                    <Text type="secondary" className="block text-xs">
-                      마지막 업데이트: {lastUpdated}
-                    </Text>
+                    <span className="text-xs font-mono tabular-nums text-[#737373]">
+                      · 최근 갱신 {lastUpdated}
+                    </span>
                   )}
                 </div>
+
+                <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                  {contestInfo.contestTitle || "대회 본부석 운영 콘솔"}
+                </h1>
               </div>
 
               <div className="flex gap-2 w-full md:w-auto">
                 {!isHolding && realtimeData?.stageId && (
-                  <Button
-                    size="large"
-                    icon={<PauseCircleOutlined />}
+                  <button
+                    type="button"
                     onClick={() => {
                       setIsHolding(true);
                       setLastUpdated(new Date().toLocaleString("ko-KR"));
                     }}
-                    className="flex-1 md:flex-none"
+                    className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
                   >
-                    모니터링 일시정지
-                  </Button>
+                    <Pause size={15} strokeWidth={1.5} />
+                    <span>모니터링 일시정지</span>
+                  </button>
                 )}
                 {isHolding && (
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlayCircleOutlined />}
+                  <button
+                    type="button"
                     onClick={() => setIsHolding(false)}
-                    className="flex-1 md:flex-none"
+                    className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
                   >
-                    모니터링 재개
-                  </Button>
+                    <Play size={15} strokeWidth={1.5} />
+                    <span>모니터링 재개</span>
+                  </button>
                 )}
                 {!realtimeData?.stageId && !isHolding && (
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlayCircleOutlined />}
+                  <button
+                    type="button"
                     onClick={() => handleUpdateCurrentStage(0)}
-                    className="flex-1 md:flex-none"
+                    className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
                   >
-                    대회 시작
-                  </Button>
+                    <Play size={15} strokeWidth={1.5} />
+                    <span>대회 시작</span>
+                  </button>
                 )}
               </div>
             </div>
-          </Card>
+          </div>
 
-          {/* 📺 실시간 무대 전광판 송출 콘솔 (Live Stage Broadcast Controller) */}
+          {/* 실시간 무대 전광판 송출 콘솔 */}
           <StageBroadcastController
             currentStage={currentStageInfo}
             currentPlayers={
               currentStageInfo?.grades
                 ? playersArray.filter((p) =>
-                    currentStageInfo.grades.some((g) => g.gradeId === p.contestGradeId)
+                    currentStageInfo.grades.some(
+                      (g) => g.gradeId === p.contestGradeId
+                    )
                   )
                 : []
             }
           />
 
-          <Card className="shadow-md">
-            <Tabs
-              activeKey={currentSubTab}
-              onChange={setCurrentSubTab}
-              size={isTabletOrMobile ? "small" : "large"}
-              tabBarStyle={{
-                marginBottom: isTabletOrMobile ? "12px" : "16px",
-              }}
-              items={[
-                {
-                  key: "0",
-                  label: (
-                    <span className="flex items-center gap-1.5 px-1 md:px-2">
-                      <PlayCircleOutlined className="text-base md:text-lg" />
-                      <span className="text-xs md:text-sm font-medium">
-                        현재 무대상황
-                      </span>
-                    </span>
-                  ),
-                  children: realtimeData && (
-                    <div className="space-y-4">
-                      <Card
-                        title={
-                          <div className="flex justify-between items-center flex-wrap gap-2">
-                            <Text strong>진행상황</Text>
-                            {!judgesIsEndValidated && hasNextStage && (
-                              <Button
-                                type="primary"
-                                icon={<FastForwardOutlined />}
-                                onClick={() =>
-                                  handleUpdateCurrentStage(currentStageIdx + 1)
-                                }
-                              >
-                                다음 진행
-                              </Button>
-                            )}
-                          </div>
-                        }
-                        className="shadow-sm"
-                      >
-                        <div className="space-y-4">
+          {/* 본부석 진행 및 무대 관리 탭 영역 */}
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="px-4 md:px-5 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] overflow-x-auto">
+              <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#e4e4e7]/60 min-w-max">
+                {subTabs.map((tab) => {
+                  const IconComponent = tab.icon;
+                  const active = currentSubTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setCurrentSubTab(tab.key)}
+                      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
+                        active
+                          ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                          : "text-[#525252] hover:text-[#171717]"
+                      }`}
+                    >
+                      <IconComponent size={15} strokeWidth={1.5} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 md:p-5">
+              {/* 탭 0: 현재 무대상황 */}
+              {currentSubTab === "0" && (
+                <>
+                  {realtimeData ? (
+                    <div className="space-y-5">
+                      {/* 진행상황 (심판석 모니터링) */}
+                      <div className="rounded-[10px] border border-[#171717]/[0.08] overflow-hidden">
+                        <div className="flex justify-between items-center flex-wrap gap-2 px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Text strong className="text-lg">
+                            <span className="text-sm font-semibold text-[#171717]">
+                              심판석 진행상황
+                            </span>
+                            {realtimeData?.stageNumber !== undefined && (
+                              <BibTag
+                                prefix="#"
+                                number={realtimeData.stageNumber}
+                                size="sm"
+                              />
+                            )}
+                            <span className="text-sm font-medium text-[#525252]">
                               {realtimeData?.categoryTitle} (
                               {realtimeData?.gradeTitle})
-                            </Text>
-                            <Tag
-                              color={
-                                currentStageJudgeType === "point"
-                                  ? "blue"
-                                  : "green"
-                              }
-                            >
+                            </span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
                               {currentStageJudgeType === "point" ? "P" : "R"}
-                            </Tag>
+                            </span>
                           </div>
 
+                          {!judgesIsEndValidated && hasNextStage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateCurrentStage(currentStageIdx + 1)
+                              }
+                              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              <SkipForward size={14} strokeWidth={1.5} />
+                              <span>다음 무대 진행</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="p-4 bg-white">
                           {isTabletOrMobile ? (
                             <JudgeCardView judges={realtimeData?.judges} />
                           ) : (
-                            <div className="overflow-x-auto">
-                              <Table
-                                columns={[
-                                  {
-                                    title: "심판석",
-                                    dataIndex: "seatIndex",
-                                    key: "seatIndex",
-                                    align: "center",
-                                    width: isTabletOrMobile ? 80 : 100,
-                                    render: (text) => (
-                                      <Text strong>{text}</Text>
-                                    ),
-                                  },
-                                  {
-                                    title: "심판정보",
-                                    dataIndex: "judgeInfo",
-                                    key: "judgeInfo",
-                                    align: "center",
-                                    render: (_, record) => {
-                                      if (record?.judgeName) {
-                                        return (
-                                          <div className="flex flex-col items-center">
-                                            <Text strong>
-                                              {record.judgeName}
-                                            </Text>
-                                            {record?.judgeUid && (
-                                              <Text
-                                                type="secondary"
-                                                className="text-xs"
-                                              >
-                                                {record.judgeUid} /{" "}
-                                                {record.onedayPassword}
-                                              </Text>
-                                            )}
-                                          </div>
-                                        );
+                            <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
+                              <table className="w-full border-collapse text-sm">
+                                <thead>
+                                  <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                                    <th className="px-3.5 py-2.5 text-center text-xs font-medium text-[#525252] w-[96px]">
+                                      심판석
+                                    </th>
+                                    <th className="px-4 py-2.5 text-left text-xs font-medium text-[#525252]">
+                                      심판 정보
+                                    </th>
+                                    <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[140px]">
+                                      상태
+                                    </th>
+                                    <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[140px]">
+                                      관리
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
+                                  {(realtimeData?.judges || []).map(
+                                    (judge, idx) => {
+                                      const { isEnd, isLogined } = judge;
+                                      let dotStatus = "idle";
+                                      let statusLabel = "로그인 대기";
+                                      if (isEnd && isLogined) {
+                                        dotStatus = "live";
+                                        statusLabel = "심사 종료";
+                                      } else if (!isEnd && isLogined) {
+                                        dotStatus = "active";
+                                        statusLabel = "심사 중";
                                       }
+
                                       return (
-                                        <Text type="secondary">정보 없음</Text>
+                                        <tr
+                                          key={idx}
+                                          className="hover:bg-[#fafafa] transition-colors"
+                                        >
+                                          <td className="px-3.5 py-2.5 text-center">
+                                            <BibTag
+                                              number={judge.seatIndex}
+                                              size="sm"
+                                            />
+                                          </td>
+                                          <td className="px-4 py-2.5">
+                                            {judge?.judgeName ? (
+                                              <div className="flex flex-col">
+                                                <span className="font-medium text-[#171717]">
+                                                  {judge.judgeName}
+                                                </span>
+                                                {judge?.judgeUid && (
+                                                  <span className="text-xs font-mono tabular-nums text-[#737373]">
+                                                    {judge.judgeUid} /{" "}
+                                                    {judge.onedayPassword}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs text-[#737373]">
+                                                정보 없음
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-2.5 text-center">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs font-medium text-[#171717]">
+                                              <StatusDot
+                                                status={dotStatus}
+                                                live={
+                                                  !isEnd && Boolean(isLogined)
+                                                }
+                                              />
+                                              <span>{statusLabel}</span>
+                                            </span>
+                                          </td>
+                                          <td className="px-4 py-2.5 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleForceReStart(
+                                                  idx,
+                                                  currentContest.contests.id
+                                                )
+                                              }
+                                              className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                                            >
+                                              <RotateCcw
+                                                size={12}
+                                                strokeWidth={1.5}
+                                              />
+                                              <span>강제 재시작</span>
+                                            </button>
+                                          </td>
+                                        </tr>
                                       );
-                                    },
-                                  },
-                                  {
-                                    title: "상태",
-                                    dataIndex: "status",
-                                    key: "status",
-                                    align: "center",
-                                    render: (_, record) => {
-                                      const { isEnd, isLogined } = record;
-                                      if (isEnd && isLogined)
-                                        return (
-                                          <Tag color="success">심사종료</Tag>
-                                        );
-                                      if (!isEnd && isLogined)
-                                        return (
-                                          <Tag color="processing">심사중</Tag>
-                                        );
-                                      return (
-                                        <Tag color="default">로그인대기</Tag>
-                                      );
-                                    },
-                                  },
-                                  {
-                                    title: "관리",
-                                    key: "action",
-                                    align: "center",
-                                    render: (_, record, index) => (
-                                      <Button
-                                        size="small"
-                                        icon={<RedoOutlined />}
-                                        onClick={() =>
-                                          handleForceReStart(
-                                            index,
-                                            currentContest.contests.id
-                                          )
-                                        }
-                                      >
-                                        강제 재시작
-                                      </Button>
-                                    ),
-                                  },
-                                ]}
-                                dataSource={realtimeData?.judges?.map(
-                                  (judge, idx) => ({
-                                    ...judge,
-                                    key: idx,
-                                    judgeInfo: {
-                                      judgeName: judge.judgeName,
-                                      judgeUid: judge.judgeUid,
-                                      onedayPassword: judge.onedayPassword,
-                                    },
-                                  })
-                                )}
-                                pagination={false}
-                                size="small"
-                                bordered
-                              />
+                                    }
+                                  )}
+                                </tbody>
+                              </table>
                             </div>
                           )}
                         </div>
-                      </Card>
+                      </div>
 
-                      <Card
-                        title={
-                          <div className="flex justify-between items-center flex-wrap gap-2">
-                            <Text strong>집계상황</Text>
-                            <Button
-                              icon={<ReloadOutlined />}
-                              onClick={() =>
-                                handleForceScoreTableRefresh(
-                                  currentStageInfo.grades
-                                )
-                              }
-                              size={isTabletOrMobile ? "small" : "middle"}
-                            >
-                              새로고침
-                            </Button>
-                          </div>
-                        }
-                        className="shadow-sm"
-                      >
-                        {currentStageInfo?.grades?.length > 0 &&
-                          currentStageInfo.grades.map((grade, gIdx) => {
-                            const {
-                              categoryTitle,
-                              categoryJudgeType,
-                              gradeTitle,
-                              gradeId,
-                            } = grade;
-                            const filterdPlayers = playersArray
-                              .filter(
-                                (f) =>
-                                  f.contestGradeId === gradeId &&
-                                  f.playerNoShow === false
+                      {/* 집계상황 매트릭스 */}
+                      <div className="rounded-[10px] border border-[#171717]/[0.08] overflow-hidden">
+                        <div className="flex justify-between items-center flex-wrap gap-2 px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                          <span className="text-sm font-semibold text-[#171717]">
+                            집계상황
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleForceScoreTableRefresh(
+                                currentStageInfo.grades
                               )
-                              .sort((a, b) => a.playerIndex - b.playerIndex);
+                            }
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                          >
+                            <RefreshCw size={14} strokeWidth={1.5} />
+                            <span>새로고침</span>
+                          </button>
+                        </div>
 
-                            const scoreColumns = [
-                              {
-                                title: "선수번호",
-                                dataIndex: "playerNumber",
-                                key: "playerNumber",
-                                align: "center",
-                                width: 100,
-                                fixed: isTabletOrMobile ? false : "left",
-                                render: (text) => <Text strong>{text}</Text>,
-                              },
-                              ...(realtimeData?.judges || []).map(
-                                (judge, jIdx) => ({
-                                  title: `${judge.seatIndex}번`,
-                                  key: `judge-${jIdx}`,
-                                  align: "center",
-                                  width: 100,
-                                  render: (_, record) => {
-                                    const finded = normalScoreData.find(
-                                      (f) =>
-                                        f.playerNumber ===
-                                          record.playerNumber &&
-                                        f.seatIndex === judge.seatIndex
-                                    );
-                                    if (
-                                      finded?.playerScore !== 0 &&
-                                      finded?.playerScore !== undefined &&
-                                      finded?.playerScore < 1000
-                                    ) {
-                                      return (
-                                        <Text strong>{finded.playerScore}</Text>
-                                      );
-                                    }
-                                    if (finded?.playerScore >= 1000) {
-                                      return <Tag color="error">순위제외</Tag>;
-                                    }
-                                    return <Text type="secondary">-</Text>;
-                                  },
-                                })
-                              ),
-                            ];
+                        <div className="p-4 space-y-6 bg-white">
+                          {currentStageInfo?.grades?.length > 0 ? (
+                            currentStageInfo.grades.map((grade, gIdx) => {
+                              const { categoryTitle, gradeTitle, gradeId } =
+                                grade;
+                              const filterdPlayers = playersArray
+                                .filter(
+                                  (f) =>
+                                    f.contestGradeId === gradeId &&
+                                    f.playerNoShow === false
+                                )
+                                .sort((a, b) => a.playerIndex - b.playerIndex);
 
-                            const scoreDataSource = filterdPlayers.map(
-                              (player, pIdx) => ({
-                                key: pIdx,
-                                playerNumber: player.playerNumber,
-                              })
-                            );
+                              const judges = realtimeData?.judges || [];
+                              const isGradeSaved =
+                                Array.isArray(realtimeData?.resultSaved) &&
+                                realtimeData.resultSaved.includes(gradeId);
 
-                            return (
-                              <div key={gIdx} className="mb-6 last:mb-0">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <Text strong className="text-base">
-                                      {categoryTitle} ({gradeTitle})
-                                    </Text>
-                                    {Array.isArray(realtimeData?.resultSaved) &&
-                                      realtimeData.resultSaved.includes(
-                                        gradeId
-                                      ) && <Tag color="error">순위표 확정</Tag>}
-                                  </div>
+                              return (
+                                <div key={gIdx} className="space-y-3">
+                                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-base font-semibold text-[#171717]">
+                                        {categoryTitle} ({gradeTitle})
+                                      </span>
+                                      {isGradeSaved && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#16a34a]/10 text-[#16a34a] text-xs font-medium">
+                                          <Check size={13} strokeWidth={1.5} />
+                                          <span>순위표 확정</span>
+                                        </span>
+                                      )}
+                                    </div>
 
-                                  <Space wrap size="small">
-                                    <Button
-                                      icon={<CloseCircleOutlined />}
-                                      onClick={handleScreenEnd}
-                                    >
-                                      화면종료
-                                    </Button>
-                                    <Button
-                                      type="primary"
-                                      icon={<EyeOutlined />}
-                                      onClick={() =>
-                                        fetchResultAndScoreBoard(
-                                          gradeId,
-                                          gradeTitle
-                                        )
-                                      }
-                                    >
-                                      순위표공개
-                                    </Button>
-                                    <Button
-                                      icon={<PrinterOutlined />}
-                                      onClick={() => {
-                                        setSummaryProp(() => {
-                                          return {
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleScreenEnd}
+                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                                      >
+                                        <XCircle size={14} strokeWidth={1.5} />
+                                        <span>화면종료</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          fetchResultAndScoreBoard(
+                                            gradeId,
+                                            gradeTitle
+                                          )
+                                        }
+                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
+                                      >
+                                        <Eye size={14} strokeWidth={1.5} />
+                                        <span>순위표공개</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSummaryProp(() => ({
                                             contestId:
                                               currentContest.contests.id,
                                             gradeId,
@@ -1314,316 +1365,356 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                             gradeTitle,
                                             categoryJudgeType:
                                               currentStageInfo.categoryJudgeType,
-                                          };
-                                        });
-                                        setSummaryPrintPreviewOpen(true);
-                                      }}
-                                    >
-                                      집계출력
-                                    </Button>
-                                  </Space>
-                                </div>
-
-                                {isTabletOrMobile ? (
-                                  <ScoreCardView
-                                    players={filterdPlayers}
-                                    judges={realtimeData?.judges}
-                                  />
-                                ) : (
-                                  <div className="overflow-x-auto">
-                                    <Table
-                                      columns={scoreColumns}
-                                      dataSource={scoreDataSource}
-                                      pagination={false}
-                                      size="small"
-                                      bordered
-                                      scroll={{ x: "max-content" }}
-                                    />
+                                          }));
+                                          setSummaryPrintPreviewOpen(true);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                                      >
+                                        <Printer size={14} strokeWidth={1.5} />
+                                        <span>집계출력</span>
+                                      </button>
+                                    </div>
                                   </div>
-                                )}
+
+                                  {isTabletOrMobile ? (
+                                    <ScoreCardView
+                                      players={filterdPlayers}
+                                      judges={judges}
+                                    />
+                                  ) : (
+                                    <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
+                                      <table className="w-full border-collapse text-sm">
+                                        <thead>
+                                          <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                                            <th className="sticky left-0 z-10 bg-[#f4f4f5] px-3.5 py-2.5 text-left text-xs font-medium text-[#525252] border-r border-[#171717]/[0.08] w-[108px] whitespace-nowrap">
+                                              선수번호
+                                            </th>
+                                            {judges.map((judge, jIdx) => (
+                                              <th
+                                                key={`judge-${jIdx}`}
+                                                className="px-3 py-2.5 text-center text-xs font-medium text-[#525252] min-w-[84px] whitespace-nowrap"
+                                              >
+                                                <span className="font-mono tabular-nums">
+                                                  {judge.seatIndex}
+                                                </span>
+                                                번
+                                              </th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
+                                          {filterdPlayers.map(
+                                            (player, pIdx) => (
+                                              <tr
+                                                key={player.playerUid || pIdx}
+                                                className="hover:bg-[#fafafa] transition-colors"
+                                              >
+                                                <td className="sticky left-0 z-10 bg-white px-3.5 py-2.5 border-r border-[#171717]/[0.08] whitespace-nowrap">
+                                                  <BibTag
+                                                    number={player.playerNumber}
+                                                    size="md"
+                                                  />
+                                                </td>
+                                                {judges.map((judge, jIdx) => {
+                                                  const finded =
+                                                    normalScoreData.find(
+                                                      (f) =>
+                                                        f.playerNumber ===
+                                                          player.playerNumber &&
+                                                        f.seatIndex ===
+                                                          judge.seatIndex
+                                                    );
+
+                                                  let content = (
+                                                    <span className="font-mono tabular-nums text-[#737373]">
+                                                      -
+                                                    </span>
+                                                  );
+                                                  if (
+                                                    finded?.playerScore >= 1000
+                                                  ) {
+                                                    content = (
+                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#737373] text-[11px] font-medium">
+                                                        순위제외
+                                                      </span>
+                                                    );
+                                                  } else if (
+                                                    finded?.playerScore !== 0 &&
+                                                    finded?.playerScore !==
+                                                      undefined &&
+                                                    finded?.playerScore !== null
+                                                  ) {
+                                                    content = (
+                                                      <span className="font-mono font-medium tabular-nums text-[#171717]">
+                                                        {finded.playerScore}
+                                                      </span>
+                                                    );
+                                                  }
+
+                                                  return (
+                                                    <td
+                                                      key={`score-${pIdx}-${jIdx}`}
+                                                      className="px-3 py-2.5 text-center whitespace-nowrap"
+                                                    >
+                                                      {content}
+                                                    </td>
+                                                  );
+                                                })}
+                                              </tr>
+                                            )
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-xs text-[#737373] py-4 text-center">
+                              현재 배정된 체급이 없습니다.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[#737373] py-8 text-center">
+                      현재 진행 중인 무대가 없습니다. 상단 [대회 시작] 버튼을 눌러 첫 무대를 시작하세요.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 탭 1: 전체 무대목록 */}
+              {currentSubTab === "1" && (
+                <>
+                  {stagesArray?.length > 0 ? (
+                    isTabletOrMobile ? (
+                      <StageCardView
+                        stages={[...stagesArray].sort(
+                          (a, b) => a.stageNumber - b.stageNumber
+                        )}
+                      />
+                    ) : (
+                      renderStageTable(
+                        [...stagesArray].sort(
+                          (a, b) => a.stageNumber - b.stageNumber
+                        )
+                      )
+                    )
+                  ) : (
+                    <div className="text-xs text-[#737373] py-6 text-center">
+                      등록된 무대 목록이 없습니다.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 탭 2: 섹션별 한눈에 보기 */}
+              {currentSubTab === "2" && (
+                <>
+                  {sectionsWithOrder.length > 0 ? (
+                    <div className="space-y-6">
+                      <div className="overflow-x-auto pb-2">
+                        <div className="flex gap-2.5 min-w-max">
+                          {sectionsWithOrder.map(({ section, items }, idx) => {
+                            const isCurrent = section === currentSectionKey;
+                            const isUpcoming = section === upcomingSectionKey;
+                            const isLast = idx === sectionsWithOrder.length - 1;
+                            const totalStages = items.length;
+                            const firstNo = items[0]?.stageNumber ?? "-";
+                            const lastNo =
+                              items[items.length - 1]?.stageNumber ?? "-";
+
+                            return (
+                              <div
+                                key={String(section)}
+                                onClick={() => scrollToSectionTable(section)}
+                                className={`p-3.5 rounded-[10px] border cursor-pointer select-none transition-colors min-w-[152px] ${
+                                  isCurrent
+                                    ? "bg-[#16a34a]/[0.05] border-[#16a34a]/50"
+                                    : isUpcoming
+                                    ? "bg-[#2563eb]/[0.05] border-[#2563eb]/50"
+                                    : "bg-white border-[#171717]/10 hover:bg-[#fafafa]"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-xs text-[#737373]">
+                                    섹션
+                                  </span>
+                                  {(isCurrent || isUpcoming) && (
+                                    <StatusDot
+                                      status={isCurrent ? "live" : "active"}
+                                      live={isCurrent}
+                                    />
+                                  )}
+                                </div>
+                                <div className="text-base font-semibold text-[#171717] mb-1 truncate">
+                                  {String(section)}
+                                </div>
+                                <div className="text-xs font-mono tabular-nums text-[#525252] mb-2">
+                                  #{firstNo} – #{lastNo}
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono tabular-nums text-[#525252]">
+                                    {totalStages}개
+                                  </span>
+                                  {isCurrent && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#16a34a]/10 text-[#16a34a] text-[11px] font-medium">
+                                      현재
+                                    </span>
+                                  )}
+                                  {isUpcoming && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/10 text-[#2563eb] text-[11px] font-medium">
+                                      다음
+                                    </span>
+                                  )}
+                                  {isLast && isCurrent && !isUpcoming && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] text-[11px] font-medium">
+                                      마지막
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
-                      </Card>
-                    </div>
-                  ),
-                },
-
-                // ✅ 전체 무대목록
-                {
-                  key: "1",
-                  label: (
-                    <span className="flex items-center gap-1.5 px-1 md:px-2">
-                      <UnorderedListOutlined className="text-base md:text-lg" />
-                      <span className="text-xs md:text-sm font-medium">
-                        전체 무대목록
-                      </span>
-                    </span>
-                  ),
-                  children:
-                    realtimeData && stagesArray?.length > 0 ? (
-                      <Card className="shadow-sm">
-                        {isTabletOrMobile ? (
-                          <StageCardView
-                            stages={stagesArray.sort(
-                              (a, b) => a.stageNumber - b.stageNumber
-                            )}
-                          />
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <Table
-                              columns={stageColumns}
-                              dataSource={stagesArray
-                                .sort((a, b) => a.stageNumber - b.stageNumber)
-                                .map((stage) => ({
-                                  ...stage,
-                                  key: stage.stageId,
-                                }))}
-                              pagination={false}
-                              scroll={{ x: "max-content" }}
-                            />
-                          </div>
-                        )}
-                      </Card>
-                    ) : null,
-                },
-
-                // ✅ 섹션별 한눈에 보기
-                {
-                  key: "2",
-                  label: (
-                    <span className="flex items-center gap-1.5 px-1 md:px-2">
-                      <CalendarOutlined className="text-base md:text-lg" />
-                      <span className="text-xs md:text-sm font-medium">
-                        섹션별 한눈에
-                      </span>
-                    </span>
-                  ),
-                  children:
-                    sectionsWithOrder.length > 0 ? (
-                      <div className="space-y-6">
-                        <div className="overflow-x-auto pb-2">
-                          <div className="flex gap-2 md:gap-3 min-w-max">
-                            {sectionsWithOrder.map(
-                              ({ section, items }, idx) => {
-                                const isCurrent = section === currentSectionKey;
-                                const isUpcoming =
-                                  section === upcomingSectionKey;
-                                const isLast =
-                                  idx === sectionsWithOrder.length - 1;
-                                const totalStages = items.length;
-                                const firstNo = items[0]?.stageNumber ?? "-";
-                                const lastNo =
-                                  items[items.length - 1]?.stageNumber ?? "-";
-
-                                return (
-                                  <div
-                                    key={String(section)}
-                                    className={`p-3 md:p-4 rounded-lg shadow-sm border bg-white cursor-pointer select-none transition-all hover:shadow-md min-w-[140px] md:min-w-[160px] ${
-                                      isUpcoming
-                                        ? "border-blue-400 ring-2 ring-blue-200 bg-blue-50"
-                                        : isCurrent
-                                        ? "border-green-500 ring-2 ring-green-200 bg-green-50"
-                                        : isLast && isCurrent
-                                        ? "border-purple-400 ring-2 ring-purple-200 bg-purple-50"
-                                        : "border-gray-200 hover:border-gray-300"
-                                    }`}
-                                    onClick={() =>
-                                      scrollToSectionTable(section)
-                                    }
-                                    title={
-                                      isUpcoming
-                                        ? "다가올 섹션"
-                                        : isCurrent
-                                        ? isLast
-                                          ? "현재 섹션 (마지막)"
-                                          : "현재 섹션"
-                                        : "섹션 이동"
-                                    }
-                                  >
-                                    <div className="text-xs md:text-sm text-gray-500 mb-1">
-                                      섹션
-                                    </div>
-                                    <div className="text-base md:text-lg font-bold mb-2 truncate">
-                                      {String(section)}
-                                    </div>
-                                    <div className="text-xs text-gray-600 mb-2">
-                                      {firstNo} ~ {lastNo}번
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      <Tag
-                                        color={
-                                          isUpcoming
-                                            ? "blue"
-                                            : isCurrent
-                                            ? "green"
-                                            : "default"
-                                        }
-                                        className="text-xs"
-                                      >
-                                        {totalStages}개
-                                      </Tag>
-                                      {isCurrent && (
-                                        <Tag
-                                          color="success"
-                                          className="text-xs"
-                                        >
-                                          현재
-                                        </Tag>
-                                      )}
-                                      {isUpcoming && (
-                                        <Tag
-                                          color="processing"
-                                          className="text-xs"
-                                        >
-                                          다음
-                                        </Tag>
-                                      )}
-                                      {isLast && isCurrent && !isUpcoming && (
-                                        <Tag color="purple" className="text-xs">
-                                          마지막
-                                        </Tag>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              }
-                            )}
-                          </div>
                         </div>
+                      </div>
 
-                        {/* 섹션별 표 모음 */}
+                      {sectionsWithOrder.map(({ section, items }, idx) => {
+                        const isCurrent = section === currentSectionKey;
+                        const isUpcoming = section === upcomingSectionKey;
+                        const isLast = idx === sectionsWithOrder.length - 1;
+
+                        return (
+                          <div
+                            key={String(section)}
+                            data-section-anchor={section}
+                            style={{ scrollMarginTop: 80 }}
+                            className="rounded-[10px] border border-[#171717]/[0.08] overflow-hidden"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
+                              <span className="text-sm font-semibold text-[#171717]">
+                                섹션: {String(section)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-xs font-mono tabular-nums text-[#525252]">
+                                {items.length}개 무대
+                              </span>
+                              {isCurrent && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#16a34a]/10 text-[#16a34a] text-xs font-medium">
+                                  <StatusDot status="live" live />
+                                  <span>현재 섹션</span>
+                                </span>
+                              )}
+                              {isUpcoming && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/10 text-[#2563eb] text-xs font-medium">
+                                  <StatusDot status="active" />
+                                  <span>다가올 섹션</span>
+                                </span>
+                              )}
+                              {isLast && isCurrent && !isUpcoming && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-xs font-medium text-[#525252]">
+                                  마지막 섹션
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="p-4 bg-white">
+                              {isTabletOrMobile ? (
+                                <StageCardView stages={items} />
+                              ) : (
+                                renderStageTable(items)
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[#737373] py-6 text-center">
+                      표시할 섹션이 없습니다.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 탭 3: 섹션별 탭 */}
+              {currentSubTab === "3" && (
+                <>
+                  {sectionsWithOrder.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-1.5 flex-wrap pb-3 border-b border-[#171717]/[0.08]">
                         {sectionsWithOrder.map(({ section, items }, idx) => {
+                          const keyStr = String(section);
+                          const isSelected =
+                            selectedSectionTab === keyStr ||
+                            (!selectedSectionTab && idx === 0);
                           const isCurrent = section === currentSectionKey;
                           const isUpcoming = section === upcomingSectionKey;
-                          const isLast = idx === sectionsWithOrder.length - 1;
 
                           return (
-                            <Card
-                              key={String(section)}
-                              className="shadow-sm"
-                              title={
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Text strong className="text-base">
-                                    섹션: {String(section)}
-                                  </Text>
-                                  <Tag>{items.length}개 무대</Tag>
-                                  {isCurrent && (
-                                    <Tag color="success">현재 섹션</Tag>
-                                  )}
-                                  {isUpcoming && (
-                                    <Tag color="blue">다가올 섹션</Tag>
-                                  )}
-                                  {isLast && isCurrent && !isUpcoming && (
-                                    <Tag color="purple">마지막 섹션</Tag>
-                                  )}
-                                </div>
-                              }
-                              bodyStyle={{ scrollMarginTop: 80 }}
-                              data-section-anchor={section}
+                            <button
+                              key={keyStr}
+                              type="button"
+                              onClick={() => setSelectedSectionTab(keyStr)}
+                              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] text-xs font-medium border transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-[#2563eb] text-white border-[#2563eb]"
+                                  : "bg-[#f4f4f5] hover:bg-[#e4e4e7]/70 text-[#171717] border-[#171717]/[0.08]"
+                              }`}
                             >
-                              <div className="overflow-x-auto">
-                                <Table
-                                  columns={stageColumns}
-                                  dataSource={items.map((stage) => ({
-                                    ...stage,
-                                    key: stage.stageId,
-                                  }))}
-                                  pagination={false}
-                                  size="small"
-                                  scroll={{ x: "max-content" }}
+                              {isCurrent && (
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    isSelected ? "bg-white" : "bg-[#16a34a]"
+                                  }`}
                                 />
-                              </div>
-                            </Card>
+                              )}
+                              <span>{keyStr}</span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded-[4px] text-[11px] font-mono tabular-nums ${
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : "bg-white text-[#525252]"
+                                }`}
+                              >
+                                {items.length}
+                              </span>
+                              {!isSelected && isUpcoming && (
+                                <span className="text-[10px] text-[#2563eb]">
+                                  다음
+                                </span>
+                              )}
+                            </button>
                           );
                         })}
                       </div>
-                    ) : (
-                      <Card className="shadow-sm">
-                        <Text type="secondary">표시할 섹션이 없습니다.</Text>
-                      </Card>
-                    ),
-                },
 
-                // ✅ 섹션별 탭
-                {
-                  key: "3",
-                  label: (
-                    <span className="flex items-center gap-1.5 px-1 md:px-2">
-                      <AppstoreOutlined className="text-base md:text-lg" />
-                      <span className="text-xs md:text-sm font-medium">
-                        섹션별 탭
-                      </span>
-                    </span>
-                  ),
-                  children:
-                    sectionsWithOrder.length > 0 ? (
-                      <Card className="shadow-sm">
-                        <Tabs
-                          tabPosition="top"
-                          size={isTabletOrMobile ? "small" : "middle"}
-                          items={sectionsWithOrder.map(
-                            ({ section, items }, idx) => {
-                              const isCurrent = section === currentSectionKey;
-                              const isUpcoming = section === upcomingSectionKey;
-                              const isLast =
-                                idx === sectionsWithOrder.length - 1;
+                      {(() => {
+                        const activeSection =
+                          sectionsWithOrder.find(
+                            (s) => String(s.section) === selectedSectionTab
+                          ) || sectionsWithOrder[0];
 
-                              return {
-                                key: String(section),
-                                label: (
-                                  <span className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-medium">
-                                      {String(section)}
-                                    </span>
-                                    <Tag className="text-xs">
-                                      {items.length}
-                                    </Tag>
-                                    {isCurrent && (
-                                      <Tag color="success" className="text-xs">
-                                        현재
-                                      </Tag>
-                                    )}
-                                    {isUpcoming && (
-                                      <Tag color="blue" className="text-xs">
-                                        다음
-                                      </Tag>
-                                    )}
-                                    {isLast && isCurrent && !isUpcoming && (
-                                      <Tag color="purple" className="text-xs">
-                                        마지막
-                                      </Tag>
-                                    )}
-                                  </span>
-                                ),
-                                children: (
-                                  <div className="overflow-x-auto">
-                                    <Table
-                                      columns={stageColumns}
-                                      dataSource={items.map((stage) => ({
-                                        ...stage,
-                                        key: stage.stageId,
-                                      }))}
-                                      pagination={false}
-                                      size="small"
-                                      scroll={{ x: "max-content" }}
-                                    />
-                                  </div>
-                                ),
-                              };
-                            }
-                          )}
-                        />
-                      </Card>
-                    ) : (
-                      <Card className="shadow-sm">
-                        <Text type="secondary">표시할 섹션이 없습니다.</Text>
-                      </Card>
-                    ),
-                },
-              ]}
-            />
-          </Card>
+                        if (!activeSection) return null;
+
+                        return isTabletOrMobile ? (
+                          <StageCardView stages={activeSection.items} />
+                        ) : (
+                          renderStageTable(activeSection.items)
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[#737373] py-6 text-center">
+                      표시할 섹션이 없습니다.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </BasecampErrorBoundary>

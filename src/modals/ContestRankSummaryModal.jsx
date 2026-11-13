@@ -1,10 +1,12 @@
 import React, { useContext, useEffect, useState } from "react";
-import { TbHeartRateMonitor } from "react-icons/tb";
-import { useLocation } from "react-router-dom";
+import { ClipboardList, X } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
+import { BibTag } from "../components/ui/BibTag";
+
 const randomTitle = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+
 const ContestRankSummaryModal = ({
   categoryId,
   gradeId,
@@ -15,7 +17,6 @@ const ContestRankSummaryModal = ({
   const [scoreData, setScoreData] = useState([]);
   const [summaryTable, setSummaryTable] = useState([]);
   const [rankTable, setRankTable] = useState([]);
-  const location = useLocation();
   const { currentContest } = useContext(CurrentContestContext);
 
   const scoreRankQuery = useFirestoreQuery();
@@ -23,7 +24,6 @@ const ContestRankSummaryModal = ({
   const generateUniqueRandomNumbers = (min, max, count) => {
     const numbers = Array.from({ length: max - min + 1 }, (_, i) => i + min);
 
-    // 무작위로 배열 섞기 (Fisher-Yates shuffle 알고리즘)
     for (let i = numbers.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
@@ -47,18 +47,15 @@ const ContestRankSummaryModal = ({
         (a, b) => a.playerScore - b.playerScore
       );
 
-      // 가장 좋은 등수/최저점(가장 작은 숫자) trimCount개 제외 -> isMin = true
       for (let i = 0; i < trimCount; i++) {
         sorted[i].isMin = true;
       }
 
-      // 가장 안 좋은 등수/최고점(가장 큰 숫자) trimCount개 제외 -> isMax = true
       for (let i = N - trimCount; i < N; i++) {
         sorted[i].isMax = true;
       }
     }
 
-    // 제외되지 않은 유효 5개 점수만 합산
     group.totalScore = group.score
       .filter((s) => !s.isMin && !s.isMax)
       .reduce((acc, curr) => acc + curr.playerScore, 0);
@@ -67,7 +64,7 @@ const ContestRankSummaryModal = ({
   const groupedByPlayerNumber = (arr, sortCriteria = "playerIndex") => {
     const groupedObj = arr.reduce((acc, curr) => {
       let group = acc.find((g) => g.playerNumber === curr.playerNumber);
-      const scoreData = {
+      const scoreItem = {
         seatIndex: curr.seatIndex,
         playerScore: curr.playerScore,
         randomIndex: generateUniqueRandomNumbers(11, 300, 1)[0],
@@ -86,7 +83,7 @@ const ContestRankSummaryModal = ({
         };
         acc.push(group);
       }
-      group.score.push(scoreData);
+      group.score.push(scoreItem);
       return acc;
     }, []);
 
@@ -94,50 +91,45 @@ const ContestRankSummaryModal = ({
       assignMinMaxAndCalculateTotal(group);
     });
 
-    // Sorting
     groupedObj.sort((a, b) =>
       sortCriteria === "totalScore"
         ? a.totalScore - b.totalScore
         : a.playerIndex - b.playerIndex
     );
 
-    // Assign rankings
-    let rank = 0; // Start from rank 1
-    let prevScore = null; // To keep track of previous score
-    let sameRankCount = 0; // To keep track of how many players have the same rank
+    let rank = 0;
+    let prevScore = null;
+    let sameRankCount = 0;
     for (let i = 0; i < groupedObj.length; i++) {
-      groupedObj[i].isAlert = false; // Initially set isAlert to false for every player
+      groupedObj[i].isAlert = false;
 
       if (groupedObj[i].totalScore > 1000) {
-        groupedObj[i].playerRank = 1000; // Set rank to 1000 for players with totalScore > 1000
+        groupedObj[i].playerRank = 1000;
       } else {
         if (prevScore === null || groupedObj[i].totalScore !== prevScore) {
           if (sameRankCount >= 1) {
-            // Loop back and set isAlert for previous players with the same rank
             for (let j = 0; j <= sameRankCount; j++) {
               groupedObj[i - j - 1].isAlert = true;
             }
           }
 
-          rank += sameRankCount + 1; // Increment rank by the number of players with the same rank
-          sameRankCount = 0; // Reset the count
+          rank += sameRankCount + 1;
+          sameRankCount = 0;
         } else {
           sameRankCount++;
-          groupedObj[i].isAlert = true; // If current score is the same as previous, set isAlert to true
+          groupedObj[i].isAlert = true;
         }
         groupedObj[i].playerRank = rank;
         prevScore = groupedObj[i].totalScore;
       }
     }
 
-    // Check after the loop to ensure the last set of players with the same rank also get the alert
     if (sameRankCount >= 1) {
       for (let j = 0; j <= sameRankCount; j++) {
         groupedObj[groupedObj.length - 1 - j].isAlert = true;
       }
     }
 
-    console.log(groupedObj);
     return groupedObj;
   };
 
@@ -167,10 +159,6 @@ const ContestRankSummaryModal = ({
       });
   };
 
-  const handleSummaryTable = (dataArray, e) => {
-    console.log(dataArray);
-  };
-
   const fetchScoreRank = async () => {
     const condidtion = [
       where("contestId", "==", currentContest.contests.id),
@@ -192,20 +180,18 @@ const ContestRankSummaryModal = ({
     } catch (error) {
       console.log(error);
     }
-
-    console.log(scoreData);
-    console.log(groupByGrade(scoreData));
   };
 
   useEffect(() => {
     setBasicInfo({ categoryId, gradeId, tableType });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    console.log(basicInfo);
     if (basicInfo.gradeId && currentContest?.contests?.id) {
       fetchScoreRank();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basicInfo, currentContest]);
 
   useEffect(() => {
@@ -213,256 +199,226 @@ const ContestRankSummaryModal = ({
       setSummaryTable(() => [...groupByGrade(scoreData, "totalScore")]);
       setRankTable(() => [...groupByGrade(scoreData, "totalScore")]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoreData]);
 
   const ScoreTable = ({ data }) => {
+    if (!data || data.length === 0) return null;
     return (
-      <div className="flex w-full flex-col px-5 py-2border">
-        <div className="flex w-full border-b-2 border-b-gray-600">
-          <div className="flex w-full justify-center items-center p-2">
-            선수번호
-          </div>
-          <div className="flex w-full justify-center items-center p-2">
-            순위
-          </div>
-          {data[0].score.map((score, sIdx) => {
-            const { seatIndex } = score;
-            return (
-              <div
-                className="flex w-full justify-center items-center p-2"
-                key={seatIndex}
-              >
-                {seatIndex}
-              </div>
-            );
-          })}
-
-          <div className="flex w-full justify-center items-center p-2">
-            기표합산
-          </div>
-        </div>
-        {data
-          .sort((a, b) => a.playerIndex - b.playerIndex)
-          .map((player, pIdx) => {
-            const { playerNumber, totalScore, playerRank, score, isAlert } =
-              player;
-            if (totalScore >= 1000) {
-              return null;
-            }
-            return (
-              <div
-                key={playerNumber}
-                className={
-                  isAlert
-                    ? "flex w-full border-b border-b-gray-300 bg-blue-200"
-                    : "flex w-full border-b border-b-gray-300"
-                }
-              >
-                <div className="flex w-full justify-center items-center p-2">
-                  {playerNumber}
-                </div>
-                <div className="flex w-full justify-center items-center p-2 bg-transparent">
-                  {playerRank}
-                  {isAlert && (
-                    <button
-                      className="flex w-10 h-10 bg-blue-800 justify-center items-center "
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        console.log("first");
-                      }}
-                    >
-                      +
-                    </button>
-                  )}
-                </div>
-                {score.map((score, sIdx) => {
-                  const { seatIndex, playerScore, isMin, isMax } = score;
-                  return (
-                    <div
-                      className="flex w-full justify-center items-center p-2"
-                      key={seatIndex}
-                    >
-                      {isMin && (
-                        <span className="w-auto h-auto p-3 px-5 rounded-lg bg-blue-400">
-                          {playerScore >= 1000 ? "제외" : playerScore}
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-center border-collapse">
+          <thead>
+            <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] text-[#525252] text-xs font-medium">
+              <th className="py-2.5 px-3 w-24">선수번호</th>
+              <th className="py-2.5 px-3 w-24">순위</th>
+              {data[0]?.score?.map((s) => (
+                <th key={s.seatIndex} className="py-2.5 px-2 min-w-[52px]">
+                  {s.seatIndex}번
+                </th>
+              ))}
+              <th className="py-2.5 px-3 w-24 text-[#171717]">기표합산</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#171717]/[0.06] text-sm">
+            {[...data]
+              .sort((a, b) => a.playerIndex - b.playerIndex)
+              .map((player) => {
+                const { playerNumber, totalScore, playerRank, score, isAlert } =
+                  player;
+                if (totalScore >= 1000) return null;
+                return (
+                  <tr
+                    key={playerNumber}
+                    className={
+                      isAlert
+                        ? "bg-[#dc2626]/[0.05] hover:bg-[#dc2626]/[0.08] transition-colors"
+                        : "hover:bg-[#fafafa] transition-colors"
+                    }
+                  >
+                    <td className="py-2.5 px-3">
+                      <BibTag
+                        number={playerNumber}
+                        className={
+                          isAlert
+                            ? "!border-[#dc2626]/50 !text-[#dc2626] !bg-[#dc2626]/[0.08]"
+                            : ""
+                        }
+                      />
+                    </td>
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-medium">
+                      <div className="inline-flex items-center gap-1.5">
+                        <span
+                          className={
+                            isAlert ? "text-[#dc2626]" : "text-[#171717]"
+                          }
+                        >
+                          {playerRank}위
                         </span>
-                      )}
-                      {isMax && (
-                        <span className="w-auto h-auto p-3 px-5 rounded-lg bg-red-500">
-                          {playerScore >= 1000 ? "제외" : playerScore}
-                        </span>
-                      )}
-                      {!isMax && !isMin && (
-                        <span className="w-auto h-auto p-3 rounded-lg ">
-                          {playerScore >= 1000 ? "제외" : playerScore}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-                <div className="flex w-full justify-center items-center p-2">
-                  {totalScore}
-                </div>
-              </div>
-            );
-          })}
-      </div>
-    );
-  };
-  const RankTable = ({ data }) => {
-    return (
-      <div className="flex w-full flex-col px-5 py-2border">
-        <div className="flex w-full border-b-2 border-b-gray-600">
-          <div className="flex w-full justify-center items-center p-2">
-            선수번호
-          </div>
-          <div className="flex w-full justify-center items-center p-2">
-            순위
-          </div>
-          {data[0].score.map((score, sIdx) => {
-            return (
-              <div
-                className="flex w-full justify-center items-center p-2"
-                key={sIdx}
-              >
-                {randomTitle[sIdx]}
-              </div>
-            );
-          })}
-
-          <div className="flex w-full justify-center items-center p-2">
-            기표합산
-          </div>
-        </div>
-        {data
-          .sort((a, b) => a.playerRank - b.playerRank)
-
-          .map((player, pIdx) => {
-            const { playerNumber, totalScore, playerRank, score } = player;
-            if (totalScore >= 1000) {
-              return null;
-            }
-            return (
-              <div
-                key={playerNumber}
-                className="flex w-full border-b border-b-gray-300"
-              >
-                <div className="flex w-full justify-center items-center p-2">
-                  {playerNumber}
-                </div>
-                <div className="flex w-full justify-center items-center p-2">
-                  {playerRank}
-                </div>
-                {score
-                  .sort((a, b) => a.randomIndex - b.randomIndex)
-                  .map((score, sIdx) => {
-                    const { seatIndex, playerScore, isMin, isMax } = score;
-                    return (
-                      <div
-                        className="flex w-full justify-center items-center p-2"
-                        key={seatIndex}
-                      >
-                        {isMin && (
-                          <span className="w-auto h-auto p-3 px-5 rounded-lg bg-blue-400">
-                            {playerScore >= 1000 ? "제외" : playerScore}
-                          </span>
-                        )}
-                        {isMax && (
-                          <span className="w-auto h-auto p-3 px-5 rounded-lg bg-red-500">
-                            {playerScore >= 1000 ? "제외" : playerScore}
-                          </span>
-                        )}
-                        {!isMax && !isMin && (
-                          <span className="w-auto h-auto p-3 rounded-lg ">
-                            {playerScore >= 1000 ? "제외" : playerScore}
+                        {isAlert && (
+                          <span className="px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.1] text-[#dc2626] text-[10px] font-sans font-medium">
+                            동점
                           </span>
                         )}
                       </div>
-                    );
-                  })}
-                <div className="flex w-full justify-center items-center p-2">
-                  {totalScore}
-                </div>
-              </div>
-            );
-          })}
+                    </td>
+                    {score.map((item) => {
+                      const { seatIndex, playerScore, isMin, isMax } = item;
+                      return (
+                        <td key={seatIndex} className="py-2.5 px-2">
+                          {isMin || isMax ? (
+                            <div className="inline-flex flex-col items-center justify-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.06] leading-tight">
+                              <span className="font-mono tabular-nums text-xs line-through text-[#737373]">
+                                {playerScore >= 1000 ? "제외" : playerScore}
+                              </span>
+                              <span className="text-[10px] text-[#737373] mt-0.5">
+                                {isMin ? "최고제외" : "최저제외"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-mono tabular-nums font-medium text-[#171717]">
+                              {playerScore >= 1000 ? "제외" : playerScore}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td
+                      className={`py-2.5 px-3 font-mono tabular-nums font-semibold ${
+                        isAlert ? "text-[#dc2626]" : "text-[#2563eb]"
+                      }`}
+                    >
+                      {totalScore}
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
       </div>
     );
   };
 
-  return (
-    <div className="flex flex-col w-full h-full bg-white p-3 gap-y-2 justify-start items-start">
-      <div className="flex w-full h-14">
-        <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-          <div className="flex w-1/2 justify-start">
-            <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-              <TbHeartRateMonitor />
-            </span>
-            <h1
-              className="font-sans text-lg font-semibold"
-              style={{ letterSpacing: "2px" }}
-            >
-              {basicInfo?.tableType === "summaryboard" ? "집계표" : "순위표"}
-            </h1>
-          </div>
-          <div className="flex w-1/2 justify-end">
-            <button
-              className="w-20 h-10 rounded-lg bg-red-500 text-gray-100 flex justify-center items-center"
-              onClick={() => setClose()}
-            >
-              닫기
-            </button>
-          </div>
-        </div>
+  const RankTable = ({ data }) => {
+    if (!data || data.length === 0) return null;
+    return (
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-center border-collapse">
+          <thead>
+            <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] text-[#525252] text-xs font-medium">
+              <th className="py-2.5 px-3 w-24">선수번호</th>
+              <th className="py-2.5 px-3 w-20">순위</th>
+              {data[0]?.score?.map((_, sIdx) => (
+                <th key={sIdx} className="py-2.5 px-2 min-w-[52px]">
+                  {randomTitle[sIdx]}
+                </th>
+              ))}
+              <th className="py-2.5 px-3 w-24 text-[#171717]">기표합산</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#171717]/[0.06] text-sm">
+            {[...data]
+              .sort((a, b) => a.playerRank - b.playerRank)
+              .map((player) => {
+                const { playerNumber, totalScore, playerRank, score } = player;
+                if (totalScore >= 1000) return null;
+                return (
+                  <tr
+                    key={playerNumber}
+                    className="hover:bg-[#fafafa] transition-colors"
+                  >
+                    <td className="py-2.5 px-3">
+                      <BibTag number={playerNumber} />
+                    </td>
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-medium text-[#171717]">
+                      {playerRank}위
+                    </td>
+                    {[...score]
+                      .sort((a, b) => a.randomIndex - b.randomIndex)
+                      .map((item) => {
+                        const { seatIndex, playerScore, isMin, isMax } = item;
+                        return (
+                          <td key={seatIndex} className="py-2.5 px-2">
+                            {isMin || isMax ? (
+                              <div className="inline-flex flex-col items-center justify-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.06] leading-tight">
+                                <span className="font-mono tabular-nums text-xs line-through text-[#737373]">
+                                  {playerScore >= 1000 ? "제외" : playerScore}
+                                </span>
+                                <span className="text-[10px] text-[#737373] mt-0.5">
+                                  {isMin ? "최고제외" : "최저제외"}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="font-mono tabular-nums font-medium text-[#171717]">
+                                {playerScore >= 1000 ? "제외" : playerScore}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-semibold text-[#2563eb] bg-[#f4f4f5]/50">
+                      {totalScore}
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
       </div>
-      {basicInfo?.tableType === "summaryboard" &&
-        summaryTable?.length > 0 &&
-        summaryTable.map((table, tIdx) => {
+    );
+  };
+
+  const activeTables =
+    basicInfo?.tableType === "summaryboard" ? summaryTable : rankTable;
+
+  return (
+    <div className="flex flex-col w-full h-full max-h-screen overflow-y-auto bg-[#fafafa] text-[#171717] p-4 sm:p-6 space-y-4">
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-5 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <ClipboardList
+            size={18}
+            strokeWidth={1.5}
+            className="text-[#525252]"
+          />
+          <h1 className="text-base font-semibold text-[#171717] m-0">
+            {basicInfo?.tableType === "summaryboard" ? "집계표" : "순위표"}
+          </h1>
+        </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-sm font-medium transition-colors cursor-pointer"
+          onClick={() => setClose()}
+        >
+          <X size={16} strokeWidth={1.5} className="text-[#525252]" />
+          <span>닫기</span>
+        </button>
+      </div>
+
+      {activeTables?.length > 0 &&
+        activeTables.map((table, tIdx) => {
           const { categoryTitle, gradeTitle, result } = table;
           return (
-            <>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-10 bg-gray-100 justify-start items-center rounded-lg px-3">
-                  <div className="flex w-full h-full justify-start ml-5 items-center">
-                    {categoryTitle}({gradeTitle})
-                  </div>
+            <div
+              key={table.gradeId || tIdx}
+              className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+            >
+              <div className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-[#171717]">
+                    {categoryTitle}
+                  </span>
+                  <span className="text-sm text-[#525252]">({gradeTitle})</span>
                 </div>
+                <span className="text-xs text-[#737373]">
+                  최고·최저 제외 유효 5심 합산
+                </span>
               </div>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-auto bg-gray-100 justify-start items-center rounded-lg p-3">
-                  <div className="flex w-full h-full justify-center items-center bg-red-200">
-                    <div className="flex bg-white w-full h-auto p-2">
-                      <ScoreTable data={result} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          );
-        })}
-      {basicInfo?.tableType === "rankboard" &&
-        rankTable?.length > 0 &&
-        rankTable.map((table, tIdx) => {
-          const { categoryTitle, gradeTitle, result } = table;
-          return (
-            <>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-10 bg-gray-100 justify-start items-center rounded-lg px-3">
-                  <div className="flex w-full h-full justify-start ml-5 items-center">
-                    {categoryTitle}({gradeTitle})
-                  </div>
-                </div>
-              </div>
-              <div className="flex w-full h-auto">
-                <div className="flex w-full h-auto bg-gray-100 justify-start items-center rounded-lg p-3">
-                  <div className="flex w-full h-full justify-center items-center bg-red-200">
-                    <div className="flex bg-white w-full h-auto p-2">
-                      <RankTable data={result} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
+
+              {basicInfo?.tableType === "summaryboard" ? (
+                <ScoreTable data={result} />
+              ) : (
+                <RankTable data={result} />
+              )}
+            </div>
           );
         })}
     </div>
