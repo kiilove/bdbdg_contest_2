@@ -62,107 +62,117 @@ const ScoreSheet = ({
         </div>
       </div>
       <div className="flex h-auto w-full  items-center py-1 px-8 flex-col mt-5">
-        <div className="flex w-full h-14 items-center border-b-2 border-gray-600 text-gray-900 font-semibold text-lg border-r-2 border-l border-t bg-gray-300">
-          <div
-            className="flex h-full justify-center items-center border-r border-gray-600"
-            style={{ width: "10%" }}
-          >
-            구분
-          </div>
-          <div
-            className="flex h-full justify-center items-center border-r border-gray-600"
-            style={{ width: "8%" }}
-          >
-            순위
-          </div>
-          {scoreTable?.length > 0 &&
-            scoreTable[0].score.map((judge, jIdx) => {
-              const { seatIndex } = judge;
-              return (
+        {(() => {
+          const judgeColCount = Math.max(
+            1,
+            scoreTable?.[0]?.score?.length || 7
+          );
+          const judgeColWidth = `${72 / judgeColCount}%`;
+          return (
+            <>
+              <div className="flex w-full h-14 items-center border-b-2 border-gray-600 text-gray-900 font-semibold text-lg border-r-2 border-l border-t bg-gray-300">
+                <div
+                  className="flex h-full justify-center items-center border-r border-gray-600"
+                  style={{ width: "10%" }}
+                >
+                  구분
+                </div>
                 <div
                   className="flex h-full justify-center items-center border-r border-gray-600"
                   style={{ width: "8%" }}
                 >
-                  {seatIndex}
+                  순위
                 </div>
-              );
-            })}
-          <div
-            className="flex h-full justify-center items-center "
-            style={{ width: "10%" }}
-          >
-            합계
-          </div>
-        </div>
+                {scoreTable?.length > 0 &&
+                  scoreTable[0].score.map((judge, jIdx) => {
+                    const { seatIndex } = judge;
+                    return (
+                      <div
+                        key={seatIndex ?? jIdx}
+                        className="flex h-full justify-center items-center border-r border-gray-600"
+                        style={{ width: judgeColWidth }}
+                      >
+                        {seatIndex}
+                      </div>
+                    );
+                  })}
+                <div
+                  className="flex h-full justify-center items-center "
+                  style={{ width: "10%" }}
+                >
+                  합계
+                </div>
+              </div>
 
-        {scoreTable?.length > 0 &&
-          scoreTable.map((player, pIdx) => {
-            const { playerNumber, score, playerRank, totalScore } = player;
+              {scoreTable?.length > 0 &&
+                scoreTable.map((player, pIdx) => {
+                  const { playerNumber, score, playerRank, totalScore } = player;
 
-            return (
-              <>
-                {playerRank >= 1000 ? null : (
-                  <div className="flex w-full h-14 items-center border-b border-gray-600 text-gray-900 font-semibold text-lg border-l border-r-2 last:border-b-2">
-                    <div
-                      className="flex h-full justify-center items-center border-r border-gray-600 text-gray-900 font-semibold text-l"
-                      style={{ width: "10%" }}
-                    >
-                      {playerNumber}
-                    </div>
-                    <div
-                      className="flex h-full justify-center items-center  font-normal border-r border-gray-400 italic"
-                      style={{ width: "8%" }}
-                    >
-                      {playerRank}
-                    </div>
-                    {score?.length > 0 &&
-                      score.map((item, iIdx) => {
-                        const { playerScore, isMax, isMin } = item;
+                  return (
+                    <React.Fragment key={playerNumber ?? pIdx}>
+                      {playerRank >= 1000 ? null : (
+                        <div className="flex w-full h-14 items-center border-b border-gray-600 text-gray-900 font-semibold text-lg border-l border-r-2 last:border-b-2">
+                          <div
+                            className="flex h-full justify-center items-center border-r border-gray-600 text-gray-900 font-semibold text-l"
+                            style={{ width: "10%" }}
+                          >
+                            {playerNumber}
+                          </div>
+                          <div
+                            className="flex h-full justify-center items-center  font-normal border-r border-gray-400 italic"
+                            style={{ width: "8%" }}
+                          >
+                            {playerRank}
+                          </div>
+                          {score?.length > 0 &&
+                            score.map((item, iIdx) => {
+                              const { playerScore, isMax, isMin } = item;
 
-                        return (
-                          <>
-                            {isMax && (
-                              <div
-                                className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal p-1 "
-                                style={{ width: "8%" }}
-                              >
-                                <span className="bg-gray-600 text-white w-full h-full flex justify-center items-center">
-                                  {playerScore}
-                                </span>
-                              </div>
-                            )}
-                            {isMin && (
-                              <div
-                                className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal p-1 "
-                                style={{ width: "8%" }}
-                              >
-                                <span className="bg-gray-400 text-white w-full h-full flex justify-center items-center">
-                                  {playerScore}
-                                </span>
-                              </div>
-                            )}
-                            {!isMax && !isMin && (
-                              <div
-                                className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal"
-                                style={{ width: "8%" }}
-                              >
-                                {playerScore}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })}
-                    <div
-                      className="flex h-full justify-center items-center  font-normal border-gray-400 italic"
-                      style={{ width: "10%" }}
-                    >
-                      {totalScore}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })}
+                              return (
+                                <React.Fragment key={item.seatIndex ?? iIdx}>
+                                  {isMax ? (
+                                    <div
+                                      className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal p-1 "
+                                      style={{ width: judgeColWidth }}
+                                    >
+                                      <span className="bg-gray-600 text-white w-full h-full flex justify-center items-center">
+                                        {playerScore}
+                                      </span>
+                                    </div>
+                                  ) : isMin ? (
+                                    <div
+                                      className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal p-1 "
+                                      style={{ width: judgeColWidth }}
+                                    >
+                                      <span className="bg-gray-400 text-white w-full h-full flex justify-center items-center">
+                                        {playerScore}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="flex h-full justify-center items-center border-r border-gray-400 text-sm font-normal"
+                                      style={{ width: judgeColWidth }}
+                                    >
+                                      {playerScore}
+                                    </div>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          <div
+                            className="flex h-full justify-center items-center  font-normal border-gray-400 italic"
+                            style={{ width: "10%" }}
+                          >
+                            {totalScore}
+                          </div>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+            </>
+          );
+        })()}
       </div>
       <div className="flex h-20 w-full justify-start items-center py-1 px-8 flex-col mt-10">
         <div className="flex w-full h-full text-lg font-semibold justify-start items-center border-b border-gray-800">

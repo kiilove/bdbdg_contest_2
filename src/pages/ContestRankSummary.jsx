@@ -26,10 +26,16 @@ const ContestRankSummary = () => {
     return numbers.slice(0, count);
   };
 
+  const getTrimCountPerSide = (count) => {
+    const n = Number(count) || 0;
+    if (n >= 9) return 2;
+    if (n >= 7) return 1;
+    return 0;
+  };
+
   const assignMinMaxAndCalculateTotal = (group) => {
     const N = group.score.length;
-    // 제외 개수: 5심제=0개, 7심제=1개, 9심제=2개 (최종 5명 점수 사용)
-    const trimCount = Math.floor(Math.max(0, N - 5) / 2);
+    const trimCount = getTrimCountPerSide(N);
 
     group.score.forEach((s) => {
       s.isMin = false;
@@ -38,7 +44,7 @@ const ContestRankSummary = () => {
 
     if (trimCount > 0) {
       const sorted = [...group.score].sort(
-        (a, b) => a.playerScore - b.playerScore
+        (a, b) => Number(a.playerScore) - Number(b.playerScore)
       );
 
       for (let i = 0; i < trimCount; i++) {
@@ -52,15 +58,19 @@ const ContestRankSummary = () => {
 
     group.totalScore = group.score
       .filter((s) => !s.isMin && !s.isMax)
-      .reduce((acc, curr) => acc + curr.playerScore, 0);
+      .reduce((acc, curr) => acc + Number(curr.playerScore || 0), 0);
   };
 
-  const groupedByPlayerNumber = (arr, sortCriteria = "playerIndex") => {
+  const groupedByPlayerNumber = (
+    arr,
+    sortCriteria = "playerIndex",
+    scoreType = "ranking"
+  ) => {
     const groupedObj = arr.reduce((acc, curr) => {
       let group = acc.find((g) => g.playerNumber === curr.playerNumber);
       const scoreItem = {
-        seatIndex: curr.seatIndex,
-        playerScore: curr.playerScore,
+        seatIndex: Number(curr.seatIndex),
+        playerScore: Number(curr.playerScore),
         randomIndex: generateUniqueRandomNumbers(11, 300, 1)[0],
         isMin: false,
         isMax: false,
@@ -77,17 +87,27 @@ const ContestRankSummary = () => {
         };
         acc.push(group);
       }
-      group.score.push(scoreItem);
+      const existingSeatIdx = group.score.findIndex(
+        (s) => s.seatIndex === scoreItem.seatIndex
+      );
+      if (existingSeatIdx >= 0) {
+        group.score[existingSeatIdx] = scoreItem;
+      } else {
+        group.score.push(scoreItem);
+      }
       return acc;
     }, []);
 
     groupedObj.forEach((group) => {
+      group.score.sort((a, b) => a.seatIndex - b.seatIndex);
       assignMinMaxAndCalculateTotal(group);
     });
 
     groupedObj.sort((a, b) =>
       sortCriteria === "totalScore"
-        ? b.totalScore - a.totalScore
+        ? scoreType === "point"
+          ? b.totalScore - a.totalScore
+          : a.totalScore - b.totalScore
         : a.playerIndex - b.playerIndex
     );
 
@@ -107,6 +127,7 @@ const ContestRankSummary = () => {
   };
 
   const groupByGrade = (arr) => {
+    const isPointMode = basicInfo?.categoryJudgeType === "point";
     return arr
       .reduce((acc, curr) => {
         let group = acc.find((g) => g.gradeId === curr.gradeId);
@@ -116,6 +137,8 @@ const ContestRankSummary = () => {
             contestId: curr.contestId,
             categoryId: curr.categoryId,
             categoryTitle: curr.categoryTitle,
+            scoreType:
+              curr.categoryJudgeType || basicInfo?.categoryJudgeType || "ranking",
             gradeId: curr.gradeId,
             gradeTitle: curr.gradeTitle,
             result: [],
@@ -127,7 +150,11 @@ const ContestRankSummary = () => {
       }, [])
       .map((group) => {
         const gradeItems = arr.filter((item) => item.gradeId === group.gradeId);
-        group.result = groupedByPlayerNumber(gradeItems);
+        group.result = groupedByPlayerNumber(
+          gradeItems,
+          "totalScore",
+          group.scoreType || (isPointMode ? "point" : "ranking")
+        );
         return group;
       });
   };
@@ -175,8 +202,9 @@ const ContestRankSummary = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoreData]);
 
-  const ScoreTable = ({ data }) => {
+  const ScoreTable = ({ data, scoreType = "ranking" }) => {
     if (!data || data.length === 0) return null;
+    const isPoint = scoreType === "point";
     return (
       <div className="overflow-x-auto w-full">
         <table className="w-full text-center border-collapse">
@@ -209,6 +237,13 @@ const ContestRankSummary = () => {
                   </td>
                   {score.map((item) => {
                     const { seatIndex, playerScore, isMin, isMax } = item;
+                    const excludedLabel = isPoint
+                      ? isMax
+                        ? "최고제외"
+                        : "최저제외"
+                      : isMin
+                      ? "최고제외"
+                      : "최저제외";
                     return (
                       <td key={seatIndex} className="py-2.5 px-2">
                         {isMin || isMax ? (
@@ -217,7 +252,7 @@ const ContestRankSummary = () => {
                               {playerScore}
                             </span>
                             <span className="text-[10px] text-[#737373] mt-0.5">
-                              {isMin ? "최저제외" : "최고제외"}
+                              {excludedLabel}
                             </span>
                           </div>
                         ) : (
@@ -249,7 +284,9 @@ const ContestRankSummary = () => {
 
       {dataTable?.length > 0 &&
         dataTable.map((table, tIdx) => {
-          const { categoryTitle, gradeTitle, result } = table;
+          const { categoryTitle, gradeTitle, result, scoreType } = table;
+          const judgeCnt = result?.[0]?.score?.length || 0;
+          const trimCnt = getTrimCountPerSide(judgeCnt);
           return (
             <div
               key={table.gradeId || tIdx}
@@ -263,10 +300,14 @@ const ContestRankSummary = () => {
                   <span className="text-sm text-[#525252]">({gradeTitle})</span>
                 </div>
                 <span className="text-xs text-[#737373]">
-                  최고·최저 제외 유효 5심 합산
+                  {trimCnt > 0
+                    ? `${judgeCnt}심제 · 최고 ${trimCnt} · 최저 ${trimCnt} 제외 후 유효 ${
+                        judgeCnt - trimCnt * 2
+                      }심 합산`
+                    : "전원 합산"}
                 </span>
               </div>
-              <ScoreTable data={result} />
+              <ScoreTable data={result} scoreType={scoreType} />
             </div>
           );
         })}

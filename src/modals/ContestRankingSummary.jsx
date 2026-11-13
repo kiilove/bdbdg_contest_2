@@ -93,6 +93,14 @@ const ContestRankingSummary = ({
   const isScoreEntered = (val) =>
     val !== undefined && val !== null && val !== "" && Number(val) !== 0;
 
+  // 심판제별 최고·최저 제외 인원 (5심제=0명, 7심제=각 1명씩 제외, 9심제=각 2명씩 제외)
+  const getTrimCountPerSide = (count) => {
+    const n = Number(count) || 0;
+    if (n >= 9) return 2;
+    if (n >= 7) return 1;
+    return 0;
+  };
+
   const assignMinMaxAndCalculateTotal = (group) => {
     group.score.forEach((s) => {
       s.isMin = false;
@@ -103,20 +111,19 @@ const ContestRankingSummary = ({
       isScoreEntered(s.playerScore)
     );
     const N = validSubmitted.length;
-    // 제외 개수: 5심제=0개, 7심제=1개, 9심제=2개 (최종 유효 5심 합산)
-    const trimCount = Math.floor(Math.max(0, N - 5) / 2);
+    const trimCount = getTrimCountPerSide(N);
 
     if (trimCount > 0) {
       const sorted = [...validSubmitted].sort(
         (a, b) => Number(a.playerScore) - Number(b.playerScore)
       );
 
-      // 가장 좋은 등수(가장 작은 숫자 = 최고점) trimCount개 제외 -> isMin = true
+      // 가장 좋은 등수(가장 작은 숫자 = 최고점) trimCount명 제외 -> isMin = true
       for (let i = 0; i < trimCount; i++) {
         sorted[i].isMin = true;
       }
 
-      // 가장 낮은 등수(가장 큰 숫자 = 최저점) trimCount개 제외 -> isMax = true
+      // 가장 낮은 등수(가장 큰 숫자 = 최저점) trimCount명 제외 -> isMax = true
       for (let i = N - trimCount; i < N; i++) {
         sorted[i].isMax = true;
       }
@@ -141,13 +148,14 @@ const ContestRankingSummary = ({
     }
   };
 
-  // 전체 심판 좌석 번호 목록 계산 (누락 좌석까지 정확히 열 정렬)
+  // 전체 심판 좌석 번호 목록 계산 (설정된 심판제 인원이 있으면 해당 좌석 수 고정)
   const seatNumbers = useMemo(() => {
+    const expected = Number(expectedJudgeCount) || 0;
     const maxInScores = scoreData.reduce(
       (max, item) => Math.max(max, Number(item?.seatIndex) || 0),
       0
     );
-    const totalSeats = Math.max(Number(expectedJudgeCount) || 0, maxInScores);
+    const totalSeats = expected > 0 ? expected : maxInScores;
     if (totalSeats > 0) {
       return Array.from({ length: totalSeats }, (_, i) => i + 1);
     }
@@ -827,9 +835,7 @@ const ContestRankingSummary = ({
                 ? seatNumbers
                 : (result[0]?.score || []).map((s) => s.seatIndex);
 
-            const trimPerSide = Math.floor(
-              Math.max(0, headerSeats.length - 5) / 2
-            );
+            const trimPerSide = getTrimCountPerSide(headerSeats.length);
 
             return (
               <div key={tIdx} className="space-y-3">

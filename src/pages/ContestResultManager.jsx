@@ -321,7 +321,8 @@ const ContestResultManager = () => {
 
                       <div className="space-y-4">
                         {grouped[cat][grd].map((docu) => {
-                          const { id, result = [] } = docu;
+                          const { id, result = [], scoreType } = docu;
+                          const isPointType = scoreType === "point";
                           const maxSeat =
                             result?.[0]?.score?.reduce(
                               (m, s) => Math.max(m, s.seatIndex || 0),
@@ -456,16 +457,20 @@ const ContestResultManager = () => {
                                                 </div>
                                                 {(s.isMin || s.isMax) && (
                                                   <div className="mt-1 flex gap-1 justify-center">
-                                                    {s.isMin && (
-                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
-                                                        최저
-                                                      </span>
-                                                    )}
-                                                    {s.isMax && (
-                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
-                                                        최고
-                                                      </span>
-                                                    )}
+                                                    {(() => {
+                                                      const isHighest = isPointType
+                                                        ? s.isMax
+                                                        : s.isMin;
+                                                      return isHighest ? (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
+                                                          최고제외
+                                                        </span>
+                                                      ) : (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                                                          최저제외
+                                                        </span>
+                                                      );
+                                                    })()}
                                                   </div>
                                                 )}
                                               </td>

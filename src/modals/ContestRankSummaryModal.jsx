@@ -32,10 +32,16 @@ const ContestRankSummaryModal = ({
     return numbers.slice(0, count);
   };
 
+  const getTrimCountPerSide = (count) => {
+    const n = Number(count) || 0;
+    if (n >= 9) return 2;
+    if (n >= 7) return 1;
+    return 0;
+  };
+
   const assignMinMaxAndCalculateTotal = (group) => {
     const N = group.score.length;
-    // 제외 개수: 5심제=0개, 7심제=1개, 9심제=2개 (최종 5명 점수 사용)
-    const trimCount = Math.floor(Math.max(0, N - 5) / 2);
+    const trimCount = getTrimCountPerSide(N);
 
     group.score.forEach((s) => {
       s.isMin = false;
@@ -44,7 +50,7 @@ const ContestRankSummaryModal = ({
 
     if (trimCount > 0) {
       const sorted = [...group.score].sort(
-        (a, b) => a.playerScore - b.playerScore
+        (a, b) => Number(a.playerScore) - Number(b.playerScore)
       );
 
       for (let i = 0; i < trimCount; i++) {
@@ -58,15 +64,15 @@ const ContestRankSummaryModal = ({
 
     group.totalScore = group.score
       .filter((s) => !s.isMin && !s.isMax)
-      .reduce((acc, curr) => acc + curr.playerScore, 0);
+      .reduce((acc, curr) => acc + Number(curr.playerScore || 0), 0);
   };
 
   const groupedByPlayerNumber = (arr, sortCriteria = "playerIndex") => {
     const groupedObj = arr.reduce((acc, curr) => {
       let group = acc.find((g) => g.playerNumber === curr.playerNumber);
       const scoreItem = {
-        seatIndex: curr.seatIndex,
-        playerScore: curr.playerScore,
+        seatIndex: Number(curr.seatIndex),
+        playerScore: Number(curr.playerScore),
         randomIndex: generateUniqueRandomNumbers(11, 300, 1)[0],
         isMin: false,
         isMax: false,
@@ -83,11 +89,19 @@ const ContestRankSummaryModal = ({
         };
         acc.push(group);
       }
-      group.score.push(scoreItem);
+      const existingSeatIdx = group.score.findIndex(
+        (s) => s.seatIndex === scoreItem.seatIndex
+      );
+      if (existingSeatIdx >= 0) {
+        group.score[existingSeatIdx] = scoreItem;
+      } else {
+        group.score.push(scoreItem);
+      }
       return acc;
     }, []);
 
     groupedObj.forEach((group) => {
+      group.score.sort((a, b) => a.seatIndex - b.seatIndex);
       assignMinMaxAndCalculateTotal(group);
     });
 
