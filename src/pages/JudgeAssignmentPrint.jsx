@@ -126,25 +126,35 @@ const JudgeAssignmentPrint = () => {
     return m;
   }, [pools]);
 
-  // 사람 기준 그룹핑 + 내부 정렬
-  // 사람 기준 그룹핑 + 내부 정렬
+  // 사람 기준 그룹핑 + 내부 정렬 (삭제된 유령 체급 제외 및 심판풀 최신 비밀번호 우선 반영)
   const judgesByPerson = useMemo(() => {
     const byJudge = {};
     judgesAssign.forEach((row) => {
-      const uid = row.judgeUid;
+      const uid = row?.judgeUid;
       if (!uid) return;
+      const grd = gradeMap[row.contestGradeId];
+      const cat = categoryMap[row.categoryId || grd?.refCategoryId];
+      if (!grd || !cat) return;
+
+      const maxSeat = num(cat.contestCategoryJudgeCount, 0);
+      const seat = num(row.seatIndex, 0);
+      if (seat < 1 || (maxSeat > 0 && seat > maxSeat)) return;
+
       if (!byJudge[uid]) {
         const pool = poolMap[uid] || {};
         byJudge[uid] = {
           judgeUid: uid,
-          judgeName: row.judgeName || pool.judgeName || "-",
-          judgeGym: pool.judgeGym || "",
-          onedayPassword: row.onedayPassword ?? pool.onedayPassword ?? "",
+          judgeName: pool.judgeName || row.judgeName || "-",
+          judgeGym: pool.judgeGym || pool.judgePromoter || "",
+          onedayPassword: pool.onedayPassword ?? row.onedayPassword ?? "",
           signature: pool.judgeSignature || "",
           items: [],
         };
       }
-      byJudge[uid].items.push(row);
+      byJudge[uid].items.push({
+        ...row,
+        categoryId: cat.contestCategoryId,
+      });
     });
 
     Object.values(byJudge).forEach((person) => {

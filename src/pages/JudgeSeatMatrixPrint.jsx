@@ -79,31 +79,41 @@ export default function JudgeSeatMatrixPrint() {
   }, [pools]);
 
   const seatCount = useMemo(() => {
+    const maxFromCategories = Math.max(
+      ...(categories || []).map((c) => num(c?.contestCategoryJudgeCount, 0)),
+      0
+    );
+    if (maxFromCategories > 0) return maxFromCategories;
     const maxSeat = Math.max(
       ...judgesAssign.map((j) => num(j.seatIndex, 0)),
       0
     );
     return maxSeat <= 7 ? 7 : 9;
-  }, [judgesAssign]);
+  }, [categories, judgesAssign]);
 
   const seatMatrix = useMemo(() => {
     if (!categories || !grades || !judgesAssign) return {};
 
     const matrix = {};
+    const catById = {};
+    const grdById = {};
 
-    categories
+    [...categories]
       .sort((a, b) => num(a.contestCategoryIndex) - num(b.contestCategoryIndex))
       .forEach((cat) => {
+        catById[cat.contestCategoryId] = cat;
         matrix[cat.contestCategoryId] = {
           categoryId: cat.contestCategoryId,
           categoryTitle: cat.contestCategoryTitle,
+          judgeCount: num(cat.contestCategoryJudgeCount, seatCount),
           grades: {},
         };
       });
 
-    grades
+    [...grades]
       .sort((a, b) => num(a.contestGradeIndex) - num(b.contestGradeIndex))
       .forEach((gr) => {
+        grdById[gr.contestGradeId] = gr;
         const catId = gr.refCategoryId;
         if (!matrix[catId]) return;
 
@@ -115,10 +125,17 @@ export default function JudgeSeatMatrixPrint() {
       });
 
     judgesAssign.forEach((row) => {
-      const catId = row.categoryId;
       const grdId = row.contestGradeId;
+      const grd = grdById[grdId];
+      const catId = grd?.refCategoryId || row.categoryId;
+      const cat = catById[catId];
+      if (!grd || !cat) return;
+
+      const maxCatSeat = num(cat.contestCategoryJudgeCount, seatCount);
       const seat = num(row.seatIndex);
-      const judgeName = row.judgeName || poolMap[row.judgeUid]?.judgeName || "";
+      if (seat < 1 || (maxCatSeat > 0 && seat > maxCatSeat)) return;
+
+      const judgeName = poolMap[row.judgeUid]?.judgeName || row.judgeName || "";
 
       if (matrix[catId]?.grades[grdId]) {
         matrix[catId].grades[grdId].seats[seat] = judgeName;
@@ -126,7 +143,7 @@ export default function JudgeSeatMatrixPrint() {
     });
 
     return matrix;
-  }, [categories, grades, judgesAssign, poolMap]);
+  }, [categories, grades, judgesAssign, poolMap, seatCount]);
 
   if (loading) {
     return (

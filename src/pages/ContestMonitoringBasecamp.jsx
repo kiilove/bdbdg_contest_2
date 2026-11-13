@@ -19,7 +19,7 @@ import ContestAwardCreator from "./ContestAwardCreator";
 import StageBroadcastController from "../components/broadcast/StageBroadcastController";
 import { useDevice } from "../contexts/DeviceContext";
 import { message as antMessage } from "antd";
-import { where, doc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import {
   Play,
@@ -111,6 +111,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const [stagesArray, setStagesArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
   const [judgesArray, setJudgesArray] = useState([]);
+  const [judgesPoolMap, setJudgesPoolMap] = useState({});
   const [currentStageInfo, setCurrentStageInfo] = useState({ stageId: null });
   const [prevRealtimeData, setPrevRealtimeData] = useState({});
 
@@ -216,6 +217,73 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
     return () => unsub();
   }, [currentContest?.contests?.contestPlayersFinalId]);
+
+  // 심판 좌석 배정 및 심판 풀(개인 비밀번호/이름) 실시간 Live-Sync 리스너
+  useEffect(() => {
+    const judgeAssignDocId =
+      currentContest?.contests?.contestJudgesAssignId ||
+      currentContest?.contestJudgesAssignId;
+    const contestId = currentContest?.contests?.id || currentContest?.id;
+    const unsubs = [];
+
+    if (judgeAssignDocId) {
+      unsubs.push(
+        onSnapshot(
+          doc(db, "contest_judges_assign", judgeAssignDocId),
+          (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (Array.isArray(data?.judges)) {
+                setJudgesArray(data.judges);
+              }
+            }
+          },
+          (err) => {
+            console.warn(
+              "[Basecamp] contest_judges_assign 실시간 리스너 오류:",
+              err
+            );
+          }
+        )
+      );
+    }
+
+    if (contestId) {
+      unsubs.push(
+        onSnapshot(
+          query(
+            collection(db, "contest_judges_pool"),
+            where("contestId", "==", contestId)
+          ),
+          (snap) => {
+            const nextMap = {};
+            snap.docs.forEach((d) => {
+              const item = d.data();
+              if (item?.judgeUid) {
+                nextMap[item.judgeUid] = item;
+              }
+            });
+            setJudgesPoolMap(nextMap);
+          },
+          (err) => {
+            console.warn(
+              "[Basecamp] contest_judges_pool 실시간 리스너 오류:",
+              err
+            );
+          }
+        )
+      );
+    }
+
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [
+    currentContest?.contests?.contestJudgesAssignId,
+    currentContest?.contestJudgesAssignId,
+    currentContest?.contests?.id,
+    currentContest?.id,
+  ]);
 
   const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
     const condition = [where("gradeId", "==", gradeId)];
@@ -391,21 +459,61 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       { length: targetJudgeCount },
       (_, jIdx) => {
         const seat = jIdx + 1;
-        const assigned = (judgesArray || []).find(
+        // 동일 (gradeId, seat) 중복 레코드가 혹시 존재할 경우 가장 마지막(최신) 배정을 사용
+        const matchingRows = (judgesArray || []).filter(
           (j) =>
             (j?.contestGradeId === gradeId || j?.gradeId === gradeId) &&
             Number(j?.seatIndex) === seat
         );
+        const assigned =
+          matchingRows.length > 0
+            ? matchingRows[matchingRows.length - 1]
+            : null;
+        const liveJudge = assigned?.judgeUid
+          ? judgesPoolMap[assigned.judgeUid]
+          : null;
+
         return {
           seatIndex: seat,
           isLogined: false,
           isEnd: false,
-          judgeName: assigned?.judgeName ?? null,
+          judgeName: liveJudge?.judgeName ?? assigned?.judgeName ?? null,
           judgeUid: assigned?.judgeUid ?? null,
-          onedayPassword: assigned?.onedayPassword ?? null,
+          onedayPassword:
+            liveJudge?.onedayPassword ?? assigned?.onedayPassword ?? null,
         };
       }
     );
+
+    const emptySeatNumbers = judgeInitState
+      .filter((j) => !j.judgeUid)
+      .map((j) => j.seatIndex);
+    if (emptySeatNumbers.length > 0) {
+      antMessage.warning(
+        `주의: 현재 무대에 심판 미배정 좌석(${emptySeatNumbers.join(
+          ", "
+        )}번)이 있습니다. 심판 좌석 배정을 확인해 주세요.`
+      );
+    } else if (Array.isArray(grades) && grades.length > 1) {
+      const hasCombinedMismatch = grades.slice(1).some((subGrade) =>
+        judgeInitState.some((seatObj) => {
+          const subRows = (judgesArray || []).filter(
+            (j) =>
+              (j?.contestGradeId === subGrade?.gradeId ||
+                j?.gradeId === subGrade?.gradeId) &&
+              Number(j?.seatIndex) === seatObj.seatIndex
+          );
+          const subAssigned =
+            subRows.length > 0 ? subRows[subRows.length - 1] : null;
+          return (subAssigned?.judgeUid || null) !== (seatObj.judgeUid || null);
+        })
+      );
+      if (hasCombinedMismatch) {
+        antMessage.warning(
+          `통합 무대 안내: 합쳐진 체급 간 배정된 심판이 서로 달라 대표 체급(${grades[0]?.gradeTitle}) 기준 심판진으로 진행됩니다.`
+        );
+      }
+    }
 
     const contestId = currentContest?.contests?.id || currentContest?.id;
     if (!contestId) {
