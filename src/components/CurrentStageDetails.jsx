@@ -1,5 +1,6 @@
 // ../components/CurrentStageDetails.js
 import React from "react";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const CurrentStageDetails = ({
   realtimeData,
@@ -132,8 +133,8 @@ const CurrentStageDetails = ({
                 )
                 .sort(
                   (a, b) =>
-                    (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                    (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                    getStagePlayerSortIndex(a, grade) -
+                    getStagePlayerSortIndex(b, grade)
                 );
               return (
                 <div key={gIdx} className="flex w-full h-auto p-2 flex-col">

@@ -5,6 +5,7 @@ import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { HiUserGroup } from "react-icons/hi";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const PrintPlayersFinal = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -72,8 +73,8 @@ const PrintPlayersFinal = () => {
             )
             .sort(
               (a, b) =>
-                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                getStagePlayerSortIndex(a, category) -
+                getStagePlayerSortIndex(b, category)
             );
           return {
             ...grade,

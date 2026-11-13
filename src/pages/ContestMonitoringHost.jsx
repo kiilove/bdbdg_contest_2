@@ -21,6 +21,7 @@ import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
+import { getStagePlayerSortIndex } from "../functions/functions";
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
@@ -150,8 +151,7 @@ const ContestMonitoringHost = ({ contestId }) => {
         const players = [...(returnPlayersFinal.players || [])]
           .sort(
             (a, b) =>
-              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+              getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
           )
           .filter((f) => f.playerNoShow === false);
         setAllFinalPlayers(players);

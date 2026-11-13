@@ -20,6 +20,7 @@ import StageBroadcastController from "../components/broadcast/StageBroadcastCont
 import { useDevice } from "../contexts/DeviceContext";
 import { collection, query, where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { getStagePlayerSortIndex } from "../functions/functions";
 import {
   Play,
   Pause,
@@ -173,8 +174,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           (returnPlayersFinal.players || [])
             .sort(
               (a, b) =>
-                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
             )
             .filter((f) => f.playerNoShow === false)
         );
@@ -213,8 +213,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             const cleanList = remotePlayers
               .sort(
                 (a, b) =>
-                  (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                  (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                  getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
               )
               .filter((f) => f.playerNoShow === false);
             setPlayersArray(cleanList);

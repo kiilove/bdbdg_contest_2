@@ -7,6 +7,10 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { FileText } from "lucide-react";
 import BibTag from "../components/ui/BibTag";
+import {
+  getStagePlayerSortIndex,
+  isGrandPrixPlayerEntry,
+} from "../functions/functions";
 
 const ContestPlayerOrderTableAfter = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -196,8 +200,8 @@ const ContestPlayerOrderTableAfter = () => {
                           {matchedPlayers
                             .sort(
                               (a, b) =>
-                                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                                getStagePlayerSortIndex(a, matched) -
+                                getStagePlayerSortIndex(b, matched)
                             )
                             .map((player, pIdx) => {
                               const {
@@ -280,8 +284,8 @@ const ContestPlayerOrderTableAfter = () => {
                               {matchedPlayers
                                 .sort(
                                   (a, b) =>
-                                    (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                                    (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                                    getStagePlayerSortIndex(a, matched) -
+                                    getStagePlayerSortIndex(b, matched)
                                 )
                                 .map((player, pIdx) => {
                                   const {
@@ -292,6 +296,10 @@ const ContestPlayerOrderTableAfter = () => {
                                     isGradeChanged,
                                     originalgradeTitle,
                                   } = player;
+                                  const isGpRow = isGrandPrixPlayerEntry(
+                                    player,
+                                    matched
+                                  );
 
                                   return (
                                     <tr
@@ -341,12 +349,12 @@ const ContestPlayerOrderTableAfter = () => {
                                       </td>
                                       <td className="w-36 py-3 px-4">
                                         <div className="flex gap-1.5 flex-wrap">
-                                          {originalgradeTitle && (
+                                          {isGpRow && originalgradeTitle && (
                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
                                               {originalgradeTitle} 1위
                                             </span>
                                           )}
-                                          {isGradeChanged && (
+                                          {!isGpRow && isGradeChanged && (
                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
                                               월체
                                             </span>

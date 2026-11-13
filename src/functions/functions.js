@@ -247,3 +247,40 @@ export const exportContestResultsToExcel = async (
   const safeTitle = (contestTitle || "대회").replace(/[\\/:*?"<>|]/g, "_").trim();
   XLSX.writeFile(wb, `${safeTitle}_최종순위표.xlsx`);
 };
+
+/**
+ * 해당 선수 엔트리(또는 무대/종목 컨텍스트)가 '그랑프리' 소속인지 엄격 판별
+ * - 일반 종목(1부, 2부 등) 엔트리에는 절대 true를 반환하지 않음
+ */
+export const isGrandPrixPlayerEntry = (player, contextMeta = null) => {
+  const section = String(
+    contextMeta?.contestCategorySection ??
+      contextMeta?.categorySection ??
+      player?.contestCategorySection ??
+      ""
+  ).trim();
+  const catTitle = String(
+    contextMeta?.contestCategoryTitle ??
+      contextMeta?.categoryTitle ??
+      player?.contestCategoryTitle ??
+      ""
+  ).trim();
+
+  return (
+    section === "그랑프리" ||
+    catTitle === "그랑프리" ||
+    catTitle.includes("그랑프리")
+  );
+};
+
+/**
+ * 무대/출전명단 정렬 인덱스 계산
+ * - 오직 '그랑프리' 엔트리에만 grandPrixIndex 우선 적용
+ * - 일반 종목은 기존과 100% 동일하게 playerIndex만 사용 (월체 후순위 등 완전 유지)
+ */
+export const getStagePlayerSortIndex = (player, contextMeta = null) => {
+  if (isGrandPrixPlayerEntry(player, contextMeta)) {
+    return Number(player?.grandPrixIndex ?? player?.playerIndex ?? 0);
+  }
+  return Number(player?.playerIndex ?? 0);
+};

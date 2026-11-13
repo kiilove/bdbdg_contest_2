@@ -75,16 +75,15 @@ const getPlayerTupleKey = (p) => {
   return `${p.contestGradeId || ""}__${p.playerNumber ?? ""}__${p.playerUid || ""}`;
 };
 
-/** 🛡️ 그랑프리 엔트리 여부 판별 (종목명/섹션/grandPrixIndex 포함) */
+/** 🛡️ 그랑프리 엔트리 여부 엄격 판별 (일반 종목의 originalGradeId 등과 절대 혼동하지 않음) */
 const isGrandPrixEntryLike = (p) => {
   if (!p) return false;
-  const catTitle = String(p.contestCategoryTitle || "");
+  const section = String(p.contestCategorySection || "").trim();
+  const catTitle = String(p.contestCategoryTitle || "").trim();
   return (
+    section === "그랑프리" ||
     catTitle === "그랑프리" ||
-    catTitle.includes("그랑프리") ||
-    p.contestCategorySection === "그랑프리" ||
-    p.grandPrixIndex !== undefined ||
-    Boolean(p.originalGradeId)
+    catTitle.includes("그랑프리")
   );
 };
 
@@ -3560,11 +3559,7 @@ const ContestPlayerWeighInTable = () => {
                           </thead>
                           <tbody className="divide-y divide-[#171717]/[0.06]">
                             {matchedPlayers
-                              .sort(
-                                (a, b) =>
-                                  (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                                  (b.grandPrixIndex ?? b.playerIndex ?? 0)
-                              )
+                              .sort((a, b) => a.playerIndex - b.playerIndex)
                               .map((player, pIdx) => {
                                 const {
                                   playerName,
@@ -3861,11 +3856,7 @@ const ContestPlayerWeighInTable = () => {
                       /* 모바일 카드 뷰 */
                       <div className="p-3 space-y-2.5">
                         {matchedPlayers
-                          .sort(
-                            (a, b) =>
-                              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                              (b.grandPrixIndex ?? b.playerIndex ?? 0)
-                          )
+                          .sort((a, b) => a.playerIndex - b.playerIndex)
                           .map((player) => {
                             const {
                               playerName,
