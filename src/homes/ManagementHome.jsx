@@ -44,7 +44,7 @@ const ManagementHome = ({ children }) => {
     contestInfo: null,
   });
   const [collapsedSections, setCollapsedSections] = useState({});
-  const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1024px)" });
+  const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1023px)" });
 
   const { currentContest } = useContext(CurrentContestContext);
   const contestId = currentContest?.contests?.id || currentContest?.id || "";
@@ -389,7 +389,7 @@ const ManagementHome = ({ children }) => {
       {/* Scrollable Navigation Groups */}
       <nav
         aria-label="주요 메뉴"
-        className="flex-1 overflow-y-auto px-3 pb-4 pt-2"
+        className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 pt-2"
       >
         {filteredMenus.map((section) => {
           if (!section.subMenus || section.subMenus.length === 0) {
@@ -458,7 +458,11 @@ const ManagementHome = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#fafafa] text-[#171717] print:block print:bg-white">
+    <div
+      className={`min-h-screen flex ${
+        isTabletOrMobile ? "flex-col" : "flex-row"
+      } bg-[#fafafa] text-[#171717] print:block print:bg-white`}
+    >
       {isTabletOrMobile ? (
         <>
           {/* Tablet & Mobile 56px Top Bar */}
@@ -533,10 +537,16 @@ const ManagementHome = ({ children }) => {
           </div>
         </>
       ) : !sidebarHidden ? (
-        /* Desktop 248px Fixed Left Sidebar */
-        <aside className="w-[248px] shrink-0 bg-[#f4f4f5] border-r border-[#171717]/[0.08] flex flex-col h-screen sticky top-0 print:hidden no-print">
-          {renderSidebarBody(false)}
-        </aside>
+        <>
+          {/* Desktop 248px Fixed Left Sidebar (always full viewport height) */}
+          <aside className="fixed inset-y-0 left-0 z-30 w-[248px] bg-[#f4f4f5] border-r border-[#171717]/[0.08] flex flex-col print:hidden no-print">
+            {renderSidebarBody(false)}
+          </aside>
+          <div
+            aria-hidden="true"
+            className="w-[248px] shrink-0 print:hidden no-print"
+          />
+        </>
       ) : (
         /* Desktop Sidebar Hidden — Left-edge Restore Tab */
         <button
