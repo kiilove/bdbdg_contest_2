@@ -18,9 +18,20 @@ import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintA
 import ContestAwardCreator from "./ContestAwardCreator";
 import StageBroadcastController from "../components/broadcast/StageBroadcastController";
 import { useDevice } from "../contexts/DeviceContext";
-import { collection, query, where, doc, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  doc,
+  onSnapshot,
+  runTransaction,
+} from "firebase/firestore";
 import { db } from "../firebase";
-import { getStagePlayerSortIndex } from "../functions/functions";
+import {
+  getStagePlayerSortIndex,
+  isGrandPrixPlayerEntry,
+  syncGrandPrixPlayerIndexForStage,
+} from "../functions/functions";
 import {
   Play,
   Pause,
@@ -663,6 +674,86 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     const collectionInfo = `currentStage/${contestId}`;
 
     try {
+      // 현재 전환할 무대가 '그랑프리'인 경우:
+      // 심판 태블릿(playerIndex 기준 정렬) 호환을 위해 이전 playerIndex는 playerIndexOriginal에 보존하고
+      // playerIndex를 grandPrixIndex로 먼저 덮어씌운 뒤 currentStage 신호를 송출합니다.
+      const matchedCategoryObj = (categoriesArray || []).find(
+        (c) => c?.contestCategoryId && c.contestCategoryId === categoryId
+      );
+      const isGrandPrixStage =
+        isGrandPrixPlayerEntry(null, targetStage) ||
+        (matchedCategoryObj
+          ? isGrandPrixPlayerEntry(null, matchedCategoryObj)
+          : false);
+
+      let syncedPlayersPool = null;
+      const finalDocId =
+        currentContest?.contests?.contestPlayersFinalId ||
+        currentContest?.contestPlayersFinalId;
+
+      if (isGrandPrixStage && finalDocId) {
+        try {
+          await runTransaction(db, async (transaction) => {
+            const finalRef = doc(db, "contest_players_final", finalDocId);
+            const finalSnap = await transaction.get(finalRef);
+            if (!finalSnap.exists()) return;
+
+            const remoteData = finalSnap.data() || {};
+            const remotePlayers = Array.isArray(remoteData.players)
+              ? remoteData.players
+              : [];
+            const syncResult = syncGrandPrixPlayerIndexForStage(
+              remotePlayers,
+              targetStage,
+              categoriesArray
+            );
+            syncedPlayersPool = syncResult.players;
+
+            if (syncResult.changed) {
+              transaction.update(finalRef, {
+                contestId: remoteData.contestId || contestId,
+                players: syncResult.players,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          });
+
+          if (Array.isArray(syncedPlayersPool) && syncedPlayersPool.length > 0) {
+            setPlayersArray(
+              syncedPlayersPool
+                .slice()
+                .sort(
+                  (a, b) =>
+                    getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
+                )
+                .filter((f) => f.playerNoShow === false)
+            );
+          }
+        } catch (gpSyncError) {
+          console.error(
+            "[Basecamp] 그랑프리 무대 playerIndex 동기화 오류:",
+            gpSyncError
+          );
+        }
+      }
+
+      const stageGradeIdSet = new Set(
+        (Array.isArray(grades) ? grades : [])
+          .map((g) => g?.gradeId || g?.contestGradeId)
+          .filter(Boolean)
+      );
+      const effectivePool = Array.isArray(syncedPlayersPool)
+        ? syncedPlayersPool
+        : playersArray;
+      const liveStagePlayerCount =
+        stageGradeIdSet.size > 0 && Array.isArray(effectivePool) && effectivePool.length > 0
+          ? effectivePool.filter(
+              (p) =>
+                stageGradeIdSet.has(p?.contestGradeId) &&
+                p?.playerNoShow === false
+            ).length
+          : targetStage?.players?.length || 0;
+
       const res = await updateCurrentStage.updateData(collectionInfo, {
         ...newCurrentStateInfo,
       });
@@ -680,7 +771,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             gradeTitle: gradeTitle || "",
             gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
             stageNumber: newCurrentStateInfo.stageNumber || "",
-            playerCount: targetStage?.players?.length || 0,
+            playerCount: liveStagePlayerCount,
           },
           activePlayer: null,
           specialScreenData: null,
@@ -799,6 +890,74 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   useEffect(() => {
     setNormalScoreData([]);
   }, [realtimeData?.stageId]);
+
+  // 현재 진행 중인 무대가 '그랑프리'일 때 playerIndexOriginal 보존 및 playerIndex <- grandPrixIndex 자동 동기화 가드
+  useEffect(() => {
+    const finalDocId =
+      currentContest?.contests?.contestPlayersFinalId ||
+      currentContest?.contestPlayersFinalId;
+    const contestId = currentContest?.contests?.id || currentContest?.id;
+    if (
+      !finalDocId ||
+      !contestId ||
+      !currentStageInfo?.stageId ||
+      !Array.isArray(playersArray) ||
+      playersArray.length === 0
+    ) {
+      return;
+    }
+
+    const preCheck = syncGrandPrixPlayerIndexForStage(
+      playersArray,
+      currentStageInfo,
+      categoriesArray
+    );
+    if (!preCheck.isGrandPrixStage || !preCheck.changed) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await runTransaction(db, async (transaction) => {
+          const finalRef = doc(db, "contest_players_final", finalDocId);
+          const finalSnap = await transaction.get(finalRef);
+          if (!finalSnap.exists() || cancelled) return;
+
+          const remoteData = finalSnap.data() || {};
+          const remotePlayers = Array.isArray(remoteData.players)
+            ? remoteData.players
+            : [];
+          const syncResult = syncGrandPrixPlayerIndexForStage(
+            remotePlayers,
+            currentStageInfo,
+            categoriesArray
+          );
+          if (syncResult.changed) {
+            transaction.update(finalRef, {
+              contestId: remoteData.contestId || contestId,
+              players: syncResult.players,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        });
+      } catch (err) {
+        console.warn("[Basecamp] 진행 중 그랑프리 playerIndex 동기화 경미 오류:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentStageInfo,
+    playersArray,
+    categoriesArray,
+    currentContest?.contests?.contestPlayersFinalId,
+    currentContest?.contestPlayersFinalId,
+    currentContest?.contests?.id,
+    currentContest?.id,
+  ]);
 
   const judgesSignature = JSON.stringify(realtimeData?.judges || []);
   const stageGradesSignature = JSON.stringify(

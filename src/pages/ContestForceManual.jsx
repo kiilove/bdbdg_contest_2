@@ -11,7 +11,10 @@ import {
 import { doc, runTransaction } from "firebase/firestore";
 import { db } from "../firebase";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { generateUUID } from "../functions/functions";
+import {
+  generateUUID,
+  isGrandPrixPlayerEntry,
+} from "../functions/functions";
 import BibTag from "../components/ui/BibTag";
 
 const inputClass =
@@ -176,9 +179,15 @@ const ContestForceManual = () => {
         (category) => category.contestCategoryId === id
       );
 
+      const matchedCategory = categorysArray.find(
+        (category) => category.contestCategoryId === id
+      );
       const newValue = {
         contestCategoryId: id,
         contestCategoryTitle: name,
+        ...(matchedCategory?.contestCategorySection
+          ? { contestCategorySection: matchedCategory.contestCategorySection }
+          : {}),
         contestGradeId: gradeId,
         contestGradeTitle: gradeTitle,
         isGradeChanged: false,
@@ -300,7 +309,37 @@ const ContestForceManual = () => {
 
         entriesToAdd.forEach((entry) => {
           if (!mergedFinalPlayers.some((p) => isSamePlayerEntry(p, entry))) {
-            mergedFinalPlayers.push(entry);
+            const matchedCat = categorysArray.find(
+              (c) => c?.contestCategoryId === entry.contestCategoryId
+            );
+            if (isGrandPrixPlayerEntry(entry, matchedCat)) {
+              const sameGradeGpList = mergedFinalPlayers.filter(
+                (p) => p?.contestGradeId === entry.contestGradeId
+              );
+              const maxGpIdx = sameGradeGpList.reduce(
+                (maxVal, p) =>
+                  Math.max(
+                    maxVal,
+                    Number(p?.grandPrixIndex ?? p?.playerIndex ?? 0) || 0
+                  ),
+                0
+              );
+              const nextGpIdx = maxGpIdx + 1;
+              mergedFinalPlayers.push({
+                ...entry,
+                contestCategorySection:
+                  entry.contestCategorySection ||
+                  matchedCat?.contestCategorySection ||
+                  "그랑프리",
+                playerIndexOriginal: entry.playerIndex,
+                grandPrixIndex: nextGpIdx,
+                playerIndex: nextGpIdx,
+                isGradeChange: false,
+                isGradeChanged: false,
+              });
+            } else {
+              mergedFinalPlayers.push(entry);
+            }
           }
         });
 

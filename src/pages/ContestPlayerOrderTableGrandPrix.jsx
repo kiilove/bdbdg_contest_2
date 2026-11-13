@@ -28,8 +28,14 @@ const getPlayerUniqueKey = (p) =>
 const normalizeGradeGrandPrixOrder = (gradePlayers, markCustom = false) =>
   gradePlayers.map((player, idx) => {
     const nextIdx = idx + 1;
+    const preservedOriginal =
+      player?.playerIndexOriginal !== undefined &&
+      player?.playerIndexOriginal !== null
+        ? player.playerIndexOriginal
+        : player?.playerIndex ?? player?.playerNumber ?? null;
     return {
       ...player,
+      playerIndexOriginal: preservedOriginal,
       grandPrixIndex: nextIdx,
       playerIndex: nextIdx,
       isGradeChange: false,
@@ -230,6 +236,11 @@ const ContestPlayerOrderTableGrandPrix = () => {
           wasGradeChangedInOriginal: Boolean(
             regularEntry?.isGradeChanged || regularEntry?.isGradeChange
           ),
+          regularPlayerIndex:
+            regularEntry?.playerIndex ??
+            findWinner?.playerIndex ??
+            findWinner?.playerNumber ??
+            null,
           playerName: findWinner.playerName,
           playerNumber: findWinner.playerNumber,
           playerGym: findWinner.playerGym,
@@ -273,15 +284,25 @@ const ContestPlayerOrderTableGrandPrix = () => {
         const saved = savedGpByGradeAndKey.get(
           `${grade.contestGradeId}_${playerKey}`
         );
+        const { regularPlayerIndex, ...matchRest } = match;
+        const resolvedOriginalIndex =
+          saved?.playerIndexOriginal !== undefined &&
+          saved?.playerIndexOriginal !== null
+            ? saved.playerIndexOriginal
+            : regularPlayerIndex !== undefined && regularPlayerIndex !== null
+            ? regularPlayerIndex
+            : saved?.playerIndex ?? matchRest.playerNumber ?? null;
+
         candidates.push({
-          ...match,
+          ...matchRest,
           contestCategoryId: grade.refCategoryId,
           contestCategoryTitle:
             parentCategory?.contestCategoryTitle || "그랑프리",
           contestCategorySection: "그랑프리",
           contestGradeId: grade.contestGradeId,
           contestGradeTitle: grade.contestGradeTitle,
-          playerNoShow: Boolean(saved?.playerNoShow ?? match.playerNoShow),
+          playerIndexOriginal: resolvedOriginalIndex,
+          playerNoShow: Boolean(saved?.playerNoShow ?? matchRest.playerNoShow),
           savedGrandPrixIndex: Number.isFinite(Number(saved?.grandPrixIndex))
             ? Number(saved.grandPrixIndex)
             : null,
@@ -302,6 +323,11 @@ const ContestPlayerOrderTableGrandPrix = () => {
         )
           ? Number(fp.originalGradeIndex ?? wonGrade?.contestGradeIndex)
           : 9999;
+        const resolvedForceOriginalIndex =
+          fp?.playerIndexOriginal !== undefined &&
+          fp?.playerIndexOriginal !== null
+            ? fp.playerIndexOriginal
+            : fp?.playerIndex ?? fp?.playerNumber ?? null;
 
         candidates.push({
           ...fp,
@@ -314,6 +340,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
           contestGradeId: grade.contestGradeId,
           contestGradeTitle: grade.contestGradeTitle,
           originalGradeIndex: resolvedWonOrder,
+          playerIndexOriginal: resolvedForceOriginalIndex,
           isGradeChange: false,
           isGradeChanged: false,
           savedGrandPrixIndex: Number.isFinite(Number(fp?.grandPrixIndex))
@@ -341,8 +368,14 @@ const ContestPlayerOrderTableGrandPrix = () => {
       const orderedForGrade = candidates.map((item, idx) => {
         const { savedGrandPrixIndex, ...rest } = item;
         const gpIndex = idx + 1;
+        const preservedOriginal =
+          rest.playerIndexOriginal !== undefined &&
+          rest.playerIndexOriginal !== null
+            ? rest.playerIndexOriginal
+            : rest.playerIndex ?? rest.playerNumber ?? null;
         return {
           ...rest,
+          playerIndexOriginal: preservedOriginal,
           grandPrixIndex: gpIndex,
           playerIndex: gpIndex,
           isGradeChange: false,
@@ -441,6 +474,11 @@ const ContestPlayerOrderTableGrandPrix = () => {
         .sort(sortByWonGradeOrder)
         .map((p, idx) => ({
           ...p,
+          playerIndexOriginal:
+            p.playerIndexOriginal !== undefined &&
+            p.playerIndexOriginal !== null
+              ? p.playerIndexOriginal
+              : p.playerIndex ?? p.playerNumber ?? null,
           grandPrixIndex: idx + 1,
           playerIndex: idx + 1,
           isGradeChange: false,
@@ -554,8 +592,14 @@ const ContestPlayerOrderTableGrandPrix = () => {
         );
         sorted.forEach((p, idx) => {
           const gpIdx = idx + 1;
+          const preservedOriginal =
+            p.playerIndexOriginal !== undefined &&
+            p.playerIndexOriginal !== null
+              ? p.playerIndexOriginal
+              : p.playerIndex ?? p.playerNumber ?? null;
           dedupedGrandPrixData.push({
             ...p,
+            playerIndexOriginal: preservedOriginal,
             grandPrixIndex: gpIdx,
             playerIndex: gpIdx,
             isGradeChange: false,
