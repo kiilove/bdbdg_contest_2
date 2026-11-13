@@ -35,6 +35,7 @@ import {
   LayoutGrid,
   Layers,
   AlertCircle,
+  AlertTriangle,
   Check,
 } from "lucide-react";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
@@ -43,6 +44,7 @@ import {
   MonitoringDiagnosticsBar,
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
+import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 
 // 본부석 실시간 렌더링 에러 바운더리
 class BasecampErrorBoundary extends React.Component {
@@ -114,6 +116,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const [summaryProp, setSummaryProp] = useState({});
 
   const [stagesArray, setStagesArray] = useState([]);
+  const [categoriesArray, setCategoriesArray] = useState([]);
+  const [gradesArray, setGradesArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
   const [judgesArray, setJudgesArray] = useState([]);
   const [judgesPoolMap, setJudgesPoolMap] = useState({});
@@ -123,6 +127,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   const [normalScoreData, setNormalScoreData] = useState([]);
 
   const fetchNotice = useFirestoreGetDocument("contest_notice");
+  const fetchCategories = useFirestoreGetDocument("contest_categorys_list");
+  const fetchGrades = useFirestoreGetDocument("contest_grades_list");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchJudgesAssign = useFirestoreGetDocument("contest_judges_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
@@ -143,24 +149,49 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     noticeId,
     stageAssignId,
     playerFinalId,
-    judgeAssignId
+    judgeAssignId,
+    categoryListId,
+    gradeListId
   ) => {
     try {
-      const returnNotice = noticeId
-        ? await fetchNotice.getDocument(noticeId)
-        : null;
-      const returnContestStage = stageAssignId
-        ? await fetchStages.getDocument(stageAssignId)
-        : null;
-      const returnPlayersFinal = playerFinalId
-        ? await fetchFinalPlayers.getDocument(playerFinalId)
-        : null;
-      const returnJudgesAssign = judgeAssignId
-        ? await fetchJudgesAssign.getDocument(judgeAssignId)
-        : null;
+      const [
+        returnNotice,
+        returnContestStage,
+        returnPlayersFinal,
+        returnJudgesAssign,
+        returnCategories,
+        returnGrades,
+      ] = await Promise.all([
+        noticeId ? fetchNotice.getDocument(noticeId) : Promise.resolve(null),
+        stageAssignId
+          ? fetchStages.getDocument(stageAssignId)
+          : Promise.resolve(null),
+        playerFinalId
+          ? fetchFinalPlayers.getDocument(playerFinalId)
+          : Promise.resolve(null),
+        judgeAssignId
+          ? fetchJudgesAssign.getDocument(judgeAssignId)
+          : Promise.resolve(null),
+        categoryListId
+          ? fetchCategories.getDocument(categoryListId)
+          : Promise.resolve(null),
+        gradeListId
+          ? fetchGrades.getDocument(gradeListId)
+          : Promise.resolve(null),
+      ]);
 
       if (returnNotice) {
         setContestInfo({ ...returnNotice });
+      }
+      if (returnCategories?.categorys) {
+        setCategoriesArray(returnCategories.categorys || []);
+      } else {
+        setCategoriesArray([]);
+      }
+      if (returnGrades?.grades) {
+        setGradesArray(returnGrades.grades || []);
+      } else {
+        setGradesArray([]);
       }
       if (returnContestStage?.stages) {
         setStagesArray(
@@ -379,7 +410,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     fetchScoreTable(grades);
   };
 
-  const handleGradeInfo = (grades) => {
+  const handleGradeInfo = (grades, stageJudgeCount = 0) => {
     let gradeTitle = "";
     let gradeId = "";
     let matchedJudgesCount = 0;
@@ -393,16 +424,16 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         matchedJudgesCount: 0,
         matchedPlayersCount: 0,
         matchedJudgeAssignCount: 0,
+        expectedJudgeCount: 0,
+        missingJudgeSeats: [],
       };
     }
 
     if (grades.length === 1) {
       gradeTitle = grades[0]?.gradeTitle || "";
       gradeId = grades[0]?.gradeId || "";
-      matchedJudgesCount = Number(grades[0]?.categoryJudgeCount) || 0;
-      matchedJudgeAssignCount = (judgesArray || []).filter(
-        (f) => f?.contestGradeId === gradeId || f?.gradeId === gradeId
-      ).length;
+      matchedJudgesCount =
+        Number(stageJudgeCount) || Number(grades[0]?.categoryJudgeCount) || 0;
       const liveCount =
         Array.isArray(playersArray) && playersArray.length > 0
           ? playersArray.filter((p) => p?.contestGradeId === gradeId).length
@@ -413,13 +444,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       const madeTitle = grades
         .map((grade) => (grade?.gradeTitle || "") + " ")
         .join("");
-      matchedJudgesCount = Number(grades[0]?.categoryJudgeCount) || 0;
-
-      matchedJudgeAssignCount = (judgesArray || []).filter(
-        (f) =>
-          f?.contestGradeId === grades[0]?.gradeId ||
-          f?.gradeId === grades[0]?.gradeId
-      ).length;
+      matchedJudgesCount =
+        Number(stageJudgeCount) || Number(grades[0]?.categoryJudgeCount) || 0;
       const hasLivePool =
         Array.isArray(playersArray) && playersArray.length > 0;
       grades.forEach((grade) => {
@@ -436,12 +462,36 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       gradeTitle = madeTitle + "통합";
     }
 
+    const missingJudgeSeats = [];
+    if (matchedJudgesCount > 0 && gradeId) {
+      for (let seat = 1; seat <= matchedJudgesCount; seat += 1) {
+        const hasSeat = (judgesArray || []).some(
+          (f) =>
+            (f?.contestGradeId === gradeId || f?.gradeId === gradeId) &&
+            Number(f?.seatIndex) === seat &&
+            Boolean(f?.judgeUid || f?.judgeName)
+        );
+        if (!hasSeat) {
+          missingJudgeSeats.push(seat);
+        }
+      }
+      matchedJudgeAssignCount = matchedJudgesCount - missingJudgeSeats.length;
+    } else {
+      matchedJudgeAssignCount = (judgesArray || []).filter(
+        (f) =>
+          (f?.contestGradeId === gradeId || f?.gradeId === gradeId) &&
+          Boolean(f?.judgeUid || f?.judgeName)
+      ).length;
+    }
+
     return {
       gradeTitle,
       gradeId,
       matchedJudgesCount,
       matchedPlayersCount,
       matchedJudgeAssignCount,
+      expectedJudgeCount: matchedJudgesCount,
+      missingJudgeSeats,
     };
   };
 
@@ -692,10 +742,30 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     const judgeAssignId =
       currentContest?.contests?.contestJudgesAssignId ||
       currentContest?.contestJudgesAssignId;
+    const categoryListId =
+      currentContest?.contests?.contestCategorysListId ||
+      currentContest?.contestCategorysListId;
+    const gradeListId =
+      currentContest?.contests?.contestGradesListId ||
+      currentContest?.contestGradesListId;
 
-    if (noticeId || stageAssignId || playerFinalId || judgeAssignId) {
+    if (
+      noticeId ||
+      stageAssignId ||
+      playerFinalId ||
+      judgeAssignId ||
+      categoryListId ||
+      gradeListId
+    ) {
       setIsLoading(true);
-      fetchPool(noticeId, stageAssignId, playerFinalId, judgeAssignId);
+      fetchPool(
+        noticeId,
+        stageAssignId,
+        playerFinalId,
+        judgeAssignId,
+        categoryListId,
+        gradeListId
+      );
     } else {
       setIsLoading(false);
     }
@@ -933,12 +1003,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           categoryTitle,
           grades,
           categoryJudgeType,
+          categoryJudgeCount,
           stageId,
           stageNumber,
         } = stage;
-        const info = handleGradeInfo(grades);
+        const info = handleGradeInfo(grades, categoryJudgeCount);
         const isCurrentStage = realtimeData?.stageId === stageId;
         const globalIndex = stagesArray.findIndex((s) => s.stageId === stageId);
+        const hasMissingSeat = (info.missingJudgeSeats || []).length > 0;
 
         return (
           <div
@@ -946,6 +1018,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             className={`p-3.5 rounded-[8px] border flex items-start justify-between gap-3 ${
               isCurrentStage
                 ? "bg-[#2563eb]/[0.04] border-[#2563eb]/40"
+                : hasMissingSeat
+                ? "bg-[#fffbeb]/50 border-[#f59e0b]/35"
                 : "bg-white border-[#171717]/[0.08]"
             }`}
           >
@@ -963,6 +1037,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
                   {categoryJudgeType === "point" ? "P" : "R"}
                 </span>
+                {hasMissingSeat && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/35 text-[11px] font-semibold text-[#92400e]">
+                    <AlertTriangle size={11} strokeWidth={2} />
+                    <span>
+                      {info.missingJudgeSeats.join("·")}번석 미배정
+                    </span>
+                  </span>
+                )}
                 {isCurrentStage && (
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-xs font-medium">
                     <StatusDot status="live" live />
@@ -973,7 +1055,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               <div className="text-xs text-[#525252]">{info.gradeTitle}</div>
               <div className="text-xs font-mono tabular-nums text-[#737373]">
                 출전 {info.matchedPlayersCount}명 · 심판{" "}
-                {info.matchedJudgeAssignCount}명
+                {info.matchedJudgeAssignCount}
+                {info.expectedJudgeCount ? `/${info.expectedJudgeCount}` : ""}명
               </div>
             </div>
 
@@ -1091,10 +1174,16 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         </thead>
         <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
           {items.map((record) => {
-            const { categoryTitle, grades, categoryJudgeType, stageId } =
-              record;
-            const info = handleGradeInfo(grades);
+            const {
+              categoryTitle,
+              grades,
+              categoryJudgeType,
+              categoryJudgeCount,
+              stageId,
+            } = record;
+            const info = handleGradeInfo(grades, categoryJudgeCount);
             const isCurrentStage = realtimeData?.stageId === stageId;
+            const hasMissingSeat = (info.missingJudgeSeats || []).length > 0;
             const globalIndex = stagesArray.findIndex(
               (s) => s.stageId === stageId
             );
@@ -1105,6 +1194,8 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                 className={`transition-colors ${
                   isCurrentStage
                     ? "bg-[#2563eb]/[0.04]"
+                    : hasMissingSeat
+                    ? "bg-[#fffbeb]/40 hover:bg-[#fffbeb]/70"
                     : "hover:bg-[#fafafa]"
                 }`}
               >
@@ -1125,6 +1216,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
                         {categoryJudgeType === "point" ? "P" : "R"}
                       </span>
+                      {hasMissingSeat && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/35 text-[11px] font-semibold text-[#92400e]">
+                          <AlertTriangle size={11} strokeWidth={2} />
+                          <span>
+                            {info.missingJudgeSeats.join("·")}번석 심판 미배정
+                          </span>
+                        </span>
+                      )}
                       {isCurrentStage && (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-xs font-medium">
                           <StatusDot status="live" live />
@@ -1134,7 +1233,11 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     </div>
                     <div className="text-xs font-mono tabular-nums text-[#737373]">
                       출전인원: {info.matchedPlayersCount}명 · 배정심판:{" "}
-                      {info.matchedJudgeAssignCount}명
+                      {info.matchedJudgeAssignCount}
+                      {info.expectedJudgeCount
+                        ? `/${info.expectedJudgeCount}`
+                        : ""}
+                      명
                     </div>
                   </div>
                 </td>
@@ -1212,6 +1315,17 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     return missing;
   }, [realtimeData?.judges, stagesArray, judgesArray]);
 
+  const judgeSeatGapSummary = useMemo(
+    () =>
+      summarizeJudgeSeatGaps({
+        judges: judgesArray,
+        categories: categoriesArray,
+        grades: gradesArray,
+        stages: stagesArray,
+      }),
+    [judgesArray, categoriesArray, gradesArray, stagesArray]
+  );
+
   return (
     <BasecampErrorBoundary>
       {(isLoading || realtimeLoading) && !loadingTimedOut ? (
@@ -1271,7 +1385,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             contestInfo={contestInfo}
             stagesCount={stagesArray.length}
             playersCount={playersArray.length}
-            judgesAssignCount={judgesArray.length}
+            judgesAssignCount={
+              judgeSeatGapSummary.totalExpectedSeats > 0
+                ? judgeSeatGapSummary.totalAssignedSeats
+                : judgesArray.length
+            }
+            judgeSeatGapSummary={judgeSeatGapSummary}
             realtimeData={realtimeData}
             currentStagePlayersCount={activeStageMatchedPlayersCount}
             emptyJudgeSeats={emptyJudgeSeatsForDiag}
@@ -1417,7 +1536,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                           contestInfo={contestInfo}
                           stagesCount={stagesArray.length}
                           playersCount={playersArray.length}
-                          judgesAssignCount={judgesArray.length}
+                          judgesAssignCount={
+                            judgeSeatGapSummary.totalExpectedSeats > 0
+                              ? judgeSeatGapSummary.totalAssignedSeats
+                              : judgesArray.length
+                          }
+                          judgeSeatGapSummary={judgeSeatGapSummary}
                           realtimeData={realtimeData}
                           currentStagePlayersCount={
                             activeStageMatchedPlayersCount
@@ -1778,7 +1902,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       contestInfo={contestInfo}
                       stagesCount={stagesArray.length}
                       playersCount={playersArray.length}
-                      judgesAssignCount={judgesArray.length}
+                      judgesAssignCount={
+                        judgeSeatGapSummary.totalExpectedSeats > 0
+                          ? judgeSeatGapSummary.totalAssignedSeats
+                          : judgesArray.length
+                      }
+                      judgeSeatGapSummary={judgeSeatGapSummary}
                       realtimeData={realtimeData}
                       emptyJudgeSeats={emptyJudgeSeatsForDiag}
                       onStartFirstStage={
@@ -1817,7 +1946,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       contestInfo={contestInfo}
                       stagesCount={stagesArray.length}
                       playersCount={playersArray.length}
-                      judgesAssignCount={judgesArray.length}
+                      judgesAssignCount={
+                        judgeSeatGapSummary.totalExpectedSeats > 0
+                          ? judgeSeatGapSummary.totalAssignedSeats
+                          : judgesArray.length
+                      }
+                      judgeSeatGapSummary={judgeSeatGapSummary}
                       realtimeData={realtimeData}
                       emptyJudgeSeats={emptyJudgeSeatsForDiag}
                       onRefreshData={reloadBasecampData}

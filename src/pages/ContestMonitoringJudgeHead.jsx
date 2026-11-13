@@ -49,6 +49,7 @@ import {
   MonitoringDiagnosticsBar,
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
+import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -175,6 +176,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     scoreMode: undefined,
   });
   const [stagesArray, setStagesArray] = useState([]);
+  const [categoriesArray, setCategoriesArray] = useState([]);
+  const [gradesArray, setGradesArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
   const [comparesList, setComparesList] = useState({});
   const [comparesArray, setComparesArray] = useState([]);
@@ -195,6 +198,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const [isMobile, setIsMobile] = useState(false);
 
   const fetchNotice = useFirestoreGetDocument("contest_notice");
+  const fetchCategories = useFirestoreGetDocument("contest_categorys_list");
+  const fetchGrades = useFirestoreGetDocument("contest_grades_list");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
   const fetchCompares = useFirestoreGetDocument("contest_compares_list");
@@ -229,7 +234,9 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     stageAssignId,
     playerFinalId,
     compareListId,
-    judgeAssignId
+    judgeAssignId,
+    categoryListId,
+    gradeListId
   ) => {
     try {
       const [
@@ -238,6 +245,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         returnPlayersFinal,
         returnCompareList,
         returnJudgesAssign,
+        returnCategories,
+        returnGrades,
       ] = await Promise.all([
         noticeId ? fetchNotice.getDocument(noticeId) : Promise.resolve(null),
         stageAssignId
@@ -252,10 +261,26 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         judgeAssignId
           ? fetchJudgesAssign.getDocument(judgeAssignId)
           : Promise.resolve(null),
+        categoryListId
+          ? fetchCategories.getDocument(categoryListId)
+          : Promise.resolve(null),
+        gradeListId
+          ? fetchGrades.getDocument(gradeListId)
+          : Promise.resolve(null),
       ]);
 
       if (returnNotice) {
         setContestInfo({ ...returnNotice });
+      }
+      if (returnCategories?.categorys) {
+        setCategoriesArray(returnCategories.categorys || []);
+      } else {
+        setCategoriesArray([]);
+      }
+      if (returnGrades?.grades) {
+        setGradesArray(returnGrades.grades || []);
+      } else {
+        setGradesArray([]);
       }
       if (returnContestStage?.stages) {
         setStagesArray(
@@ -494,20 +519,28 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentContest?.contests?.contestComparesListId || "";
     const judgeAssignId =
       currentContest?.contests?.contestJudgesAssignId || "";
+    const categoryListId =
+      currentContest?.contests?.contestCategorysListId || "";
+    const gradeListId =
+      currentContest?.contests?.contestGradesListId || "";
 
     if (
       noticeId ||
       stageAssignId ||
       playerFinalId ||
       compareListId ||
-      judgeAssignId
+      judgeAssignId ||
+      categoryListId ||
+      gradeListId
     ) {
       fetchPool(
         noticeId,
         stageAssignId,
         playerFinalId,
         compareListId,
-        judgeAssignId
+        judgeAssignId,
+        categoryListId,
+        gradeListId
       );
     } else {
       setIsLoading(false);
@@ -892,6 +925,17 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     return [];
   }, [realtimeData?.judges]);
 
+  const judgeSeatGapSummary = useMemo(
+    () =>
+      summarizeJudgeSeatGaps({
+        judges: judgesAssignArray,
+        categories: categoriesArray,
+        grades: gradesArray,
+        stages: stagesArray,
+      }),
+    [judgesAssignArray, categoriesArray, gradesArray, stagesArray]
+  );
+
   return (
     <>
       {(isLoading || realtimeLoading) && !loadingTimedOut ? (
@@ -1133,7 +1177,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             contestInfo={contestInfo}
             stagesCount={stagesArray.length}
             playersCount={playersArray.length}
-            judgesAssignCount={judgesAssignArray.length}
+            judgesAssignCount={
+              judgeSeatGapSummary.totalExpectedSeats > 0
+                ? judgeSeatGapSummary.totalAssignedSeats
+                : judgesAssignArray.length
+            }
+            judgeSeatGapSummary={judgeSeatGapSummary}
             realtimeData={realtimeData}
             currentStagePlayersCount={activeStageMatchedPlayersCount}
             emptyJudgeSeats={emptyJudgeSeatsForDiag}
@@ -1205,7 +1254,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               contestInfo={contestInfo}
               stagesCount={stagesArray.length}
               playersCount={playersArray.length}
-              judgesAssignCount={judgesAssignArray.length}
+              judgesAssignCount={
+                judgeSeatGapSummary.totalExpectedSeats > 0
+                  ? judgeSeatGapSummary.totalAssignedSeats
+                  : judgesAssignArray.length
+              }
+              judgeSeatGapSummary={judgeSeatGapSummary}
               realtimeData={realtimeData}
               currentStagePlayersCount={activeStageMatchedPlayersCount}
               emptyJudgeSeats={emptyJudgeSeatsForDiag}

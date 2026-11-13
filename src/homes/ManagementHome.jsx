@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   LogOut,
   Wrench,
+  AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   MonitoringDiagnosticsBar,
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
+import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 
 const ManagementHome = ({ children }) => {
   const navigate = useNavigate();
@@ -42,6 +44,7 @@ const ManagementHome = ({ children }) => {
     playersCount: undefined,
     judgesAssignCount: undefined,
     contestInfo: null,
+    judgeSeatGapSummary: null,
   });
   const [collapsedSections, setCollapsedSections] = useState({});
   const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1023px)" });
@@ -50,6 +53,8 @@ const ManagementHome = ({ children }) => {
   const contestId = currentContest?.contests?.id || currentContest?.id || "";
 
   const fetchNoticeDoc = useFirestoreGetDocument("contest_notice");
+  const fetchCategoriesDoc = useFirestoreGetDocument("contest_categorys_list");
+  const fetchGradesDoc = useFirestoreGetDocument("contest_grades_list");
   const fetchStagesDoc = useFirestoreGetDocument("contest_stages_assign");
   const fetchPlayersDoc = useFirestoreGetDocument("contest_players_final");
   const fetchJudgesDoc = useFirestoreGetDocument("contest_judges_assign");
@@ -65,13 +70,20 @@ const ManagementHome = ({ children }) => {
         playersCount: undefined,
         judgesAssignCount: undefined,
         contestInfo: null,
+        judgeSeatGapSummary: null,
       });
       return;
     }
     try {
-      const [nDoc, sDoc, pDoc, jDoc] = await Promise.all([
+      const [nDoc, catDoc, grdDoc, sDoc, pDoc, jDoc] = await Promise.all([
         c.contestNoticeId
           ? fetchNoticeDoc.getDocument(c.contestNoticeId)
+          : Promise.resolve(null),
+        c.contestCategorysListId
+          ? fetchCategoriesDoc.getDocument(c.contestCategorysListId)
+          : Promise.resolve(null),
+        c.contestGradesListId
+          ? fetchGradesDoc.getDocument(c.contestGradesListId)
           : Promise.resolve(null),
         c.contestStagesAssignId
           ? fetchStagesDoc.getDocument(c.contestStagesAssignId)
@@ -83,13 +95,25 @@ const ManagementHome = ({ children }) => {
           ? fetchJudgesDoc.getDocument(c.contestJudgesAssignId)
           : Promise.resolve(null),
       ]);
+      const stagesList = Array.isArray(sDoc?.stages) ? sDoc.stages : [];
+      const judgesList = Array.isArray(jDoc?.judges) ? jDoc.judges : [];
+      const gapSummary = summarizeJudgeSeatGaps({
+        judges: judgesList,
+        categories: Array.isArray(catDoc?.categorys) ? catDoc.categorys : [],
+        grades: Array.isArray(grdDoc?.grades) ? grdDoc.grades : [],
+        stages: stagesList,
+      });
       setQuickCheckCounts({
         contestInfo: nDoc || null,
-        stagesCount: Array.isArray(sDoc?.stages) ? sDoc.stages.length : 0,
+        stagesCount: stagesList.length,
         playersCount: Array.isArray(pDoc?.players)
           ? pDoc.players.filter((p) => p && p.playerNoShow !== true).length
           : 0,
-        judgesAssignCount: Array.isArray(jDoc?.judges) ? jDoc.judges.length : 0,
+        judgesAssignCount:
+          gapSummary.totalExpectedSeats > 0
+            ? gapSummary.totalAssignedSeats
+            : judgesList.length,
+        judgeSeatGapSummary: gapSummary,
       });
     } catch (e) {
       console.error("[QuickCheck] 카운트 조회 오류:", e);
@@ -97,11 +121,9 @@ const ManagementHome = ({ children }) => {
   };
 
   useEffect(() => {
-    if (quickCheckOpen) {
-      loadQuickCheckCounts();
-    }
+    loadQuickCheckCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickCheckOpen, contestId]);
+  }, [quickCheckOpen, contestId, location.pathname]);
 
   useEffect(() => {
     setQuickCheckOpen(false);
@@ -360,6 +382,8 @@ const ManagementHome = ({ children }) => {
           className={`w-full h-8 px-2.5 rounded-[8px] border flex items-center justify-between gap-2 text-xs font-medium transition-colors cursor-pointer ${
             quickCheckOpen
               ? "bg-[#2563eb] text-white border-[#2563eb]"
+              : quickCheckCounts.judgeSeatGapSummary?.hasGap
+              ? "bg-[#fffbeb] hover:bg-[#fef3c7]/70 text-[#92400e] border-[#f59e0b]/45 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
               : "bg-white hover:bg-[#fafafa] text-[#171717] border-[#171717]/[0.09] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
           }`}
         >
@@ -367,7 +391,13 @@ const ManagementHome = ({ children }) => {
             <Wrench
               size={13}
               strokeWidth={1.6}
-              className={quickCheckOpen ? "text-white" : "text-[#2563eb]"}
+              className={
+                quickCheckOpen
+                  ? "text-white"
+                  : quickCheckCounts.judgeSeatGapSummary?.hasGap
+                  ? "text-[#b45309]"
+                  : "text-[#2563eb]"
+              }
             />
             <span>필수 데이터 점검</span>
           </span>
@@ -381,6 +411,16 @@ const ManagementHome = ({ children }) => {
             >
               누락 {quickMissingLinkCount}
             </span>
+          ) : quickCheckCounts.judgeSeatGapSummary?.hasGap ? (
+            <span
+              className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold tabular-nums ${
+                quickCheckOpen
+                  ? "bg-white/20 text-white"
+                  : "bg-[#f59e0b]/20 text-[#92400e]"
+              }`}
+            >
+              주의
+            </span>
           ) : (
             <span
               className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-medium ${
@@ -393,6 +433,31 @@ const ManagementHome = ({ children }) => {
             </span>
           )}
         </button>
+
+        {quickCheckCounts.judgeSeatGapSummary?.hasGap && (
+          <button
+            type="button"
+            onClick={() => handleNavigate("/judges-hub?tab=assign")}
+            title={quickCheckCounts.judgeSeatGapSummary.preWarningText}
+            className="w-full px-2.5 py-1.5 rounded-[8px] bg-[#fffbeb] hover:bg-[#fef3c7]/80 border border-[#f59e0b]/45 flex items-center justify-between gap-1.5 text-[11px] leading-4 text-[#92400e] font-semibold transition-colors cursor-pointer text-left"
+          >
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <AlertTriangle
+                size={12}
+                strokeWidth={2}
+                className="text-[#d97706] shrink-0"
+              />
+              <span className="truncate">
+                {quickCheckCounts.judgeSeatGapSummary.shortJoined} 심판 비어있음
+              </span>
+            </span>
+            <ArrowUpRight
+              size={12}
+              strokeWidth={1.7}
+              className="text-[#b45309] shrink-0"
+            />
+          </button>
+        )}
       </div>
 
       {/* Scrollable Navigation Groups */}
@@ -501,11 +566,18 @@ const ManagementHome = ({ children }) => {
                 className={`h-8 px-2.5 rounded-[8px] border inline-flex items-center gap-1 text-xs leading-4 font-medium transition-colors cursor-pointer ${
                   quickCheckOpen
                     ? "bg-[#2563eb] text-white border-[#2563eb]"
+                    : quickCheckCounts.judgeSeatGapSummary?.hasGap
+                    ? "bg-[#fffbeb] border-[#f59e0b]/45 text-[#92400e]"
                     : "bg-white border-[#171717]/[0.08] text-[#171717]"
                 }`}
               >
                 <Wrench size={13} strokeWidth={1.6} />
                 <span>데이터 점검</span>
+                {quickCheckCounts.judgeSeatGapSummary?.hasGap && (
+                  <span className="px-1 py-0.2 rounded bg-[#f59e0b]/20 text-[#92400e] text-[10px] font-bold">
+                    주의
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -578,7 +650,7 @@ const ManagementHome = ({ children }) => {
           onClose={() => setQuickCheckOpen(false)}
           PaperProps={{
             sx: {
-              width: { xs: "100vw", md: "min(92vw, 920px)" },
+              width: { xs: "100vw", md: "min(96vw, 1140px)" },
               bgcolor: "#ffffff",
               boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
             },
@@ -616,6 +688,7 @@ const ManagementHome = ({ children }) => {
                 stagesCount={quickCheckCounts.stagesCount}
                 playersCount={quickCheckCounts.playersCount}
                 judgesAssignCount={quickCheckCounts.judgesAssignCount}
+                judgeSeatGapSummary={quickCheckCounts.judgeSeatGapSummary}
                 realtimeData={liveStageRealtime}
                 onRefreshData={loadQuickCheckCounts}
                 defaultExpanded={true}

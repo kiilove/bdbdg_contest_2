@@ -59,6 +59,7 @@ export const buildMonitoringReadiness = ({
   realtimeData,
   currentStagePlayersCount,
   emptyJudgeSeats = [],
+  judgeSeatGapSummary = null,
   screenType = "basecamp", // "basecamp" | "judgeHead" | "host" | "mc" | "hub"
 }) => {
   const contestsDoc = currentContest?.contests || currentContest || {};
@@ -108,10 +109,12 @@ export const buildMonitoringReadiness = ({
   const hasFinalPlayers =
     Boolean(playerFinalId) &&
     (resolvedPlayersCount === null || resolvedPlayersCount > 0);
+  const hasJudgesGap = Boolean(judgeSeatGapSummary?.hasGap);
   const hasJudges =
     Boolean(judgeAssignId) &&
     (resolvedJudgesCount === null || resolvedJudgesCount > 0) &&
-    emptyJudgeSeats.length === 0;
+    emptyJudgeSeats.length === 0 &&
+    !hasJudgesGap;
   const hasCompareDoc = Boolean(compareListId);
   const hasLiveStage = Boolean(realtimeData?.stageId);
 
@@ -236,28 +239,44 @@ export const buildMonitoringReadiness = ({
       icon: Gavel,
       status:
         screenType === "host" || screenType === "mc"
-          ? judgeAssignId
-            ? "ready"
-            : "warning"
-          : !judgeAssignId || resolvedJudgesCount === 0
+          ? !judgeAssignId
+            ? "warning"
+            : hasJudgesGap
+            ? "warning"
+            : "ready"
+          : !judgeAssignId ||
+            resolvedJudgesCount === 0 ||
+            (judgeSeatGapSummary?.totalExpectedSeats > 0 &&
+              judgeSeatGapSummary?.totalAssignedSeats === 0)
           ? "missing"
           : emptyJudgeSeats.length > 0
+          ? "missing"
+          : hasJudgesGap
           ? "warning"
           : "ready",
       valueText: !judgeAssignId
         ? "심판배정 문서 미연결"
         : emptyJudgeSeats.length > 0
         ? `현재 무대 미배정: ${emptyJudgeSeats.join(", ")}번석`
+        : hasJudgesGap
+        ? judgeSeatGapSummary.headlineText
+        : judgeSeatGapSummary?.totalExpectedSeats > 0
+        ? judgeSeatGapSummary.headlineText
         : resolvedJudgesCount !== null
         ? `좌석 배정 ${resolvedJudgesCount}건`
         : "심판배정 연결됨",
       reason:
-        !judgeAssignId || resolvedJudgesCount === 0
+        !judgeAssignId ||
+        resolvedJudgesCount === 0 ||
+        (judgeSeatGapSummary?.totalExpectedSeats > 0 &&
+          judgeSeatGapSummary?.totalAssignedSeats === 0)
           ? "심판 좌석 배정 데이터(contest_judges_assign)가 비어 있습니다. 심판석 로그인 및 채점을 위해 좌석 배정을 저장해 주세요."
           : emptyJudgeSeats.length > 0
           ? `현재 진행 무대에 심판이 배정되지 않은 좌석(${emptyJudgeSeats.join(
               ", "
-            )}번)이 있습니다.`
+            )}번)이 있습니다. 즉시 좌석 배정을 보강해 주세요.`
+          : hasJudgesGap
+          ? judgeSeatGapSummary.preWarningText
           : null,
       primaryAction: {
         label: "심판 좌석배정",
@@ -354,6 +373,7 @@ export const buildMonitoringReadiness = ({
     hasLiveStage,
     hasStages,
     hasFinalPlayers,
+    hasJudges,
   };
 };
 
@@ -370,6 +390,7 @@ export const MonitoringDiagnosticsBar = ({
   realtimeData = null,
   currentStagePlayersCount,
   emptyJudgeSeats = [],
+  judgeSeatGapSummary = null,
   onStartFirstStage = null,
   onRefreshData = null,
   defaultExpanded,
@@ -391,6 +412,7 @@ export const MonitoringDiagnosticsBar = ({
         realtimeData,
         currentStagePlayersCount,
         emptyJudgeSeats,
+        judgeSeatGapSummary,
         screenType,
       }),
     [
@@ -402,6 +424,7 @@ export const MonitoringDiagnosticsBar = ({
       realtimeData,
       currentStagePlayersCount,
       emptyJudgeSeats,
+      judgeSeatGapSummary,
       screenType,
     ]
   );
@@ -613,6 +636,8 @@ export const MonitoringDiagnosticsBar = ({
           readiness.missingSteps.length +
           (readiness.activeStageEmptyReason ? 1 : 0)
         }건`
+      : judgeSeatGapSummary?.hasGap
+      ? `사전 예고 · ${judgeSeatGapSummary.shortJoined} 미배정`
       : readiness.warningSteps.length > 0
       ? `점검 권장 ${readiness.warningSteps.length}건`
       : readiness.standbySteps.length > 0
@@ -792,6 +817,40 @@ export const MonitoringDiagnosticsBar = ({
         </div>
       </div>
 
+      {/* 접혀 있을 때도 심판 좌석 누락 사전 예고를 즉시 노출하는 알림 바 */}
+      {!drawerVisible && judgeSeatGapSummary?.hasGap && (
+        <div
+          className={`px-4 py-2.5 border-t flex flex-wrap items-center justify-between gap-2.5 text-xs ${
+            isDark
+              ? "border-[#f59e0b]/30 bg-[#231e14]/90 text-[#fcd34d]"
+              : "border-[#b45309]/20 bg-[#fffbeb] text-[#92400e]"
+          }`}
+        >
+          <div className="flex items-start sm:items-center gap-2 min-w-0">
+            <AlertTriangle
+              size={14}
+              strokeWidth={1.8}
+              className="shrink-0 mt-0.5 sm:mt-0"
+            />
+            <span className="font-medium leading-relaxed">
+              {judgeSeatGapSummary.preWarningText}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/judges-hub?tab=assign")}
+            className={`inline-flex items-center gap-1 h-7 px-3 rounded-[6px] text-xs font-semibold border whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+              isDark
+                ? "bg-[#f59e0b]/20 hover:bg-[#f59e0b]/30 text-[#fcd34d] border-[#f59e0b]/40"
+                : "bg-white hover:bg-[#fef3c7] text-[#92400e] border-[#b45309]/35"
+            }`}
+          >
+            <span>심판 좌석배정 바로가기</span>
+            <ArrowUpRight size={12.5} strokeWidth={1.6} />
+          </button>
+        </div>
+      )}
+
       {/* 확장형 데이터 점검 및 빠른 보강 드로어 */}
       {drawerVisible && (
         <div
@@ -821,7 +880,13 @@ export const MonitoringDiagnosticsBar = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5">
+          <div
+            className={
+              screenType === "hub"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"
+                : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-2.5"
+            }
+          >
             {readiness.steps.map((step) => {
               const StepIcon = step.icon;
               const isMissing = step.status === "missing";
@@ -908,6 +973,10 @@ export const MonitoringDiagnosticsBar = ({
                           ? isDark
                             ? "text-[#ff8589] font-medium"
                             : "text-[#dc2626] font-medium"
+                          : isWarning
+                          ? isDark
+                            ? "text-[#fcd34d] font-semibold"
+                            : "text-[#b45309] font-semibold"
                           : isDark
                           ? "text-[#a1a1a6]"
                           : "text-[#525252]"
@@ -934,10 +1003,10 @@ export const MonitoringDiagnosticsBar = ({
                         type="button"
                         disabled={busyAction === step.autoFixType}
                         onClick={() => handleAutoFix(step.autoFixType)}
-                        className="w-full inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        className="w-full inline-flex items-center justify-center gap-1 min-h-[30px] py-1 px-2.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[11px] font-medium whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        <Play size={11.5} strokeWidth={1.75} />
-                        <span>
+                        <Play size={11.5} strokeWidth={1.75} className="shrink-0" />
+                        <span className="truncate">
                           {busyAction === step.autoFixType
                             ? "처리 중..."
                             : step.autoFixLabel}
@@ -949,16 +1018,20 @@ export const MonitoringDiagnosticsBar = ({
                       <button
                         type="button"
                         onClick={() => navigate(step.primaryAction.path)}
-                        className={`w-full inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] text-[11px] font-medium border transition-colors cursor-pointer ${
+                        className={`w-full inline-flex items-center justify-center gap-1 min-h-[30px] py-1 px-2.5 rounded-[6px] text-[11px] font-medium border whitespace-nowrap transition-colors cursor-pointer ${
                           isMissing && !step.autoFixType
                             ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border-[#2563eb]"
+                            : isWarning && !step.autoFixType
+                            ? isDark
+                              ? "bg-[#f59e0b]/20 hover:bg-[#f59e0b]/30 text-[#fcd34d] border-[#f59e0b]/45"
+                              : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#92400e] border-[#b45309]/35 font-semibold"
                             : isDark
                             ? "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border-[#ededed]/[0.1]"
                             : "bg-white hover:bg-[#f4f4f5] text-[#171717] border-[#171717]/[0.12]"
                         }`}
                       >
-                        <span>{step.primaryAction.label}</span>
-                        <ArrowUpRight size={12} strokeWidth={1.5} />
+                        <span className="truncate">{step.primaryAction.label}</span>
+                        <ArrowUpRight size={12} strokeWidth={1.5} className="shrink-0" />
                       </button>
                     )}
 
@@ -966,14 +1039,14 @@ export const MonitoringDiagnosticsBar = ({
                       <button
                         type="button"
                         onClick={() => navigate(step.secondaryAction.path)}
-                        className={`w-full inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] text-[11px] font-medium border transition-colors cursor-pointer ${
+                        className={`w-full inline-flex items-center justify-center gap-1 min-h-[30px] py-1 px-2.5 rounded-[6px] text-[11px] font-medium border whitespace-nowrap transition-colors cursor-pointer ${
                           isDark
                             ? "bg-transparent hover:bg-[#232325] text-[#a1a1a6] hover:text-[#ededed] border-[#ededed]/[0.08]"
                             : "bg-[#f4f4f5]/70 hover:bg-[#e4e4e7]/70 text-[#525252] hover:text-[#171717] border-[#171717]/[0.08]"
                         }`}
                       >
-                        <span>{step.secondaryAction.label}</span>
-                        <ArrowUpRight size={11.5} strokeWidth={1.5} />
+                        <span className="truncate">{step.secondaryAction.label}</span>
+                        <ArrowUpRight size={11.5} strokeWidth={1.5} className="shrink-0" />
                       </button>
                     )}
                   </div>
@@ -1001,6 +1074,7 @@ export const MonitoringBlockingState = ({
   realtimeData = null,
   currentStagePlayersCount,
   emptyJudgeSeats = [],
+  judgeSeatGapSummary = null,
   onStartFirstStage = null,
   onRefreshData = null,
 }) => {
@@ -1104,6 +1178,7 @@ export const MonitoringBlockingState = ({
         realtimeData,
         currentStagePlayersCount,
         emptyJudgeSeats,
+        judgeSeatGapSummary,
         screenType,
       }),
     [
@@ -1115,6 +1190,7 @@ export const MonitoringBlockingState = ({
       realtimeData,
       currentStagePlayersCount,
       emptyJudgeSeats,
+      judgeSeatGapSummary,
       screenType,
     ]
   );
