@@ -201,7 +201,8 @@ const ContestPointSummary = ({
       if (sp?.playerNoShow) return;
       mapByNum.set(sp.playerNumber, {
         playerNumber: sp.playerNumber,
-        playerIndex: sp.playerIndex ?? Number(sp.playerNumber) ?? 0,
+        playerIndex:
+          sp.grandPrixIndex ?? sp.playerIndex ?? Number(sp.playerNumber) ?? 0,
         playerGym: sp.playerGym || "",
         playerName: sp.playerName || "",
         playerUid: sp.playerUid || "",
@@ -214,7 +215,11 @@ const ContestPointSummary = ({
       if (!group) {
         group = {
           playerNumber: curr.playerNumber,
-          playerIndex: curr.playerIndex ?? Number(curr.playerNumber) ?? 0,
+          playerIndex:
+            curr.grandPrixIndex ??
+            curr.playerIndex ??
+            Number(curr.playerNumber) ??
+            0,
           playerGym: curr.playerGym || "",
           playerName: curr.playerName || "",
           playerUid: curr.playerUid || "",

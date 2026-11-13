@@ -171,7 +171,11 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       if (returnPlayersFinal?.players) {
         setPlayersArray(
           (returnPlayersFinal.players || [])
-            .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
+            .sort(
+              (a, b) =>
+                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+            )
             .filter((f) => f.playerNoShow === false)
         );
       }
@@ -207,7 +211,11 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           const remotePlayers = remoteData?.players || [];
           if (remotePlayers.length > 0) {
             const cleanList = remotePlayers
-              .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
+              .sort(
+                (a, b) =>
+                  (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                  (b.grandPrixIndex ?? b.playerIndex ?? 0)
+              )
               .filter((f) => f.playerNoShow === false);
             setPlayersArray(cleanList);
           }
@@ -396,7 +404,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       matchedJudgeAssignCount = (judgesArray || []).filter(
         (f) => f?.contestGradeId === gradeId || f?.gradeId === gradeId
       ).length;
-      matchedPlayersCount = Number(grades[0]?.playerCount) || 0;
+      const liveCount =
+        Array.isArray(playersArray) && playersArray.length > 0
+          ? playersArray.filter((p) => p?.contestGradeId === gradeId).length
+          : null;
+      matchedPlayersCount =
+        liveCount !== null ? liveCount : Number(grades[0]?.playerCount) || 0;
     } else if (grades.length > 1) {
       const madeTitle = grades
         .map((grade) => (grade?.gradeTitle || "") + " ")
@@ -408,9 +421,17 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           f?.contestGradeId === grades[0]?.gradeId ||
           f?.gradeId === grades[0]?.gradeId
       ).length;
+      const hasLivePool =
+        Array.isArray(playersArray) && playersArray.length > 0;
       grades.forEach((grade) => {
-        matchedPlayersCount +=
-          Number.parseInt(grade?.playerCount || 0, 10) || 0;
+        if (hasLivePool) {
+          matchedPlayersCount += playersArray.filter(
+            (p) => p?.contestGradeId === grade?.gradeId
+          ).length;
+        } else {
+          matchedPlayersCount +=
+            Number.parseInt(grade?.playerCount || 0, 10) || 0;
+        }
       });
       gradeId = grades[0]?.gradeId || "";
       gradeTitle = madeTitle + "통합";

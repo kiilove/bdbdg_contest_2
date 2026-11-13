@@ -148,7 +148,11 @@ const ContestMonitoringHost = ({ contestId }) => {
 
       if (returnPlayersFinal?.players) {
         const players = [...(returnPlayersFinal.players || [])]
-          .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
+          .sort(
+            (a, b) =>
+              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+          )
           .filter((f) => f.playerNoShow === false);
         setAllFinalPlayers(players);
       } else {

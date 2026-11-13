@@ -194,7 +194,11 @@ const ContestPlayerOrderTableAfter = () => {
                       {isMobile ? (
                         <div className="flex flex-col gap-2.5 p-3">
                           {matchedPlayers
-                            .sort((a, b) => a.playerIndex - b.playerIndex)
+                            .sort(
+                              (a, b) =>
+                                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                            )
                             .map((player, pIdx) => {
                               const {
                                 playerName,
@@ -274,7 +278,11 @@ const ContestPlayerOrderTableAfter = () => {
                             </thead>
                             <tbody className="divide-y divide-[#171717]/[0.06]">
                               {matchedPlayers
-                                .sort((a, b) => a.playerIndex - b.playerIndex)
+                                .sort(
+                                  (a, b) =>
+                                    (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                                    (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                                )
                                 .map((player, pIdx) => {
                                   const {
                                     playerName,
@@ -282,6 +290,7 @@ const ContestPlayerOrderTableAfter = () => {
                                     playerNumber,
                                     playerNoShow,
                                     isGradeChanged,
+                                    originalgradeTitle,
                                   } = player;
 
                                   return (
@@ -331,7 +340,12 @@ const ContestPlayerOrderTableAfter = () => {
                                         {playerGym || "-"}
                                       </td>
                                       <td className="w-36 py-3 px-4">
-                                        <div className="flex gap-1.5">
+                                        <div className="flex gap-1.5 flex-wrap">
+                                          {originalgradeTitle && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
+                                              {originalgradeTitle} 1위
+                                            </span>
+                                          )}
                                           {isGradeChanged && (
                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
                                               월체

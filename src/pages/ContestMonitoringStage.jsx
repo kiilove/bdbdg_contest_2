@@ -180,7 +180,11 @@ const ContestMonitoringStage = () => {
             (f) =>
               f.contestGradeId === filter.gradeId && f.playerNoShow !== true
           )
-          .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0));
+          .sort(
+            (a, b) =>
+              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+          );
         dummy = [...dummy, ...filterdPlayers];
         return {
           gradeId: filter.gradeId,

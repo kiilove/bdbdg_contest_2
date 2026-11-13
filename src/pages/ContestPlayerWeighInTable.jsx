@@ -75,11 +75,24 @@ const getPlayerTupleKey = (p) => {
   return `${p.contestGradeId || ""}__${p.playerNumber ?? ""}__${p.playerUid || ""}`;
 };
 
+/** 🛡️ 그랑프리 엔트리 여부 판별 (종목명/섹션/grandPrixIndex 포함) */
+const isGrandPrixEntryLike = (p) => {
+  if (!p) return false;
+  const catTitle = String(p.contestCategoryTitle || "");
+  return (
+    catTitle === "그랑프리" ||
+    catTitle.includes("그랑프리") ||
+    p.contestCategorySection === "그랑프리" ||
+    p.grandPrixIndex !== undefined ||
+    Boolean(p.originalGradeId)
+  );
+};
+
 /** 🛡️ 그랑프리 자동생성 엔트리 여부 판별 (강제등록 createdBy === 'force' 제외) */
 const isAutoGrandPrixEntry = (p) => {
   if (!p) return false;
   if (p.createdBy === "force" || p.createBy === "force") return false;
-  return p.contestCategoryTitle === "그랑프리";
+  return isGrandPrixEntryLike(p);
 };
 
 /** 🛡️ contest_players_final 저장 시 assign에 없는 그랑프리/강제등록 선수 완벽 보존 */
@@ -103,7 +116,7 @@ const mergePreservingUnmatchedFinalEntries = (
         (p) =>
           p?.playerUid &&
           p?.contestCategoryId &&
-          p?.contestCategoryTitle !== "그랑프리"
+          !isGrandPrixEntryLike(p)
       )
       .map((p) => `${p.playerUid}__${p.contestCategoryId}`)
   );
@@ -117,7 +130,7 @@ const mergePreservingUnmatchedFinalEntries = (
       return;
     }
     const isForce = fp.createdBy === "force" || fp.createBy === "force";
-    const isGrandPrix = fp.contestCategoryTitle === "그랑프리";
+    const isGrandPrix = isGrandPrixEntryLike(fp);
     if (
       !isForce &&
       !isGrandPrix &&
@@ -3518,36 +3531,40 @@ const ContestPlayerWeighInTable = () => {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-[#171717]/[0.08] bg-[#fafafa] text-xs font-medium text-[#525252]">
-                              <th className="py-2.5 px-3 w-14 text-center">
+                              <th className="py-2.5 px-3 w-14 text-center whitespace-nowrap">
                                 순번
                               </th>
-                              <th className="py-2.5 px-2 w-20 text-center">
+                              <th className="py-2.5 px-2 w-20 text-center whitespace-nowrap">
                                 사진
                               </th>
-                              <th className="py-2.5 px-3 w-28 text-center">
+                              <th className="py-2.5 px-3 w-28 text-center whitespace-nowrap">
                                 선수번호
                               </th>
-                              <th className="py-2.5 px-4 w-48">
+                              <th className="py-2.5 px-4 w-48 whitespace-nowrap">
                                 선수 성명 / 상태
                               </th>
-                              <th className="py-2.5 px-3 w-40">소속</th>
-                              <th className="py-2.5 px-4 min-w-[330px]">
+                              <th className="py-2.5 px-3 w-40 whitespace-nowrap">소속</th>
+                              <th className="py-2.5 px-4 min-w-[330px] whitespace-nowrap">
                                 신장(cm) / 체중(kg) 계측
                               </th>
-                              <th className="py-2.5 px-3 w-16 text-center">
+                              <th className="py-2.5 px-3 w-16 text-center whitespace-nowrap">
                                 월체
                               </th>
-                              <th className="py-2.5 px-3 w-20 text-center">
+                              <th className="py-2.5 px-3 w-16 text-center whitespace-nowrap">
                                 불참
                               </th>
-                              <th className="py-2.5 px-3 w-20 text-center">
+                              <th className="py-2.5 px-3 w-24 min-w-[88px] text-center whitespace-nowrap">
                                 관리
                               </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#171717]/[0.06]">
                             {matchedPlayers
-                              .sort((a, b) => a.playerIndex - b.playerIndex)
+                              .sort(
+                                (a, b) =>
+                                  (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                                  (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                              )
                               .map((player, pIdx) => {
                                 const {
                                   playerName,
@@ -3820,14 +3837,18 @@ const ContestPlayerWeighInTable = () => {
                                       />
                                     </td>
 
-                                    <td className="py-3.5 px-3 text-center">
+                                    <td className="py-3.5 px-3 text-center whitespace-nowrap">
                                       <button
                                         type="button"
                                         onClick={() => openNumberModal(player)}
-                                        className="inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
+                                        className="inline-flex items-center justify-center gap-1 h-8 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0"
                                       >
-                                        <Pencil size={13} strokeWidth={1.5} />
-                                        <span>수정</span>
+                                        <Pencil
+                                          size={13}
+                                          strokeWidth={1.5}
+                                          className="shrink-0"
+                                        />
+                                        <span className="whitespace-nowrap">수정</span>
                                       </button>
                                     </td>
                                   </tr>
@@ -3840,7 +3861,11 @@ const ContestPlayerWeighInTable = () => {
                       /* 모바일 카드 뷰 */
                       <div className="p-3 space-y-2.5">
                         {matchedPlayers
-                          .sort((a, b) => a.playerIndex - b.playerIndex)
+                          .sort(
+                            (a, b) =>
+                              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                          )
                           .map((player) => {
                             const {
                               playerName,

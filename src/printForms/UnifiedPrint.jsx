@@ -320,6 +320,8 @@ const UnifiedPrint = () => {
                   if (printType === "final") {
                     if (player.playerNoShow) {
                       note = "불참";
+                    } else if (player.originalgradeTitle) {
+                      note = `${player.originalgradeTitle} 1위`;
                     } else if (player.isGradeChanged) {
                       note = "월체 반영됨";
                     }
@@ -328,7 +330,8 @@ const UnifiedPrint = () => {
                   return {
                     index: index + 1,
                     playerNumber: player.playerNumber,
-                    playerIndex: player.playerIndex,
+                    grandPrixIndex: player.grandPrixIndex,
+                    playerIndex: player.grandPrixIndex ?? player.playerIndex,
                     playerName,
                     heightWeight: player.heightWeight || "",
                     playerGym: player.playerGym || "",
@@ -453,7 +456,9 @@ const UnifiedPrint = () => {
         ...category,
         grades: category.grades.map((grade) => {
           const sorted = [...grade.players].sort(
-            (a, b) => a.playerIndex - b.playerIndex
+            (a, b) =>
+              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+              (b.grandPrixIndex ?? b.playerIndex ?? 0)
           );
           const renumbered = sorted.map((p, i) => ({ ...p, index: i + 1 }));
           return { ...grade, players: renumbered };

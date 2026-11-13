@@ -145,7 +145,11 @@ const ContestStagetable = () => {
                 player.playerNoShow === false
             );
 
-            if (matchedPlayers?.length === 0) {
+            if (
+              matchedPlayers?.length === 0 &&
+              categorySection !== "그랑프리" &&
+              !categoryIsOverall
+            ) {
               return null;
             }
 
