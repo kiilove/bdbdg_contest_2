@@ -24,7 +24,11 @@ import {
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
-import { exportContestResultsToExcel } from "../functions/functions";
+import {
+  exportContestResultsToExcel,
+  getStagePlayerSortIndex,
+  isGrandPrixPlayerEntry,
+} from "../functions/functions";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
@@ -317,12 +321,14 @@ const UnifiedPrint = () => {
                   let note = player.note || "";
                   let playerName = player.playerName;
 
+                  const isGpRow = isGrandPrixPlayerEntry(player, category);
+
                   if (printType === "final") {
                     if (player.playerNoShow) {
                       note = "불참";
-                    } else if (player.originalgradeTitle) {
+                    } else if (isGpRow && player.originalgradeTitle) {
                       note = `${player.originalgradeTitle} 1위`;
-                    } else if (player.isGradeChanged) {
+                    } else if (!isGpRow && player.isGradeChanged) {
                       note = "월체 반영됨";
                     }
                   }
@@ -330,8 +336,16 @@ const UnifiedPrint = () => {
                   return {
                     index: index + 1,
                     playerNumber: player.playerNumber,
-                    grandPrixIndex: player.grandPrixIndex,
-                    playerIndex: player.grandPrixIndex ?? player.playerIndex,
+                    contestCategorySection:
+                      player.contestCategorySection ||
+                      category?.contestCategorySection ||
+                      category?.categorySection,
+                    contestCategoryTitle:
+                      player.contestCategoryTitle ||
+                      category?.contestCategoryTitle ||
+                      category?.categoryTitle,
+                    grandPrixIndex: isGpRow ? player.grandPrixIndex : undefined,
+                    playerIndex: getStagePlayerSortIndex(player, category),
                     playerName,
                     heightWeight: player.heightWeight || "",
                     playerGym: player.playerGym || "",
@@ -457,8 +471,8 @@ const UnifiedPrint = () => {
         grades: category.grades.map((grade) => {
           const sorted = [...grade.players].sort(
             (a, b) =>
-              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+              getStagePlayerSortIndex(a, category) -
+              getStagePlayerSortIndex(b, category)
           );
           const renumbered = sorted.map((p, i) => ({ ...p, index: i + 1 }));
           return { ...grade, players: renumbered };

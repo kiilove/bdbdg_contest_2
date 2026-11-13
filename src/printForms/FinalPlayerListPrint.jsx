@@ -6,6 +6,7 @@ import { HiUserGroup } from "react-icons/hi";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
 import PrintTable from "./PrintTable";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const FinalPlayerListPrint = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -65,8 +66,8 @@ const FinalPlayerListPrint = () => {
                 )
                 .sort(
                   (a, b) =>
-                    (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                    (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                    getStagePlayerSortIndex(a, category) -
+                    getStagePlayerSortIndex(b, category)
                 );
               return {
                 ...grade,

@@ -9,6 +9,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import LoadingPage from "./LoadingPage";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const ContestMonitoringStage = () => {
   const [stagesArray, setStagesArray] = useState([]);
@@ -182,8 +183,8 @@ const ContestMonitoringStage = () => {
           )
           .sort(
             (a, b) =>
-              (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-              (b.grandPrixIndex ?? b.playerIndex ?? 0)
+              getStagePlayerSortIndex(a, filter) -
+              getStagePlayerSortIndex(b, filter)
           );
         dummy = [...dummy, ...filterdPlayers];
         return {

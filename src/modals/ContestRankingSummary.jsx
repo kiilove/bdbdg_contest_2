@@ -18,6 +18,7 @@ import { where } from "firebase/firestore";
 import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
 import { Modal } from "@mui/material";
 import { resolveEffectiveCollectionName } from "../components/monitoring/MonitoringDiagnosticsBar";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const ContestRankingSummary = ({
   categoryId,
@@ -171,7 +172,7 @@ const ContestRankingSummary = ({
       mapByNum.set(sp.playerNumber, {
         playerNumber: sp.playerNumber,
         playerIndex:
-          sp.grandPrixIndex ?? sp.playerIndex ?? Number(sp.playerNumber) ?? 0,
+          getStagePlayerSortIndex(sp) || Number(sp.playerNumber) || 0,
         playerGym: sp.playerGym || "",
         playerName: sp.playerName || "",
         playerUid: sp.playerUid || "",
@@ -185,10 +186,7 @@ const ContestRankingSummary = ({
         group = {
           playerNumber: curr.playerNumber,
           playerIndex:
-            curr.grandPrixIndex ??
-            curr.playerIndex ??
-            Number(curr.playerNumber) ??
-            0,
+            getStagePlayerSortIndex(curr) || Number(curr.playerNumber) || 0,
           playerGym: curr.playerGym || "",
           playerName: curr.playerName || "",
           playerUid: curr.playerUid || "",

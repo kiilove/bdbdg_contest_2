@@ -22,6 +22,7 @@ import {
 } from "../hooks/useFirebaseRealtime";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import { getStagePlayerSortIndex } from "../functions/functions";
 import { Drawer, Modal } from "@mui/material";
 import CompareSetting from "../modals/CompareSetting";
 import ContestRankingSummary from "../modals/ContestRankingSummary";
@@ -270,8 +271,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           [...(returnPlayersFinal.players || [])]
             .sort(
               (a, b) =>
-                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
             )
             .filter((f) => f.playerNoShow === false)
         );

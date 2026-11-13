@@ -23,6 +23,7 @@ import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
+import { getStagePlayerSortIndex } from "../functions/functions";
 import { where } from "firebase/firestore";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
@@ -231,12 +232,8 @@ const ContestMonitoringMC = () => {
       setPlayersArray(
         deduped.sort(
           (a, b) =>
-            (Number(a.grandPrixIndex ?? a.playerIndex) ||
-              Number(a.playerNumber) ||
-              0) -
-            (Number(b.grandPrixIndex ?? b.playerIndex) ||
-              Number(b.playerNumber) ||
-              0)
+            (getStagePlayerSortIndex(a) || Number(a.playerNumber) || 0) -
+            (getStagePlayerSortIndex(b) || Number(b.playerNumber) || 0)
         )
       );
     } catch (error) {

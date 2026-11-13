@@ -8,7 +8,10 @@ import {
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { generateToday } from "../functions/functions";
+import {
+  generateToday,
+  isGrandPrixPlayerEntry,
+} from "../functions/functions";
 import {
   Trophy,
   Save,
@@ -128,11 +131,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
     (existingFinalPlayers || []).forEach((fp) => {
       if (!fp) return;
       const uKey = getPlayerUniqueKey(fp);
-      const isGpLike =
-        fp.contestCategoryTitle === "그랑프리" ||
-        String(fp.contestCategoryTitle || "").includes("그랑프리") ||
-        fp.contestCategorySection === "그랑프리" ||
-        fp.grandPrixIndex !== undefined;
+      const isGpLike = isGrandPrixPlayerEntry(fp);
 
       if (isGpLike && fp.contestGradeId && uKey) {
         savedGpByGradeAndKey.set(`${fp.contestGradeId}_${uKey}`, fp);

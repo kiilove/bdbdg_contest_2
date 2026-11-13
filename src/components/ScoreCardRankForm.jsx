@@ -3,6 +3,7 @@ import ybbf from "../assets/img/ybbf_logo.png";
 import sbbf from "../assets/img/sbbf_logo.png";
 
 import CanvasWithImageData from "./CanvasWithImageData";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const ScoreCardRankForm = ({
   contestInfo,
@@ -163,8 +164,8 @@ const ScoreCardRankForm = ({
                 players
                   .sort(
                     (a, b) =>
-                      (a.grandPrixIndex ?? a.playerIndex ?? 0) -
-                      (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                      getStagePlayerSortIndex(a, { categoryTitle }) -
+                      getStagePlayerSortIndex(b, { categoryTitle })
                   )
                   .map((player, pIdx) => {
                     const { playerNumber, playerScore } = player;
