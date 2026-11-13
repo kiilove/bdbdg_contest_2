@@ -9,6 +9,8 @@ import {
   ArrowUpRight,
   LogOut,
   Wrench,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import LoadingPage from "../pages/LoadingPage";
 import { MenuArray } from "../components/Menus";
@@ -26,6 +28,13 @@ const ManagementHome = ({ children }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(() => {
+    try {
+      return localStorage.getItem("bdbdg_sidebar_hidden") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [quickCheckOpen, setQuickCheckOpen] = useState(false);
   const [quickCheckCounts, setQuickCheckCounts] = useState({
     stagesCount: undefined,
@@ -122,15 +131,39 @@ const ManagementHome = ({ children }) => {
     }
   }, [isTabletOrMobile, drawerOpen]);
 
+  const toggleSidebarHidden = () => {
+    setSidebarHidden((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("bdbdg_sidebar_hidden", next ? "1" : "0");
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && drawerOpen) {
         setDrawerOpen(false);
+        return;
+      }
+      if (
+        !isTabletOrMobile &&
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.key === "b" || e.key === "B") &&
+        !e.target?.isContentEditable
+      ) {
+        e.preventDefault();
+        toggleSidebarHidden();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [drawerOpen]);
+  }, [drawerOpen, isTabletOrMobile]);
 
   const handleLogout = () => {
     sessionStorage.removeItem("user");
@@ -255,7 +288,7 @@ const ManagementHome = ({ children }) => {
         <button
           type="button"
           onClick={() => handleNavigate("/")}
-          className="flex items-baseline gap-2 text-left focus:outline-none"
+          className="flex items-baseline gap-2 text-left focus:outline-none cursor-pointer"
         >
           <span className="text-[16px] leading-none font-semibold text-[#171717]">
             BDBDg
@@ -264,14 +297,25 @@ const ManagementHome = ({ children }) => {
             대회 운영 시스템
           </span>
         </button>
-        {showCloseButton && (
+        {showCloseButton ? (
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
             aria-label="메뉴 닫기"
-            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-[#737373] hover:text-[#171717] hover:bg-[#171717]/[0.05] transition-colors duration-150"
+            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-[#737373] hover:text-[#171717] hover:bg-[#171717]/[0.05] transition-colors duration-150 cursor-pointer"
           >
             <X size={16} strokeWidth={1.5} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={toggleSidebarHidden}
+            title="사이드바 숨기기 (Ctrl+B)"
+            aria-label="사이드바 숨기기"
+            className="h-7 px-2 rounded-[7px] inline-flex items-center gap-1 text-xs font-medium text-[#737373] hover:text-[#171717] hover:bg-[#171717]/[0.06] transition-colors duration-150 cursor-pointer"
+          >
+            <PanelLeftClose size={15} strokeWidth={1.6} />
+            <span>숨김</span>
           </button>
         )}
       </div>
@@ -487,11 +531,23 @@ const ManagementHome = ({ children }) => {
             </aside>
           </div>
         </>
-      ) : (
+      ) : !sidebarHidden ? (
         /* Desktop 248px Fixed Left Sidebar */
         <aside className="w-[248px] shrink-0 bg-[#f4f4f5] border-r border-[#171717]/[0.08] flex flex-col h-screen sticky top-0 print:hidden no-print">
           {renderSidebarBody(false)}
         </aside>
+      ) : (
+        /* Desktop Sidebar Hidden — Left-edge Restore Tab */
+        <button
+          type="button"
+          onClick={toggleSidebarHidden}
+          title="사이드바 펼치기 (Ctrl+B)"
+          aria-label="사이드바 펼치기"
+          className="fixed left-0 bottom-5 z-40 h-9 pl-2.5 pr-3 rounded-r-[10px] bg-white/95 hover:bg-white border border-l-0 border-[#171717]/15 shadow-[0_2px_10px_rgba(0,0,0,0.10)] inline-flex items-center gap-1.5 text-xs font-semibold text-[#171717] transition-all cursor-pointer print:hidden no-print"
+        >
+          <PanelLeftOpen size={15} strokeWidth={1.8} className="text-[#2563eb]" />
+          <span>메뉴</span>
+        </button>
       )}
 
       {/* Main Content Area */}
