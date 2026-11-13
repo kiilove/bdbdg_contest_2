@@ -20,6 +20,7 @@ import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
 import {
   Checkbox,
   Drawer,
@@ -27,7 +28,6 @@ import {
   InputNumber,
   Input,
   Tooltip,
-  Popconfirm,
 } from "antd";
 import {
   Save,
@@ -3282,11 +3282,13 @@ const ContestPlayerWeighInTable = () => {
 
               {/* 저장 및 갱신/초기화 버튼 그룹 */}
               <div className="flex flex-wrap items-center gap-2">
-                <Popconfirm
+                <ConfirmModalTrigger
+                  variant="warning"
                   title="1단계 배정 기준 명단 갱신"
-                  description="1단계 선수 번호 배정(contest_players_assign)의 최신 번호와 명단을 기준으로 계측 명단을 새로 갱신합니다. 진행하시겠습니까?"
+                  body="선수 번호 배정 단계의 최신 번호와 명단을 기준으로 계측 명단을 새로 갱신합니다."
+                  body2="기존에 입력된 계측 기록(신장·체중·월체·불참)은 유지한 채 신규·변경 배정 내역만 동기화됩니다. 진행하시겠습니까?"
                   onConfirm={handleRefreshAndSyncAssign}
-                  okText="명단 갱신 실행"
+                  confirmText="명단 갱신 실행"
                   cancelText="취소"
                 >
                   <button
@@ -3301,15 +3303,16 @@ const ContestPlayerWeighInTable = () => {
                     />
                     <span>명단 갱신</span>
                   </button>
-                </Popconfirm>
+                </ConfirmModalTrigger>
 
-                <Popconfirm
-                  title="계측 데이터 완전 초기화 (배정본 덮어쓰기)"
-                  description="기존의 모든 월체, 불참, 신장/체중 계측 데이터를 폐기하고, 1단계 선수 번호 배정 원본 체급과 번호로 덮어씌웁니다. 진행하시겠습니까?"
+                <ConfirmModalTrigger
+                  variant="danger"
+                  title="계측 데이터 초기화"
+                  body="기존에 기록된 신장·체중, 월체, 불참 내역을 모두 비우고 1단계 선수 번호 배정 원본 상태로 되돌립니다."
+                  body2="초기화된 계측 기록은 복구할 수 없습니다. 계속 진행하시겠습니까?"
                   onConfirm={handleForceResetToAssign}
-                  okText="배정본으로 덮어쓰기"
+                  confirmText="배정본으로 초기화"
                   cancelText="취소"
-                  okButtonProps={{ danger: true }}
                 >
                   <button
                     type="button"
@@ -3319,7 +3322,7 @@ const ContestPlayerWeighInTable = () => {
                     <AlertTriangle size={15} strokeWidth={1.5} />
                     <span>계측 초기화</span>
                   </button>
-                </Popconfirm>
+                </ConfirmModalTrigger>
 
                 <button
                   type="button"

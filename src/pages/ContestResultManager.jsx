@@ -12,10 +12,10 @@ import {
 import { FileSpreadsheet, RefreshCw, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { Popconfirm } from "antd";
 import { exportContestResultsToExcel } from "../functions/functions";
 import BibTag from "../components/ui/BibTag";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
 
 const ContestResultManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -237,9 +237,12 @@ const ContestResultManager = () => {
               <span>새로고침</span>
             </button>
 
-            <Popconfirm
-              title="이 대회의 모든 결과를 삭제할까요?"
-              okText="삭제"
+            <ConfirmModalTrigger
+              variant="danger"
+              title="전체 집계 결과 삭제"
+              body="현재 대회에 저장된 모든 종목·체급의 최종 순위 결과를 삭제합니다."
+              body2="삭제된 확정 결과 문서는 복구할 수 없습니다. 전체 삭제를 진행할까요?"
+              confirmText="전체 삭제"
               cancelText="취소"
               onConfirm={deleteAllInContest}
               disabled={docs.length === 0}
@@ -247,12 +250,12 @@ const ContestResultManager = () => {
               <button
                 type="button"
                 disabled={docs.length === 0}
-                className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 disabled:opacity-40 text-[#dc2626] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+                className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 disabled:opacity-40 text-[#dc2626] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150 cursor-pointer"
               >
                 <Trash2 size={15} strokeWidth={1.5} />
                 <span>전체 삭제</span>
               </button>
-            </Popconfirm>
+            </ConfirmModalTrigger>
 
             <button
               type="button"
@@ -303,20 +306,23 @@ const ContestResultManager = () => {
                           </h3>
                         </div>
 
-                        <Popconfirm
-                          title={`"${cat} / ${grd}" 결과를 모두 삭제할까요?`}
-                          okText="삭제"
+                        <ConfirmModalTrigger
+                          variant="danger"
+                          title="체급 결과 삭제"
+                          body={`'${cat} / ${grd}' 체급에 저장된 확정 결과를 모두 삭제하시겠습니까?`}
+                          body2="삭제된 결과 문서는 복구할 수 없습니다."
+                          confirmText="체급 결과 삭제"
                           cancelText="취소"
                           onConfirm={() => deleteGradeGroup(cat, grd)}
                         >
                           <button
                             type="button"
-                            className="h-8 px-3 rounded-[6px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+                            className="h-8 px-3 rounded-[6px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
                           >
                             <Trash2 size={13} strokeWidth={1.5} />
                             <span>체급 결과 삭제</span>
                           </button>
-                        </Popconfirm>
+                        </ConfirmModalTrigger>
                       </div>
 
                       <div className="space-y-4">
@@ -341,20 +347,23 @@ const ContestResultManager = () => {
                                     {id}
                                   </code>
                                 </span>
-                                <Popconfirm
-                                  title="이 결과 문서를 삭제할까요?"
-                                  okText="삭제"
+                                <ConfirmModalTrigger
+                                  variant="danger"
+                                  title="결과 문서 삭제"
+                                  body="선택한 확정 결과 문서를 삭제하시겠습니까?"
+                                  body4={`문서 ID: ${id}`}
+                                  confirmText="문서 삭제"
                                   cancelText="취소"
                                   onConfirm={() => deleteOne(id)}
                                 >
                                   <button
                                     type="button"
-                                    className="h-7 px-2.5 rounded-[6px] text-[#dc2626] hover:bg-[#dc2626]/[0.08] text-[12px] font-medium inline-flex items-center gap-1 transition-colors duration-150"
+                                    className="h-7 px-2.5 rounded-[6px] text-[#dc2626] hover:bg-[#dc2626]/[0.08] text-[12px] font-medium inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer"
                                   >
                                     <Trash2 size={13} strokeWidth={1.5} />
                                     <span>문서 삭제</span>
                                   </button>
-                                </Popconfirm>
+                                </ConfirmModalTrigger>
                               </div>
 
                               <div className="overflow-x-auto bg-white">

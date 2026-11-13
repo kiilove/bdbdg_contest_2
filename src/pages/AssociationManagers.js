@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   Select,
-  Popconfirm,
 } from "antd";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
@@ -17,6 +16,7 @@ import {
 } from "../hooks/useFirestores";
 import bcrypt from "bcryptjs";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
 
 const { Option } = Select;
 
@@ -196,20 +196,23 @@ const AssociationManagerPage = () => {
             <Pencil size={13} strokeWidth={1.5} className="text-[#525252]" />
             <span>수정</span>
           </button>
-          <Popconfirm
-            title="이 계정을 삭제하시겠습니까?"
+          <ConfirmModalTrigger
+            variant="danger"
+            title="관리자 계정 삭제"
+            body={`'${record.userID}' 관리자 계정을 삭제하시겠습니까?`}
+            body2="삭제된 계정은 즉시 로그인이 차단되며 복구할 수 없습니다."
             onConfirm={() => handleDelete(record.id)}
-            okText="삭제"
+            confirmText="계정 삭제"
             cancelText="취소"
           >
             <button
               type="button"
-              className="h-8 px-2.5 rounded-[6px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+              className="h-8 px-2.5 rounded-[6px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer whitespace-nowrap"
             >
               <Trash2 size={13} strokeWidth={1.5} />
               <span>삭제</span>
             </button>
-          </Popconfirm>
+          </ConfirmModalTrigger>
         </div>
       ),
     },
