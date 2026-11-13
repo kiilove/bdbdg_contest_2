@@ -33,7 +33,10 @@ const NewContest = () => {
     let createdSuccess = false;
 
     try {
-      const addedContest = await contestHook.addData({ isCompleted: false });
+      const addedContest = await contestHook.addData({
+        isCompleted: false,
+        startPlayerNumber: 1,
+      });
       if (!addedContest?.id) {
         throw new Error("대회 문서 생성에 실패했습니다.");
       }

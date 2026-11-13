@@ -65,7 +65,7 @@ const ContestPlayerOrderTable = () => {
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
   const [playersAssign, setPlayersAssign] = useState({}); // assign만 관리
-  const [startPlayerNumber, setStartPlayerNumber] = useState(1);
+  const [startPlayerNumber, setStartPlayerNumber] = useState(0);
 
   // ✅ 개별 항목 선택 상태 (고유 행 key 기준)
   const [selectedEntries, setSelectedEntries] = useState(new Set());
@@ -126,10 +126,13 @@ const ContestPlayerOrderTable = () => {
     setIsLoading(true);
 
     try {
-      if (currentContest.contests.startPlayerNumber) {
-        // 내부 계산 편의를 위해 -1 보정
-        setStartPlayerNumber(currentContest.contests.startPlayerNumber - 1);
-      }
+      const configuredStart = Number(currentContest.contests.startPlayerNumber);
+      // DB에 startPlayerNumber가 없으면 기본 1번부터 시작 (내부 계산 편의를 위해 -1 보정 → 0)
+      setStartPlayerNumber(
+        Number.isFinite(configuredStart) && configuredStart >= 1
+          ? configuredStart - 1
+          : 0
+      );
 
       // 카테고리
       if (currentContest.contests.contestCategorysListId) {
