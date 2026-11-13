@@ -24,3 +24,10 @@ yarn-error.log*
 
 .env
 /firebase
+
+# local multi-branch worktrees & vite caches
+/bdbdgmain1/
+/bdbdgmain2/
+/bdbdgmain3/
+.vite-cache/
+vite.local.mjs
