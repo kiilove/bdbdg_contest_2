@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
+import React, {
+  useCallback,
+  useState,
+  useEffect,
+  useContext,
+  useMemo,
+  useRef,
+} from "react";
 import LoadingPage from "./LoadingPage";
 import {
   useFirestoreGetDocument,
@@ -34,6 +41,11 @@ import {
   Table2,
 } from "lucide-react";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import {
+  MonitoringBlockingState,
+  MonitoringDiagnosticsBar,
+  resolveEffectiveCollectionName,
+} from "../components/monitoring/MonitoringDiagnosticsBar";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -175,12 +187,15 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   });
   const [normalScoreData, setNormalScoreData] = useState([]);
   const [normalScoreTable, setNormalScoreTable] = useState([]);
+  const [judgesAssignArray, setJudgesAssignArray] = useState([]);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const fetchNotice = useFirestoreGetDocument("contest_notice");
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
   const fetchCompares = useFirestoreGetDocument("contest_compares_list");
+  const fetchJudgesAssign = useFirestoreGetDocument("contest_judges_assign");
   const updateCompare = useFirestoreUpdateData("contest_compares_list");
   const fetchScoreCardQuery = useFirestoreQuery();
 
@@ -210,34 +225,55 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     noticeId,
     stageAssignId,
     playerFinalId,
-    compareListId
+    compareListId,
+    judgeAssignId
   ) => {
     try {
-      const returnNotice = await fetchNotice.getDocument(noticeId);
-      const returnContestStage = await fetchStages.getDocument(stageAssignId);
-      const returnPlayersFinal = await fetchFinalPlayers.getDocument(
+      const [
+        returnNotice,
+        returnContestStage,
+        returnPlayersFinal,
+        returnCompareList,
+        returnJudgesAssign,
+      ] = await Promise.all([
+        noticeId ? fetchNotice.getDocument(noticeId) : Promise.resolve(null),
+        stageAssignId
+          ? fetchStages.getDocument(stageAssignId)
+          : Promise.resolve(null),
         playerFinalId
-      );
-      const returnCompareList = await fetchCompares.getDocument(compareListId);
+          ? fetchFinalPlayers.getDocument(playerFinalId)
+          : Promise.resolve(null),
+        compareListId
+          ? fetchCompares.getDocument(compareListId)
+          : Promise.resolve(null),
+        judgeAssignId
+          ? fetchJudgesAssign.getDocument(judgeAssignId)
+          : Promise.resolve(null),
+      ]);
 
-      if (returnNotice && returnContestStage) {
-        const promises = [
-          setStagesArray(
-            returnContestStage.stages.sort(
-              (a, b) => a.stageNumber - b.stageNumber
-            )
-          ),
-          setContestInfo({ ...returnNotice }),
-          setPlayersArray(
-            returnPlayersFinal.players
-              .sort((a, b) => a.playerIndex - b.playerIndex)
-              .filter((f) => f.playerNoShow === false)
-          ),
-        ];
-
-        Promise.all(promises);
-
-        setIsLoading(false);
+      if (returnNotice) {
+        setContestInfo({ ...returnNotice });
+      }
+      if (returnContestStage?.stages) {
+        setStagesArray(
+          [...(returnContestStage.stages || [])].sort(
+            (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
+          )
+        );
+      } else {
+        setStagesArray([]);
+      }
+      if (returnPlayersFinal?.players) {
+        setPlayersArray(
+          [...(returnPlayersFinal.players || [])]
+            .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
+            .filter((f) => f.playerNoShow === false)
+        );
+      } else {
+        setPlayersArray([]);
+      }
+      if (returnJudgesAssign?.judges) {
+        setJudgesAssignArray(returnJudgesAssign.judges || []);
       }
 
       if (returnCompareList) {
@@ -255,13 +291,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const effectiveCollectionName =
-    contestInfo?.contestCollectionName ||
-    currentContest?.contestInfo?.contestCollectionName ||
-    "";
+  const effectiveCollectionName = resolveEffectiveCollectionName(
+    contestInfo,
+    currentContest
+  );
 
   const fetchScoreTable = useCallback(
     async (grades) => {
@@ -463,34 +502,63 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   };
 
-  useEffect(() => {
+  const reloadJudgeHeadData = () => {
+    const noticeId =
+      currentContest?.contests?.contestNoticeId ||
+      currentContest?.contestInfo?.contestNoticeId ||
+      "";
+    const stageAssignId =
+      currentContest?.contests?.contestStagesAssignId || "";
+    const playerFinalId =
+      currentContest?.contests?.contestPlayersFinalId || "";
+    const compareListId =
+      currentContest?.contests?.contestComparesListId || "";
+    const judgeAssignId =
+      currentContest?.contests?.contestJudgesAssignId || "";
+
     if (
-      currentContest?.contests?.contestNoticeId &&
-      currentContest?.contests?.contestStagesAssignId &&
-      currentContest?.contests?.contestPlayersFinalId &&
-      currentContest?.contests?.contestComparesListId
+      noticeId ||
+      stageAssignId ||
+      playerFinalId ||
+      compareListId ||
+      judgeAssignId
     ) {
       fetchPool(
-        currentContest.contests.contestNoticeId,
-        currentContest.contests.contestStagesAssignId,
-        currentContest?.contests?.contestPlayersFinalId,
-        currentContest?.contests?.contestComparesListId
+        noticeId,
+        stageAssignId,
+        playerFinalId,
+        compareListId,
+        judgeAssignId
       );
+    } else {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    reloadJudgeHeadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest, realtimeData?.compares]);
 
   useEffect(() => {
     if (parentRefresh) {
       setIsLoading(true);
-      fetchPool(
-        currentContest.contests.contestNoticeId,
-        currentContest.contests.contestStagesAssignId,
-        currentContest?.contests?.contestPlayersFinalId,
-        currentContest?.contests?.contestComparesListId
-      );
+      reloadJudgeHeadData();
       setParentRefresh(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentRefresh]);
+
+  useEffect(() => {
+    if (!(isLoading || realtimeLoading)) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingTimedOut(true);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [isLoading, realtimeLoading]);
 
   useEffect(() => {
     const foundStage = stagesArray.find(
@@ -835,9 +903,27 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   void handleAddCurrentStage;
   void handleGotoSummary;
 
+  const activeStageMatchedPlayersCount = useMemo(() => {
+    if (!realtimeData?.stageId) return undefined;
+    const grades = currentStageInfo?.grades || [];
+    if (!grades.length) return 0;
+    const gradeSet = new Set(grades.map((g) => g?.gradeId).filter(Boolean));
+    return (playersArray || []).filter((p) => gradeSet.has(p.contestGradeId))
+      .length;
+  }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
+
+  const emptyJudgeSeatsForDiag = useMemo(() => {
+    if (realtimeData?.judges?.length > 0) {
+      return realtimeData.judges
+        .filter((j) => !j?.judgeUid && !j?.judgeName)
+        .map((j, i) => j?.seatIndex ?? i + 1);
+    }
+    return [];
+  }, [realtimeData?.judges]);
+
   return (
     <>
-      {isLoading || realtimeLoading ? (
+      {(isLoading || realtimeLoading) && !loadingTimedOut ? (
         <div className="flex w-full min-h-[60vh] justify-center items-center bg-[#fafafa]">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
@@ -989,6 +1075,20 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             />
           </Modal>
 
+          {/* 울트라퀵 데이터 보강 메뉴 바 */}
+          <MonitoringDiagnosticsBar
+            variant="light"
+            screenType="judgeHead"
+            contestInfo={contestInfo}
+            stagesCount={stagesArray.length}
+            playersCount={playersArray.length}
+            judgesAssignCount={judgesAssignArray.length}
+            realtimeData={realtimeData}
+            currentStagePlayersCount={activeStageMatchedPlayersCount}
+            emptyJudgeSeats={emptyJudgeSeatsForDiag}
+            onRefreshData={reloadJudgeHeadData}
+          />
+
           {/* 상단 대회 및 현재 무대 요약 바 */}
           <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 md:p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -999,6 +1099,14 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                     live={Boolean(realtimeData?.stageId)}
                   />
                   <span>심판위원장 총괄 집계석</span>
+                  {effectiveCollectionName && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono">
+                        DB: {effectiveCollectionName}
+                      </span>
+                    </>
+                  )}
                   {lastUpdated && (
                     <>
                       <span>·</span>
@@ -1009,7 +1117,9 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   )}
                 </div>
                 <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
-                  {contestInfo.contestTitle || "대회 정보 대기 중"}
+                  {contestInfo.contestTitle ||
+                    currentContest?.contests?.contestTitle ||
+                    "대회 정보 대기 중"}
                 </h1>
               </div>
 
@@ -1033,8 +1143,27 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             </div>
           </div>
 
+          {/* 실시간 무대 미개시 또는 필수 데이터 누락 시 구체적 진단 안내 */}
+          {(!realtimeData?.stageId ||
+            !effectiveCollectionName ||
+            activeStageMatchedPlayersCount === 0) && (
+            <MonitoringBlockingState
+              variant="light"
+              screenType="judgeHead"
+              screenLabel="심판위원장 채점·비교심사 모니터링"
+              contestInfo={contestInfo}
+              stagesCount={stagesArray.length}
+              playersCount={playersArray.length}
+              judgesAssignCount={judgesAssignArray.length}
+              realtimeData={realtimeData}
+              currentStagePlayersCount={activeStageMatchedPlayersCount}
+              emptyJudgeSeats={emptyJudgeSeatsForDiag}
+              onRefreshData={reloadJudgeHeadData}
+            />
+          )}
+
           {/* 비교심사 제어 카드 */}
-          {realtimeData && (
+          {realtimeData?.stageId && (
             <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
                 <div className="flex items-center gap-2">
@@ -1175,7 +1304,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           )}
 
           {/* 실시간 집계상황 매트릭스 (Moment #2: Judge-by-Athlete Score Matrix) */}
-          {realtimeData && (
+          {realtimeData?.stageId && (
             <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
                 <div className="flex items-center gap-2">

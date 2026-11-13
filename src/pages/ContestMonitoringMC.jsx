@@ -19,10 +19,17 @@ import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
-import { useFirestoreQuery } from "../hooks/useFirestores";
+import {
+  useFirestoreGetDocument,
+  useFirestoreQuery,
+} from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { message } from "antd";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import {
+  MonitoringBlockingState,
+  MonitoringDiagnosticsBar,
+} from "../components/monitoring/MonitoringDiagnosticsBar";
 
 // 규정 포즈 멘트 가이드 (사회자 진행용)
 const POSES_GUIDE = [
@@ -40,17 +47,21 @@ const POSES_GUIDE = [
 
 const ContestMonitoringMC = () => {
   const { currentContest } = useContext(CurrentContestContext);
-  const contestId = currentContest?.contests?.id || "";
+  const contestId =
+    currentContest?.contests?.id || currentContest?.id || "";
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentStageId, setCurrentStageId] = useState("");
   const [varStageTitle, setVarStageTitle] = useState("");
+  const [allStages, setAllStages] = useState([]);
+  const [allFinalPlayers, setAllFinalPlayers] = useState([]);
   const [, setStageInfo] = useState({});
   const [playersArray, setPlayersArray] = useState([]);
   const [selectedCalloutPlayers, setSelectedCalloutPlayers] = useState([]);
 
   const fetchStagesQuery = useFirestoreQuery();
   const fetchPlayers = useFirestoreQuery();
+  const fetchFinalPlayersDoc = useFirestoreGetDocument("contest_players_final");
 
   // 실시간 무대 진행 상태 구독
   const { data: currentStageRealtime } = useFirebaseRealtimeGetDocument(
@@ -65,6 +76,44 @@ const ContestMonitoringMC = () => {
 
   const currentMode = broadcastData?.mode || "STANDBY";
 
+  // 0. 사전 무대 및 최종선수 풀 로드 (무대 개시 전에도 준비도 진단 가능)
+  const preloadContestPools = async () => {
+    if (!contestId) {
+      setAllStages([]);
+      setAllFinalPlayers([]);
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const stageData = await fetchStagesQuery.getDocuments(
+        "contest_stages_assign",
+        [where("contestId", "==", contestId)]
+      );
+      if (stageData?.length > 0) {
+        setStageInfo({ ...stageData[0] });
+        setAllStages(stageData[0]?.stages || []);
+      } else {
+        setAllStages([]);
+      }
+
+      const finalDocId =
+        currentContest?.contests?.contestPlayersFinalId || "";
+      if (finalDocId) {
+        const finalDoc = await fetchFinalPlayersDoc.getDocument(finalDocId);
+        const cleanPlayers = (finalDoc?.players || []).filter(
+          (p) => p && p.playerNoShow !== true
+        );
+        setAllFinalPlayers(cleanPlayers);
+      } else {
+        setAllFinalPlayers([]);
+      }
+    } catch (err) {
+      console.error("사전 무대/선수 데이터 로드 실패:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 1. 현재 무대 종목/체급 로드
   const loadStageData = async (cId, sId) => {
     if (!cId || !sId) return;
@@ -76,6 +125,7 @@ const ContestMonitoringMC = () => {
       );
       if (data?.length > 0) {
         setStageInfo({ ...data[0] });
+        setAllStages(data[0]?.stages || []);
         const currentStage = data[0].stages?.find((s) => s.stageId === sId);
         if (currentStage?.grades?.length > 0) {
           if (currentStage.grades.length === 1) {
@@ -120,7 +170,7 @@ const ContestMonitoringMC = () => {
     }
   };
 
-  // 2. 출전 선수 목록 로드
+  // 2. 출전 선수 목록 로드 (contest_players_final 우선 + contest_entrys_list 사진 병합)
   const fetchPlayersList = async (cId, gradeIds) => {
     const ids = (Array.isArray(gradeIds) ? gradeIds : [gradeIds]).filter(
       Boolean
@@ -138,11 +188,32 @@ const ContestMonitoringMC = () => {
           ])
         )
       );
-      const merged = perGradePlayers
+      const entryDocs = perGradePlayers
         .flat()
         .filter((p) => p && p.playerNoShow !== true);
+
+      const entryByUid = new Map();
+      entryDocs.forEach((e) => {
+        if (e?.playerUid) entryByUid.set(e.playerUid, e);
+      });
+
+      const idSet = new Set(ids);
+      const finalMatched = allFinalPlayers.filter((p) =>
+        idSet.has(p.contestGradeId)
+      );
+
+      const baseList =
+        finalMatched.length > 0
+          ? finalMatched.map((fp) => {
+              const entry = fp?.playerUid
+                ? entryByUid.get(fp.playerUid)
+                : null;
+              return entry ? { ...entry, ...fp } : fp;
+            })
+          : entryDocs;
+
       const seen = new Set();
-      const deduped = merged.filter((p) => {
+      const deduped = baseList.filter((p) => {
         const key = String(
           p.playerUid || p.id || `${p.contestGradeId}-${p.playerNumber}`
         );
@@ -164,10 +235,9 @@ const ContestMonitoringMC = () => {
   };
 
   useEffect(() => {
-    if (contestId || currentContest !== undefined) {
-      setIsLoading(false);
-    }
-  }, [contestId, currentContest]);
+    preloadContestPools();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contestId, currentContest?.contests?.contestPlayersFinalId]);
 
   useEffect(() => {
     const nextStageId = currentStageRealtime?.stageId || "";
@@ -188,7 +258,7 @@ const ContestMonitoringMC = () => {
       loadStageData(contestId, currentStageId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contestId, currentStageId]);
+  }, [contestId, currentStageId, allFinalPlayers.length]);
 
   // 전광판 방송 모드 즉시 스위칭 핸들러
   const handleSwitchMode = async (mode, extraData = {}) => {
@@ -444,6 +514,24 @@ const ContestMonitoringMC = () => {
       </header>
 
       <div className="p-4 sm:p-6 space-y-5 flex-1">
+        {/* 울트라퀵 데이터 보강 메뉴 바 */}
+        <MonitoringDiagnosticsBar
+          variant="dark"
+          screenType="mc"
+          stagesCount={allStages.length}
+          playersCount={allFinalPlayers.length}
+          realtimeData={currentStageRealtime}
+          currentStagePlayersCount={
+            currentStageRealtime?.stageId ? playersArray.length : undefined
+          }
+          onRefreshData={() => {
+            preloadContestPools();
+            if (contestId && currentStageId) {
+              loadStageData(contestId, currentStageId);
+            }
+          }}
+        />
+
         {/* 2. 원터치 방송 제어 스튜디오 스위처 그리드 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {scenes.map((scene) => {
@@ -492,9 +580,23 @@ const ContestMonitoringMC = () => {
             </div>
 
             {playersArray.length === 0 ? (
-              <div className="py-12 text-center text-sm text-[#85858b]">
-                현재 진행 중인 체급에 배정된 선수가 없습니다
-              </div>
+              <MonitoringBlockingState
+                variant="dark"
+                screenType="mc"
+                screenLabel="사회자 방송 제어 콘솔"
+                stagesCount={allStages.length}
+                playersCount={allFinalPlayers.length}
+                realtimeData={currentStageRealtime}
+                currentStagePlayersCount={
+                  currentStageRealtime?.stageId ? 0 : undefined
+                }
+                onRefreshData={() => {
+                  preloadContestPools();
+                  if (contestId && currentStageId) {
+                    loadStageData(contestId, currentStageId);
+                  }
+                }}
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
                 {playersArray.map((player) => {

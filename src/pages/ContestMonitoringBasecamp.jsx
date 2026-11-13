@@ -38,6 +38,11 @@ import {
   Check,
 } from "lucide-react";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import {
+  MonitoringBlockingState,
+  MonitoringDiagnosticsBar,
+  resolveEffectiveCollectionName,
+} from "../components/monitoring/MonitoringDiagnosticsBar";
 
 // 본부석 실시간 렌더링 에러 바운더리
 class BasecampErrorBoundary extends React.Component {
@@ -323,10 +328,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     await updateCurrentStage.updateData(collectionInfo, { ...newState });
   };
 
-  const effectiveCollectionName =
-    contestInfo?.contestCollectionName ||
-    currentContest?.contestInfo?.contestCollectionName ||
-    "";
+  const effectiveCollectionName = resolveEffectiveCollectionName(
+    contestInfo,
+    currentContest
+  );
 
   const fetchScoreTable = async (grades) => {
     if (!effectiveCollectionName || !grades || grades.length === 0) return;
@@ -603,7 +608,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     return validate;
   };
 
-  useEffect(() => {
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+  const reloadBasecampData = () => {
     const noticeId =
       currentContest?.contests?.contestNoticeId ||
       currentContest?.contestInfo?.contestNoticeId ||
@@ -618,13 +625,29 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       currentContest?.contests?.contestJudgesAssignId ||
       currentContest?.contestJudgesAssignId;
 
-    if (noticeId || stageAssignId || playerFinalId) {
+    if (noticeId || stageAssignId || playerFinalId || judgeAssignId) {
       setIsLoading(true);
       fetchPool(noticeId, stageAssignId, playerFinalId, judgeAssignId);
-    } else if (currentContest) {
+    } else {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    reloadBasecampData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest]);
+
+  useEffect(() => {
+    if (!(isLoading || realtimeLoading)) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingTimedOut(true);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [isLoading, realtimeLoading]);
 
   useEffect(() => {
     const foundStage = stagesArray.find(
@@ -1087,9 +1110,43 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     { key: "3", label: "섹션별 탭", icon: Layers },
   ];
 
+  // 현재 무대(또는 개시 예정 1번 무대) 출전선수 및 미배정 심판석 진단 계산
+  const activeStageMatchedPlayersCount = useMemo(() => {
+    if (!realtimeData?.stageId) return undefined;
+    const grades = currentStageInfo?.grades || [];
+    if (!grades.length) return 0;
+    const gradeSet = new Set(grades.map((g) => g?.gradeId).filter(Boolean));
+    return (playersArray || []).filter((p) => gradeSet.has(p.contestGradeId))
+      .length;
+  }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
+
+  const emptyJudgeSeatsForDiag = useMemo(() => {
+    if (realtimeData?.judges?.length > 0) {
+      return realtimeData.judges
+        .filter((j) => !j?.judgeUid && !j?.judgeName)
+        .map((j, i) => j?.seatIndex ?? i + 1);
+    }
+    const firstStage = stagesArray?.[0];
+    if (!firstStage) return [];
+    const targetCount = Number(firstStage?.categoryJudgeCount) || 0;
+    const repGradeId = firstStage?.grades?.[0]?.gradeId;
+    if (!targetCount || !repGradeId) return [];
+    const missing = [];
+    for (let seat = 1; seat <= targetCount; seat += 1) {
+      const hasSeat = (judgesArray || []).some(
+        (j) =>
+          (j?.contestGradeId === repGradeId || j?.gradeId === repGradeId) &&
+          Number(j?.seatIndex) === seat &&
+          Boolean(j?.judgeUid)
+      );
+      if (!hasSeat) missing.push(seat);
+    }
+    return missing;
+  }, [realtimeData?.judges, stagesArray, judgesArray]);
+
   return (
     <BasecampErrorBoundary>
-      {isLoading || realtimeLoading ? (
+      {(isLoading || realtimeLoading) && !loadingTimedOut ? (
         <div className="flex w-full min-h-[60vh] justify-center items-center bg-[#fafafa]">
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
@@ -1114,6 +1171,23 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               setClose={setAwardPrintPreviewOpen}
             />
           </Modal>
+
+          {/* 울트라퀵 데이터 보강 메뉴 바 */}
+          <MonitoringDiagnosticsBar
+            variant="light"
+            screenType="basecamp"
+            contestInfo={contestInfo}
+            stagesCount={stagesArray.length}
+            playersCount={playersArray.length}
+            judgesAssignCount={judgesArray.length}
+            realtimeData={realtimeData}
+            currentStagePlayersCount={activeStageMatchedPlayersCount}
+            emptyJudgeSeats={emptyJudgeSeatsForDiag}
+            onStartFirstStage={
+              stagesArray.length > 0 ? () => handleUpdateCurrentStage(0) : null
+            }
+            onRefreshData={reloadBasecampData}
+          />
 
           {/* 상단 대회 본부석 요약 바 */}
           <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 md:p-5">
@@ -1140,9 +1214,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     </span>
                   </span>
 
-                  {contestInfo.contestCollectionName && (
+                  {effectiveCollectionName && (
                     <span className="text-xs font-mono text-[#737373]">
-                      DB: {contestInfo.contestCollectionName}
+                      DB: {effectiveCollectionName}
                     </span>
                   )}
 
@@ -1240,8 +1314,26 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               {/* 탭 0: 현재 무대상황 */}
               {currentSubTab === "0" && (
                 <>
-                  {realtimeData ? (
+                  {realtimeData?.stageId ? (
                     <div className="space-y-5">
+                      {(!effectiveCollectionName ||
+                        activeStageMatchedPlayersCount === 0) && (
+                        <MonitoringBlockingState
+                          variant="light"
+                          screenType="basecamp"
+                          screenLabel="본부석 현재 무대 점검"
+                          contestInfo={contestInfo}
+                          stagesCount={stagesArray.length}
+                          playersCount={playersArray.length}
+                          judgesAssignCount={judgesArray.length}
+                          realtimeData={realtimeData}
+                          currentStagePlayersCount={
+                            activeStageMatchedPlayersCount
+                          }
+                          emptyJudgeSeats={emptyJudgeSeatsForDiag}
+                          onRefreshData={reloadBasecampData}
+                        />
+                      )}
                       {/* 진행상황 (심판석 모니터링) */}
                       <div className="rounded-[10px] border border-[#171717]/[0.08] overflow-hidden">
                         <div className="flex justify-between items-center flex-wrap gap-2 px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
@@ -1587,9 +1679,23 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm text-[#737373] py-8 text-center">
-                      현재 진행 중인 무대가 없습니다. 상단 [대회 시작] 버튼을 눌러 첫 무대를 시작하세요.
-                    </div>
+                    <MonitoringBlockingState
+                      variant="light"
+                      screenType="basecamp"
+                      screenLabel="본부석 현재 무대 모니터링"
+                      contestInfo={contestInfo}
+                      stagesCount={stagesArray.length}
+                      playersCount={playersArray.length}
+                      judgesAssignCount={judgesArray.length}
+                      realtimeData={realtimeData}
+                      emptyJudgeSeats={emptyJudgeSeatsForDiag}
+                      onStartFirstStage={
+                        stagesArray.length > 0
+                          ? () => handleUpdateCurrentStage(0)
+                          : null
+                      }
+                      onRefreshData={reloadBasecampData}
+                    />
                   )}
                 </>
               )}
@@ -1612,9 +1718,18 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       )
                     )
                   ) : (
-                    <div className="text-xs text-[#737373] py-6 text-center">
-                      등록된 무대 목록이 없습니다.
-                    </div>
+                    <MonitoringBlockingState
+                      variant="light"
+                      screenType="basecamp"
+                      screenLabel="본부석 전체 무대목록"
+                      contestInfo={contestInfo}
+                      stagesCount={stagesArray.length}
+                      playersCount={playersArray.length}
+                      judgesAssignCount={judgesArray.length}
+                      realtimeData={realtimeData}
+                      emptyJudgeSeats={emptyJudgeSeatsForDiag}
+                      onRefreshData={reloadBasecampData}
+                    />
                   )}
                 </>
               )}

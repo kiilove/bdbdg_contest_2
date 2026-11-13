@@ -30,15 +30,22 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { matchedGradewWithPlayers } from "../functions/functions";
 import { Spin, message } from "antd";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import {
+  MonitoringBlockingState,
+  MonitoringDiagnosticsBar,
+} from "../components/monitoring/MonitoringDiagnosticsBar";
 
 const ContestMonitoringHost = ({ contestId }) => {
   const { currentContest } = useContext(CurrentContestContext);
-  const effectiveContestId = contestId || currentContest?.contests?.id || "";
+  const effectiveContestId =
+    contestId || currentContest?.contests?.id || currentContest?.id || "";
 
-  const [, setStagesArray] = useState([]);
+  const [stagesArray, setStagesArray] = useState([]);
+  const [allFinalPlayers, setAllFinalPlayers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [currentPlayersArray, setCurrentPlayersArray] = useState([]);
-  const [, setContestInfo] = useState({});
+  const [contestInfo, setContestInfo] = useState({});
   const [selectedPlayerUid, setSelectedPlayerUid] = useState(null);
   const [calledPlayers, setCalledPlayers] = useState({});
   const [calledCompareNums, setCalledCompareNums] = useState({});
@@ -105,54 +112,39 @@ const ContestMonitoringHost = ({ contestId }) => {
   const fetchStages = useFirestoreGetDocument("contest_stages_assign");
   const fetchFinalPlayers = useFirestoreGetDocument("contest_players_final");
 
-  const fetchPool = async (
-    noticeId,
-    cId,
-    stageAssignId,
-    playerFinalId,
-    currentStageId
-  ) => {
+  const fetchPool = async (noticeId, stageAssignId, playerFinalId) => {
     try {
       const [returnNotice, returnContestStage, returnPlayersFinal] =
         await Promise.all([
-          fetchNotice.getDocument(noticeId),
-          fetchStages.getDocument(stageAssignId),
-          fetchFinalPlayers.getDocument(playerFinalId),
+          noticeId ? fetchNotice.getDocument(noticeId) : Promise.resolve(null),
+          stageAssignId
+            ? fetchStages.getDocument(stageAssignId)
+            : Promise.resolve(null),
+          playerFinalId
+            ? fetchFinalPlayers.getDocument(playerFinalId)
+            : Promise.resolve(null),
         ]);
 
-      if (returnNotice && returnContestStage && returnPlayersFinal) {
+      if (returnNotice) {
+        setContestInfo(returnNotice);
+      }
+      if (returnContestStage?.stages) {
         setStagesArray(
-          returnContestStage.stages.sort(
-            (a, b) => a.stageNumber - b.stageNumber
+          [...(returnContestStage.stages || [])].sort(
+            (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
           )
         );
-        setContestInfo(returnNotice);
+      } else {
+        setStagesArray([]);
+      }
 
-        const players = returnPlayersFinal.players
-          .sort((a, b) => a.playerIndex - b.playerIndex)
+      if (returnPlayersFinal?.players) {
+        const players = [...(returnPlayersFinal.players || [])]
+          .sort((a, b) => (a.playerIndex || 0) - (b.playerIndex || 0))
           .filter((f) => f.playerNoShow === false);
-
-        const currentStage = returnContestStage.stages.find(
-          (f) => f.stageId === currentStageId
-        );
-        const currentStageGrades = currentStage ? currentStage.grades : [];
-
-        const playerList = currentStageGrades.length
-          ? currentStageGrades.map((grade) => {
-              const matchedPlayers = matchedGradewWithPlayers(
-                cId,
-                grade.gradeId,
-                players
-              );
-              return {
-                gradeTitle: grade.gradeTitle,
-                gradeId: grade.gradeId,
-                players: matchedPlayers,
-              };
-            })
-          : [];
-
-        setCurrentPlayersArray(playerList);
+        setAllFinalPlayers(players);
+      } else {
+        setAllFinalPlayers([]);
       }
     } catch (error) {
       console.error("데이터 로드 중 에러:", error);
@@ -261,30 +253,76 @@ const ContestMonitoringHost = ({ contestId }) => {
     else setFontScale("normal");
   };
 
-  useEffect(() => {
-    const loadData = async () => {
-      if (
-        currentContest?.contests?.contestNoticeId &&
-        currentContest?.contests?.contestStagesAssignId &&
-        currentContest?.contests?.contestPlayersFinalId &&
-        realtimeData?.stageId
-      ) {
-        setIsLoading(true);
-        setCalledPlayers({});
-        setCalledCompareNums({});
-        await fetchPool(
-          currentContest.contests.contestNoticeId,
-          currentContest.contests.id,
-          currentContest.contests.contestStagesAssignId,
-          currentContest.contests.contestPlayersFinalId,
-          realtimeData.stageId
-        );
-      }
-    };
+  const reloadHostData = async () => {
+    const noticeId =
+      currentContest?.contests?.contestNoticeId ||
+      currentContest?.contestInfo?.contestNoticeId ||
+      "";
+    const stageAssignId =
+      currentContest?.contests?.contestStagesAssignId || "";
+    const playerFinalId =
+      currentContest?.contests?.contestPlayersFinalId || "";
 
-    loadData();
+    if (noticeId || stageAssignId || playerFinalId) {
+      setIsLoading(true);
+      await fetchPool(noticeId, stageAssignId, playerFinalId);
+    } else {
+      setStagesArray([]);
+      setAllFinalPlayers([]);
+      setCurrentPlayersArray([]);
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadHostData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentContest, realtimeData?.stageId]);
+  }, [currentContest]);
+
+  // 현재 진행 무대(stageId) 변경 시 출전 선수 매칭 동기화
+  useEffect(() => {
+    setCalledPlayers({});
+    setCalledCompareNums({});
+  }, [realtimeData?.stageId]);
+
+  useEffect(() => {
+    if (!realtimeData?.stageId || !stagesArray.length) {
+      setCurrentPlayersArray([]);
+      return;
+    }
+    const currentStage = stagesArray.find(
+      (f) => f.stageId === realtimeData.stageId
+    );
+    const currentStageGrades = currentStage?.grades || [];
+    const playerList = currentStageGrades.length
+      ? currentStageGrades.map((grade) => ({
+          gradeTitle: grade.gradeTitle,
+          gradeId: grade.gradeId,
+          players: matchedGradewWithPlayers(
+            effectiveContestId,
+            grade.gradeId,
+            allFinalPlayers
+          ),
+        }))
+      : [];
+    setCurrentPlayersArray(playerList);
+  }, [
+    realtimeData?.stageId,
+    stagesArray,
+    allFinalPlayers,
+    effectiveContestId,
+  ]);
+
+  useEffect(() => {
+    if (!(isLoading || realtimeLoading)) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingTimedOut(true);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [isLoading, realtimeLoading]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -306,7 +344,15 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   }, [realtimeData?.compares?.confirmed?.numbers]);
 
-  if (isLoading || realtimeLoading) {
+  const activeStageMatchedPlayersCount = useMemo(() => {
+    if (!realtimeData?.stageId) return undefined;
+    return currentPlayersArray.reduce(
+      (acc, g) => acc + (g?.players?.length || 0),
+      0
+    );
+  }, [realtimeData?.stageId, currentPlayersArray]);
+
+  if ((isLoading || realtimeLoading) && !loadingTimedOut) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#141415] text-[#ededed] gap-3">
         <Spin size="large" />
@@ -620,6 +666,20 @@ const ContestMonitoringHost = ({ contestId }) => {
             </button>
           );
         })}
+      </div>
+
+      {/* 울트라퀵 데이터 보강 메뉴 바 (다크 스튜디오 테마) */}
+      <div className="px-4 pt-3">
+        <MonitoringDiagnosticsBar
+          variant="dark"
+          screenType="host"
+          contestInfo={contestInfo}
+          stagesCount={stagesArray.length}
+          playersCount={allFinalPlayers.length}
+          realtimeData={realtimeData}
+          currentStagePlayersCount={activeStageMatchedPlayersCount}
+          onRefreshData={reloadHostData}
+        />
       </div>
 
       {/* 메인 바디 영역 */}
@@ -982,7 +1042,8 @@ const ContestMonitoringHost = ({ contestId }) => {
                     );
                   })}
               </div>
-            ) : (
+            ) : currentPlayersArray.length > 0 &&
+              activeStageMatchedPlayersCount > 0 ? (
               /* 3. 참가 선수 명단 및 멘트 프롬프터 */
               currentPlayersArray.map((current, cIdx) => (
                 <div key={cIdx} className="space-y-3">
@@ -1087,6 +1148,18 @@ const ContestMonitoringHost = ({ contestId }) => {
                   )}
                 </div>
               ))
+            ) : (
+              <MonitoringBlockingState
+                variant="dark"
+                screenType="host"
+                screenLabel="사회자 호명 프롬프터"
+                contestInfo={contestInfo}
+                stagesCount={stagesArray.length}
+                playersCount={allFinalPlayers.length}
+                realtimeData={realtimeData}
+                currentStagePlayersCount={activeStageMatchedPlayersCount}
+                onRefreshData={reloadHostData}
+              />
             )}
           </div>
         </main>
