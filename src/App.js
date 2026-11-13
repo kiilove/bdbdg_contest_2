@@ -1,4 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { ConfigProvider } from "antd";
+import koKR from "antd/locale/ko_KR";
 import "./App.css";
 
 import Login from "./pages/Login";
@@ -54,9 +56,74 @@ import StageLiveDisplaySquare from "./pages/broadcast/StageLiveDisplaySquare";
 import ContestSponsorManager from "./pages/broadcast/ContestSponsorManager";
 import ContestMonitoringMC from "./pages/ContestMonitoringMC";
 
+const unslopAntdTheme = {
+  token: {
+    colorPrimary: "#2563eb",
+    colorInfo: "#2563eb",
+    colorSuccess: "#16a34a",
+    colorWarning: "#b45309",
+    colorError: "#dc2626",
+    colorBgLayout: "#fafafa",
+    colorBgContainer: "#ffffff",
+    colorBgElevated: "#ffffff",
+    colorText: "#171717",
+    colorTextSecondary: "#525252",
+    colorTextDescription: "#737373",
+    colorBorder: "rgba(23, 23, 23, 0.10)",
+    colorBorderSecondary: "rgba(23, 23, 23, 0.06)",
+    borderRadius: 8,
+    borderRadiusLG: 12,
+    borderRadiusSM: 6,
+    fontFamily:
+      '"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+    fontSize: 14,
+    wireframe: false,
+    boxShadowTertiary: "0 1px 2px rgba(0, 0, 0, 0.04)",
+  },
+  components: {
+    Button: {
+      controlHeight: 36,
+      controlHeightLG: 44,
+      controlHeightSM: 28,
+      fontWeight: 500,
+      primaryShadow: "none",
+      defaultShadow: "none",
+      dangerShadow: "none",
+    },
+    Card: {
+      borderRadiusLG: 12,
+      paddingLG: 20,
+    },
+    Table: {
+      headerBg: "#f4f4f5",
+      headerColor: "#525252",
+      rowHoverBg: "#f8f8f9",
+      borderColor: "rgba(23, 23, 23, 0.06)",
+      borderRadius: 8,
+    },
+    Input: {
+      controlHeight: 36,
+      controlHeightLG: 44,
+      borderRadius: 8,
+    },
+    Select: {
+      controlHeight: 36,
+      controlHeightLG: 44,
+      borderRadius: 8,
+    },
+    Tabs: {
+      itemSelectedColor: "#171717",
+      inkBarColor: "#2563eb",
+      titleFontSize: 14,
+      titleFontSizeLG: 14,
+    },
+  },
+};
+
 function App() {
   return (
-    <CurrentContestProvider>
+    <ConfigProvider locale={koKR} theme={unslopAntdTheme}>
+      <CurrentContestProvider>
       <DeviceProvider>
         <BrowserRouter>
           <Routes>
@@ -252,6 +319,7 @@ function App() {
         </BrowserRouter>
       </DeviceProvider>
     </CurrentContestProvider>
+    </ConfigProvider>
   );
 }
 

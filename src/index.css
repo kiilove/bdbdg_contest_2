@@ -1,30 +1,171 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Do+Hyeon&family=Nanum+Gothic:wght@400;700;800&display=swap");
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: "Nanum Gothic", "Apple SD Gothic", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-y: auto;
+:root {
+  /* Unslop Light Graphite Ramp */
+  --bg-sidebar: #f4f4f5;
+  --bg-page: #fafafa;
+  --bg-card: #ffffff;
+  --bg-raised: #f4f4f5;
+  --border-hairline: rgba(23, 23, 23, 0.08);
+  --border-strong: rgba(23, 23, 23, 0.14);
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --text-muted: #737373;
+
+  /* Single Chrome Accent (Cobalt — >= 4.5:1 contrast with white) */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: rgba(37, 99, 235, 0.08);
+
+  /* Toned Semantic Roles */
+  --positive: #16a34a;
+  --positive-bg: rgba(22, 163, 74, 0.08);
+  --negative: #dc2626;
+  --negative-bg: rgba(220, 38, 38, 0.08);
+  --warning: #b45309;
+  --warning-bg: rgba(180, 83, 9, 0.08);
+
+  /* Unslop Dark Graphite Ramp (Booth / Live Consoles) */
+  --dark-deepest: #0f0f10;
+  --dark-page: #141415;
+  --dark-card: #19191b;
+  --dark-raised: #232325;
+  --dark-hairline: rgba(237, 237, 237, 0.08);
+  --dark-text-primary: #ededed;
+  --dark-text-secondary: #a1a1a6;
+  --dark-text-muted: #85858b;
+  --dark-positive: #4cc38a;
+  --dark-negative: #e5484d;
+
+  /* Typography & Motion */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+  --ease-out-unslop: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
-    monospace;
+@layer base {
+  html,
+  body {
+    margin: 0;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 400;
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-y: auto;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
 }
 
+/* Signature & Tabular Figure Helpers */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.bib-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--bg-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.bib-tag-dark {
+  background-color: var(--dark-raised);
+  color: var(--dark-text-primary);
+  border: 1px solid rgba(237, 237, 237, 0.14);
+}
+
+.bib-tag-active {
+  background-color: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+/* Quiet Ant Design Table & Surface Alignment */
+.ant-table-wrapper .ant-table {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  background-color: #f4f4f5 !important;
+  color: #525252 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  border-bottom: 1px solid rgba(23, 23, 23, 0.08) !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom: 1px solid rgba(23, 23, 23, 0.06);
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background-color: #f8f8f9 !important;
+}
+
+.ant-card {
+  border-color: rgba(23, 23, 23, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.ant-btn {
+  font-weight: 500;
+  box-shadow: none !important;
+  transition: background-color 150ms var(--ease-out-unslop),
+    border-color 150ms var(--ease-out-unslop),
+    color 150ms var(--ease-out-unslop),
+    transform 120ms var(--ease-out-unslop);
+}
+
+.ant-btn:active {
+  transform: scale(0.98);
+}
+
+/* Strict A4 Print Preservation */
 @media print {
   @page {
     size: A4 portrait;
     margin: 15mm;
   }
 
+  html,
   body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
   }
 
   .break-page {

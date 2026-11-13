@@ -25,6 +25,7 @@
     "gsap": "^3.12.5",
     "html2canvas": "^1.4.1",
     "lodash": "^4.17.21",
+    "lucide-react": "^1.72.0",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-datepicker": "^4.11.0",
