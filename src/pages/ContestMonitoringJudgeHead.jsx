@@ -894,98 +894,102 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         </div>
       ) : (
         <div className="flex flex-col w-full min-h-full bg-[#f1f5f9] text-[#0f172a] p-4 md:p-6 gap-5">
-          {/* 심판위원장 순위 확정 대형 알림 다이얼로그 */}
+          {/* 심판위원장 순위 확정 초대형 알림 다이얼로그 */}
           <Modal
             open={urgentModalOpen}
             onClose={() => setUrgentModalOpen(false)}
           >
             <div
-              className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/65"
+              className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 z-50 bg-black/75"
               style={{ transform: "none" }}
             >
-              <div className="w-full max-w-xl bg-white rounded-[18px] border-[3px] border-[#2563eb] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.3)] space-y-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1.5">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[6px] bg-[#dbeafe] text-sm font-extrabold text-[#1d4ed8]">
-                      <StatusDot status="active" live />
-                      <span>전 심판 채점 집계 완료</span>
+              <div className="w-[min(94vw,760px)] bg-white rounded-[24px] border-4 border-[#2563eb] shadow-[0_32px_80px_rgba(0,0,0,0.5)] overflow-hidden">
+                <div className="bg-[#0f172a] text-white px-7 sm:px-9 py-6 sm:py-7 border-b-2 border-[#1e293b] flex items-start justify-between gap-4">
+                  <div className="space-y-2.5">
+                    <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-[8px] bg-[#2563eb] text-white text-base sm:text-lg font-black">
+                      <CheckCircle2 size={20} strokeWidth={2.8} />
+                      <span>채점 집계 완료</span>
                     </div>
-                    <h2 className="text-2xl font-black tracking-tight text-[#0f172a] m-0 pt-1">
-                      모든 심판 점수가 들어왔습니다! 순위표를 확정해 주세요
+                    <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white leading-snug m-0">
+                      전 좌석 채점 완료 — 순위 확정이 필요합니다
                     </h2>
                   </div>
                   <button
                     type="button"
                     onClick={() => setUrgentModalOpen(false)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a] transition-colors cursor-pointer"
+                    className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-[#1e293b] hover:bg-[#334155] border border-[#475569] text-white transition-colors cursor-pointer"
                     aria-label="닫기"
                   >
-                    <X size={22} strokeWidth={2.2} />
+                    <X size={26} strokeWidth={2.6} />
                   </button>
                 </div>
 
-                <div className="rounded-[12px] bg-[#f8fafc] border-2 border-[#cbd5e1] p-4 space-y-2">
-                  <div className="text-sm font-extrabold text-[#475569]">
-                    순위 확정 대기 체급
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {realtimeData?.stageNumber !== undefined && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-[8px] bg-[#0f172a] text-white font-mono text-lg font-black">
-                        #{realtimeData.stageNumber} 무대
+                <div className="p-7 sm:p-9 space-y-6 bg-white">
+                  <div className="rounded-[16px] bg-[#eff6ff] border-[3px] border-[#60a5fa] p-6 space-y-3">
+                    <div className="text-base sm:text-lg font-black text-[#1e40af]">
+                      대기 중인 무대 체급
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {realtimeData?.stageNumber !== undefined && (
+                        <span className="inline-flex items-center px-4 py-1.5 rounded-[10px] bg-[#0f172a] text-white font-mono text-2xl sm:text-3xl font-black">
+                          #{realtimeData.stageNumber}
+                        </span>
+                      )}
+                      <span className="text-2xl sm:text-3xl font-black text-[#0f172a]">
+                        {urgentGradeInfo?.categoryTitle}
                       </span>
-                    )}
-                    <span className="text-xl font-black text-[#0f172a]">
-                      {urgentGradeInfo?.categoryTitle}
-                    </span>
-                    <span className="text-[#64748b] font-bold">/</span>
-                    <span className="text-xl font-black text-[#1d4ed8]">
-                      {urgentGradeInfo?.gradeTitle}
-                    </span>
+                      <span className="text-2xl font-black text-[#64748b]">
+                        /
+                      </span>
+                      <span className="text-2xl sm:text-3xl font-black text-[#1d4ed8]">
+                        {urgentGradeInfo?.gradeTitle}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <p className="text-base sm:text-lg font-bold text-[#334155] leading-relaxed m-0">
-                  아래 파란 버튼을 눌러 [최종순위]와 동점 여부를 확인하신 뒤 [순위표 최종 확정]을 눌러주셔야 전광판 및 본부석에 결과가 반영됩니다.
-                </p>
+                  <p className="text-xl sm:text-2xl font-bold text-[#1e293b] leading-relaxed m-0">
+                    모든 심사위원 좌석의 점수가 수신되었습니다. 아래 파란 버튼을 눌러 순위표를 검토하고 확정을 완료하면 다음 무대 진행 및 공식 결과 집계가 반영됩니다.
+                  </p>
 
-                <div className="flex flex-col sm:flex-row-reverse gap-3 pt-1">
-                  <button
-                    type="button"
-                    className="flex-1 inline-flex items-center justify-center gap-2 h-14 px-6 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-lg shadow-md transition-colors cursor-pointer"
-                    onClick={() => {
-                      setUrgentModalOpen(false);
-                      if (urgentGradeInfo?.categoryJudgeType === "point") {
-                        setPointSummaryProp({
-                          categoryId: urgentGradeInfo.categoryId,
-                          gradeId: urgentGradeInfo.gradeId,
-                          categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                          categoryTitle: urgentGradeInfo.categoryTitle || "",
-                          gradeTitle: urgentGradeInfo.gradeTitle || "",
-                        });
-                        setPointSummaryOpen(true);
-                      } else {
-                        setRankingSummaryProp({
-                          categoryId: urgentGradeInfo.categoryId,
-                          gradeId: urgentGradeInfo.gradeId,
-                          categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                          categoryTitle: urgentGradeInfo.categoryTitle || "",
-                          gradeTitle: urgentGradeInfo.gradeTitle || "",
-                        });
-                        setRankingSummaryOpen(true);
-                      }
-                    }}
-                  >
-                    <span>순위 집계표 열기 및 확정</span>
-                    <ArrowRight size={20} strokeWidth={2.4} />
-                  </button>
+                  <div className="flex flex-col sm:flex-row-reverse gap-4 pt-2">
+                    <button
+                      type="button"
+                      className="flex-1 inline-flex items-center justify-center gap-3 h-16 sm:h-20 px-8 rounded-[14px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-2xl sm:text-[26px] shadow-[0_8px_24px_rgba(37,99,235,0.35)] transition-colors cursor-pointer"
+                      onClick={() => {
+                        setUrgentModalOpen(false);
+                        if (urgentGradeInfo?.categoryJudgeType === "point") {
+                          setPointSummaryProp({
+                            categoryId: urgentGradeInfo.categoryId,
+                            gradeId: urgentGradeInfo.gradeId,
+                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                            categoryTitle: urgentGradeInfo.categoryTitle || "",
+                            gradeTitle: urgentGradeInfo.gradeTitle || "",
+                          });
+                          setPointSummaryOpen(true);
+                        } else {
+                          setRankingSummaryProp({
+                            categoryId: urgentGradeInfo.categoryId,
+                            gradeId: urgentGradeInfo.gradeId,
+                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                            categoryTitle: urgentGradeInfo.categoryTitle || "",
+                            gradeTitle: urgentGradeInfo.gradeTitle || "",
+                          });
+                          setRankingSummaryOpen(true);
+                        }
+                      }}
+                    >
+                      <span>순위표 확인 및 확정</span>
+                      <ArrowRight size={28} strokeWidth={2.8} />
+                    </button>
 
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center h-14 px-5 rounded-[12px] bg-[#e2e8f0] hover:bg-[#cbd5e1] text-[#334155] font-extrabold text-base transition-colors cursor-pointer"
-                    onClick={() => setUrgentModalOpen(false)}
-                  >
-                    잠시 뒤에 열기
-                  </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center h-16 sm:h-20 px-7 rounded-[14px] bg-[#f1f5f9] hover:bg-[#e2e8f0] border-2 border-[#cbd5e1] text-[#334155] font-extrabold text-xl transition-colors cursor-pointer"
+                      onClick={() => setUrgentModalOpen(false)}
+                    >
+                      나중에 확인
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
