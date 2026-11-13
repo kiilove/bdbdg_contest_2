@@ -2,12 +2,7 @@
 import React, { useContext, useEffect, useState, useMemo } from "react";
 import { where } from "firebase/firestore";
 import { Tabs } from "antd";
-import {
-  TeamOutlined,
-  UserOutlined,
-  TrophyOutlined,
-  PieChartOutlined,
-} from "@ant-design/icons";
+import { Users, UserCheck, Trophy, BarChart3 } from "lucide-react";
 
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
@@ -20,13 +15,14 @@ import {
 } from "../hooks/useFirestores";
 import { writePriceCheckLog } from "../utils/priceCheckLogger";
 
-// 새로 제작된 대시보드 컴포넌트들
 import LiveStageStatusCard from "../components/dashboard/LiveStageStatusCard";
 import RegistrationMetricCards from "../components/dashboard/RegistrationMetricCards";
 import JudgesOverviewPanel from "../components/dashboard/JudgesOverviewPanel";
 import UnconfirmedAthletesTable from "../components/dashboard/UnconfirmedAthletesTable";
 import CategoryGradeStatusGrid from "../components/dashboard/CategoryGradeStatusGrid";
 import AthleteRatioAnalytics from "../components/dashboard/AthleteRatioAnalytics";
+
+const tabIconProps = { size: 16, strokeWidth: 1.5 };
 
 const Dashboard = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -41,7 +37,6 @@ const Dashboard = () => {
 
   const contestId = currentContest?.contests?.id;
 
-  // 실시간 무대 정보 구독 (currentStage)
   const { data: realtimeStageData } = useFirebaseRealtimeGetDocument(
     contestId ? `currentStage/${contestId}` : null
   );
@@ -54,7 +49,6 @@ const Dashboard = () => {
   const deleteEntry = useFirestoreDeleteData("contest_entrys_list");
   const updateInvoice = useFirestoreUpdateData("invoices_pool");
 
-  /** Firestore 데이터 통합 로드 */
   const fetchPool = async (categoryListId, gradeListId, contestId) => {
     const condition = [where("contestId", "==", contestId)];
     try {
@@ -80,7 +74,6 @@ const Dashboard = () => {
     }
   };
 
-  /** 선수 데이터 병합 (확정된 선수만) */
   const mergePlayersWithGrades = (grades, invoices) => {
     const flattenPlayers = invoices
       .filter((invoice) => invoice.isPriceCheck && !invoice.isCanceled)
@@ -96,7 +89,6 @@ const Dashboard = () => {
     setPlayers(flattenPlayers);
   };
 
-  /** 카테고리 & 체급별 선수 매칭 */
   const matchCategoriesAndPlayers = (categories, players, grades) =>
     categories.map((category) => {
       const matchingPlayers = players.filter(
@@ -123,7 +115,6 @@ const Dashboard = () => {
       };
     });
 
-  /** 그랑프리 종목 여부 판별 (사전 신청자가 없으므로 미달 집계에서 제외) */
   const isGrandPrixCategory = (category) => {
     if (!category) return false;
     const section = category.contestCategorySection || "";
@@ -151,6 +142,7 @@ const Dashboard = () => {
     const matchedData = matchCategoriesAndPlayers(categories, players, grades);
     setCategoriesWithPlayers(matchedData);
     updateNoRegistrationCategories(matchedData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, categories, grades]);
 
   useEffect(() => {
@@ -161,9 +153,9 @@ const Dashboard = () => {
         currentContest.contests.id
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest]);
 
-  /** 입금/등록확인 토글 처리 로직 */
   const handleIsPriceCheckUpdate = async (invoiceId, playerUid, checked) => {
     const idx = invoices.findIndex((i) => i.id === invoiceId);
     if (idx < 0) return;
@@ -233,7 +225,6 @@ const Dashboard = () => {
     mergePlayersWithGrades(grades, newInvoices);
   };
 
-  /** 미확정 선수 목록 */
   const unconfirmedAthletes = useMemo(
     () =>
       invoices.filter(
@@ -246,7 +237,6 @@ const Dashboard = () => {
     [invoices]
   );
 
-  // 확정 고유 선수 수
   const confirmedPlayersCount = useMemo(
     () =>
       new Set(
@@ -257,13 +247,14 @@ const Dashboard = () => {
     [invoices]
   );
 
-  // 전체 고유 신청자 수
   const totalUniqueAthletes = useMemo(
-    () => new Set(invoices.filter((inv) => !inv.isCanceled).map((inv) => inv.playerUid)).size,
+    () =>
+      new Set(
+        invoices.filter((inv) => !inv.isCanceled).map((inv) => inv.playerUid)
+      ).size,
     [invoices]
   );
 
-  // 총 출전 번호표 (티켓) 수
   const totalEntries = useMemo(
     () =>
       invoices
@@ -272,14 +263,59 @@ const Dashboard = () => {
     [invoices]
   );
 
-  // 총 체급 수 및 심사 완료 체급 수 계산
   const totalGradesCount = grades.length;
   const savedGradeIds = realtimeStageData?.resultSaved || [];
   const savedGradesCount = savedGradeIds.length;
 
+  const contestTitle =
+    currentContest?.contestInfo?.contestTitle || "대회 운영 대시보드";
+  const contestLocation = currentContest?.contestInfo?.contestLocation;
+  const contestDate = currentContest?.contestInfo?.contestDate;
+
+  const renderTabLabel = (icon, text, count, key) => {
+    const isActive = activeTabKey === key;
+    return (
+      <span className="inline-flex items-center gap-2 px-1 tabular-nums">
+        <span
+          className={
+            isActive ? "text-[#2563eb]" : "text-[#737373]"
+          }
+        >
+          {icon}
+        </span>
+        <span
+          className={`text-[14px] leading-5 font-medium ${
+            isActive ? "text-[#171717]" : "text-[#525252]"
+          }`}
+        >
+          {text}
+        </span>
+        {typeof count === "number" && (
+          <span className="font-mono text-xs leading-4 text-[#737373]">
+            {count}
+          </span>
+        )}
+      </span>
+    );
+  };
+
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto space-y-6">
-      {/* 1. 실시간 LIVE 무대 관제 & 빠른 바로가기 카드 */}
+    <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
+      {/* Page Context Header */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+        <h1 className="text-[24px] leading-8 font-medium text-[#171717] m-0 tracking-[-0.01em]">
+          {contestTitle}
+        </h1>
+        {(contestDate || contestLocation) && (
+          <div className="flex items-center gap-2 text-xs leading-4 text-[#737373] tabular-nums">
+            {contestDate && <span className="font-mono">{contestDate}</span>}
+            {contestDate && contestLocation && <span aria-hidden="true">·</span>}
+            {contestLocation && <span>{contestLocation}</span>}
+          </div>
+        )}
+      </div>
+
+      {/* 1. Moment #1: Dark Graphite Live Stage Instrument Console */}
       <LiveStageStatusCard
         realtimeData={realtimeStageData}
         currentContest={currentContest}
@@ -287,7 +323,7 @@ const Dashboard = () => {
         savedGradesCount={savedGradesCount}
       />
 
-      {/* 2. 선수 등록 & 심판 & 경기 운영 핵심 KPI 카드 5종 */}
+      {/* 2. 5 Clean Stat Cards */}
       <RegistrationMetricCards
         invoices={invoices}
         confirmedPlayersCount={confirmedPlayersCount}
@@ -296,23 +332,22 @@ const Dashboard = () => {
         totalEntries={totalEntries}
         judgesCount={judgesPool.length}
         noRegistrationCategories={noRegistrationCategories}
-        contestDate={currentContest?.contestInfo?.contestDate}
+        contestDate={contestDate}
       />
 
-      {/* 3. 대회 실무 4대 운영 탭 허브 */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+      {/* 3. Operational Tabs Hub */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
         <Tabs
           activeKey={activeTabKey}
           onChange={setActiveTabKey}
-          size="large"
           items={[
             {
               key: "judges",
-              label: (
-                <span className="flex items-center gap-2 font-bold px-1">
-                  <TeamOutlined className="text-purple-600 text-base" />
-                  <span>심판진 운영 및 배정 ({judgesPool.length}명)</span>
-                </span>
+              label: renderTabLabel(
+                <Users {...tabIconProps} />,
+                "심판진 운영 및 배정",
+                judgesPool.length,
+                "judges"
               ),
               children: (
                 <div className="pt-2">
@@ -322,13 +357,11 @@ const Dashboard = () => {
             },
             {
               key: "unconfirmed",
-              label: (
-                <span className="flex items-center gap-2 font-bold px-1">
-                  <UserOutlined className="text-amber-500 text-base" />
-                  <span>
-                    미등록 선수 관리 ({unconfirmedAthletes.length}명)
-                  </span>
-                </span>
+              label: renderTabLabel(
+                <UserCheck {...tabIconProps} />,
+                "미등록 선수 관리",
+                unconfirmedAthletes.length,
+                "unconfirmed"
               ),
               children: (
                 <div className="pt-2">
@@ -341,11 +374,11 @@ const Dashboard = () => {
             },
             {
               key: "categories",
-              label: (
-                <span className="flex items-center gap-2 font-bold px-1">
-                  <TrophyOutlined className="text-blue-600 text-base" />
-                  <span>종목 및 체급별 출전 현황</span>
-                </span>
+              label: renderTabLabel(
+                <Trophy {...tabIconProps} />,
+                "종목 및 체급별 출전 현황",
+                undefined,
+                "categories"
               ),
               children: (
                 <div className="pt-2">
@@ -358,11 +391,11 @@ const Dashboard = () => {
             },
             {
               key: "analytics",
-              label: (
-                <span className="flex items-center gap-2 font-bold px-1">
-                  <PieChartOutlined className="text-emerald-600 text-base" />
-                  <span>출전 데이터 통계 및 비율 분석</span>
-                </span>
+              label: renderTabLabel(
+                <BarChart3 {...tabIconProps} />,
+                "출전 데이터 통계 및 비율",
+                undefined,
+                "analytics"
               ),
               children: (
                 <div className="pt-2">

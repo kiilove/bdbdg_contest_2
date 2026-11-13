@@ -1,15 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Table, Tag, Input, Empty } from "antd";
-import {
-  TeamOutlined,
-  SearchOutlined,
-  SettingOutlined,
-  SafetyCertificateOutlined,
-  CrownOutlined,
-} from "@ant-design/icons";
+import { Table, Input, Empty } from "antd";
+import { Search, Settings2, Printer } from "lucide-react";
+import { BibTag } from "../ui/BibTag";
 
-const JudgesOverviewPanel = ({ judges = [], judgesAssign = {} }) => {
+const JudgesOverviewPanel = ({ judges = [] }) => {
   const [searchText, setSearchText] = useState("");
 
   const filteredJudges = judges.filter((judge) => {
@@ -28,150 +23,136 @@ const JudgesOverviewPanel = ({ judges = [], judgesAssign = {} }) => {
     {
       title: "순번",
       key: "index",
-      width: 70,
+      width: 72,
       align: "center",
-      render: (_, __, index) => (
-        <span className="font-bold text-slate-500 text-xs">{index + 1}</span>
+      render: (_, record, index) => (
+        <BibTag size="sm" number={record.seatIndex || index + 1} />
       ),
     },
     {
       title: "심판 성명",
       dataIndex: "judgeName",
       key: "judgeName",
-      width: 140,
-      render: (name, record) => {
-        const isHead =
-          record.judgeTitle?.includes("위원장") ||
-          record.position?.includes("위원장") ||
-          record.isHead;
-        return (
-          <div className="flex items-center gap-2">
-            {isHead ? (
-              <CrownOutlined className="text-amber-500 text-base" />
-            ) : (
-              <SafetyCertificateOutlined className="text-blue-500 text-sm" />
-            )}
-            <span className="font-bold text-slate-800 text-sm">
-              {name || record.name || "성명 미입력"}
-            </span>
-          </div>
-        );
-      },
+      width: 160,
+      render: (name, record) => (
+        <span className="text-[14px] leading-5 font-medium text-[#171717]">
+          {name || record.name || "성명 미입력"}
+        </span>
+      ),
     },
     {
-      title: "직책 / 구분",
+      title: "직책 · 구분",
       dataIndex: "judgeTitle",
       key: "judgeTitle",
-      width: 130,
+      width: 140,
       render: (title, record) => {
         const displayTitle = title || record.position || "심사위원";
-        const isHead = displayTitle.includes("위원장");
+        const isHead =
+          displayTitle.includes("위원장") || Boolean(record.isHead);
         return (
-          <Tag
-            color={isHead ? "gold" : "blue"}
-            className="font-bold text-xs px-2.5 py-0.5 rounded-full"
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-[4px] text-xs leading-4 font-medium border ${
+              isHead
+                ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]/20"
+                : "bg-[#f4f4f5] text-[#525252] border-[#171717]/[0.08]"
+            }`}
           >
             {displayTitle}
-          </Tag>
+          </span>
         );
       },
     },
     {
-      title: "소속 / 직함",
+      title: "소속 · 직함",
       dataIndex: "judgeGym",
       key: "judgeGym",
       render: (gym, record) => (
-        <span className="text-slate-600 text-xs font-medium">
+        <span className="text-[13px] leading-5 text-[#525252]">
           {gym || record.gym || record.judgeAffiliation || "-"}
         </span>
       ),
     },
     {
-      title: "자격 / 비고",
+      title: "자격 · 비고",
       dataIndex: "judgeGrade",
       key: "judgeGrade",
-      width: 120,
+      width: 132,
       render: (grade, record) => (
-        <span className="text-slate-500 text-xs">
-          {grade || record.judgeNote || "공인심판"}
+        <span className="text-xs leading-4 text-[#737373]">
+          {grade || record.judgeNote || "공인 심판"}
         </span>
       ),
     },
   ];
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-      {/* 패널 헤더 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-            <TeamOutlined className="text-lg" />
-          </div>
-          <div>
-            <h3 className="text-base font-black text-slate-800 m-0">
-              위촉 심판진 명단 및 심사 운영
-            </h3>
-            <p className="text-xs text-slate-500 m-0">
-              이번 대회에 위촉되어 심사를 담당하는 공인 심사위원진입니다.
-            </p>
-          </div>
+    <div className="space-y-4">
+      {/* Panel Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#171717]/[0.08]">
+        <div>
+          <h3 className="text-[16px] leading-6 font-medium text-[#171717] m-0">
+            위촉 심판진 명단 및 심사 운영
+          </h3>
+          <p className="text-xs leading-4 text-[#737373] mt-1 mb-0">
+            대회에 위촉된 공인 심사위원 명단과 좌석 배정 관리입니다
+          </p>
         </div>
 
-        {/* 퀵 링크 버튼들 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             to="/contestjudgetable"
-            className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs border border-purple-200 no-underline transition-colors flex items-center gap-1"
+            className="h-[34px] px-3 rounded-[8px] bg-[#171717] hover:bg-[#262626] active:scale-[0.98] text-white font-medium text-xs leading-4 no-underline transition-[background-color,transform] duration-150 inline-flex items-center gap-1.5"
           >
-            <SettingOutlined />
-            <span>심판 배정 & 비밀번호 관리</span>
+            <Settings2 size={15} strokeWidth={1.5} className="text-white/80" />
+            <span>심판 배정 및 비밀번호 관리</span>
           </Link>
           <Link
             to="/judgeassignmentPrint"
-            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs no-underline transition-colors"
+            className="h-[34px] px-3 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] active:scale-[0.98] border border-[#171717]/[0.08] text-[#171717] font-medium text-xs leading-4 no-underline transition-[background-color,transform] duration-150 inline-flex items-center gap-1.5"
           >
-            배정표 인쇄 ➔
+            <Printer size={15} strokeWidth={1.5} className="text-[#737373]" />
+            <span>배정표 인쇄</span>
           </Link>
         </div>
       </div>
 
-      {/* 심판 채점 룰 안내 칩 */}
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-purple-50/50 rounded-xl border border-purple-100 text-xs text-purple-900">
-        <span className="font-bold flex items-center gap-1">
-          <span>⚖️</span>
-          <span>보디빌딩 심사 집계 룰:</span>
+      {/* Scoring Rule Summary Strip */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3.5 py-2.5 bg-[#f4f4f5] rounded-[8px] border border-[#171717]/[0.06] text-xs leading-4 text-[#525252] tabular-nums">
+        <span className="font-medium text-[#171717]">심사 집계 기준</span>
+        <span>5심제: 5명 전원 합산</span>
+        <span className="text-[#737373]" aria-hidden="true">
+          ·
         </span>
-        <span className="bg-white px-2 py-0.5 rounded border border-purple-200 font-medium">
-          5심제: 5명 전원 합산
+        <span>7심제: 최고 1개, 최저 1개 제외 후 5명 합산</span>
+        <span className="text-[#737373]" aria-hidden="true">
+          ·
         </span>
-        <span className="bg-white px-2 py-0.5 rounded border border-purple-200 font-medium">
-          7심제: 최고 1개, 최저 1개 제외 후 5명 합산
-        </span>
-        <span className="bg-white px-2 py-0.5 rounded border border-purple-200 font-medium">
-          9심제: 최고 2개, 최저 2개 제외 후 5명 합산
-        </span>
+        <span>9심제: 최고 2개, 최저 2개 제외 후 5명 합산</span>
       </div>
 
-      {/* 검색 바 & 심판 인원 통계 */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-bold text-slate-600">
-          총 위촉 심판: <strong className="text-purple-700">{judges.length}명</strong>
+      {/* Search & Count */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="text-xs leading-4 text-[#525252] tabular-nums">
+          총 위촉 심판{" "}
+          <span className="font-mono font-medium text-[#171717]">
+            {judges.length}명
+          </span>
         </div>
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <Input
-            placeholder="심판 성명, 소속 검색..."
-            prefix={<SearchOutlined className="text-slate-400" />}
+            placeholder="성명 또는 소속 검색"
+            prefix={
+              <Search size={15} strokeWidth={1.5} className="text-[#737373]" />
+            }
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             allowClear
-            size="small"
-            className="rounded-lg"
           />
         </div>
       </div>
 
-      {/* 심판 목록 테이블 */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      {/* Judges Table */}
+      <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
         <Table
           dataSource={filteredJudges}
           columns={columns}
@@ -182,7 +163,7 @@ const JudgesOverviewPanel = ({ judges = [], judgesAssign = {} }) => {
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="등록된 심판 정보가 없습니다."
+                description="등록된 심판 정보가 없습니다"
               />
             ),
           }}

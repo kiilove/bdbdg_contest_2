@@ -1,17 +1,8 @@
 import React from "react";
-import { Popover, List } from "antd";
-import {
-  CalendarOutlined,
-  UserOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-  TeamOutlined,
-  IdcardOutlined,
-} from "@ant-design/icons";
+import { Popover } from "antd";
 import dayjs from "dayjs";
 
 const RegistrationMetricCards = ({
-  invoices = [],
   confirmedPlayersCount = 0,
   unconfirmedPlayersCount = 0,
   totalUniqueAthletes = 0,
@@ -20,194 +11,180 @@ const RegistrationMetricCards = ({
   noRegistrationCategories = [],
   contestDate,
 }) => {
-  // D-Day 계산
   const formatDDay = (dateStr) => {
-    if (!dateStr) return { text: "일정 미정", color: "text-slate-500", bg: "bg-slate-50 border-slate-200" };
-    const target = dayjs(dateStr, "YYYY-MM-DD", true);
-    if (!target.isValid()) return { text: "일정 미정", color: "text-slate-500", bg: "bg-slate-50 border-slate-200" };
-    const diff = target.startOf("day").diff(dayjs().startOf("day"), "day");
-    if (diff === 0) return { text: "D-DAY 오늘!", color: "text-red-600", bg: "bg-red-50 border-red-200 animate-pulse" };
-    if (diff > 0) {
-      if (diff <= 3) return { text: `D-${diff}일`, color: "text-rose-600", bg: "bg-rose-50 border-rose-200" };
-      if (diff <= 7) return { text: `D-${diff}일`, color: "text-amber-600", bg: "bg-amber-50 border-amber-200" };
-      return { text: `D-${diff}일`, color: "text-blue-600", bg: "bg-blue-50 border-blue-200" };
+    if (!dateStr) {
+      return { figure: "미정", sub: "대회 일자 미등록" };
     }
-    return { text: `D+${Math.abs(diff)}일 (종료)`, color: "text-slate-500", bg: "bg-slate-50 border-slate-200" };
+    const target = dayjs(dateStr, "YYYY-MM-DD", true);
+    if (!target.isValid()) {
+      return { figure: "미정", sub: "대회 일자 확인 필요" };
+    }
+    const diff = target.startOf("day").diff(dayjs().startOf("day"), "day");
+    if (diff === 0) {
+      return { figure: "D-Day", sub: "금일 대회 진행" };
+    }
+    if (diff > 0) {
+      return { figure: `D-${diff}`, sub: "계측 및 경기 예정" };
+    }
+    return { figure: `D+${Math.abs(diff)}`, sub: "종료된 대회" };
   };
 
   const dDayInfo = formatDDay(contestDate);
 
-  // 등록 확정률
   const confirmationRate =
     totalUniqueAthletes > 0
       ? Math.round((confirmedPlayersCount / totalUniqueAthletes) * 100)
       : 0;
 
-  // 1인당 평균 출전 종목 수
   const avgEntriesPerAthlete =
     confirmedPlayersCount > 0
       ? (totalEntries / confirmedPlayersCount).toFixed(1)
-      : "1.0";
+      : "0.0";
 
-  // 그랑프리 제외된 미등록 체급 리스트
   const noPlayersList = noRegistrationCategories || [];
   const noPlayersCount = noPlayersList.length;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-      {/* 1. 대회 D-Day */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-            <CalendarOutlined className="text-blue-500" />
-            대회 D-Day
-          </span>
-          <span className="text-[11px] font-semibold text-slate-400">
-            {contestDate || "일정 확인필요"}
+    <section
+      aria-label="대회 핵심 지표"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
+    >
+      {/* 1. 대회 일정 D-Day */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-5 flex flex-col justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs leading-4 text-[#737373]">대회 일정</span>
+          <span className="font-mono text-xs leading-4 text-[#737373] tabular-nums">
+            {contestDate || "-"}
           </span>
         </div>
-        <div className="mt-3">
-          <div className={`text-2xl sm:text-3xl font-black ${dDayInfo.color}`}>
-            {dDayInfo.text}
+        <div>
+          <div className="text-[28px] leading-none font-medium tabular-nums text-[#171717]">
+            {dDayInfo.figure}
           </div>
-          <div className="text-xs text-slate-400 font-medium mt-1">
-            계측 및 경기 일정
+          <div className="text-xs leading-4 text-[#737373] mt-2">
+            {dDayInfo.sub}
           </div>
         </div>
       </div>
 
-      {/* 2. 선수 등록 확정률 & 인원 */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-            <CheckCircleOutlined className="text-emerald-500" />
-            선수 등록 확정
-          </span>
-          <span className="text-xs font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+      {/* 2. 선수 등록 확정 */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-5 flex flex-col justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs leading-4 text-[#737373]">선수 등록 확정</span>
+          <span className="font-mono text-xs leading-4 text-[#16a34a] font-medium tabular-nums">
             {confirmationRate}%
           </span>
         </div>
-        <div className="mt-3">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-800">
+        <div>
+          <div className="flex items-baseline gap-1.5 tabular-nums">
+            <span className="text-[28px] leading-none font-medium text-[#171717]">
               {confirmedPlayersCount}
             </span>
-            <span className="text-sm font-bold text-slate-400">
-              / 총 {totalUniqueAthletes}명
+            <span className="text-sm leading-5 text-[#737373]">
+              / {totalUniqueAthletes}명
             </span>
           </div>
-          {/* 프로그레스 바 */}
-          <div className="w-full bg-slate-100 rounded-full h-2 mt-2 overflow-hidden">
-            <div
-              className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${confirmationRate}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-            <span>미확정 {unconfirmedPlayersCount}명</span>
-            <span className="text-emerald-600 font-semibold">확정 완료</span>
+          <div className="text-xs leading-4 text-[#737373] tabular-nums mt-2">
+            미확정 대기 {unconfirmedPlayersCount}명
           </div>
         </div>
       </div>
 
-      {/* 3. 총 출전 번호표 (티켓수) & 중복출전 */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-            <IdcardOutlined className="text-indigo-500" />
-            총 출전 번호표
-          </span>
-          <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
-            인당 {avgEntriesPerAthlete}종목
+      {/* 3. 총 출전 번호표 */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-5 flex flex-col justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs leading-4 text-[#737373]">총 출전 번호표</span>
+          <span className="font-mono text-xs leading-4 text-[#737373] tabular-nums">
+            1인당 {avgEntriesPerAthlete}종목
           </span>
         </div>
-        <div className="mt-3">
-          <div className="text-2xl sm:text-3xl font-black text-indigo-600">
-            {totalEntries}
-            <span className="text-sm font-bold text-slate-500 ml-1">개</span>
+        <div>
+          <div className="flex items-baseline gap-1 tabular-nums">
+            <span className="text-[28px] leading-none font-medium text-[#171717]">
+              {totalEntries}
+            </span>
+            <span className="text-sm leading-5 text-[#737373]">건</span>
           </div>
-          <div className="text-xs text-slate-400 font-medium mt-1">
-            중복 출전 포함 총 배부 번호표
-          </div>
-        </div>
-      </div>
-
-      {/* 4. 위촉 심판진 현황 */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-            <TeamOutlined className="text-purple-500" />
-            위촉 심판진
-          </span>
-          <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-            심사 운영
-          </span>
-        </div>
-        <div className="mt-3">
-          <div className="text-2xl sm:text-3xl font-black text-purple-700">
-            {judgesCount}
-            <span className="text-sm font-bold text-slate-500 ml-1">명</span>
-          </div>
-          <div className="text-xs text-slate-400 font-medium mt-1">
-            심사위원장 · 주심 · 부심 구성
+          <div className="text-xs leading-4 text-[#737373] mt-2">
+            중복 출전 포함 배부 기준
           </div>
         </div>
       </div>
 
-      {/* 5. 미등록 체급 (그랑프리 제외) */}
+      {/* 4. 위촉 심판진 */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-5 flex flex-col justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs leading-4 text-[#737373]">위촉 심판진</span>
+          <span className="text-xs leading-4 text-[#737373]">공인 심판</span>
+        </div>
+        <div>
+          <div className="flex items-baseline gap-1 tabular-nums">
+            <span className="text-[28px] leading-none font-medium text-[#171717]">
+              {judgesCount}
+            </span>
+            <span className="text-sm leading-5 text-[#737373]">명</span>
+          </div>
+          <div className="text-xs leading-4 text-[#737373] mt-2">
+            위원장 · 주심 · 부심 구성
+          </div>
+        </div>
+      </div>
+
+      {/* 5. 접수 미달 종목 */}
       <Popover
-        placement="bottom"
+        placement="bottomRight"
+        trigger="hover"
         content={
           noPlayersCount > 0 ? (
-            <div className="max-w-xs max-h-60 overflow-y-auto">
-              <div className="font-bold text-xs text-slate-700 mb-2 pb-1 border-b">
-                신청자가 없는 종목/체급 (그랑프리 제외)
+            <div className="w-64 max-h-60 overflow-y-auto p-1">
+              <div className="text-xs leading-4 font-medium text-[#171717] pb-2 mb-2 border-b border-[#171717]/[0.08]">
+                신청자 0명 종목 ({noPlayersCount}개 · 그랑프리 제외)
               </div>
-              <List
-                size="small"
-                dataSource={noPlayersList}
-                renderItem={(c) => (
-                  <List.Item className="text-xs py-1">
-                    <span className="font-bold text-slate-700">
-                      {c.contestCategoryTitle}
-                    </span>
-                  </List.Item>
-                )}
-              />
+              <ul className="space-y-1 m-0 p-0 list-none">
+                {noPlayersList.map((c) => (
+                  <li
+                    key={c.contestCategoryId || c.contestCategoryTitle}
+                    className="text-xs leading-5 text-[#525252] py-0.5 truncate"
+                  >
+                    {c.contestCategoryTitle}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
-            <div className="text-xs text-emerald-600 font-bold p-1">
-              ✓ 모든 정규 종목에 선수가 등록되어 있습니다!
+            <div className="text-xs leading-4 text-[#525252] p-1">
+              모든 정규 종목에 선수가 등록되어 있습니다
             </div>
           )
         }
-        trigger="hover"
       >
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-              <ExclamationCircleOutlined className="text-orange-500" />
-              미달 종목
-            </span>
-            <span className="text-[10px] text-slate-400 font-normal">
+        <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] hover:border-[#171717]/[0.16] transition-colors duration-150 p-5 flex flex-col justify-between gap-3 cursor-pointer">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs leading-4 text-[#737373]">미달 종목</span>
+            <span className="text-xs leading-4 text-[#737373]">
               그랑프리 제외
             </span>
           </div>
-          <div className="mt-3">
-            <div
-              className={`text-2xl sm:text-3xl font-black ${
-                noPlayersCount > 0 ? "text-orange-600" : "text-emerald-600"
-              }`}
-            >
-              {noPlayersCount > 0 ? `${noPlayersCount}개` : "없음 (전체 등록)"}
+          <div>
+            <div className="flex items-baseline gap-1 tabular-nums">
+              <span
+                className={`text-[28px] leading-none font-medium ${
+                  noPlayersCount > 0 ? "text-[#b45309]" : "text-[#171717]"
+                }`}
+              >
+                {noPlayersCount}
+              </span>
+              <span className="text-sm leading-5 text-[#737373]">종목</span>
             </div>
-            <div className="text-xs text-slate-400 font-medium mt-1">
-              신청자 0명 종목 (호버 시 명단)
+            <div className="text-xs leading-4 text-[#737373] mt-2">
+              {noPlayersCount > 0
+                ? "신청자 0명 종목 · 마우스 오버 확인"
+                : "모든 정규 종목 등록됨"}
             </div>
           </div>
         </div>
       </Popover>
-    </div>
+    </section>
   );
 };
 

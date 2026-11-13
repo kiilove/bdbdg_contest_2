@@ -1,20 +1,18 @@
 "use client";
 
-// components/SelectDatabase.js
-import { useContext, useEffect, useState } from "react";
-import { Card, Select, Button, Typography, Space, Alert } from "antd";
-import { DatabaseOutlined, RightOutlined } from "@ant-design/icons";
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import { Select } from "antd";
+import { where } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
+import { Database, ArrowRight, AlertCircle, LogOut } from "lucide-react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
 import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
-import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useNavigate } from "react-router-dom";
 import LoadingPage from "./LoadingPage";
 
-const { Title, Text } = Typography;
 const { Option } = Select;
 
 const SelectDatabase = () => {
@@ -22,17 +20,14 @@ const SelectDatabase = () => {
   const [user, setUser] = useState(null);
   const [contestList, setContestList] = useState([]);
   const [contestNoticeId, setContestNoticeId] = useState(null);
-  const [message, setMessage] = useState(""); // 간단한 메시지 상태
+  const [message, setMessage] = useState("");
   const navigate = useNavigate();
 
-  const { currentContest, setCurrentContest } = useContext(
-    CurrentContestContext
-  );
+  const { setCurrentContest } = useContext(CurrentContestContext);
   const fetchQuery = useFirestoreQuery();
   const fetchDocument = useFirestoreGetDocument("contest_notice");
   const updateGlobalSetting = useFirebaseRealtimeUpdateData();
 
-  // 대회 목록 가져오기 함수
   const fetchList = async (userData) => {
     const condition = [
       where("contestStatus", "in", [
@@ -50,7 +45,6 @@ const SelectDatabase = () => {
         condition
       );
 
-      // 사용자 그룹에 따른 필터링
       const filteredData =
         userData.userGroup === "orgManager"
           ? returnData.filter(
@@ -60,25 +54,22 @@ const SelectDatabase = () => {
             )
           : [...returnData];
 
-      // 대회 목록 정렬 및 설정
       const sortedList = filteredData.sort((a, b) =>
-        a.contestTitle.localeCompare(b.contestTitle)
+        (a.contestTitle || "").localeCompare(b.contestTitle || "")
       );
 
       setContestList(sortedList);
 
-      // 기본 대회 ID 설정 (첫 번째 대회)
       if (sortedList.length >= 1) {
         setContestNoticeId(sortedList[0].id);
       }
     } catch (error) {
       console.error("대회 목록을 가져오는 중 오류 발생:", error);
-      setMessage("대회 목록을 가져오는 중 오류가 발생했습니다.");
+      setMessage("대회 목록을 가져오는 중 오류가 발생했습니다");
       alert("대회 목록을 가져오는 중 오류가 발생했습니다.");
     }
   };
 
-  // 선택된 대회 정보 가져오기 함수
   const fetchContest = async () => {
     if (contestNoticeId) {
       const condition = [where("contestNoticeId", "==", contestNoticeId)];
@@ -96,31 +87,30 @@ const SelectDatabase = () => {
           };
 
           setCurrentContest(contestData);
-
-          // sessionStorage에 저장하여 리프레시 시에도 유지되도록 설정
           sessionStorage.setItem("currentContest", JSON.stringify(contestData));
 
-          // 📡 전광판(스크린) 화면들이 자동으로 바라보도록 Realtime DB 전역 활성 대회 동기화!
           try {
-            await updateGlobalSetting.updateData("systemSettings/activeContest", {
-              contestId: returnContest[0].id,
-              contestNoticeId: contestNoticeId,
-              contestTitle: returnNotice.contestTitle || "",
-              updatedAt: Date.now(),
-            });
+            await updateGlobalSetting.updateData(
+              "systemSettings/activeContest",
+              {
+                contestId: returnContest[0].id,
+                contestNoticeId: contestNoticeId,
+                contestTitle: returnNotice.contestTitle || "",
+                updatedAt: Date.now(),
+              }
+            );
           } catch (syncErr) {
             console.warn("전광판 전역 동기화 실패:", syncErr);
           }
         }
       } catch (error) {
         console.error("선택된 대회 정보를 가져오는 중 오류 발생:", error);
-        setMessage("선택된 대회 정보를 가져오는 중 오류가 발생했습니다.");
+        setMessage("선택된 대회 정보를 가져오는 중 오류가 발생했습니다");
         alert("선택된 대회 정보를 가져오는 중 오류가 발생했습니다.");
       }
     }
   };
 
-  // 첫 번째 useEffect: 컴포넌트 마운트 시 user 정보 및 currentContest 정보 로드
   useEffect(() => {
     const storedUser = sessionStorage.getItem("user");
     const storedContest = sessionStorage.getItem("currentContest");
@@ -136,18 +126,17 @@ const SelectDatabase = () => {
         }
       } catch (e) {
         console.error("데이터 파싱 오류:", e);
-        setMessage("로그인 정보를 다시 확인해 주세요.");
+        setMessage("로그인 정보를 다시 확인해 주세요");
         navigate("/login");
         return;
       }
     } else {
-      setMessage("사용자 정보가 없습니다. 로그인 해주세요.");
+      setMessage("사용자 정보가 없습니다");
       navigate("/login");
       return;
     }
-  }, [navigate]);
+  }, [navigate, setCurrentContest]);
 
-  // 두 번째 useEffect: user가 설정되면 대회 목록 로드
   useEffect(() => {
     if (!user) {
       return;
@@ -157,32 +146,32 @@ const SelectDatabase = () => {
 
     const loadData = async () => {
       try {
-        await fetchList(user); // 대회 목록 가져오기
-        clearTimeout(timeoutId); // 타임아웃 취소
-        setIsLoading(false); // 로딩 해제
+        await fetchList(user);
+        clearTimeout(timeoutId);
+        setIsLoading(false);
       } catch (error) {
         console.error("대회 목록을 가져오는 중 오류 발생:", error);
-        clearTimeout(timeoutId); // 타임아웃 취소
-        setIsLoading(false); // 로딩 해제
-        setMessage("대회 목록을 가져오는 중 오류가 발생했습니다.");
+        clearTimeout(timeoutId);
+        setIsLoading(false);
+        setMessage("대회 목록을 가져오는 중 오류가 발생했습니다");
         alert("대회 목록을 가져오는 중 오류가 발생했습니다.");
       }
     };
 
-    setIsLoading(true); // 로딩 시작
+    setIsLoading(true);
     timeoutId = setTimeout(() => {
-      setIsLoading(false); // 3초 후 로딩 해제
+      setIsLoading(false);
       alert("데이터 로딩 시간이 초과되었습니다.");
     }, 3000);
 
     loadData();
 
     return () => {
-      clearTimeout(timeoutId); // 컴포넌트 언마운트 시 타임아웃 정리
+      clearTimeout(timeoutId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // 선택된 대회 ID 변경 시 대회 정보 가져오기
   useEffect(() => {
     if (contestNoticeId) {
       fetchContest();
@@ -190,60 +179,89 @@ const SelectDatabase = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contestNoticeId]);
 
-  // 대회 선택 핸들러
   const handleSelectChange = (value) => {
     setContestNoticeId(value);
   };
 
-  // 관리페이지로 이동 핸들러
   const handleNavigate = () => {
     if (!contestNoticeId) {
       alert("먼저 대회를 선택해주세요.");
       return;
     }
-    navigate("/", { state: { showTopBar: true } }); // 올바른 경로로 수정
+    navigate("/", { state: { showTopBar: true } });
   };
 
+  const handleLogout = () => {
+    sessionStorage.removeItem("user");
+    navigate("/login", { replace: true });
+  };
+
+  const selectedContest = useMemo(
+    () => contestList.find((c) => c.id === contestNoticeId) || null,
+    [contestList, contestNoticeId]
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-[#fafafa] text-[#171717] flex items-center justify-center p-6">
+      <div className="w-full max-w-[440px]">
         {isLoading ? (
-          <LoadingPage />
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center gap-3">
+            <LoadingPage />
+            <span className="text-xs leading-4 text-[#737373]">
+              대회 목록을 불러오는 중입니다
+            </span>
+          </div>
         ) : (
-          <Card
-            className="shadow-2xl border-0 backdrop-blur-sm bg-white/90"
-            style={{
-              borderRadius: "20px",
-              overflow: "hidden",
-            }}
-          >
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mb-4">
-                <DatabaseOutlined className="text-2xl text-white" />
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            {/* Top Brand & Title */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[16px] leading-none font-semibold text-[#171717]">
+                    BDBDg
+                  </span>
+                  <span className="text-xs leading-4 text-[#737373]">
+                    데이터베이스 선택
+                  </span>
+                </div>
+                <Database
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#737373]"
+                />
               </div>
-              <Title level={2} className="!mb-2 !text-gray-800">
-                대회 선택
-              </Title>
-              <Text type="secondary" className="text-base">
-                관리할 대회를 선택해주세요
-              </Text>
+
+              <h1 className="text-[20px] leading-7 font-medium text-[#171717] m-0">
+                운영할 대회 선택
+              </h1>
+              <p className="text-[13px] leading-5 text-[#737373] mt-1 mb-0">
+                선택한 대회가 관리 콘솔과 전광판 송출 화면에 동기화됩니다
+              </p>
             </div>
 
+            {message && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-[#dc2626]/[0.06] border border-[#dc2626]/20 text-[13px] leading-5 text-[#dc2626]">
+                <AlertCircle
+                  size={16}
+                  strokeWidth={1.5}
+                  className="shrink-0 text-[#dc2626]"
+                />
+                <span>{message}</span>
+              </div>
+            )}
+
             {contestList.length > 0 ? (
-              <Space direction="vertical" size="large" className="w-full">
-                <div>
-                  <Text strong className="block mb-3 text-gray-700">
-                    대회 목록
-                  </Text>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs leading-4 font-medium text-[#525252]">
+                    대회 목록 ({contestList.length}개)
+                  </label>
                   <Select
                     size="large"
                     value={contestNoticeId || ""}
                     onChange={handleSelectChange}
                     className="w-full"
-                    placeholder="대회를 선택하세요"
-                    style={{
-                      borderRadius: "12px",
-                    }}
+                    placeholder="대회 선택"
                   >
                     {contestList.map((contest) => (
                       <Option key={contest.id} value={contest.id}>
@@ -253,38 +271,75 @@ const SelectDatabase = () => {
                   </Select>
                 </div>
 
-                <Button
-                  type="primary"
-                  size="large"
+                {selectedContest && (
+                  <div className="rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.06] px-3.5 py-3 space-y-1.5 text-xs leading-4 tabular-nums">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[#737373]">진행 상태</span>
+                      <span className="font-medium text-[#171717]">
+                        {selectedContest.contestStatus || "-"}
+                      </span>
+                    </div>
+                    {selectedContest.contestDate && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#737373]">대회 일자</span>
+                        <span className="font-mono text-[#525252]">
+                          {selectedContest.contestDate}
+                        </span>
+                      </div>
+                    )}
+                    {selectedContest.contestAssociate && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#737373]">주관 단체</span>
+                        <span className="text-[#525252] truncate max-w-[220px]">
+                          {selectedContest.contestAssociate}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
                   onClick={handleNavigate}
-                  className="w-full h-12 text-base font-medium"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
-                  }}
-                  icon={<RightOutlined />}
-                  iconPosition="end"
+                  className="w-full h-[44px] px-4 rounded-[8px] bg-[#171717] hover:bg-[#262626] active:scale-[0.98] text-white font-medium text-[14px] leading-5 inline-flex items-center justify-center gap-2 transition-[background-color,transform] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/50"
                 >
-                  관리페이지로 이동
-                </Button>
-              </Space>
+                  <span>관리 콘솔로 이동</span>
+                  <ArrowRight size={16} strokeWidth={1.5} />
+                </button>
+              </div>
             ) : (
-              <Alert
-                message="선택 가능한 대회가 없습니다"
-                description="현재 접수 중인 대회가 없습니다. 관리자에게 문의하세요."
-                type="warning"
-                showIcon
-                className="text-center"
-                style={{
-                  borderRadius: "12px",
-                  border: "none",
-                }}
-              />
+              <div className="rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] p-4 flex items-start gap-2.5">
+                <AlertCircle
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#b45309] shrink-0 mt-0.5"
+                />
+                <div className="space-y-1">
+                  <div className="text-[13px] leading-5 font-medium text-[#171717]">
+                    선택 가능한 대회가 없습니다
+                  </div>
+                  <div className="text-xs leading-4 text-[#737373]">
+                    현재 권한으로 접근 가능한 대회가 등록되어 있지 않습니다
+                  </div>
+                </div>
+              </div>
             )}
-          </Card>
+
+            {/* Footer User & Logout */}
+            <div className="mt-6 pt-4 border-t border-[#171717]/[0.08] flex items-center justify-between text-xs leading-4 text-[#737373]">
+              <span className="truncate">
+                접속 계정: <span className="text-[#525252] font-medium">{user?.userID || "-"}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center gap-1 text-[#525252] hover:text-[#171717] font-medium transition-colors duration-150"
+              >
+                <LogOut size={14} strokeWidth={1.5} className="text-[#737373]" />
+                <span>로그아웃</span>
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
