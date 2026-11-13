@@ -152,7 +152,7 @@ const ContestAwardCreator = ({ props, setClose }) => {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full h-full flex flex-col bg-white overflow-hidden text-[#171717]">
       <ConfirmationModal
         isOpen={msgOpen}
         message={message}
@@ -160,125 +160,123 @@ const ContestAwardCreator = ({ props, setClose }) => {
         onConfirm={() => setMsgOpen(false)}
       />
 
-      <div className="w-full max-w-2xl max-h-[88vh] bg-white rounded-[14px] border border-[#171717]/15 shadow-[0_16px_40px_rgba(0,0,0,0.12)] flex flex-col overflow-hidden text-[#171717]">
-        <div className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Award size={18} strokeWidth={1.5} className="text-[#525252]" />
-            <div>
-              <h2 className="text-sm font-semibold text-[#171717] m-0">
-                상장 발급 대상 등록
-              </h2>
-              <p className="text-xs text-[#525252] m-0">
-                {categoryTitle} ({gradeTitle})
-              </p>
-            </div>
+      <div className="sticky top-0 z-10 shrink-0 bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Award size={18} strokeWidth={1.5} className="text-[#525252]" />
+          <div>
+            <h2 className="text-sm font-semibold text-[#171717] m-0">
+              상장 발급 대상 등록
+            </h2>
+            <p className="text-xs text-[#525252] m-0">
+              {categoryTitle} ({gradeTitle})
+            </p>
           </div>
+        </div>
 
+        <button
+          type="button"
+          onClick={() => setClose(false)}
+          className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#525252] hover:bg-white hover:text-[#171717] transition-colors cursor-pointer"
+        >
+          <X size={16} strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-[#fafafa] border-b border-[#171717]/[0.08] text-[#525252] text-xs font-medium">
+              <th className="py-2.5 px-3 w-14 text-center">선택</th>
+              <th className="py-2.5 px-3 w-16 text-center">연번</th>
+              <th className="py-2.5 px-3 w-16 text-center">순위</th>
+              <th className="py-2.5 px-3 w-20 text-center">번호</th>
+              <th className="py-2.5 px-3 text-left">이름</th>
+              <th className="py-2.5 px-4 text-left">소속</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#171717]/[0.06]">
+            {sortedResult.length > 0 ? (
+              sortedResult.map((curr, cIdx) => {
+                const {
+                  playerName,
+                  playerRank,
+                  playerUid,
+                  playerGym,
+                  playerNumber,
+                } = curr;
+                return (
+                  <tr
+                    key={playerUid || cIdx}
+                    className="hover:bg-[#fafafa] transition-colors"
+                  >
+                    <td className="py-2.5 px-3 text-center">
+                      <input
+                        type="checkbox"
+                        name="playerAward"
+                        className="w-4 h-4 accent-[#2563eb] cursor-pointer"
+                        value={playerUid}
+                        onChange={(e) =>
+                          handleAwardCheck(
+                            e,
+                            cIdx,
+                            awardUniqeNumber + cIdx + 1
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-mono tabular-nums text-xs text-[#737373]">
+                      {awardUniqeNumber + cIdx + 1}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-mono tabular-nums font-medium text-[#171717]">
+                      {playerRank}위
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <BibTag number={playerNumber} size="sm" />
+                    </td>
+                    <td className="py-2.5 px-3 font-medium text-[#171717]">
+                      {playerName}
+                    </td>
+                    <td className="py-2.5 px-4 text-[#525252]">
+                      {playerGym || "무소속"}
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="py-10 text-center text-xs text-[#737373]"
+                >
+                  확정된 순위 데이터가 없습니다
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="sticky bottom-0 z-10 shrink-0 bg-[#f4f4f5] border-t border-[#171717]/[0.08] px-5 py-3 flex items-center justify-between gap-3">
+        <span className="font-mono tabular-nums text-xs text-[#525252]">
+          선택 인원 {awardAddArray.length}명
+        </span>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setClose(false)}
-            className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#525252] hover:bg-white hover:text-[#171717] transition-colors cursor-pointer"
+            className="h-9 px-4 rounded-[8px] bg-white border border-[#171717]/[0.12] hover:bg-[#fafafa] text-sm font-medium text-[#171717] transition-colors cursor-pointer"
           >
-            <X size={16} strokeWidth={1.5} />
+            닫기
           </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-[#fafafa] border-b border-[#171717]/[0.08] text-[#525252] text-xs font-medium">
-                <th className="py-2.5 px-3 w-14 text-center">선택</th>
-                <th className="py-2.5 px-3 w-16 text-center">연번</th>
-                <th className="py-2.5 px-3 w-16 text-center">순위</th>
-                <th className="py-2.5 px-3 w-20 text-center">번호</th>
-                <th className="py-2.5 px-3 text-left">이름</th>
-                <th className="py-2.5 px-4 text-left">소속</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#171717]/[0.06]">
-              {sortedResult.length > 0 ? (
-                sortedResult.map((curr, cIdx) => {
-                  const {
-                    playerName,
-                    playerRank,
-                    playerUid,
-                    playerGym,
-                    playerNumber,
-                  } = curr;
-                  return (
-                    <tr
-                      key={playerUid || cIdx}
-                      className="hover:bg-[#fafafa] transition-colors"
-                    >
-                      <td className="py-2.5 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          name="playerAward"
-                          className="w-4 h-4 accent-[#2563eb] cursor-pointer"
-                          value={playerUid}
-                          onChange={(e) =>
-                            handleAwardCheck(
-                              e,
-                              cIdx,
-                              awardUniqeNumber + cIdx + 1
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-mono tabular-nums text-xs text-[#737373]">
-                        {awardUniqeNumber + cIdx + 1}
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-mono tabular-nums font-medium text-[#171717]">
-                        {playerRank}위
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <BibTag number={playerNumber} size="sm" />
-                      </td>
-                      <td className="py-2.5 px-3 font-medium text-[#171717]">
-                        {playerName}
-                      </td>
-                      <td className="py-2.5 px-4 text-[#525252]">
-                        {playerGym || "무소속"}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="py-10 text-center text-xs text-[#737373]"
-                  >
-                    확정된 순위 데이터가 없습니다
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="bg-[#f4f4f5] border-t border-[#171717]/[0.08] px-5 py-3 flex items-center justify-between gap-3">
-          <span className="font-mono tabular-nums text-xs text-[#525252]">
-            선택 인원 {awardAddArray.length}명
-          </span>
-          <div className="flex items-center gap-2">
+          {awardAddArray.length > 0 && (
             <button
               type="button"
-              onClick={() => setClose(false)}
-              className="h-9 px-4 rounded-[8px] bg-white border border-[#171717]/[0.12] hover:bg-[#fafafa] text-sm font-medium text-[#171717] transition-colors cursor-pointer"
+              onClick={() => handleSaveAwardList(awardAddArray)}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors active:scale-[0.98] cursor-pointer"
             >
-              닫기
+              상장 추가
             </button>
-            {awardAddArray.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleSaveAwardList(awardAddArray)}
-                className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors active:scale-[0.98] cursor-pointer"
-              >
-                상장 추가
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   Table,
-  Modal,
+  Drawer,
+  Button,
   Form,
   Input,
   Select,
@@ -257,13 +258,25 @@ const AssociationManagerPage = () => {
           />
         </section>
 
-        <Modal
+        <Drawer
+          placement="right"
+          width={440}
           title={editingUser ? "계정 수정" : "새 계정 추가"}
           open={isModalOpen}
-          onCancel={() => setIsModalOpen(false)}
-          onOk={() => form.submit()}
-          okText="저장"
-          cancelText="취소"
+          onClose={() => setIsModalOpen(false)}
+          destroyOnClose
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setIsModalOpen(false)}>취소</Button>
+              <Button
+                type="primary"
+                loading={loading}
+                onClick={() => form.submit()}
+              >
+                저장
+              </Button>
+            </div>
+          }
         >
           <Form form={form} layout="vertical" onFinish={handleAddOrUpdate}>
             <Form.Item
@@ -299,7 +312,7 @@ const AssociationManagerPage = () => {
               <Input placeholder="소속 협회명 입력" />
             </Form.Item>
           </Form>
-        </Modal>
+        </Drawer>
       </div>
     </div>
   );

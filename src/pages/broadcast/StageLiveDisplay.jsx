@@ -31,7 +31,7 @@ import {
   SoundOutlined,
   AudioMutedOutlined,
 } from "@ant-design/icons";
-import { Modal, Input, message, Tag } from "antd";
+import { Drawer, Input, message, Tag } from "antd";
 import PreDownloadModal from "../../components/broadcast/PreDownloadModal";
 import SmoothBackgroundVideo from "../../components/broadcast/SmoothBackgroundVideo";
 import defaultStandbyVideo from "../../assets/mov/ybbf_mp4.mp4";
@@ -775,30 +775,31 @@ const StageLiveDisplay = () => {
       )}
 
       {/* ========================================================================================= */}
-      {/* 🗄️ [초호화 전광판 데이터베이스(대회) 선택 팝업 모달] */}
+      {/* 🗄️ [초호화 전광판 데이터베이스(대회) 선택 우측 슬라이드 드로어] */}
       {/* ========================================================================================= */}
-      <Modal
+      <Drawer
+        placement="right"
+        width={560}
         open={isDbModalOpen}
-        onCancel={() => setIsDbModalOpen(false)}
-        footer={null}
-        width={720}
-        centered
+        onClose={() => setIsDbModalOpen(false)}
+        closable={false}
         destroyOnClose
         className="stage-db-selector-modal"
         styles={{
+          header: { display: "none" },
           content: {
             backgroundColor: "#090d16",
-            border: "2px solid rgba(251, 191, 36, 0.5)",
-            borderRadius: "24px",
-            boxShadow: "0 25px 80px rgba(0, 0, 0, 0.9)",
+          },
+          body: {
+            backgroundColor: "#090d16",
             padding: "24px",
+            borderLeft: "2px solid rgba(251, 191, 36, 0.4)",
           },
         }}
       >
-        <div className="space-y-4 text-white">
-          
-          {/* 모달 상단 헤더 */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex flex-col h-full gap-4 text-white">
+          {/* 드로어 상단 헤더 */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-xl shadow-lg">
                 <DatabaseOutlined />
@@ -811,43 +812,55 @@ const StageLiveDisplay = () => {
               </div>
             </div>
 
-            <button
-              onClick={loadAllContests}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
-            >
-              <ReloadOutlined className={isContestLoading ? "animate-spin" : ""} />
-              <span>새로고침</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={loadAllContests}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+              >
+                <ReloadOutlined className={isContestLoading ? "animate-spin" : ""} />
+                <span>새로고침</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDbModalOpen(false)}
+                aria-label="닫기"
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 cursor-pointer"
+              >
+                <CloseOutlined />
+              </button>
+            </div>
           </div>
 
           {/* 현재 연결된 활성 대회 정보 */}
-          <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/50 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/50 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
-              <div>
+              <div className="min-w-0">
                 <span className="text-[10px] text-amber-400/80 font-mono font-bold uppercase block">
                   CURRENT CONNECTED DATABASE
                 </span>
-                <span className="text-sm font-black text-amber-200">{contestTitle}</span>
+                <span className="text-sm font-black text-amber-200 block truncate">{contestTitle}</span>
               </div>
             </div>
-            <Tag color="gold" className="font-mono font-black text-xs mr-0">
+            <Tag color="gold" className="font-mono font-black text-xs mr-0 shrink-0">
               실시간 연결중
             </Tag>
           </div>
 
           {/* 대회 검색 입력창 */}
-          <Input
-            placeholder="대회명 검색..."
-            prefix={<SearchOutlined className="text-slate-400" />}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-slate-900 border-slate-700 text-white rounded-xl py-2.5"
-            allowClear
-          />
+          <div className="shrink-0">
+            <Input
+              placeholder="대회명 검색..."
+              prefix={<SearchOutlined className="text-slate-400" />}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white rounded-xl py-2.5"
+              allowClear
+            />
+          </div>
 
           {/* 대회 카드 리스트 */}
-          <div className="max-h-[380px] overflow-y-auto space-y-2.5 pr-1">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1">
             {filteredContests.length === 0 ? (
               <div className="py-10 text-center text-slate-500 font-bold">
                 {isContestLoading ? "대회 목록을 불러오는 중..." : "검색된 대회가 없습니다."}
@@ -900,12 +913,11 @@ const StageLiveDisplay = () => {
             )}
           </div>
 
-          <div className="text-[11px] text-slate-500 text-center pt-2">
+          <div className="text-[11px] text-slate-500 text-center pt-2 border-t border-slate-800/80 shrink-0">
             💡 단축키: <span className="text-slate-300 font-mono">D</span> (DB 선택창), <span className="text-slate-300 font-mono">P</span> (사전 다운로드), <span className="text-slate-300 font-mono">F</span> (전체화면)
           </div>
-
         </div>
-      </Modal>
+      </Drawer>
 
       {/* ⚡ [초호화 전광판 7종 무대 비디오 + 스폰서 광고 + 특별영상 사전 다운로드 매니저 모달] */}
       <PreDownloadModal

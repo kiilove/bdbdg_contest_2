@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useContext } from "react";
-import { Modal, Button, Progress, Tag } from "antd";
+import React, { useState, useEffect, useMemo, useContext, useRef } from "react";
+import { Drawer, Button, Progress, Tag } from "antd";
 import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import {
   CloudDownloadOutlined,
@@ -12,6 +12,7 @@ import {
   NotificationOutlined,
   VideoCameraOutlined,
   PictureOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import {
   downloadVideoWithProgress,
@@ -61,12 +62,14 @@ export const PreDownloadModal = ({
   const [dbVideoSettings, setDbVideoSettings] = useState({});
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState({});
+  const noticeConfirmRef = useRef(null);
 
   const extractContent = (arg) =>
     typeof arg === "string" ? arg : arg?.content || "";
 
   const message = {
     success: (arg) => {
+      noticeConfirmRef.current = null;
       setNoticeMessage({
         variant: "success",
         title: "미디어 캐시 작업 완료",
@@ -77,6 +80,7 @@ export const PreDownloadModal = ({
       setNoticeOpen(true);
     },
     error: (arg) => {
+      noticeConfirmRef.current = null;
       setNoticeMessage({
         variant: "error",
         title: "다운로드 오류",
@@ -87,6 +91,7 @@ export const PreDownloadModal = ({
       setNoticeOpen(true);
     },
     warning: (arg) => {
+      noticeConfirmRef.current = null;
       setNoticeMessage({
         variant: "warning",
         title: "미디어 확인 필요",
@@ -97,6 +102,7 @@ export const PreDownloadModal = ({
       setNoticeOpen(true);
     },
     info: (arg) => {
+      noticeConfirmRef.current = null;
       setNoticeMessage({
         variant: "info",
         title: "사전 다운로드 안내",
@@ -328,20 +334,22 @@ export const PreDownloadModal = ({
   };
 
   // 전체 캐시 삭제
-  const handleClearCache = async () => {
-    Modal.confirm({
+  const handleClearCache = () => {
+    noticeConfirmRef.current = async () => {
+      await clearStoredVideos();
+      setCacheInfo({});
+      setDownloadProgress({});
+      message.success("로컬 미디어 캐시가 비워졌습니다.");
+    };
+    setNoticeMessage({
+      variant: "danger",
       title: "로컬 미디어 캐시를 모두 비우시겠습니까?",
-      content: "브라우저 로컬 디스크(IndexedDB)에 저장된 영상 및 광고 파일들이 삭제되며, 이후 재생 시 네트워크에서 다시 다운로드됩니다.",
-      okText: "캐시 삭제",
-      okType: "danger",
-      cancelText: "취소",
-      onOk: async () => {
-        await clearStoredVideos();
-        setCacheInfo({});
-        setDownloadProgress({});
-        message.success("로컬 미디어 캐시가 비워졌습니다.");
-      },
+      body: "브라우저 로컬 디스크(IndexedDB)에 저장된 영상 및 광고 파일들이 삭제되며, 이후 재생 시 네트워크에서 다시 다운로드됩니다.",
+      isButton: true,
+      confirmButtonText: "캐시 삭제",
+      cancelButtonText: "취소",
     });
+    setNoticeOpen(true);
   };
 
   // 총 저장 용량 계산
@@ -362,100 +370,122 @@ export const PreDownloadModal = ({
       <ConfirmationModal
         isOpen={noticeOpen}
         message={noticeMessage}
-        onCancel={() => setNoticeOpen(false)}
-        onConfirm={() => setNoticeOpen(false)}
+        onCancel={() => {
+          noticeConfirmRef.current = null;
+          setNoticeOpen(false);
+        }}
+        onConfirm={async () => {
+          const confirmAction = noticeConfirmRef.current;
+          noticeConfirmRef.current = null;
+          setNoticeOpen(false);
+          if (confirmAction) {
+            await confirmAction();
+          }
+        }}
       />
-      <Modal
+      <Drawer
+        placement="right"
+        width={680}
         open={open}
-        onCancel={onClose}
-      footer={null}
-      width={840}
-      centered
-      destroyOnClose
-      styles={{
-        content: {
-          backgroundColor: "#090d16",
-          border: "1px solid rgba(251, 191, 36, 0.3)",
-          borderRadius: "24px",
-          padding: "24px",
-          color: "#fff",
-        },
-      }}
-    >
-      <div className="space-y-5 select-none">
-        
-        {/* 상단 타이틀 헤더 */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-black text-2xl shadow-lg">
-              <CloudDownloadOutlined />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-white m-0 tracking-tight">
-                  무대 영상 & 스폰서 광고 사전 다운로드 매니저
-                </h2>
-                <Tag color="gold" className="font-bold border-amber-400/40">
-                  SSD 영구 보관
-                </Tag>
+        onClose={onClose}
+        closable={false}
+        destroyOnClose
+        styles={{
+          header: { display: "none" },
+          content: {
+            backgroundColor: "#090d16",
+          },
+          body: {
+            backgroundColor: "#090d16",
+            borderLeft: "1px solid rgba(251, 191, 36, 0.3)",
+            padding: "24px",
+            color: "#fff",
+          },
+        }}
+      >
+        <div className="flex flex-col h-full gap-5 select-none">
+          {/* 상단 타이틀 헤더 */}
+          <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shrink-0">
+                <CloudDownloadOutlined />
               </div>
-              <p className="text-xs text-slate-400 m-0 mt-0.5">
-                대회 무대 영상과 협찬사 광고 미디어를 100% 미리 받아두어 인터넷 버퍼링 없이 즉시 재생합니다.
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <div className="text-xs font-bold text-slate-400">보관된 로컬 용량</div>
-            <div className="text-lg font-black text-amber-400 font-mono">
-              {formatBytes(totalCachedBytes)}
-            </div>
-          </div>
-        </div>
-
-        {/* 종합 상태 대시보드 카드 */}
-        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-400 text-xl shrink-0">
-              <HddOutlined />
-            </div>
-            <div>
-              <div className="text-xs text-slate-400 font-bold uppercase">준비 현황</div>
-              <div className="text-sm sm:text-base font-black text-white">
-                설정 미디어 <span className="text-amber-400">{totalConfiguredCount}개</span> 중{" "}
-                <span className="text-emerald-400">{totalDownloadedCount}개 로컬 SSD 저장 완료</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg font-black text-white m-0 tracking-tight">
+                    무대 영상 & 스폰서 광고 사전 다운로드 매니저
+                  </h2>
+                  <Tag color="gold" className="font-bold border-amber-400/40 m-0">
+                    SSD 영구 보관
+                  </Tag>
+                </div>
+                <p className="text-xs text-slate-400 m-0 mt-0.5">
+                  대회 무대 영상과 협찬사 광고 미디어를 100% 미리 받아두어 인터넷 버퍼링 없이 즉시 재생합니다.
+                </p>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="primary"
-              size="large"
-              icon={<ThunderboltFilled />}
-              loading={isDownloadingAll}
-              onClick={handleDownloadAll}
-              className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black border-none rounded-xl shadow-lg hover:opacity-90 h-11 px-4 text-xs sm:text-sm"
-            >
-              {isDownloadingAll ? "사전 다운로드 진행중..." : "전체 미디어(무대+광고) 일괄 다운로드"}
-            </Button>
-
-            {totalCachedBytes > 0 && (
-              <Button
-                danger
-                size="large"
-                icon={<DeleteOutlined />}
-                onClick={handleClearCache}
-                className="rounded-xl font-bold h-11 px-3 text-xs"
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="text-right">
+                <div className="text-xs font-bold text-slate-400">보관된 로컬 용량</div>
+                <div className="text-base font-black text-amber-400 font-mono tabular-nums">
+                  {formatBytes(totalCachedBytes)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="닫기"
+                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
               >
-                캐시 비우기
-              </Button>
-            )}
+                <CloseOutlined />
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* 상세 리스트 (무대 7종 영상 + 스폰서 광고) */}
-        <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1.5">
+          {/* 종합 상태 대시보드 카드 */}
+          <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-400 text-xl shrink-0">
+                <HddOutlined />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 font-bold uppercase">준비 현황</div>
+                <div className="text-sm sm:text-base font-black text-white">
+                  설정 미디어 <span className="text-amber-400">{totalConfiguredCount}개</span> 중{" "}
+                  <span className="text-emerald-400">{totalDownloadedCount}개 로컬 SSD 저장 완료</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="primary"
+                size="large"
+                icon={<ThunderboltFilled />}
+                loading={isDownloadingAll}
+                onClick={handleDownloadAll}
+                className="bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black border-none rounded-xl shadow-lg hover:opacity-90 h-10 px-3.5 text-xs"
+              >
+                {isDownloadingAll ? "사전 다운로드 진행중..." : "전체 미디어(무대+광고) 일괄 다운로드"}
+              </Button>
+
+              {totalCachedBytes > 0 && (
+                <Button
+                  danger
+                  size="large"
+                  icon={<DeleteOutlined />}
+                  onClick={handleClearCache}
+                  className="rounded-xl font-bold h-10 px-3 text-xs"
+                >
+                  캐시 비우기
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* 상세 리스트 (무대 7종 영상 + 스폰서 광고) */}
+          <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1.5">
           
           {/* 1. 무대 메인 7종 영상 섹션 */}
           <div className="space-y-2">
@@ -698,13 +728,12 @@ export const PreDownloadModal = ({
 
         </div>
 
-        {/* 하단 안내 캡션 */}
-        <div className="text-[11px] text-slate-400 text-center border-t border-white/10 pt-3">
-          💡 다운로드된 무대 영상, 스폰서 광고 및 특별영상은 브라우저 로컬 디스크(IndexedDB)에 영구 보관되어 실시간 송출 시 0초 버퍼링 없이 즉시 재생됩니다.
+          {/* 하단 안내 캡션 */}
+          <div className="text-[11px] text-slate-400 text-center border-t border-white/10 pt-3 shrink-0">
+            💡 다운로드된 무대 영상, 스폰서 광고 및 특별영상은 브라우저 로컬 디스크(IndexedDB)에 영구 보관되어 실시간 송출 시 0초 버퍼링 없이 즉시 재생됩니다.
+          </div>
         </div>
-
-      </div>
-      </Modal>
+      </Drawer>
     </>
   );
 };

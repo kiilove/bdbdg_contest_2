@@ -32,7 +32,7 @@ import {
   AudioMutedOutlined,
   AppstoreOutlined,
 } from "@ant-design/icons";
-import { Modal, Input, message, Tag } from "antd";
+import { Drawer, Input, message, Tag } from "antd";
 import PreDownloadModal from "../../components/broadcast/PreDownloadModal";
 import SmoothBackgroundVideo from "../../components/broadcast/SmoothBackgroundVideo";
 import defaultStandbyVideo from "../../assets/mov/ybbf_mp4.mp4";
@@ -612,37 +612,37 @@ const StageLiveDisplaySquare = () => {
         />
       )}
 
-      {/* DB 선택 모달 */}
-      <Modal
+      {/* DB 선택 드로어 */}
+      <Drawer
+        placement="right"
+        width={520}
         open={isDbModalOpen}
-        onCancel={() => setIsDbModalOpen(false)}
-        footer={null}
-        width={680}
-        centered
+        onClose={() => setIsDbModalOpen(false)}
+        title="전광판 대회 데이터베이스 선택"
         destroyOnClose
       >
-        <div className="p-4 space-y-4">
-          <h2 className="text-xl font-bold text-slate-900">전광판 대회 데이터베이스 선택</h2>
+        <div className="space-y-4">
           <Input
             placeholder="대회명 검색..."
             prefix={<SearchOutlined />}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            allowClear
           />
-          <div className="max-h-80 overflow-y-auto space-y-2">
+          <div className="space-y-2">
             {filteredContests.map((c) => (
               <div
                 key={c.id}
                 onClick={() => handleSelectContest(c)}
-                className="p-3 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 cursor-pointer flex items-center justify-between"
+                className="p-3 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 cursor-pointer flex items-center justify-between gap-3"
               >
-                <span className="font-bold text-slate-800">{c.contestTitle}</span>
-                <Tag color="gold">선택</Tag>
+                <span className="font-bold text-slate-800 truncate">{c.contestTitle}</span>
+                <Tag color="gold" className="m-0 shrink-0">선택</Tag>
               </div>
             ))}
           </div>
         </div>
-      </Modal>
+      </Drawer>
 
       {/* 사전 다운로드 모달 */}
       <PreDownloadModal

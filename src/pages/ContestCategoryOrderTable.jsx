@@ -1,4 +1,4 @@
-import { Modal } from "@mui/material";
+import { Drawer } from "@mui/material";
 import React, { useContext, useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import {
@@ -165,11 +165,19 @@ const ContestCategoryOrderTable = () => {
 
   return (
     <div className="w-full space-y-4 pt-2">
-      <Modal open={Boolean(isOpen?.grandPrix)} onClose={handleGrandPrixClose}>
-        <div
-          className="flex w-full max-w-2xl max-h-[90vh] overflow-y-auto absolute top-1/2 left-1/2 rounded-[12px] bg-[#ffffff] border border-[#171717]/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.08)] p-5 outline-none"
-          style={{ transform: "translate(-50%, -50%)" }}
-        >
+      <Drawer
+        anchor="right"
+        open={Boolean(isOpen?.grandPrix)}
+        onClose={handleGrandPrixClose}
+        PaperProps={{
+          sx: {
+            width: { xs: "100vw", sm: 540 },
+            bgcolor: "#ffffff",
+            boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+          },
+        }}
+      >
+        <div className="h-full w-full flex flex-col bg-white overflow-hidden">
           <GrandPrixInfoModal
             setClose={handleGrandPrixClose}
             propState={isOpen}
@@ -177,12 +185,20 @@ const ContestCategoryOrderTable = () => {
             setRefresh={setIsRefresh}
           />
         </div>
-      </Modal>
-      <Modal open={Boolean(isOpen?.category)} onClose={handleCategoryClose}>
-        <div
-          className="flex w-full max-w-lg max-h-[90vh] overflow-y-auto absolute top-1/2 left-1/2 rounded-[12px] bg-[#ffffff] border border-[#171717]/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.08)] p-5 outline-none"
-          style={{ transform: "translate(-50%, -50%)" }}
-        >
+      </Drawer>
+      <Drawer
+        anchor="right"
+        open={Boolean(isOpen?.category)}
+        onClose={handleCategoryClose}
+        PaperProps={{
+          sx: {
+            width: { xs: "100vw", sm: 540 },
+            bgcolor: "#ffffff",
+            boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+          },
+        }}
+      >
+        <div className="h-full w-full flex flex-col bg-white overflow-hidden">
           <CategoryInfoModal
             setClose={handleCategoryClose}
             propState={isOpen}
@@ -190,12 +206,20 @@ const ContestCategoryOrderTable = () => {
             setRefresh={setIsRefresh}
           />
         </div>
-      </Modal>
-      <Modal open={isOpen.grade} onClose={handleGradeClose}>
-        <div
-          className="flex w-full max-w-md max-h-[90vh] overflow-y-auto absolute top-1/2 left-1/2 rounded-[12px] bg-[#ffffff] border border-[#171717]/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.08)] p-5 outline-none"
-          style={{ transform: "translate(-50%, -50%)" }}
-        >
+      </Drawer>
+      <Drawer
+        anchor="right"
+        open={Boolean(isOpen?.grade)}
+        onClose={handleGradeClose}
+        PaperProps={{
+          sx: {
+            width: { xs: "100vw", sm: 540 },
+            bgcolor: "#ffffff",
+            boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+          },
+        }}
+      >
+        <div className="h-full w-full flex flex-col bg-white overflow-hidden">
           <GradeInfoModal
             setClose={handleGradeClose}
             propState={isOpen}
@@ -203,7 +227,7 @@ const ContestCategoryOrderTable = () => {
             setRefresh={setIsRefresh}
           />
         </div>
-      </Modal>
+      </Drawer>
 
       {/* 상단 액션 바 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#fafafa] border border-[#171717]/[0.08] rounded-[12px] px-4 py-3">

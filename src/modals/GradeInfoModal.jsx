@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import {
   useFirestoreGetDocument,
   useFirestoreUpdateData,
@@ -82,7 +82,7 @@ const GradeInfoModal = ({ setClose, propState, setState }) => {
           ...initGradeInfo,
           contestGradeIndex: parseInt(updatedGradeInfo.contestGradeIndex) + 1,
         });
-        gradeInfoRef.current.contestGradeTitle.focus();
+        gradeInfoRef.current.contestGradeTitle?.focus?.();
         break;
       case "체급수정":
         console.log(propState.gradeId);
@@ -137,72 +137,87 @@ const GradeInfoModal = ({ setClose, propState, setState }) => {
     if (propState.title === "체급수정") {
       setGradeInfo({ ...propState.info });
     }
-    gradeInfoRef.current.contestGradeTitle.focus();
+    gradeInfoRef.current.contestGradeTitle?.focus?.();
     console.log(propState);
   }, []);
   return (
-    <div className="flex w-full flex-col gap-4 h-auto bg-[#ffffff] text-[#171717] p-2">
-      <div className="flex w-full items-center gap-2.5 pb-3 border-b border-[#171717]/[0.08]">
-        <div className="w-8 h-8 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
-          <SlidersHorizontal
-            size={15}
-            strokeWidth={1.5}
-            className="text-[#525252]"
-          />
-        </div>
-        <h1 className="text-base font-semibold text-[#171717] m-0">
-          {propState.title}
-        </h1>
-      </div>
-
-      <div className="bg-[#fafafa] rounded-[12px] border border-[#171717]/[0.08] p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
-          <label className="text-xs font-medium text-[#525252] sm:text-right">
-            소속 종목
-          </label>
-          <div className="h-9 w-full rounded-[8px] border border-[#171717]/[0.08] bg-[#f4f4f5] px-3 flex items-center text-sm font-medium text-[#525252]">
-            {propState.categoryTitle}
+    <div className="h-full w-full flex flex-col bg-white text-[#171717]">
+      {/* 상단 고정 헤더 */}
+      <div className="flex w-full items-center justify-between px-5 py-4 border-b border-[#171717]/[0.08] bg-[#fafafa] shrink-0 sticky top-0 z-10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-[8px] bg-white border border-[#171717]/[0.08] flex items-center justify-center">
+            <SlidersHorizontal
+              size={15}
+              strokeWidth={1.5}
+              className="text-[#525252]"
+            />
           </div>
+          <h1 className="text-base font-semibold text-[#171717] m-0">
+            {propState?.title || "체급 설정"}
+          </h1>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
-          <label className="text-xs font-medium text-[#525252] sm:text-right">
-            개최 순서
-          </label>
-          <input
-            type="text"
-            name="contestGradeIndex"
-            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
-            value={gradeInfo.contestGradeIndex ?? ""}
-            onChange={(e) => handleInputValues(e)}
-            ref={(ref) => (gradeInfoRef.current.contestGradeIndex = ref)}
-            placeholder="개최 순서 (숫자)"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
-          <label className="text-xs font-medium text-[#525252] sm:text-right">
-            체급명
-          </label>
-          <input
-            type="text"
-            name="contestGradeTitle"
-            onChange={(e) => handleInputValues(e)}
-            value={gradeInfo.contestGradeTitle ?? ""}
-            ref={(ref) => (gradeInfoRef.current.contestGradeTitle = ref)}
-            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
-            placeholder="예: -65kg, +175cm"
-          />
-        </div>
-      </div>
-
-      <div className="flex w-full justify-end gap-2 pt-1">
         <button
           type="button"
-          className="inline-flex items-center justify-center h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
+          onClick={() => setClose()}
+          aria-label="닫기"
+          className="h-8 w-8 rounded-[8px] inline-flex items-center justify-center text-[#737373] hover:bg-[#e4e4e7]/70 hover:text-[#171717] transition-colors duration-150 cursor-pointer"
+        >
+          <X size={16} strokeWidth={1.5} />
+        </button>
+      </div>
+
+      {/* 스크롤 본문 */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="bg-[#fafafa] rounded-[12px] border border-[#171717]/[0.08] p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+            <label className="text-xs font-medium text-[#525252] sm:text-right">
+              소속 종목
+            </label>
+            <div className="h-9 w-full rounded-[8px] border border-[#171717]/[0.08] bg-[#f4f4f5] px-3 flex items-center text-sm font-medium text-[#525252]">
+              {propState.categoryTitle}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+            <label className="text-xs font-medium text-[#525252] sm:text-right">
+              개최 순서
+            </label>
+            <input
+              type="text"
+              name="contestGradeIndex"
+              className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+              value={gradeInfo.contestGradeIndex ?? ""}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (gradeInfoRef.current.contestGradeIndex = ref)}
+              placeholder="개최 순서 (숫자)"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+            <label className="text-xs font-medium text-[#525252] sm:text-right">
+              체급명
+            </label>
+            <input
+              type="text"
+              name="contestGradeTitle"
+              onChange={(e) => handleInputValues(e)}
+              value={gradeInfo.contestGradeTitle ?? ""}
+              ref={(ref) => (gradeInfoRef.current.contestGradeTitle = ref)}
+              className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+              placeholder="예: -65kg, +175cm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 고정 푸터 */}
+      <div className="flex w-full items-center justify-end gap-2 px-5 py-3.5 border-t border-[#171717]/[0.08] bg-[#fafafa] shrink-0 sticky bottom-0">
+        <button
+          type="button"
+          className="inline-flex items-center justify-center h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
           onClick={() => setClose()}
         >
-          닫기
+          취소
         </button>
         <button
           type="button"

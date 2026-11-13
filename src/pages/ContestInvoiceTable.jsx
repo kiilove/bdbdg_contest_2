@@ -17,7 +17,7 @@ import {
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { Modal } from "@mui/material";
+import { Drawer } from "@mui/material";
 import { writePriceCheckLog } from "../utils/priceCheckLogger";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 
@@ -828,18 +828,26 @@ const ContestInvoiceTable = () => {
               )}
             </section>
 
-            <Modal open={Boolean(isOpen.invoice)} onClose={handleInoviceClose}>
-              <div
-                className="flex w-[95vw] max-w-2xl max-h-[90vh] absolute top-1/2 left-1/2 bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.08)] overflow-hidden focus:outline-none"
-                style={{ transform: "translate(-50%, -50%)" }}
-              >
+            <Drawer
+              anchor="right"
+              open={Boolean(isOpen.invoice)}
+              onClose={handleInoviceClose}
+              PaperProps={{
+                sx: {
+                  width: { xs: "100vw", sm: 580 },
+                  bgcolor: "#ffffff",
+                  boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+                },
+              }}
+            >
+              <div className="h-full w-full flex flex-col bg-white overflow-hidden">
                 <InvoiceInfoModal
                   setClose={handleInoviceClose}
                   propState={isOpen}
                   setState={setInvoiceList}
                 />
               </div>
-            </Modal>
+            </Drawer>
           </>
         )}
       </div>

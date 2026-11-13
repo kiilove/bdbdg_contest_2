@@ -320,7 +320,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
   const joinsList = Array.isArray(invoiceInfo?.joins) ? invoiceInfo.joins : [];
 
   return (
-    <div className="flex flex-col w-full max-h-[90vh] bg-white text-[#171717]">
+    <div className="flex flex-col w-full h-full bg-white text-[#171717]">
       <ConfirmationModal
         isOpen={modalOpen}
         onCancel={() => {
@@ -339,10 +339,10 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
         message={message}
       />
 
-      {/* 모달 헤더 */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-[#171717]/[0.08] bg-[#fafafa] shrink-0">
+      {/* 드로어 헤더 */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-[#171717]/[0.08] bg-[#fafafa] shrink-0 sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-[16px] font-medium text-[#171717]">
+          <h2 className="text-[16px] font-semibold text-[#171717] m-0">
             {propState?.title || "참가신청서 상세"}
           </h2>
           {invoiceInfo.isCanceled && (
@@ -356,7 +356,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
             <button
               type="button"
               onClick={() => handleOpenUnDelMsgBox()}
-              className="h-8 px-3 rounded-[6px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+              className="h-8 px-3 rounded-[6px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
             >
               <RotateCcw size={13} strokeWidth={1.5} className="text-[#525252]" />
               <span>복원</span>
@@ -365,7 +365,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
             <button
               type="button"
               onClick={() => handleOpenDelMsgBox()}
-              className="h-8 px-3 rounded-[6px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+              className="h-8 px-3 rounded-[6px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
             >
               <Trash2 size={13} strokeWidth={1.5} />
               <span>신청 취소</span>
@@ -375,7 +375,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
             type="button"
             onClick={() => setClose()}
             aria-label="닫기"
-            className="h-8 w-8 rounded-[6px] inline-flex items-center justify-center text-[#737373] hover:bg-[#f4f4f5] hover:text-[#171717] transition-colors duration-150"
+            className="h-8 w-8 rounded-[6px] inline-flex items-center justify-center text-[#737373] hover:bg-[#e4e4e7]/70 hover:text-[#171717] transition-colors duration-150 cursor-pointer"
           >
             <X size={16} strokeWidth={1.5} />
           </button>
@@ -383,7 +383,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       </div>
 
       {/* 본문 폼 */}
-      <div className="p-5 space-y-4 overflow-y-auto flex-1">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div className="space-y-1">
             <label className="block text-[12px] font-medium text-[#525252]">
@@ -513,7 +513,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
               선택됨 {joinsList.length}종목
             </span>
           </div>
-          <div className="rounded-[8px] border border-[#171717]/[0.08] bg-[#fafafa] p-2.5 max-h-56 overflow-y-auto space-y-1.5">
+          <div className="rounded-[8px] border border-[#171717]/[0.08] bg-[#fafafa] p-2.5 space-y-1.5">
             {categorysArray?.length > 0 &&
               categorysArray.map((category, cIdx) => {
                 const {
@@ -598,12 +598,12 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
         </div>
       </div>
 
-      {/* 모달 푸터 */}
-      <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[#171717]/[0.08] bg-[#fafafa] shrink-0">
+      {/* 드로어 푸터 */}
+      <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[#171717]/[0.08] bg-[#fafafa] shrink-0 sticky bottom-0">
         <button
           type="button"
           onClick={() => setClose()}
-          className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium transition-colors duration-150"
+          className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium transition-colors duration-150 cursor-pointer"
         >
           닫기
         </button>
@@ -611,10 +611,10 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
           type="button"
           disabled={isLoading}
           onClick={() => handleUpdateInvoice()}
-          className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-60 text-white text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+          className="h-9 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-60 text-white text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
         >
           <Save size={15} strokeWidth={1.5} />
-          <span>{isLoading ? "저장 중" : "수정 저장"}</span>
+          <span>{isLoading ? "저장 중" : "저장"}</span>
         </button>
       </div>
     </div>

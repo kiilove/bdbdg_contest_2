@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from "react";
-import { Table, Select, Modal, message } from "antd";
+import { Table, Select, Drawer, Button, message } from "antd";
 import { Music, Save } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
@@ -498,14 +498,20 @@ const ContestMusicSetting = () => {
           </div>
         </section>
 
-        <Modal
+        <Drawer
+          placement="right"
+          width={520}
           title="중복 음원 설정 문서 정리"
           open={isModalVisible}
-          onOk={handleModalOk}
-          onCancel={handleModalCancel}
-          okText="정리 실행"
-          cancelText="취소"
-          width={680}
+          onClose={handleModalCancel}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button onClick={handleModalCancel}>취소</Button>
+              <Button type="primary" onClick={handleModalOk}>
+                정리 실행
+              </Button>
+            </div>
+          }
         >
           <Table
             columns={[
@@ -563,7 +569,7 @@ const ContestMusicSetting = () => {
             rowKey="id"
             pagination={false}
           />
-        </Modal>
+        </Drawer>
       </div>
     </div>
   );

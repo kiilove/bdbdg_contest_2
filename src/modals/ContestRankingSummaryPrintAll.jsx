@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { where } from "firebase/firestore";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
+import { Printer, X } from "lucide-react";
 import { result } from "lodash";
 
 const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
@@ -199,116 +200,143 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
     }
   }, [currentContest, resultTable]);
   return (
-    <div className="w-full h-auto flex flex-col bg-gray-100 justify-start items-center overflow-auto">
-      {isLoading && <LoadingPage />}
-      {!isLoading && (
-        <>
-          <div
-            className="flex h-14 justify-end items-center gap-x-2"
-            style={{ width: "210mm" }}
+    <div className="w-full h-full flex flex-col bg-white overflow-hidden">
+      <div className="sticky top-0 z-10 shrink-0 bg-white border-b border-[#171717]/[0.08] px-5 py-3.5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-[#171717] m-0">
+            집계표 및 채점표 출력 미리보기
+          </h2>
+          {(props?.categoryTitle ||
+            resultTable?.[0]?.categoryTitle ||
+            props?.gradeTitle ||
+            resultTable?.[0]?.gradeTitle) && (
+            <p className="text-xs text-[#525252] m-0 truncate">
+              {props?.categoryTitle || resultTable?.[0]?.categoryTitle || ""}
+              {props?.gradeTitle || resultTable?.[0]?.gradeTitle
+                ? ` (${props?.gradeTitle || resultTable?.[0]?.gradeTitle})`
+                : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <ReactToPrint
+            trigger={() => (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors cursor-pointer"
+              >
+                <Printer size={15} strokeWidth={1.5} />
+                <span>집계표출력</span>
+              </button>
+            )}
+            content={() => printRef.current}
+            pageStyle="@page { size: A4; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; box-shadow:none; } }"
+          />
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-sm font-medium transition-colors cursor-pointer"
+            onClick={() => setClose(false)}
           >
-            <ReactToPrint
-              trigger={() => (
-                <button className="w-40 h-10 bg-blue-300 rounded-lg">
-                  집계표출력
-                </button>
-              )}
-              content={() => printRef.current}
-              pageStyle="@page { size: A4; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; box-shadow:none; } }"
-            />
-            <button
-              className="flex w-40 h-10 bg-gray-300 rounded-lg justify-center items-center"
-              onClick={() => setClose(false)}
-            >
-              닫기
-            </button>
-          </div>
-          {resultTable?.length > 0 &&
-            resultTable.map((table, rIdx) => {
-              const {
-                contestId,
-                categoryId,
-                categoryTitle,
-                gradeId,
-                gradeTitle,
-                result,
-              } = table;
+            <X size={15} strokeWidth={1.5} />
+            <span>닫기</span>
+          </button>
+        </div>
+      </div>
 
-              return (
-                <div
-                  key={table.id || rIdx}
-                  className="flex shadow bg-white"
-                  ref={printRef}
-                  style={{ width: "210mm", height: "297mm" }}
-                >
-                  <div className="flex flex-col w-full h-auto">
-                    <div className="flex w-full break-after-page mb-20">
-                      <ScoreSheet
-                        contestId={contestId}
-                        contestInfo={currentContest.contestInfo}
-                        gradeId={gradeId}
-                        categoryTitle={categoryTitle}
-                        gradeTitle={gradeTitle}
-                        scoreTable={result}
-                        judgeHeadInfo={judgeHeadInfo}
-                      />
-                    </div>
-                    <div className="flex w-full h-auto flex-col">
-                      {scoreCardPrintArray?.length > 0 &&
-                        [...scoreCardPrintArray]
-                          .sort((a, b) => a.seatIndex - b.seatIndex)
-                          .map((card, cIdx) => {
-                            const {
-                              seatIndex,
-                              categoryTitle,
-                              gradeTitle,
-                              judgeSignature,
-                              judgeName,
-                              judgePromoter,
-                              players,
-                            } = card;
-                            const isPointType =
-                              (props?.categoryJudgeType || table?.scoreType) ===
-                              "point";
-                            return (
-                              <React.Fragment key={seatIndex ?? cIdx}>
-                                {isPointType ? (
-                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                    <ScoreCardPointForm
-                                      contestInfo={currentContest.contestInfo}
-                                      seatIndex={seatIndex}
-                                      categoryTitle={categoryTitle}
-                                      gradeTitle={gradeTitle}
-                                      judgeSignature={judgeSignature}
-                                      judgeName={judgeName}
-                                      judgePromoter={judgePromoter}
-                                      players={players}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                    <ScoreCardRankForm
-                                      contestInfo={currentContest.contestInfo}
-                                      seatIndex={seatIndex}
-                                      categoryTitle={categoryTitle}
-                                      gradeTitle={gradeTitle}
-                                      judgeSignature={judgeSignature}
-                                      judgeName={judgeName}
-                                      judgePromoter={judgePromoter}
-                                      players={players}
-                                    />
-                                  </div>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                    </div>
+      <div className="flex-1 overflow-y-auto bg-[#fafafa] p-4 flex flex-col items-center">
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center py-16">
+            <LoadingPage />
+          </div>
+        ) : resultTable?.length > 0 ? (
+          resultTable.map((table, rIdx) => {
+            const {
+              contestId,
+              categoryTitle,
+              gradeId,
+              gradeTitle,
+              result,
+            } = table;
+
+            return (
+              <div
+                key={table.id || rIdx}
+                className="flex shadow-[0_1px_3px_rgba(0,0,0,0.08)] bg-white"
+                ref={printRef}
+                style={{ width: "210mm", minHeight: "297mm" }}
+              >
+                <div className="flex flex-col w-full h-auto">
+                  <div className="flex w-full break-after-page mb-20">
+                    <ScoreSheet
+                      contestId={contestId}
+                      contestInfo={currentContest.contestInfo}
+                      gradeId={gradeId}
+                      categoryTitle={categoryTitle}
+                      gradeTitle={gradeTitle}
+                      scoreTable={result}
+                      judgeHeadInfo={judgeHeadInfo}
+                    />
+                  </div>
+                  <div className="flex w-full h-auto flex-col">
+                    {scoreCardPrintArray?.length > 0 &&
+                      [...scoreCardPrintArray]
+                        .sort((a, b) => a.seatIndex - b.seatIndex)
+                        .map((card, cIdx) => {
+                          const {
+                            seatIndex,
+                            categoryTitle,
+                            gradeTitle,
+                            judgeSignature,
+                            judgeName,
+                            judgePromoter,
+                            players,
+                          } = card;
+                          const isPointType =
+                            (props?.categoryJudgeType || table?.scoreType) ===
+                            "point";
+                          return (
+                            <React.Fragment key={seatIndex ?? cIdx}>
+                              {isPointType ? (
+                                <div className="flex w-full h-auto justify-center items-start break-after-page">
+                                  <ScoreCardPointForm
+                                    contestInfo={currentContest.contestInfo}
+                                    seatIndex={seatIndex}
+                                    categoryTitle={categoryTitle}
+                                    gradeTitle={gradeTitle}
+                                    judgeSignature={judgeSignature}
+                                    judgeName={judgeName}
+                                    judgePromoter={judgePromoter}
+                                    players={players}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex w-full h-auto justify-center items-start break-after-page">
+                                  <ScoreCardRankForm
+                                    contestInfo={currentContest.contestInfo}
+                                    seatIndex={seatIndex}
+                                    categoryTitle={categoryTitle}
+                                    gradeTitle={gradeTitle}
+                                    judgeSignature={judgeSignature}
+                                    judgeName={judgeName}
+                                    judgePromoter={judgePromoter}
+                                    players={players}
+                                  />
+                                </div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                   </div>
                 </div>
-              );
-            })}
-        </>
-      )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex-1 flex items-center justify-center py-16 text-xs text-[#737373]">
+            확정된 집계표 데이터가 없습니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 };

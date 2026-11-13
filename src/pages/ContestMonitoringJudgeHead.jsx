@@ -1051,48 +1051,76 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               />
             )}
           </Drawer>
-          <Modal open={rankingSummaryOpen}>
-            <ContestRankingSummary
-              categoryId={rankingSummaryProp?.categoryId}
-              gradeId={rankingSummaryProp?.gradeId}
-              stageId={realtimeData?.stageId}
-              setClose={setRankingSummaryOpen}
-              currentResultSaved={realtimeData?.resultSaved}
-              expectedJudgeCount={
-                realtimeData?.stageJudgeCount ||
-                realtimeData?.judges?.length ||
-                0
-              }
-              stagePlayers={playersArray.filter(
-                (f) =>
-                  f.contestGradeId === rankingSummaryProp?.gradeId &&
-                  f.playerNoShow === false
-              )}
-              categoryTitleProp={rankingSummaryProp?.categoryTitle || ""}
-              gradeTitleProp={rankingSummaryProp?.gradeTitle || ""}
-            />
-          </Modal>
-          <Modal open={pointSummaryOpen}>
-            <ContestPointSummary
-              categoryId={pointSummaryProp?.categoryId}
-              gradeId={pointSummaryProp?.gradeId}
-              stageId={realtimeData?.stageId}
-              setClose={setPointSummaryOpen}
-              currentResultSaved={realtimeData?.resultSaved}
-              expectedJudgeCount={
-                realtimeData?.stageJudgeCount ||
-                realtimeData?.judges?.length ||
-                0
-              }
-              stagePlayers={playersArray.filter(
-                (f) =>
-                  f.contestGradeId === pointSummaryProp?.gradeId &&
-                  f.playerNoShow === false
-              )}
-              categoryTitleProp={pointSummaryProp?.categoryTitle || ""}
-              gradeTitleProp={pointSummaryProp?.gradeTitle || ""}
-            />
-          </Modal>
+          <Drawer
+            anchor="right"
+            open={rankingSummaryOpen}
+            onClose={() => setRankingSummaryOpen(false)}
+            PaperProps={{
+              sx: {
+                width: { xs: "100vw", xl: "min(92vw, 1320px)" },
+                maxWidth: "100vw",
+                bgcolor: "#f8fafc",
+                boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+              },
+            }}
+          >
+            <div className="w-full h-full overflow-y-auto outline-none">
+              <ContestRankingSummary
+                categoryId={rankingSummaryProp?.categoryId}
+                gradeId={rankingSummaryProp?.gradeId}
+                stageId={realtimeData?.stageId}
+                setClose={setRankingSummaryOpen}
+                currentResultSaved={realtimeData?.resultSaved}
+                expectedJudgeCount={
+                  realtimeData?.stageJudgeCount ||
+                  realtimeData?.judges?.length ||
+                  0
+                }
+                stagePlayers={playersArray.filter(
+                  (f) =>
+                    f.contestGradeId === rankingSummaryProp?.gradeId &&
+                    f.playerNoShow === false
+                )}
+                categoryTitleProp={rankingSummaryProp?.categoryTitle || ""}
+                gradeTitleProp={rankingSummaryProp?.gradeTitle || ""}
+              />
+            </div>
+          </Drawer>
+          <Drawer
+            anchor="right"
+            open={pointSummaryOpen}
+            onClose={() => setPointSummaryOpen(false)}
+            PaperProps={{
+              sx: {
+                width: { xs: "100vw", xl: "min(92vw, 1320px)" },
+                maxWidth: "100vw",
+                bgcolor: "#f8fafc",
+                boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+              },
+            }}
+          >
+            <div className="w-full h-full overflow-y-auto outline-none">
+              <ContestPointSummary
+                categoryId={pointSummaryProp?.categoryId}
+                gradeId={pointSummaryProp?.gradeId}
+                stageId={realtimeData?.stageId}
+                setClose={setPointSummaryOpen}
+                currentResultSaved={realtimeData?.resultSaved}
+                expectedJudgeCount={
+                  realtimeData?.stageJudgeCount ||
+                  realtimeData?.judges?.length ||
+                  0
+                }
+                stagePlayers={playersArray.filter(
+                  (f) =>
+                    f.contestGradeId === pointSummaryProp?.gradeId &&
+                    f.playerNoShow === false
+                )}
+                categoryTitleProp={pointSummaryProp?.categoryTitle || ""}
+                gradeTitleProp={pointSummaryProp?.gradeTitle || ""}
+              />
+            </div>
+          </Drawer>
 
           {/* 운영 데이터 점검 및 빠른 보강 바 */}
           <MonitoringDiagnosticsBar

@@ -1,6 +1,27 @@
 import React from "react";
-import { Modal, Input } from "antd";
-import { Radio, Code, BookOpen, Lock } from "lucide-react";
+import { Drawer, Input } from "antd";
+import { Radio, Code, BookOpen, Lock, X } from "lucide-react";
+
+const darkDrawerStyles = {
+  header: {
+    backgroundColor: "#141415",
+    borderBottom: "1px solid rgba(237, 237, 237, 0.08)",
+    padding: "16px 24px",
+  },
+  content: {
+    backgroundColor: "#141415",
+  },
+  body: {
+    backgroundColor: "#141415",
+    borderLeft: "1px solid rgba(237, 237, 237, 0.08)",
+    padding: "24px",
+  },
+  footer: {
+    backgroundColor: "#141415",
+    borderTop: "1px solid rgba(237, 237, 237, 0.08)",
+    padding: "12px 24px",
+  },
+};
 
 export const AudioModals = ({
   isLoginModalOpen,
@@ -21,18 +42,33 @@ export const AudioModals = ({
 }) => {
   return (
     <>
-      <Modal
+      <Drawer
+        placement="right"
+        width={460}
         open={isLoginModalOpen}
-        onCancel={() => setIsLoginModalOpen(false)}
-        footer={null}
-        width={420}
-        centered
+        onClose={() => setIsLoginModalOpen(false)}
+        closable={false}
         destroyOnClose
+        styles={{
+          header: { display: "none" },
+          content: darkDrawerStyles.content,
+          body: darkDrawerStyles.body,
+        }}
       >
-        <form onSubmit={handleLogin} className="space-y-4 pt-2 text-[#ededed]">
+        <form onSubmit={handleLogin} className="space-y-4 text-[#ededed]">
           <div className="space-y-1.5 pb-4 border-b border-[#ededed]/[0.08]">
-            <div className="w-10 h-10 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08] text-[#a1a1a6] flex items-center justify-center mb-3">
-              <Radio size={18} strokeWidth={1.5} />
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08] text-[#a1a1a6] flex items-center justify-center">
+                <Radio size={18} strokeWidth={1.5} />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLoginModalOpen(false)}
+                aria-label="닫기"
+                className="w-8 h-8 rounded-[6px] bg-transparent hover:bg-[#19191b] text-[#85858b] hover:text-[#ededed] inline-flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} strokeWidth={1.5} />
+              </button>
             </div>
             <h2 className="text-[18px] leading-6 font-medium text-[#ededed] m-0">
               VibeFlows 계정 로그인
@@ -98,13 +134,22 @@ export const AudioModals = ({
             <span>인증 토큰은 브라우저 로컬 스토리지에 보관됩니다</span>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
-      <Modal
+      <Drawer
+        placement="right"
+        width={600}
         open={isRawModalOpen}
-        onCancel={() => setIsRawModalOpen(false)}
+        onClose={() => setIsRawModalOpen(false)}
+        styles={darkDrawerStyles}
+        title={
+          <span className="font-medium text-[15px] flex items-center gap-2 text-[#ededed]">
+            <Code size={18} strokeWidth={1.5} className="text-[#85858b]" />
+            <span>VibeFlows API 응답 원본 (JSON)</span>
+          </span>
+        }
         footer={
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => setIsRawModalOpen(false)}
@@ -114,30 +159,31 @@ export const AudioModals = ({
             </button>
           </div>
         }
-        width={700}
-        centered
-        title={
-          <span className="font-medium text-[15px] flex items-center gap-2 text-[#ededed]">
-            <Code size={18} strokeWidth={1.5} className="text-[#85858b]" />
-            <span>VibeFlows API 응답 원본 (JSON)</span>
-          </span>
-        }
       >
-        <div className="space-y-3 pt-2">
-          <div className="text-xs text-[#85858b] font-mono">
+        <div className="flex flex-col h-full gap-3">
+          <div className="text-xs text-[#85858b] font-mono shrink-0">
             GET https://api.vibeflows.net/playlist/contest-songs
           </div>
-          <pre className="bg-[#0f0f10] border border-[#ededed]/[0.08] p-4 rounded-[8px] text-xs font-mono text-[#ededed] max-h-[420px] overflow-y-auto select-text m-0">
+          <pre className="bg-[#0f0f10] border border-[#ededed]/[0.08] p-4 rounded-[8px] text-xs font-mono text-[#ededed] flex-1 min-h-0 overflow-y-auto select-text m-0">
             {JSON.stringify(rawApiResponse, null, 2)}
           </pre>
         </div>
-      </Modal>
+      </Drawer>
 
-      <Modal
+      <Drawer
+        placement="right"
+        width={560}
         open={isGuideModalOpen}
-        onCancel={() => setIsGuideModalOpen(false)}
+        onClose={() => setIsGuideModalOpen(false)}
+        styles={darkDrawerStyles}
+        title={
+          <span className="font-medium text-[15px] flex items-center gap-2 text-[#ededed]">
+            <BookOpen size={18} strokeWidth={1.5} className="text-[#85858b]" />
+            <span>스마트 오토파일럿 및 시드 매칭 안내</span>
+          </span>
+        }
         footer={
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => setIsGuideModalOpen(false)}
@@ -147,16 +193,8 @@ export const AudioModals = ({
             </button>
           </div>
         }
-        width={640}
-        centered
-        title={
-          <span className="font-medium text-[15px] flex items-center gap-2 text-[#ededed]">
-            <BookOpen size={18} strokeWidth={1.5} className="text-[#85858b]" />
-            <span>스마트 오토파일럿 및 시드 매칭 안내</span>
-          </span>
-        }
       >
-        <div className="space-y-4 pt-2 text-xs text-[#a1a1a6] leading-relaxed">
+        <div className="space-y-4 text-xs text-[#a1a1a6] leading-relaxed">
           <div className="p-3.5 bg-[#19191b] rounded-[8px] border border-[#ededed]/[0.08]">
             <div className="font-medium text-[#ededed] text-[13px]">
               스마트 오토파일럿 동작 원리
@@ -210,7 +248,7 @@ export const AudioModals = ({
             </div>
           </div>
         </div>
-      </Modal>
+      </Drawer>
     </>
   );
 };

@@ -24,7 +24,7 @@ import {
   deleteObject,
 } from "firebase/storage";
 import {
-  Modal,
+  Drawer,
   Input,
   Select,
   Popconfirm,
@@ -1676,8 +1676,10 @@ const StageBroadcastController = ({
         )}
       </div>
 
-      {/* 비교심사 호명 전용 모달 */}
-      <Modal
+      {/* 비교심사 호명 전용 드로어 */}
+      <Drawer
+        placement="right"
+        width={520}
         title={
           <div className="flex items-center gap-2 text-[#171717]">
             <Users size={16} strokeWidth={1.5} className="text-[#2563eb]" />
@@ -1687,17 +1689,41 @@ const StageBroadcastController = ({
           </div>
         }
         open={isCalloutModalOpen}
-        onCancel={() => setIsCalloutModalOpen(false)}
-        onOk={handleSendCallout}
-        okText="전광판에 비교심사 송출"
-        cancelText="취소"
-        width={720}
-        okButtonProps={{
-          style: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+        onClose={() => setIsCalloutModalOpen(false)}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(23, 23, 23, 0.08)",
+            padding: "16px 24px",
+          },
+          body: {
+            padding: "20px 24px",
+          },
+          footer: {
+            borderTop: "1px solid rgba(23, 23, 23, 0.08)",
+            padding: "12px 24px",
+          },
         }}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCalloutModalOpen(false)}
+              className="h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] cursor-pointer transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleSendCallout}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer transition-colors"
+            >
+              전광판에 비교심사 송출
+            </button>
+          </div>
+        }
       >
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-4">
+          <div className="space-y-3">
             <div>
               <label className="text-xs font-medium text-[#525252] block mb-1.5">
                 비교심사 라운드 차수
@@ -1754,7 +1780,7 @@ const StageBroadcastController = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {currentPlayers
                 .filter((p) => !p.playerNoShow)
                 .map((p) => {
@@ -1798,10 +1824,12 @@ const StageBroadcastController = ({
             </div>
           </div>
         </div>
-      </Modal>
+      </Drawer>
 
-      {/* 특별영상 업로드 및 관리 모달 */}
-      <Modal
+      {/* 특별영상 업로드 및 관리 드로어 */}
+      <Drawer
+        placement="right"
+        width={560}
         title={
           <div className="flex items-center gap-2 text-[#171717]">
             <Film size={16} strokeWidth={1.5} className="text-[#2563eb]" />
@@ -1811,12 +1839,19 @@ const StageBroadcastController = ({
           </div>
         }
         open={isSpecialVideoModalOpen}
-        onCancel={() => setIsSpecialVideoModalOpen(false)}
-        footer={null}
+        onClose={() => setIsSpecialVideoModalOpen(false)}
         destroyOnClose
-        width={680}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(23, 23, 23, 0.08)",
+            padding: "16px 24px",
+          },
+          body: {
+            padding: "20px 24px",
+          },
+        }}
       >
-        <div className="space-y-4 pt-2">
+        <div className="space-y-4">
           <div className="p-4 bg-[#fafafa] rounded-[10px] border border-[#171717]/[0.08] space-y-3">
             <div className="text-xs font-semibold text-[#171717] flex items-center gap-1.5">
               <Upload size={14} strokeWidth={1.5} className="text-[#525252]" />
@@ -1914,7 +1949,7 @@ const StageBroadcastController = ({
                 등록된 특별영상이 없습니다.
               </div>
             ) : (
-              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              <div className="space-y-2">
                 {specialVideos.map((vid, idx) => (
                   <div
                     key={vid.id || idx}
@@ -1927,7 +1962,7 @@ const StageBroadcastController = ({
                           {vid.title}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#737373] font-mono truncate max-w-md">
+                      <div className="text-[11px] text-[#737373] font-mono truncate">
                         {vid.videoUrl}
                       </div>
                     </div>
@@ -1970,7 +2005,7 @@ const StageBroadcastController = ({
             등록된 특별영상은 사전 다운로드 매니저에도 자동 등록되어 오프라인 환경에서도 재생됩니다.
           </div>
         </div>
-      </Modal>
+      </Drawer>
     </div>
   );
 };

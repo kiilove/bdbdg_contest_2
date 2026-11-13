@@ -12,7 +12,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { where } from "firebase/firestore";
 import {
   Table,
-  Modal,
+  Drawer,
   Form,
   Input,
   Popconfirm,
@@ -920,7 +920,9 @@ const ContestSponsorManager = () => {
         )}
       </div>
 
-      <Modal
+      <Drawer
+        placement="right"
+        width={640}
         title={
           <div className="flex items-center gap-2 text-[#171717]">
             <Megaphone size={18} strokeWidth={1.5} className="text-[#525252]" />
@@ -932,16 +934,44 @@ const ContestSponsorManager = () => {
           </div>
         }
         open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
-        footer={null}
+        onClose={() => setIsModalOpen(false)}
         destroyOnClose
-        width={680}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(23, 23, 23, 0.08)",
+            padding: "16px 24px",
+          },
+          body: {
+            padding: "20px 24px",
+          },
+          footer: {
+            borderTop: "1px solid rgba(23, 23, 23, 0.08)",
+            padding: "12px 24px",
+          },
+        }}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] cursor-pointer transition-colors duration-150"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={() => form.submit()}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer transition-colors duration-150"
+            >
+              저장하기
+            </button>
+          </div>
+        }
       >
         <Form
           form={form}
           layout="vertical"
           onFinish={handleSubmitSponsor}
-          className="pt-2"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Form.Item
@@ -1189,24 +1219,9 @@ const ContestSponsorManager = () => {
           <Form.Item name="id" hidden>
             <Input />
           </Form.Item>
-
-          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-[#171717]/[0.08]">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] cursor-pointer transition-colors duration-150"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium cursor-pointer transition-colors duration-150"
-            >
-              저장하기
-            </button>
-          </div>
+          <button type="submit" className="hidden" aria-hidden="true" />
         </Form>
-      </Modal>
+      </Drawer>
 
       <PreDownloadModal
         open={isPreDownloadOpen}

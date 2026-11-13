@@ -13,7 +13,7 @@ import {
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Modal } from "@mui/material";
+import { Drawer } from "@mui/material";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
 import ContestAwardCreator from "./ContestAwardCreator";
 import StageBroadcastController from "../components/broadcast/StageBroadcastController";
@@ -1207,18 +1207,42 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             onConfirm={() => setMsgOpen(false)}
           />
 
-          <Modal open={summaryPrintPreviewOpen}>
+          <Drawer
+            anchor="right"
+            open={summaryPrintPreviewOpen}
+            onClose={() => setSummaryPrintPreviewOpen(false)}
+            PaperProps={{
+              sx: {
+                width: { xs: "100vw", lg: "min(92vw, 1140px)" },
+                maxWidth: "100vw",
+                bgcolor: "#ffffff",
+                boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+              },
+            }}
+          >
             <ContestRankingSummaryPrintAll
               props={summaryProp}
               setClose={setSummaryPrintPreviewOpen}
             />
-          </Modal>
-          <Modal open={awardPrintPreviewOpen}>
+          </Drawer>
+          <Drawer
+            anchor="right"
+            open={awardPrintPreviewOpen}
+            onClose={() => setAwardPrintPreviewOpen(false)}
+            PaperProps={{
+              sx: {
+                width: { xs: "100vw", lg: "min(92vw, 1140px)" },
+                maxWidth: "100vw",
+                bgcolor: "#ffffff",
+                boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+              },
+            }}
+          >
             <ContestAwardCreator
               props={awardProp}
               setClose={setAwardPrintPreviewOpen}
             />
-          </Modal>
+          </Drawer>
 
           {/* 운영 데이터 점검 및 빠른 보강 바 */}
           <MonitoringDiagnosticsBar

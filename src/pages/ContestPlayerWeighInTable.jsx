@@ -22,7 +22,8 @@ import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import {
   Checkbox,
-  Modal,
+  Drawer,
+  Button,
   InputNumber,
   Input,
   Tooltip,
@@ -2766,9 +2767,15 @@ const ContestPlayerWeighInTable = () => {
             message={message}
           />
 
-          {/* 선수 번호/인덱스/신장·체중 수정 모달 */}
-          <Modal
+          {/* 선수 번호/인덱스/신장·체중 수정 드로어 */}
+          <Drawer
+            placement="right"
+            width={440}
             open={numModalOpen}
+            onClose={() => {
+              setNumModalOpen(false);
+              setEditTargetKey(null);
+            }}
             title={
               <div className="flex items-center gap-2 text-[#171717]">
                 <Pencil size={16} strokeWidth={1.5} className="text-[#525252]" />
@@ -2777,20 +2784,21 @@ const ContestPlayerWeighInTable = () => {
                 </span>
               </div>
             }
-            onOk={applyNumberChange}
-            onCancel={() => {
-              setNumModalOpen(false);
-              setEditTargetKey(null);
-            }}
-            okText="적용"
-            cancelText="취소"
-            okButtonProps={{
-              className:
-                "h-9 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] font-medium shadow-none",
-            }}
-            cancelButtonProps={{
-              className: "h-9 rounded-[8px] font-medium",
-            }}
+            footer={
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => {
+                    setNumModalOpen(false);
+                    setEditTargetKey(null);
+                  }}
+                >
+                  취소
+                </Button>
+                <Button type="primary" onClick={applyNumberChange}>
+                  적용
+                </Button>
+              </div>
+            }
             destroyOnClose
           >
             <div className="flex flex-col gap-3.5 py-2">
@@ -2867,11 +2875,17 @@ const ContestPlayerWeighInTable = () => {
                 </div>
               </div>
             </div>
-          </Modal>
+          </Drawer>
 
-          {/* 선수 사진 확인 및 무대용 사진 1, 2 지정 모달 */}
-          <Modal
+          {/* 선수 사진 확인 및 무대용 사진 1, 2 지정 드로어 */}
+          <Drawer
+            placement="right"
+            width={720}
             open={photoModalOpen}
+            onClose={() => {
+              setPhotoModalOpen(false);
+              setPhotoModalPlayer(null);
+            }}
             title={
               <div className="flex items-center gap-2 text-[#171717]">
                 <Image size={16} strokeWidth={1.5} className="text-[#525252]" />
@@ -2880,13 +2894,7 @@ const ContestPlayerWeighInTable = () => {
                 </span>
               </div>
             }
-            onCancel={() => {
-              setPhotoModalOpen(false);
-              setPhotoModalPlayer(null);
-            }}
             footer={null}
-            centered
-            width={680}
             destroyOnClose
           >
             {photoModalPlayer &&
@@ -3184,7 +3192,7 @@ const ContestPlayerWeighInTable = () => {
                   </div>
                 );
               })()}
-          </Modal>
+          </Drawer>
 
           {/* 1. 상단 타이틀 & 실시간 계측 현황 카드 */}
           <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">

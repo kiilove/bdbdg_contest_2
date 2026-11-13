@@ -9,10 +9,19 @@ import {
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import LoadingPage from "./LoadingPage";
-import { Modal } from "@mui/material";
+import { Drawer } from "@mui/material";
 import CanvasWithImageData from "../components/CanvasWithImageData";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { UserCheck, Search, Crown, KeyRound } from "lucide-react";
+import {
+  UserCheck,
+  Search,
+  Crown,
+  KeyRound,
+  X,
+  RefreshCw,
+} from "lucide-react";
+
+const hasSignature = (sig) => Boolean(sig && String(sig).trim());
 
 const ContestJudgeTable = () => {
   const [currentTab, setCurrentTab] = useState(1);
@@ -470,16 +479,287 @@ const ContestJudgeTable = () => {
     }
   }, [currentContest?.contests?.id]);
 
+  const selectedJudge = isOpen?.info || {};
+
+  const matchedPoolJudge = useMemo(() => {
+    const targetName = (selectedJudge?.judgeName || "").trim();
+    if (!targetName) return null;
+    const candidates = judgesAllPool.filter(
+      (j) =>
+        (j.judgeName || "").trim() === targetName &&
+        hasSignature(j.judgeSignature)
+    );
+    if (candidates.length === 0) return null;
+    return (
+      candidates.find(
+        (j) => j.judgeUid && j.judgeUid === selectedJudge?.judgeUid
+      ) || candidates[0]
+    );
+  }, [selectedJudge?.judgeName, selectedJudge?.judgeUid, judgesAllPool]);
+
+  const handleSyncJudgeFromPool = async () => {
+    const info = isOpen?.info;
+    if (!info?.isJoined || !info?.judgeAssignId || !matchedPoolJudge) return;
+
+    const existingAssign =
+      judgesAssignPool.find((item) => item.id === info.judgeAssignId) || {};
+
+    const nextPayload = {
+      ...existingAssign,
+      judgeName: existingAssign.judgeName || info.judgeName || "",
+      judgeSignature: matchedPoolJudge.judgeSignature,
+      judgeTel:
+        matchedPoolJudge.judgeTel ||
+        existingAssign.judgeTel ||
+        info.judgeTel ||
+        "",
+      judgePromoter:
+        matchedPoolJudge.judgePromoter ||
+        existingAssign.judgePromoter ||
+        info.judgePromoter ||
+        "",
+      judgeUid: existingAssign.judgeUid ?? info.judgeUid,
+      onedayPassword:
+        existingAssign.onedayPassword ?? info.onedayPassword ?? "",
+      isHead: Boolean(existingAssign.isHead ?? info.isHead),
+    };
+
+    setIsSync(false);
+    try {
+      const updated = await updateJudgesAssignPool.updateData(
+        info.judgeAssignId,
+        nextPayload
+      );
+      if (updated) {
+        setJudgesAssignPool((prev) =>
+          prev.map((item) =>
+            item.id === info.judgeAssignId ? { ...item, ...nextPayload } : item
+          )
+        );
+        setIsOpen((prev) => ({
+          ...prev,
+          info: {
+            ...prev.info,
+            judgeSignature: nextPayload.judgeSignature,
+            judgeTel: nextPayload.judgeTel,
+            judgePromoter: nextPayload.judgePromoter,
+            judgeUid: nextPayload.judgeUid,
+            onedayPassword: nextPayload.onedayPassword,
+            isHead: nextPayload.isHead,
+          },
+        }));
+        setModalMessage({
+          variant: "success",
+          title: "최신 서명·정보 동기화 완료",
+          body: `${info.judgeName} 심판의 최신 서명 및 소속·연락처 정보가 반영되었습니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
+      }
+    } catch (error) {
+      console.error("심판 정보 동기화 중 에러:", error);
+      setModalMessage({
+        variant: "error",
+        title: "동기화 실패",
+        body: "심판 정보를 동기화하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsSync(true);
+    }
+  };
+
   const ContestInvoiceUncompleteRender = (
     <div className="w-full space-y-4">
-      <Modal open={Boolean(isOpen.judge)} onClose={handleJudgeClose}>
-        <div
-          className="flex w-full lg:w-1/2 h-screen lg:h-auto absolute top-1/2 left-1/2 rounded-[12px] bg-[#ffffff] border border-[#171717]/[0.08] p-4"
-          style={{
-            transform: "translate(-50%, -50%)",
-          }}
-        />
-      </Modal>
+      <Drawer
+        anchor="right"
+        open={Boolean(isOpen.judge)}
+        onClose={handleJudgeClose}
+        PaperProps={{
+          sx: {
+            width: { xs: "100vw", sm: 440 },
+            bgcolor: "#ffffff",
+            boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
+          },
+        }}
+      >
+        <div className="h-full flex flex-col bg-white text-[#171717]">
+          {/* 드로어 상단 헤더 */}
+          <div className="px-5 py-4 bg-[#fafafa] border-b border-[#171717]/[0.08] flex items-center justify-between gap-3 shrink-0 sticky top-0 z-10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-[8px] bg-white border border-[#171717]/[0.08] flex items-center justify-center">
+                <UserCheck
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+              </div>
+              <h2 className="text-base font-semibold text-[#171717] m-0">
+                {isOpen?.title || "심판 상세 정보"}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleJudgeClose}
+              aria-label="닫기"
+              className="w-8 h-8 rounded-[8px] inline-flex items-center justify-center text-[#737373] hover:text-[#171717] hover:bg-[#e4e4e7]/70 transition-colors duration-150 cursor-pointer"
+            >
+              <X size={16} strokeWidth={1.5} />
+            </button>
+          </div>
+
+          {/* 드로어 본문 */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {/* 기본 정보 카드 */}
+            <div className="rounded-[12px] border border-[#171717]/[0.08] bg-[#fafafa] p-4 space-y-3.5">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#171717]/[0.08]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-lg font-semibold text-[#171717]">
+                    {selectedJudge.judgeName || "-"}
+                  </span>
+                  {selectedJudge.isHead && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
+                      <Crown size={11} strokeWidth={1.5} />
+                      <span>위원장</span>
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-[4px] text-[11px] font-medium border ${
+                    selectedJudge.isJoined
+                      ? "bg-[#2563eb]/[0.08] text-[#2563eb] border-[#2563eb]/20"
+                      : "bg-white text-[#737373] border-[#171717]/[0.10]"
+                  }`}
+                >
+                  {selectedJudge.isJoined ? "대회 배정됨" : "미배정"}
+                </span>
+              </div>
+
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-[#737373]">
+                    소속
+                  </span>
+                  <span className="text-sm font-medium text-[#171717] text-right">
+                    {selectedJudge.judgePromoter || "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-[#737373]">
+                    연락처
+                  </span>
+                  <span className="text-sm font-mono tabular-nums text-[#171717]">
+                    {selectedJudge.judgeTel || "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-[#737373]">
+                    개인 비밀번호
+                  </span>
+                  {selectedJudge.onedayPassword ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-white border border-[#171717]/[0.10] font-mono tabular-nums text-xs font-semibold text-[#171717]">
+                      <KeyRound
+                        size={12}
+                        strokeWidth={1.5}
+                        className="text-[#737373]"
+                      />
+                      <span>{selectedJudge.onedayPassword}</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[#737373]">미배정</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 서명 상태 카드 */}
+            <div className="rounded-[12px] border border-[#171717]/[0.08] bg-white p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#525252]">
+                  등록 서명 상태
+                </span>
+                {hasSignature(selectedJudge.judgeSignature) ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
+                    서명 등록됨
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center bg-[#f59e0b]/10 text-[#b45309] border border-[#f59e0b]/25 text-[11px] font-medium px-2 py-0.5 rounded-[4px]">
+                    서명 미등록
+                  </span>
+                )}
+              </div>
+
+              <div className="rounded-[8px] border border-[#171717]/[0.08] bg-[#fafafa] min-h-[112px] flex items-center justify-center p-3">
+                {hasSignature(selectedJudge.judgeSignature) ? (
+                  <CanvasWithImageData
+                    imageData={selectedJudge.judgeSignature}
+                    style={{
+                      width: "180px",
+                      height: "88px",
+                      padding: "0",
+                    }}
+                  />
+                ) : (
+                  <span className="text-xs text-[#737373]">
+                    현재 대회 배정 정보에 등록된 서명이 없습니다.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 심판 풀 최신 서명·정보 동기화 섹션 */}
+            {Boolean(
+              selectedJudge.isJoined &&
+                selectedJudge.judgeAssignId &&
+                matchedPoolJudge
+            ) && (
+              <div className="rounded-[12px] border border-[#2563eb]/20 bg-[#2563eb]/[0.04] p-4 space-y-3">
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold text-[#171717]">
+                    심판 풀 최신 데이터 감지
+                  </div>
+                  <p className="text-xs text-[#525252] m-0 leading-relaxed">
+                    전체 심판 풀(judges_pool)에 등록된{" "}
+                    <strong>{matchedPoolJudge.judgeName}</strong> 심판의 최신
+                    서명·연락처·소속 정보를 개인 비밀번호와 위원장 여부를 유지한
+                    채 동기화합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isSync}
+                  onClick={handleSyncJudgeFromPool}
+                  className="w-full h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-60 text-white text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer border-0"
+                >
+                  <RefreshCw
+                    size={14}
+                    strokeWidth={1.5}
+                    className={!isSync ? "animate-spin" : ""}
+                  />
+                  <span>
+                    {!isSync ? "동기화 중..." : "최신 서명·정보 동기화"}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 드로어 하단 고정 푸터 */}
+          <div className="px-5 py-3.5 bg-[#fafafa] border-t border-[#171717]/[0.08] flex items-center justify-end gap-2 shrink-0 sticky bottom-0">
+            <button
+              type="button"
+              onClick={handleJudgeClose}
+              className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-xs font-medium transition-colors duration-150 cursor-pointer"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </Drawer>
 
       {/* 검색 바 */}
       <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -595,15 +875,23 @@ const ContestJudgeTable = () => {
                       </td>
                       <td className="py-2.5 px-4 text-sm">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`font-medium ${
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setIsOpen({
+                                judge: true,
+                                title: "심판 상세 정보",
+                                info: filtered,
+                              })
+                            }
+                            className={`font-medium text-left bg-transparent border-0 p-0 cursor-pointer hover:text-[#2563eb] hover:underline transition-colors duration-150 ${
                               !isConfirmed
                                 ? "line-through text-[#737373]"
                                 : "text-[#171717]"
                             }`}
                           >
                             {judgeName}
-                          </span>
+                          </button>
                           {isHead && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
                               <Crown size={11} strokeWidth={1.5} />
@@ -619,14 +907,20 @@ const ContestJudgeTable = () => {
                         {judgePromoter || "-"}
                       </td>
                       <td className="py-2 px-4 hidden lg:table-cell">
-                        <CanvasWithImageData
-                          imageData={judgeSignature}
-                          style={{
-                            width: "76px",
-                            height: "52px",
-                            padding: "0",
-                          }}
-                        />
+                        {hasSignature(judgeSignature) ? (
+                          <CanvasWithImageData
+                            imageData={judgeSignature}
+                            style={{
+                              width: "76px",
+                              height: "52px",
+                              padding: "0",
+                            }}
+                          />
+                        ) : (
+                          <span className="inline-flex items-center bg-[#f59e0b]/10 text-[#b45309] border border-[#f59e0b]/25 text-[11px] font-medium px-2 py-0.5 rounded-[4px]">
+                            서명 미등록
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-4">
                         {onedayPassword ? (
