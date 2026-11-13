@@ -39,8 +39,10 @@ import {
   ArrowRight,
   SlidersHorizontal,
   Table2,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
-import { BibTag, StatusDot } from "../components/ui/BibTag";
+import { StatusDot } from "../components/ui/BibTag";
 import {
   MonitoringBlockingState,
   MonitoringDiagnosticsBar,
@@ -928,67 +930,65 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full min-h-full bg-[#fafafa] text-[#171717] p-4 md:p-6 gap-4">
-          {/* 심판위원장 순위 확정 안내 다이얼로그 (Instrument Dialog) */}
+        <div className="flex flex-col w-full min-h-full bg-[#f1f5f9] text-[#0f172a] p-4 md:p-6 gap-5">
+          {/* 심판위원장 순위 확정 대형 알림 다이얼로그 */}
           <Modal
             open={urgentModalOpen}
             onClose={() => setUrgentModalOpen(false)}
           >
             <div
-              className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/45"
+              className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/65"
               style={{ transform: "none" }}
             >
-              <div className="w-full max-w-md bg-white rounded-[14px] border border-[#171717]/15 p-6 shadow-[0_16px_40px_rgba(0,0,0,0.12)] space-y-5">
-                <div className="flex items-start justify-between gap-3">
+              <div className="w-full max-w-xl bg-white rounded-[18px] border-[3px] border-[#2563eb] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.3)] space-y-5">
+                <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1.5">
-                    <div className="inline-flex items-center gap-2 text-xs font-medium text-[#2563eb]">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[6px] bg-[#dbeafe] text-sm font-extrabold text-[#1d4ed8]">
                       <StatusDot status="active" live />
-                      <span>채점 집계 완료</span>
+                      <span>전 심판 채점 집계 완료</span>
                     </div>
-                    <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
-                      전 좌석 채점 완료 — 순위 확정이 필요합니다
+                    <h2 className="text-2xl font-black tracking-tight text-[#0f172a] m-0 pt-1">
+                      모든 심판 점수가 들어왔습니다! 순위표를 확정해 주세요
                     </h2>
                   </div>
                   <button
                     type="button"
                     onClick={() => setUrgentModalOpen(false)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#737373] hover:bg-[#f4f4f5] hover:text-[#171717] transition-colors cursor-pointer"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a] transition-colors cursor-pointer"
                     aria-label="닫기"
                   >
-                    <X size={16} strokeWidth={1.5} />
+                    <X size={22} strokeWidth={2.2} />
                   </button>
                 </div>
 
-                <div className="rounded-[10px] bg-[#f4f4f5] border border-[#171717]/[0.08] p-4 space-y-2">
-                  <div className="text-xs font-medium text-[#737373]">
-                    대기 중인 무대 체급
+                <div className="rounded-[12px] bg-[#f8fafc] border-2 border-[#cbd5e1] p-4 space-y-2">
+                  <div className="text-sm font-extrabold text-[#475569]">
+                    순위 확정 대기 체급
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
                     {realtimeData?.stageNumber !== undefined && (
-                      <BibTag
-                        prefix="#"
-                        number={realtimeData.stageNumber}
-                        size="md"
-                      />
+                      <span className="inline-flex items-center px-3 py-1 rounded-[8px] bg-[#0f172a] text-white font-mono text-lg font-black">
+                        #{realtimeData.stageNumber} 무대
+                      </span>
                     )}
-                    <span className="text-sm font-semibold text-[#171717]">
+                    <span className="text-xl font-black text-[#0f172a]">
                       {urgentGradeInfo?.categoryTitle}
                     </span>
-                    <span className="text-[#737373]">/</span>
-                    <span className="text-sm font-medium text-[#525252]">
+                    <span className="text-[#64748b] font-bold">/</span>
+                    <span className="text-xl font-black text-[#1d4ed8]">
                       {urgentGradeInfo?.gradeTitle}
                     </span>
                   </div>
                 </div>
 
-                <p className="text-sm text-[#525252] leading-relaxed m-0">
-                  모든 심사위원 좌석의 점수가 수신되었습니다. 순위표를 검토하고 확정을 완료하면 다음 무대 진행 및 공식 결과 집계가 반영됩니다.
+                <p className="text-base sm:text-lg font-bold text-[#334155] leading-relaxed m-0">
+                  아래 파란 버튼을 눌러 [최종순위]와 동점 여부를 확인하신 뒤 [순위표 최종 확정]을 눌러주셔야 전광판 및 본부석에 결과가 반영됩니다.
                 </p>
 
-                <div className="flex flex-col sm:flex-row-reverse gap-2 pt-1">
+                <div className="flex flex-col sm:flex-row-reverse gap-3 pt-1">
                   <button
                     type="button"
-                    className="flex-1 inline-flex items-center justify-center gap-2 h-10 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium text-sm transition-colors cursor-pointer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 h-14 px-6 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-lg shadow-md transition-colors cursor-pointer"
                     onClick={() => {
                       setUrgentModalOpen(false);
                       if (urgentGradeInfo?.categoryJudgeType === "point") {
@@ -996,6 +996,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                           categoryId: urgentGradeInfo.categoryId,
                           gradeId: urgentGradeInfo.gradeId,
                           categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                          categoryTitle: urgentGradeInfo.categoryTitle || "",
+                          gradeTitle: urgentGradeInfo.gradeTitle || "",
                         });
                         setPointSummaryOpen(true);
                       } else {
@@ -1003,21 +1005,23 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                           categoryId: urgentGradeInfo.categoryId,
                           gradeId: urgentGradeInfo.gradeId,
                           categoryJudgeType: urgentGradeInfo.categoryJudgeType,
+                          categoryTitle: urgentGradeInfo.categoryTitle || "",
+                          gradeTitle: urgentGradeInfo.gradeTitle || "",
                         });
                         setRankingSummaryOpen(true);
                       }
                     }}
                   >
-                    <span>순위표 확인 및 확정</span>
-                    <ArrowRight size={16} strokeWidth={1.5} />
+                    <span>순위 집계표 열기 및 확정</span>
+                    <ArrowRight size={20} strokeWidth={2.4} />
                   </button>
 
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center h-10 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#525252] font-medium text-sm transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center h-14 px-5 rounded-[12px] bg-[#e2e8f0] hover:bg-[#cbd5e1] text-[#334155] font-extrabold text-base transition-colors cursor-pointer"
                     onClick={() => setUrgentModalOpen(false)}
                   >
-                    나중에 확인
+                    잠시 뒤에 열기
                   </button>
                 </div>
               </div>
@@ -1063,6 +1067,18 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               stageId={realtimeData?.stageId}
               setClose={setRankingSummaryOpen}
               currentResultSaved={realtimeData?.resultSaved}
+              expectedJudgeCount={
+                realtimeData?.stageJudgeCount ||
+                realtimeData?.judges?.length ||
+                0
+              }
+              stagePlayers={playersArray.filter(
+                (f) =>
+                  f.contestGradeId === rankingSummaryProp?.gradeId &&
+                  f.playerNoShow === false
+              )}
+              categoryTitleProp={rankingSummaryProp?.categoryTitle || ""}
+              gradeTitleProp={rankingSummaryProp?.gradeTitle || ""}
             />
           </Modal>
           <Modal open={pointSummaryOpen}>
@@ -1072,6 +1088,18 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               stageId={realtimeData?.stageId}
               setClose={setPointSummaryOpen}
               currentResultSaved={realtimeData?.resultSaved}
+              expectedJudgeCount={
+                realtimeData?.stageJudgeCount ||
+                realtimeData?.judges?.length ||
+                0
+              }
+              stagePlayers={playersArray.filter(
+                (f) =>
+                  f.contestGradeId === pointSummaryProp?.gradeId &&
+                  f.playerNoShow === false
+              )}
+              categoryTitleProp={pointSummaryProp?.categoryTitle || ""}
+              gradeTitleProp={pointSummaryProp?.gradeTitle || ""}
             />
           </Modal>
 
@@ -1089,20 +1117,20 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             onRefreshData={reloadJudgeHeadData}
           />
 
-          {/* 상단 대회 및 현재 무대 요약 바 */}
-          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 md:p-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* 상단 대회 및 현재 진행 무대 고대비 요약 바 */}
+          <div className="bg-white rounded-[14px] border-2 border-[#cbd5e1] shadow-sm p-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-medium text-[#737373]">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-[#475569]">
                   <StatusDot
                     status={realtimeData?.stageId ? "live" : "idle"}
                     live={Boolean(realtimeData?.stageId)}
                   />
-                  <span>심판위원장 총괄 집계석</span>
+                  <span className="text-[#0f172a]">심판위원장 총괄 집계석</span>
                   {effectiveCollectionName && (
                     <>
                       <span>·</span>
-                      <span className="font-mono">
+                      <span className="font-mono text-[#334155]">
                         DB: {effectiveCollectionName}
                       </span>
                     </>
@@ -1110,34 +1138,34 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   {lastUpdated && (
                     <>
                       <span>·</span>
-                      <span className="font-mono tabular-nums">
-                        최근 갱신 {lastUpdated}
+                      <span className="font-mono tabular-nums text-[#334155]">
+                        갱신 {lastUpdated}
                       </span>
                     </>
                   )}
                 </div>
-                <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#0f172a] m-0">
                   {contestInfo.contestTitle ||
                     currentContest?.contests?.contestTitle ||
                     "대회 정보 대기 중"}
                 </h1>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 px-3.5 py-2.5 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.06]">
-                <span className="text-xs font-medium text-[#737373]">
-                  진행 무대
+              <div className="flex flex-wrap items-center gap-3 px-5 py-3.5 rounded-[12px] bg-[#0f172a] text-white border-2 border-[#1e293b]">
+                <span className="text-sm font-extrabold text-[#93c5fd]">
+                  현재 무대
                 </span>
                 {realtimeData?.stageNumber !== undefined && (
-                  <BibTag
-                    prefix="#"
-                    number={realtimeData.stageNumber}
-                    size="sm"
-                  />
+                  <span className="px-3 py-1 rounded-[8px] bg-[#2563eb] text-white font-mono text-lg font-black tabular-nums">
+                    #{realtimeData.stageNumber}
+                  </span>
                 )}
-                <span className="text-sm font-semibold text-[#171717]">
+                <span className="text-lg sm:text-xl font-black text-white">
                   {realtimeData?.categoryTitle
-                    ? `${realtimeData.categoryTitle} / ${realtimeData?.gradeTitle || ""}`
-                    : "대기 중"}
+                    ? `${realtimeData.categoryTitle} / ${
+                        realtimeData?.gradeTitle || ""
+                      }`
+                    : "본부석 무대 시작 대기 중"}
                 </span>
               </div>
             </div>
@@ -1162,22 +1190,22 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             />
           )}
 
-          {/* 비교심사 제어 카드 */}
+          {/* 비교심사 운영 카드 (대형 고대비) */}
           {realtimeData?.stageId && (
-            <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
-                <div className="flex items-center gap-2">
+            <div className="bg-white rounded-[14px] border-2 border-[#cbd5e1] shadow-sm overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 bg-[#1e293b] text-white border-b-2 border-[#0f172a]">
+                <div className="flex items-center gap-2.5">
                   <SlidersHorizontal
-                    size={16}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
+                    size={22}
+                    strokeWidth={2.2}
+                    className="text-[#93c5fd]"
                   />
-                  <h2 className="text-sm font-semibold text-[#171717] m-0">
+                  <h2 className="text-lg sm:text-xl font-black text-white m-0">
                     비교심사 운영
                   </h2>
                   {comparesArray?.length > 0 && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-xs font-mono font-medium tabular-nums text-[#525252]">
-                      {comparesArray.length}회 진행
+                    <span className="inline-flex items-center px-3 py-1 rounded-[6px] bg-[#fef08a] text-[#991b1b] text-sm font-mono font-black tabular-nums">
+                      {comparesArray.length}회 진행 중
                     </span>
                   )}
                 </div>
@@ -1186,7 +1214,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   <div
                     className={`flex ${
                       isMobile ? "flex-col w-full" : "flex-row items-center"
-                    } gap-2`}
+                    } gap-2.5`}
                   >
                     <button
                       type="button"
@@ -1197,13 +1225,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                           compareStart: true,
                         }))
                       }
-                      className={`inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] text-xs font-medium transition-colors ${
+                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-black transition-colors ${
                         !currentStageInfo?.grades?.length
-                          ? "bg-[#e4e4e7] text-[#737373] cursor-not-allowed"
-                          : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+                          ? "bg-[#475569] text-[#94a3b8] cursor-not-allowed"
+                          : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-sm cursor-pointer"
                       } ${isMobile ? "w-full" : ""}`}
                     >
-                      <Play size={15} strokeWidth={1.5} />
+                      <Play size={18} strokeWidth={2.2} />
                       <span className="tabular-nums">
                         {(comparesArray?.length ?? 0) + 1}차 비교심사 시작
                       </span>
@@ -1213,14 +1241,14 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       type="button"
                       disabled={!currentStageInfo?.grades?.length}
                       onClick={() => setCompareOpen(true)}
-                      className={`inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] text-xs font-medium border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] transition-colors ${
+                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-extrabold border-2 border-white/25 bg-[#334155] hover:bg-[#475569] text-white transition-colors ${
                         !currentStageInfo?.grades?.length
                           ? "opacity-50 cursor-not-allowed"
                           : "cursor-pointer"
                       } ${isMobile ? "w-full" : ""}`}
                     >
-                      <Settings size={15} strokeWidth={1.5} />
-                      <span>비교심사 설정 보기</span>
+                      <Settings size={18} strokeWidth={2.2} />
+                      <span>비교심사 현황·설정</span>
                     </button>
                   </div>
                 )}
@@ -1228,22 +1256,22 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
               <div className="p-5">
                 {currentCompareInfo?.players?.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] text-xs">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] font-medium tabular-nums">
+                  <div className="flex flex-col gap-3.5">
+                    <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-[10px] bg-[#eff6ff] border-2 border-[#93c5fd] text-base font-extrabold text-[#1e3a8a]">
+                      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-[6px] bg-[#2563eb] text-white font-black tabular-nums">
                         <StatusDot status="active" />
-                        {currentCompareInfo?.compareIndex}차 비교심사
+                        {currentCompareInfo?.compareIndex}차 비교심사 진행 중
                       </span>
-                      <span className="text-[#525252] font-mono tabular-nums">
-                        선발인원 {currentCompareInfo?.comparePlayerLength}명
+                      <span className="font-mono tabular-nums">
+                        선발 인원: {currentCompareInfo?.comparePlayerLength}명
                       </span>
-                      <span className="text-[#737373]">·</span>
-                      <span className="text-[#525252]">
-                        채점모드:{" "}
+                      <span>·</span>
+                      <span>
+                        채점 방식:{" "}
                         {currentCompareInfo?.compareScoreMode === "compare" ||
                         currentCompareInfo?.compareScoreMode === "topOnly"
-                          ? "대상자만 채점"
-                          : "전체 채점"}
+                          ? "비교심사 대상자만 채점"
+                          : "출전 선수 전원 채점"}
                       </span>
                     </div>
 
@@ -1254,19 +1282,19 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                         return (
                           <div
                             key={cIdx}
-                            className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between p-3.5 rounded-[8px] bg-white border border-[#171717]/[0.08]"
+                            className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between p-4 rounded-[12px] bg-[#f8fafc] border-2 border-[#cbd5e1]"
                           >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-medium text-[#737373] mr-1 tabular-nums">
-                                {compareIndex}차 호명
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <span className="px-3 py-1.5 rounded-[8px] bg-[#0f172a] text-white text-base font-black mr-1 tabular-nums">
+                                {compareIndex}차 호명 선수
                               </span>
                               {players?.map((top, tIdx) => (
-                                <BibTag
+                                <span
                                   key={tIdx}
-                                  number={top.playerNumber}
-                                  variant="active"
-                                  size="lg"
-                                />
+                                  className="inline-flex items-center justify-center min-w-[68px] h-12 px-3.5 rounded-[10px] bg-[#2563eb] text-white font-mono tabular-nums text-2xl font-black shadow-xs"
+                                >
+                                  {top.playerNumber}번
+                                </span>
                               ))}
                             </div>
 
@@ -1275,16 +1303,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 type="button"
                                 onClick={() => {
                                   setMessage({
-                                    body: "비교심사를 취소하시겠습니까?",
+                                    body: `${compareIndex}차 비교심사를 취소하시겠습니까?`,
                                     isButton: true,
                                     cancelButtonText: "아니오",
-                                    confirmButtonText: "예",
+                                    confirmButtonText: "예 (취소)",
                                   });
                                   setCompareCancelMsgOpen(true);
                                 }}
-                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#dc2626]/25 bg-white hover:bg-[#dc2626]/[0.05] text-[#dc2626] text-xs font-medium transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[10px] border-2 border-[#dc2626] bg-white hover:bg-[#fef2f2] text-[#dc2626] text-sm sm:text-base font-extrabold transition-colors cursor-pointer"
                               >
-                                <X size={14} strokeWidth={1.5} />
+                                <X size={18} strokeWidth={2.2} />
                                 <span className="tabular-nums">
                                   {compareIndex}차 비교심사 취소
                                 </span>
@@ -1295,36 +1323,36 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       })}
                   </div>
                 ) : (
-                  <div className="text-xs text-[#737373] py-2">
-                    현재 체급에서 진행 중인 비교심사가 없습니다.
+                  <div className="text-base font-bold text-[#64748b] py-2">
+                    현재 체급에서 진행 중인 비교심사가 없습니다. (필요 시 우측 상단 [비교심사 시작] 버튼을 눌러주세요)
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* 실시간 집계상황 매트릭스 (Moment #2: Judge-by-Athlete Score Matrix) */}
+          {/* 실시간 심판 채점 집계상황 매트릭스 (대형 고대비 · 미채점 즉시 식별) */}
           {realtimeData?.stageId && (
-            <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
-                <div className="flex items-center gap-2">
+            <div className="bg-white rounded-[14px] border-2 border-[#cbd5e1] shadow-sm overflow-hidden">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-4 bg-[#0f172a] text-white border-b-2 border-[#1e293b]">
+                <div className="flex items-center gap-2.5">
                   <Table2
-                    size={16}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
+                    size={22}
+                    strokeWidth={2.2}
+                    className="text-[#93c5fd]"
                   />
-                  <h2 className="text-sm font-semibold text-[#171717] m-0">
-                    집계상황
+                  <h2 className="text-lg sm:text-xl font-black text-white m-0">
+                    실시간 심판별 채점 현황 · 순위 확정
                   </h2>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleForceUpdate}
-                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 h-11 px-4 rounded-[10px] border-2 border-white/25 bg-[#1e293b] hover:bg-[#334155] text-white text-sm sm:text-base font-extrabold transition-colors cursor-pointer"
                 >
-                  <RefreshCw size={14} strokeWidth={1.5} />
-                  <span>새로고침</span>
+                  <RefreshCw size={18} strokeWidth={2.2} />
+                  <span>점수 새로고침</span>
                 </button>
               </div>
 
@@ -1345,24 +1373,39 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
                     const judges = realtimeData?.judges || [];
 
+                    // 좌석별 미채점 여부 및 전체 미채점 칸 수 실시간 계산
+                    const missingSeatSet = new Set();
+                    let missingCellCount = 0;
+
+                    filterdPlayers.forEach((player) => {
+                      judges.forEach((judge) => {
+                        const scoreEntry = normalScoreData.find(
+                          (f) =>
+                            f.playerNumber === player.playerNumber &&
+                            f.seatIndex === judge.seatIndex
+                        );
+                        const hasScore =
+                          scoreEntry &&
+                          scoreEntry.playerScore !== 0 &&
+                          scoreEntry.playerScore !== undefined &&
+                          scoreEntry.playerScore !== null &&
+                          scoreEntry.playerScore !== "";
+
+                        if (!hasScore) {
+                          missingSeatSet.add(judge.seatIndex);
+                          missingCellCount++;
+                        }
+                      });
+                    });
+
+                    const missingSeatList = Array.from(missingSeatSet).sort(
+                      (a, b) => a - b
+                    );
+
                     const isAllScored =
                       filterdPlayers.length > 0 &&
                       judges.length > 0 &&
-                      filterdPlayers.every((player) =>
-                        judges.every((judge) => {
-                          const scoreEntry = normalScoreData.find(
-                            (f) =>
-                              f.playerNumber === player.playerNumber &&
-                              f.seatIndex === judge.seatIndex
-                          );
-                          return (
-                            scoreEntry &&
-                            scoreEntry.playerScore !== 0 &&
-                            scoreEntry.playerScore !== undefined &&
-                            scoreEntry.playerScore !== null
-                          );
-                        })
-                      );
+                      missingCellCount === 0;
 
                     const savedGrades = Array.isArray(realtimeData?.resultSaved)
                       ? realtimeData.resultSaved
@@ -1373,33 +1416,33 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       <div
                         key={gIdx}
                         id={`score-table-card-${gradeId}`}
-                        className="p-4 md:p-5 bg-white rounded-[12px] border border-[#171717]/[0.08] space-y-4"
+                        className="p-5 bg-white rounded-[14px] border-2 border-[#94a3b8] space-y-4 shadow-xs"
                       >
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        {/* 체급 헤더 + 순위 확정 액션 버튼 */}
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                           <div className="space-y-1">
-                            <div className="text-xs text-[#737373]">
+                            <div className="text-sm font-bold text-[#64748b]">
                               {contestInfo?.contestTitle ||
                                 currentContest?.contestInfo?.contestTitle ||
                                 currentContest?.contests?.contestTitle ||
                                 "대회"}
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-base font-semibold tracking-[-0.01em] text-[#171717]">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <span className="px-3.5 py-1 rounded-[8px] bg-[#0f172a] text-white text-lg sm:text-xl font-black">
                                 {categoryTitle}
                               </span>
-                              <span className="text-[#737373]">/</span>
-                              <span className="text-base font-medium text-[#525252]">
+                              <span className="text-xl sm:text-2xl font-black text-[#0f172a]">
                                 {gradeTitle}
                               </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
+                              <span className="inline-flex items-center px-3 py-1 rounded-[8px] bg-[#eff6ff] border-2 border-[#93c5fd] text-sm font-black text-[#1d4ed8]">
                                 {categoryJudgeType === "point"
-                                  ? "POINT"
-                                  : "RANKING"}
+                                  ? "점수형 심사 (POINT)"
+                                  : "랭킹형 심사 (RANKING)"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-end">
                             <button
                               type="button"
                               onClick={() =>
@@ -1409,10 +1452,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                   gradeTitle
                                 )
                               }
-                              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-2 h-12 px-4 rounded-[10px] border-2 border-[#94a3b8] bg-white hover:bg-[#f1f5f9] text-[#0f172a] text-sm sm:text-base font-extrabold transition-colors cursor-pointer"
                             >
-                              <Camera size={15} strokeWidth={1.5} />
-                              <span>캡처</span>
+                              <Camera size={18} strokeWidth={2.2} />
+                              <span>집계표 캡처</span>
                             </button>
 
                             {categoryJudgeType === "point" ? (
@@ -1425,34 +1468,36 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                       categoryId,
                                       gradeId,
                                       categoryJudgeType,
+                                      categoryTitle,
+                                      gradeTitle,
                                     });
                                     setPointSummaryOpen(true);
                                   }
                                 }}
-                                className={`inline-flex items-center gap-2 h-9 px-4 rounded-[8px] text-xs font-medium transition-colors ${
+                                className={`inline-flex items-center gap-2 h-12 px-6 rounded-[10px] text-base sm:text-lg font-black transition-colors ${
                                   isGradeConfirmed
-                                    ? "bg-[#f4f4f5] text-[#737373] border border-[#171717]/10 cursor-default"
+                                    ? "bg-[#dcfce7] text-[#15803d] border-2 border-[#16a34a] cursor-default"
                                     : isAllScored
-                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
-                                    : "bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/20 cursor-pointer"
+                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-md cursor-pointer"
+                                    : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#b45309] border-2 border-[#f59e0b] cursor-pointer"
                                 }`}
                               >
                                 {isGradeConfirmed ? (
                                   <>
                                     <Check
-                                      size={15}
-                                      strokeWidth={1.5}
+                                      size={20}
+                                      strokeWidth={2.5}
                                       className="text-[#16a34a]"
                                     />
-                                    <span>순위표 확정됨</span>
+                                    <span>순위표 최종 확정 완료</span>
                                   </>
                                 ) : isAllScored ? (
                                   <>
-                                    <span className="h-2 w-2 rounded-full bg-white" />
-                                    <span>점수형 순위 확정 (채점 완료)</span>
+                                    <span className="h-3 w-3 rounded-full bg-[#fef08a]" />
+                                    <span>점수형 순위 집계표 열기 · 확정</span>
                                   </>
                                 ) : (
-                                  <span>점수형 집계 및 순위 확인</span>
+                                  <span>점수형 집계표 미리보기 (채점 중)</span>
                                 )}
                               </button>
                             ) : (
@@ -1465,72 +1510,145 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                       categoryId,
                                       gradeId,
                                       categoryJudgeType,
+                                      categoryTitle,
+                                      gradeTitle,
                                     });
                                     setRankingSummaryOpen(true);
                                   }
                                 }}
-                                className={`inline-flex items-center gap-2 h-9 px-4 rounded-[8px] text-xs font-medium transition-colors ${
+                                className={`inline-flex items-center gap-2 h-12 px-6 rounded-[10px] text-base sm:text-lg font-black transition-colors ${
                                   isGradeConfirmed
-                                    ? "bg-[#f4f4f5] text-[#737373] border border-[#171717]/10 cursor-default"
+                                    ? "bg-[#dcfce7] text-[#15803d] border-2 border-[#16a34a] cursor-default"
                                     : isAllScored
-                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
-                                    : "bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/20 cursor-pointer"
+                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-md cursor-pointer"
+                                    : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#b45309] border-2 border-[#f59e0b] cursor-pointer"
                                 }`}
                               >
                                 {isGradeConfirmed ? (
                                   <>
                                     <Check
-                                      size={15}
-                                      strokeWidth={1.5}
+                                      size={20}
+                                      strokeWidth={2.5}
                                       className="text-[#16a34a]"
                                     />
-                                    <span>순위표 확정됨</span>
+                                    <span>순위표 최종 확정 완료</span>
                                   </>
                                 ) : isAllScored ? (
                                   <>
-                                    <span className="h-2 w-2 rounded-full bg-white" />
-                                    <span>랭킹형 순위 확정 (채점 완료)</span>
+                                    <span className="h-3 w-3 rounded-full bg-[#fef08a]" />
+                                    <span>랭킹형 순위 집계표 열기 · 확정</span>
                                   </>
                                 ) : (
-                                  <span>랭킹형 집계 및 순위 확인</span>
+                                  <span>랭킹형 집계표 미리보기 (채점 중)</span>
                                 )}
                               </button>
                             )}
                           </div>
                         </div>
 
-                        <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
-                          <table className="w-full border-collapse text-sm">
+                        {/* 심판위원장용 대형 상태 메시지 배너 */}
+                        {isGradeConfirmed ? (
+                          <div className="bg-[#f0fdf4] border-2 border-[#16a34a] rounded-[12px] px-5 py-3.5 flex items-center gap-3">
+                            <CheckCircle2
+                              size={26}
+                              strokeWidth={2.3}
+                              className="text-[#16a34a] shrink-0"
+                            />
+                            <div className="text-lg sm:text-xl font-black text-[#15803d]">
+                              이 체급의 순위표 확정이 완료되었습니다. (전광판 · 본부석 전송 완료)
+                            </div>
+                          </div>
+                        ) : isAllScored ? (
+                          <div className="bg-[#eff6ff] border-[3px] border-[#2563eb] rounded-[12px] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <CheckCircle2
+                                size={28}
+                                strokeWidth={2.3}
+                                className="text-[#2563eb] shrink-0"
+                              />
+                              <div>
+                                <div className="text-xl font-black text-[#1d4ed8]">
+                                  전 심판 채점 완료! 이제 순위표를 확정해 주세요
+                                </div>
+                                <div className="text-base font-bold text-[#1e3a8a]">
+                                  우측 상단 파란색 [순위 집계표 열기 · 확정] 버튼을 눌러 동점자 유무를 확인하고 최종 확정해 주세요.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : filterdPlayers.length > 0 && judges.length > 0 ? (
+                          <div className="bg-[#fef2f2] border-[3px] border-[#dc2626] rounded-[12px] px-5 py-4 flex items-start sm:items-center gap-3.5">
+                            <AlertTriangle
+                              size={28}
+                              strokeWidth={2.4}
+                              className="text-[#dc2626] shrink-0 mt-0.5 sm:mt-0"
+                            />
+                            <div>
+                              <div className="text-lg sm:text-xl font-black text-[#dc2626]">
+                                아직 점수가 안 들어온 심판석:{" "}
+                                {missingSeatList.map((s) => `${s}번`).join(", ")} 심판 (미입력 {missingCellCount}칸)
+                              </div>
+                              <div className="text-sm sm:text-base font-bold text-[#7f1d1d]">
+                                아래 표에서 빨간 [미채점] 표시된 심판석의 제출이 완료되면 자동으로 순위 확정 안내창이 열립니다.
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* 대형 고대비 채점 매트릭스 */}
+                        <div className="overflow-x-auto rounded-[12px] border-2 border-[#94a3b8]">
+                          <table className="w-full border-collapse text-center">
                             <thead>
-                              <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
-                                <th className="sticky left-0 z-10 bg-[#f4f4f5] px-3.5 py-2.5 text-left text-xs font-medium text-[#525252] border-r border-[#171717]/[0.08] whitespace-nowrap w-[108px]">
+                              <tr className="bg-[#1e293b] text-white border-b-2 border-[#0f172a]">
+                                <th className="sticky left-0 z-10 bg-[#0f172a] px-4 py-3.5 text-center text-base sm:text-lg font-extrabold text-white border-r-2 border-white/20 whitespace-nowrap w-[130px]">
                                   선수번호
                                 </th>
-                                {judges.map((judge) => (
-                                  <th
-                                    key={`head-judge-${judge.seatIndex}`}
-                                    className="px-3 py-2.5 text-center text-xs font-medium text-[#525252] whitespace-nowrap min-w-[84px]"
-                                  >
-                                    <span className="font-mono tabular-nums">
-                                      {judge.seatIndex}
-                                    </span>
-                                    번 심판
-                                  </th>
-                                ))}
+                                {judges.map((judge) => {
+                                  const isSeatMissing = missingSeatSet.has(
+                                    judge.seatIndex
+                                  );
+                                  return (
+                                    <th
+                                      key={`head-judge-${judge.seatIndex}`}
+                                      className={`px-3 py-3.5 text-center text-base sm:text-lg font-extrabold border-r border-white/15 whitespace-nowrap min-w-[100px] ${
+                                        isSeatMissing && !isGradeConfirmed
+                                          ? "bg-[#b91c1c] text-white"
+                                          : ""
+                                      }`}
+                                    >
+                                      <div className="flex flex-col items-center gap-1">
+                                        <span className="tabular-nums">
+                                          {judge.seatIndex}번 심판
+                                        </span>
+                                        {isSeatMissing && !isGradeConfirmed && (
+                                          <span className="px-2 py-0.5 rounded bg-[#fef08a] text-[#991b1b] text-xs font-black">
+                                            미채점
+                                          </span>
+                                        )}
+                                      </div>
+                                    </th>
+                                  );
+                                })}
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
+                            <tbody className="divide-y-2 divide-[#cbd5e1] bg-white">
                               {filterdPlayers.length > 0 ? (
                                 filterdPlayers.map((player, pIdx) => (
                                   <tr
                                     key={player.playerUid || pIdx}
-                                    className="hover:bg-[#fafafa] transition-colors"
+                                    className="hover:bg-[#f8fafc] transition-colors"
                                   >
-                                    <td className="sticky left-0 z-10 bg-white px-3.5 py-2.5 border-r border-[#171717]/[0.08] whitespace-nowrap">
-                                      <BibTag
-                                        number={player.playerNumber}
-                                        size="md"
-                                      />
+                                    <td className="sticky left-0 z-10 bg-[#f8fafc] px-4 py-3 border-r-2 border-[#94a3b8] whitespace-nowrap">
+                                      <div className="flex flex-col items-center gap-0.5">
+                                        <span className="inline-flex items-center justify-center min-w-[72px] h-11 px-3 rounded-[10px] bg-[#0f172a] text-white font-mono tabular-nums text-2xl font-black">
+                                          {player.playerNumber}
+                                        </span>
+                                        {player.playerName && (
+                                          <span className="text-xs font-extrabold text-[#475569] truncate max-w-[96px]">
+                                            {player.playerName}
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     {judges.map((judge) => {
                                       const finded = normalScoreData.find(
@@ -1540,36 +1658,46 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                           f.seatIndex === judge.seatIndex
                                       );
 
-                                      let cellContent = (
-                                        <span className="font-mono tabular-nums text-[#737373]">
-                                          -
-                                        </span>
-                                      );
-
-                                      if (finded?.playerScore >= 1000) {
-                                        cellContent = (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#737373] text-[11px] font-medium">
-                                            순위제외
-                                          </span>
-                                        );
-                                      } else if (
+                                      const hasValidScore =
                                         finded?.playerScore !== 0 &&
                                         finded?.playerScore !== undefined &&
-                                        finded?.playerScore !== null
-                                      ) {
-                                        cellContent = (
-                                          <span className="font-mono font-medium tabular-nums text-[#171717]">
-                                            {finded.playerScore}
-                                          </span>
+                                        finded?.playerScore !== null &&
+                                        finded?.playerScore !== "";
+
+                                      if (finded?.playerScore >= 1000) {
+                                        return (
+                                          <td
+                                            key={`cell-${player.playerNumber}-${judge.seatIndex}`}
+                                            className="px-3 py-3 text-center border-r border-[#cbd5e1] bg-[#f1f5f9] whitespace-nowrap"
+                                          >
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#334155] text-white text-sm font-black">
+                                              순위제외
+                                            </span>
+                                          </td>
+                                        );
+                                      }
+
+                                      if (hasValidScore) {
+                                        return (
+                                          <td
+                                            key={`cell-${player.playerNumber}-${judge.seatIndex}`}
+                                            className="px-3 py-3 text-center border-r border-[#cbd5e1] whitespace-nowrap"
+                                          >
+                                            <span className="font-mono font-black tabular-nums text-[#0f172a] text-2xl sm:text-3xl">
+                                              {finded.playerScore}
+                                            </span>
+                                          </td>
                                         );
                                       }
 
                                       return (
                                         <td
                                           key={`cell-${player.playerNumber}-${judge.seatIndex}`}
-                                          className="px-3 py-2.5 text-center whitespace-nowrap"
+                                          className="px-3 py-3 text-center border-r border-[#cbd5e1] bg-[#fef2f2] whitespace-nowrap"
                                         >
-                                          {cellContent}
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-[#fee2e2] border-2 border-[#dc2626] text-[#dc2626] text-sm font-black">
+                                            미채점
+                                          </span>
                                         </td>
                                       );
                                     })}
@@ -1579,7 +1707,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 <tr>
                                   <td
                                     colSpan={Math.max(judges.length + 1, 2)}
-                                    className="px-4 py-8 text-center text-xs text-[#737373]"
+                                    className="px-4 py-10 text-center text-lg font-extrabold text-[#64748b]"
                                   >
                                     출전 선수 정보가 없습니다.
                                   </td>
@@ -1592,7 +1720,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                     );
                   })
                 ) : (
-                  <div className="text-xs text-[#737373] py-4 text-center">
+                  <div className="text-lg font-extrabold text-[#64748b] py-6 text-center">
                     현재 진행 중인 체급 정보가 없습니다.
                   </div>
                 )}
