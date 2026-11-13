@@ -34,6 +34,27 @@ import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 
+const UNIFIED_PRINT_PAGE_STYLE = `
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+    @bottom-center {
+      content: "- " counter(page) " / " counter(pages) " -";
+      font-family: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+      font-size: 9.5pt;
+      font-weight: 500;
+      color: #525252;
+    }
+  }
+  @media print {
+    html, body {
+      background-color: #ffffff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+`;
+
 const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
   const { isTabletOrMobile } = useDevice();
   const params = useParams();
@@ -560,7 +581,7 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
                     {documentTitle}
                   </h1>
                   <p className="text-[12px] text-[#737373] m-0 mt-0.5">
-                    A4 용지 규격 인쇄 양식 · 미리보기 및 출력
+                    A4 용지 규격 · 하단 페이지 번호 자동 표기 (인쇄 설정: 여백 &apos;기본값&apos;, 머리글·바닥글 해제 권장)
                   </p>
                 </div>
               </div>
@@ -585,6 +606,8 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
                     </button>
                   )}
                   content={() => printRef.current}
+                  documentTitle={documentTitle || "대회_명단_출력"}
+                  pageStyle={UNIFIED_PRINT_PAGE_STYLE}
                 />
               </div>
             </div>
@@ -676,6 +699,7 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
                 ref={printRef}
                 className="w-full max-w-4xl mx-auto bg-white min-h-[500px]"
               >
+                <style>{UNIFIED_PRINT_PAGE_STYLE}</style>
                 {printType === "ranking" && resultArray.length === 0 ? (
                   <div className="py-20 text-center">
                     <Empty description="확정된 순위표 데이터가 없습니다. 심판위원장 순위 확정 후 출력 가능합니다." />
