@@ -83,7 +83,7 @@ const ContestMonitoring = () => {
       ? { type: "host", label: "사회자 프롬프터 콘솔" }
       : { type: "basecamp", label: "본부석 운영 콘솔" };
 
-  // 선택된 대회가 없을 때 무한 로딩 대신 명확한 데이터 미선택 진단 및 울트라퀵 메뉴 표시
+  // 선택된 대회가 없을 때 무한 로딩 대신 명확한 데이터 미선택 진단 및 빠른 보강 안내 표시
   if (!contestId) {
     return (
       <div

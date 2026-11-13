@@ -26,8 +26,8 @@ const ManagementHome = ({ children }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [ultraQuickOpen, setUltraQuickOpen] = useState(false);
-  const [ultraQuickCounts, setUltraQuickCounts] = useState({
+  const [quickCheckOpen, setQuickCheckOpen] = useState(false);
+  const [quickCheckCounts, setQuickCheckCounts] = useState({
     stagesCount: undefined,
     playersCount: undefined,
     judgesAssignCount: undefined,
@@ -44,13 +44,13 @@ const ManagementHome = ({ children }) => {
   const fetchPlayersDoc = useFirestoreGetDocument("contest_players_final");
   const fetchJudgesDoc = useFirestoreGetDocument("contest_judges_assign");
   const { data: liveStageRealtime } = useFirebaseRealtimeGetDocument(
-    ultraQuickOpen && contestId ? `currentStage/${contestId}` : null
+    quickCheckOpen && contestId ? `currentStage/${contestId}` : null
   );
 
-  const loadUltraQuickCounts = async () => {
+  const loadQuickCheckCounts = async () => {
     const c = currentContest?.contests || {};
     if (!contestId) {
-      setUltraQuickCounts({
+      setQuickCheckCounts({
         stagesCount: undefined,
         playersCount: undefined,
         judgesAssignCount: undefined,
@@ -73,7 +73,7 @@ const ManagementHome = ({ children }) => {
           ? fetchJudgesDoc.getDocument(c.contestJudgesAssignId)
           : Promise.resolve(null),
       ]);
-      setUltraQuickCounts({
+      setQuickCheckCounts({
         contestInfo: nDoc || null,
         stagesCount: Array.isArray(sDoc?.stages) ? sDoc.stages.length : 0,
         playersCount: Array.isArray(pDoc?.players)
@@ -82,19 +82,19 @@ const ManagementHome = ({ children }) => {
         judgesAssignCount: Array.isArray(jDoc?.judges) ? jDoc.judges.length : 0,
       });
     } catch (e) {
-      console.error("[UltraQuick] 카운트 조회 오류:", e);
+      console.error("[QuickCheck] 카운트 조회 오류:", e);
     }
   };
 
   useEffect(() => {
-    if (ultraQuickOpen) {
-      loadUltraQuickCounts();
+    if (quickCheckOpen) {
+      loadQuickCheckCounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ultraQuickOpen, contestId]);
+  }, [quickCheckOpen, contestId]);
 
   useEffect(() => {
-    setUltraQuickOpen(false);
+    setQuickCheckOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -301,10 +301,10 @@ const ManagementHome = ({ children }) => {
           type="button"
           onClick={() => {
             if (isTabletOrMobile) setDrawerOpen(false);
-            setUltraQuickOpen((prev) => !prev);
+            setQuickCheckOpen((prev) => !prev);
           }}
           className={`w-full h-8 px-2.5 rounded-[8px] border flex items-center justify-between gap-2 text-xs font-medium transition-colors cursor-pointer ${
-            ultraQuickOpen
+            quickCheckOpen
               ? "bg-[#2563eb] text-white border-[#2563eb]"
               : "bg-white hover:bg-[#fafafa] text-[#171717] border-[#171717]/[0.09] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
           }`}
@@ -313,14 +313,14 @@ const ManagementHome = ({ children }) => {
             <Wrench
               size={13}
               strokeWidth={1.6}
-              className={ultraQuickOpen ? "text-white" : "text-[#2563eb]"}
+              className={quickCheckOpen ? "text-white" : "text-[#2563eb]"}
             />
-            <span>울트라퀵 데이터 보강</span>
+            <span>필수 데이터 점검</span>
           </span>
           {quickMissingLinkCount > 0 ? (
             <span
               className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold tabular-nums ${
-                ultraQuickOpen
+                quickCheckOpen
                   ? "bg-white/20 text-white"
                   : "bg-[#dc2626]/10 text-[#dc2626]"
               }`}
@@ -330,7 +330,7 @@ const ManagementHome = ({ children }) => {
           ) : (
             <span
               className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-medium ${
-                ultraQuickOpen
+                quickCheckOpen
                   ? "bg-white/20 text-white"
                   : "bg-[#f4f4f5] text-[#525252]"
               }`}
@@ -439,15 +439,15 @@ const ManagementHome = ({ children }) => {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={() => setUltraQuickOpen((prev) => !prev)}
+                onClick={() => setQuickCheckOpen((prev) => !prev)}
                 className={`h-8 px-2.5 rounded-[8px] border inline-flex items-center gap-1 text-xs leading-4 font-medium transition-colors cursor-pointer ${
-                  ultraQuickOpen
+                  quickCheckOpen
                     ? "bg-[#2563eb] text-white border-[#2563eb]"
                     : "bg-white border-[#171717]/[0.08] text-[#171717]"
                 }`}
               >
                 <Wrench size={13} strokeWidth={1.6} />
-                <span>울트라퀵</span>
+                <span>데이터 점검</span>
               </button>
               <button
                 type="button"
@@ -496,7 +496,7 @@ const ManagementHome = ({ children }) => {
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 bg-[#fafafa] min-h-screen print:bg-white relative">
-        {ultraQuickOpen && (
+        {quickCheckOpen && (
           <div className="fixed inset-0 z-50 flex items-start justify-center p-4 md:p-8 bg-[#171717]/40 overflow-y-auto print:hidden no-print">
             <div className="w-full max-w-6xl bg-white rounded-[14px] border border-[#171717]/15 shadow-[0_20px_50px_rgba(0,0,0,0.16)] overflow-hidden">
               <div className="px-5 py-3.5 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex items-center justify-between gap-3">
@@ -507,7 +507,7 @@ const ManagementHome = ({ children }) => {
                     className="text-[#2563eb]"
                   />
                   <span className="text-sm font-semibold text-[#171717]">
-                    울트라퀵 데이터 보강 센터
+                    대회 데이터 점검 · 빠른 보강
                   </span>
                   <span className="text-xs text-[#737373] hidden sm:inline">
                     · 대회 전·당일 누락 데이터를 한눈에 진단하고 즉시 이동합니다
@@ -515,7 +515,7 @@ const ManagementHome = ({ children }) => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setUltraQuickOpen(false)}
+                  onClick={() => setQuickCheckOpen(false)}
                   className="w-8 h-8 rounded-[8px] inline-flex items-center justify-center text-[#525252] hover:text-[#171717] hover:bg-[#e4e4e7]/70 transition-colors cursor-pointer"
                   aria-label="닫기"
                 >
@@ -526,12 +526,12 @@ const ManagementHome = ({ children }) => {
                 <MonitoringDiagnosticsBar
                   variant="light"
                   screenType="hub"
-                  contestInfo={ultraQuickCounts.contestInfo}
-                  stagesCount={ultraQuickCounts.stagesCount}
-                  playersCount={ultraQuickCounts.playersCount}
-                  judgesAssignCount={ultraQuickCounts.judgesAssignCount}
+                  contestInfo={quickCheckCounts.contestInfo}
+                  stagesCount={quickCheckCounts.stagesCount}
+                  playersCount={quickCheckCounts.playersCount}
+                  judgesAssignCount={quickCheckCounts.judgesAssignCount}
                   realtimeData={liveStageRealtime}
-                  onRefreshData={loadUltraQuickCounts}
+                  onRefreshData={loadQuickCheckCounts}
                   defaultExpanded={true}
                 />
               </div>

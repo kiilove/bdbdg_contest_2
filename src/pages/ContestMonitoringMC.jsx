@@ -526,7 +526,7 @@ const ContestMonitoringMC = () => {
       </header>
 
       <div className="p-4 sm:p-6 space-y-5 flex-1">
-        {/* 울트라퀵 데이터 보강 메뉴 바 */}
+        {/* 운영 데이터 점검 및 빠른 보강 바 */}
         <MonitoringDiagnosticsBar
           variant="dark"
           screenType="mc"

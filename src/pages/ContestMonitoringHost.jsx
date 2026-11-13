@@ -703,7 +703,7 @@ const ContestMonitoringHost = ({ contestId }) => {
         })}
       </div>
 
-      {/* 울트라퀵 데이터 보강 메뉴 바 (다크 스튜디오 테마) */}
+      {/* 운영 데이터 점검 및 빠른 보강 바 (다크 스튜디오 테마) */}
       <div className="px-4 pt-3">
         <MonitoringDiagnosticsBar
           variant="dark"

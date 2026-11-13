@@ -354,7 +354,7 @@ export const buildMonitoringReadiness = ({
 };
 
 /**
- * 상단 울트라퀵 데이터 보강 메뉴 바 (Light / Dark 양쪽 테마 지원)
+ * 상단 운영 데이터 점검 및 빠른 보강 바 (Light / Dark 양쪽 테마 지원)
  */
 export const MonitoringDiagnosticsBar = ({
   variant = "light", // "light" | "dark"
@@ -629,7 +629,7 @@ export const MonitoringDiagnosticsBar = ({
         onCancel={() => setDiagModalOpen(false)}
         onConfirm={() => setDiagModalOpen(false)}
       />
-      {/* 상단 1줄 요약 & 울트라퀵 토글 바 */}
+      {/* 상단 1줄 요약 & 데이터 점검 토글 바 */}
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <button
@@ -644,7 +644,7 @@ export const MonitoringDiagnosticsBar = ({
             }`}
           >
             <Wrench size={13.5} strokeWidth={1.75} />
-            <span>울트라퀵 데이터 보강</span>
+            <span>데이터 점검 · 빠른 보강</span>
             {drawerVisible ? (
               <ChevronUp size={14} strokeWidth={1.75} />
             ) : (
@@ -788,7 +788,7 @@ export const MonitoringDiagnosticsBar = ({
         </div>
       </div>
 
-      {/* 확장형 울트라퀵 데이터 보강 드로어 */}
+      {/* 확장형 데이터 점검 및 빠른 보강 드로어 */}
       {drawerVisible && (
         <div
           className={`px-4 pb-4 pt-3 border-t space-y-3 ${

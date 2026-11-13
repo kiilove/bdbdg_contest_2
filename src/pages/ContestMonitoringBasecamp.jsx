@@ -1220,7 +1220,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             />
           </Modal>
 
-          {/* 울트라퀵 데이터 보강 메뉴 바 */}
+          {/* 운영 데이터 점검 및 빠른 보강 바 */}
           <MonitoringDiagnosticsBar
             variant="light"
             screenType="basecamp"
