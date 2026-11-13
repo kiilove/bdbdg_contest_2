@@ -130,7 +130,11 @@ const CurrentStageDetails = ({
                     f.contestGradeId === grade.gradeId &&
                     f.playerNoShow === false
                 )
-                .sort((a, b) => a.playerIndex - b.playerIndex);
+                .sort(
+                  (a, b) =>
+                    (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                    (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                );
               return (
                 <div key={gIdx} className="flex w-full h-auto p-2 flex-col">
                   <div className="flex w-full h-20 justify-start items-center">

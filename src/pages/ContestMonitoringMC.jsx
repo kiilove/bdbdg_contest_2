@@ -221,9 +221,9 @@ const ContestMonitoringMC = () => {
 
       const seen = new Set();
       const deduped = baseList.filter((p) => {
-        const key = String(
-          p.playerUid || p.id || `${p.contestGradeId}-${p.playerNumber}`
-        );
+        const key = `${p.contestGradeId || ""}__${
+          p.playerUid || p.id || p.playerNumber || p.playerName || ""
+        }`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -231,8 +231,12 @@ const ContestMonitoringMC = () => {
       setPlayersArray(
         deduped.sort(
           (a, b) =>
-            (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
-            (Number(b.playerIndex) || Number(b.playerNumber) || 0)
+            (Number(a.grandPrixIndex ?? a.playerIndex) ||
+              Number(a.playerNumber) ||
+              0) -
+            (Number(b.grandPrixIndex ?? b.playerIndex) ||
+              Number(b.playerNumber) ||
+              0)
         )
       );
     } catch (error) {

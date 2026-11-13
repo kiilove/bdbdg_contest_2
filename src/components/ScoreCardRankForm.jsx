@@ -161,7 +161,11 @@ const ScoreCardRankForm = ({
               </div>
               {players?.length > 0 &&
                 players
-                  .sort((a, b) => a.playerIndex - b.playerIndex)
+                  .sort(
+                    (a, b) =>
+                      (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                      (b.grandPrixIndex ?? b.playerIndex ?? 0)
+                  )
                   .map((player, pIdx) => {
                     const { playerNumber, playerScore } = player;
                     if (playerScore >= 1000) {

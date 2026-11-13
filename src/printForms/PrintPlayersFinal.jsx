@@ -70,7 +70,11 @@ const PrintPlayersFinal = () => {
                 player.contestGradeId === grade.contestGradeId &&
                 player.playerNoShow === false
             )
-            .sort((a, b) => a.playerIndex - b.playerIndex);
+            .sort(
+              (a, b) =>
+                (a.grandPrixIndex ?? a.playerIndex ?? 0) -
+                (b.grandPrixIndex ?? b.playerIndex ?? 0)
+            );
           return {
             ...grade,
             players: playersForGrade,
