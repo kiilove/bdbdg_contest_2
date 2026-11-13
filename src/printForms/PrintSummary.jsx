@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { HiUserGroup } from "react-icons/hi";
-import { FaFileExcel } from "react-icons/fa";
+import { FileText, FileSpreadsheet, Search } from "lucide-react";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { collection, getDocs, query, where } from "firebase/firestore";
@@ -233,163 +232,160 @@ const PrintSummary = () => {
   }, [currentContest?.contests?.id]);
 
   return (
-    <div
-      className={`flex flex-col w-full h-full ${
-        isTabletOrMobile ? "bg-gray-100 p-2" : "bg-gray-50 p-4"
-      }`}
-    >
-      {isLoading && <LoadingPage />}
-      {!isLoading && (
-        <>
-          <ConfirmationModal
-            isOpen={msgOpen}
-            message={message}
-            onCancel={() => setMsgOpen(false)}
-            onConfirm={() => setMsgOpen(false)}
-          />
-          <div
-            className={`flex w-full h-14 mb-4 ${
-              isTabletOrMobile ? "bg-gray-200" : "bg-gray-100"
-            } justify-between items-center rounded-lg px-3`}
-          >
-            <div className="flex items-center">
-              <span
-                className={`font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl ${
-                  isTabletOrMobile ? "bg-blue-300" : "bg-blue-400"
-                } text-white mr-3`}
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        {isLoading && <LoadingPage />}
+        {!isLoading && (
+          <>
+            <ConfirmationModal
+              isOpen={msgOpen}
+              message={message}
+              onCancel={() => setMsgOpen(false)}
+              onConfirm={() => setMsgOpen(false)}
+            />
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                  <FileText size={16} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    집계표 출력
+                  </h1>
+                  <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                    종목 및 체급별 상세 채점 집계표를 조회하고 출력합니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer disabled:opacity-50"
               >
-                <HiUserGroup />
-              </span>
-              <h1
-                className="font-sans text-lg font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                집계표 출력
-              </h1>
+                <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                <span>{isExporting ? "엑셀 생성 중..." : "전체 최종순위표 엑셀 다운로드"}</span>
+              </button>
             </div>
-            <button
-              onClick={handleExportExcel}
-              disabled={isExporting}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all text-white font-bold px-4 py-2 rounded-lg shadow-md cursor-pointer"
-            >
-              <FaFileExcel className="w-4 h-4" />
-              <span>{isExporting ? "엑셀 생성중..." : "전체 최종순위표 엑셀 다운로드"}</span>
-            </button>
-          </div>
-          <div className="flex flex-wrap w-full mb-4 gap-2 px-3">
-            <button
-              className={`px-4 py-2 rounded-lg border ${
-                currentSection === "all"
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-gray-700"
-              }`}
-              onClick={() => {
-                setCurrentSection("all");
-                clearDefault();
-              }}
-            >
-              전체
-            </button>
-            {sectionArray.length > 0 &&
-              sectionArray.map((section) => (
+
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-2">
+              <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
                 <button
-                  key={section}
-                  className={`px-4 py-2 rounded-lg border ${
-                    currentSection === section
-                      ? "bg-blue-500 text-white"
-                      : "bg-white text-gray-700"
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    currentSection === "all"
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
                   }`}
                   onClick={() => {
-                    setCurrentSection(section);
+                    setCurrentSection("all");
                     clearDefault();
                   }}
                 >
-                  {section}
+                  전체
                 </button>
-              ))}
-            <select
-              value={currentCategoryId}
-              onChange={(e) => {
-                setCurrentCategoryId(e.target.value);
-                setCurrentGradeId("all");
-              }}
-              className="border rounded-lg p-2"
-            >
-              <option value="all">종목선택</option>
-              {categoriesArray
-                .filter(
-                  (category) =>
-                    currentSection === "all" ||
-                    category.contestCategorySection === currentSection
-                )
-                .map((category) => (
-                  <option
-                    key={category.contestCategoryId}
-                    value={category.contestCategoryId}
-                  >
-                    {category.contestCategoryTitle}
-                  </option>
-                ))}
-            </select>
-            <select
-              value={currentGradeId}
-              onChange={(e) => setCurrentGradeId(e.target.value)}
-              className={`border rounded-lg p-2 ${
-                currentCategoryId === "all"
-                  ? "bg-gray-200 cursor-not-allowed"
-                  : ""
-              }`}
-              disabled={currentCategoryId === "all"}
-            >
-              <option value="all">체급선택</option>
-              {currentCategoryId !== "all" &&
-                gradesArray
-                  .filter((grade) => grade.refCategoryId === currentCategoryId)
-                  .map((grade) => (
-                    <option
-                      key={grade.contestGradeId}
-                      value={grade.contestGradeId}
+                {sectionArray.length > 0 &&
+                  sectionArray.map((section) => (
+                    <button
+                      key={section}
+                      className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                        currentSection === section
+                          ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                          : "text-[#525252] hover:text-[#171717]"
+                      }`}
+                      onClick={() => {
+                        setCurrentSection(section);
+                        clearDefault();
+                      }}
                     >
-                      {grade.contestGradeTitle || grade.gradeTitle}
+                      {section}
+                    </button>
+                  ))}
+              </div>
+
+              <select
+                value={currentCategoryId}
+                onChange={(e) => {
+                  setCurrentCategoryId(e.target.value);
+                  setCurrentGradeId("all");
+                }}
+                className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] focus:outline-none focus:border-[#2563eb]"
+              >
+                <option value="all">종목 선택</option>
+                {categoriesArray
+                  .filter(
+                    (category) =>
+                      currentSection === "all" ||
+                      category.contestCategorySection === currentSection
+                  )
+                  .map((category) => (
+                    <option
+                      key={category.contestCategoryId}
+                      value={category.contestCategoryId}
+                    >
+                      {category.contestCategoryTitle}
                     </option>
                   ))}
-            </select>
-            <button
-              className="bg-blue-500 text-white rounded-lg px-4 py-2"
-              onClick={handleSearch}
-            >
-              검색
-            </button>
-            <button
-              onClick={handleExportExcel}
-              disabled={isExporting}
-              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg ml-auto font-medium text-sm shadow-sm"
-            >
-              <FaFileExcel className="w-4 h-4" />
-              <span>{isExporting ? "생성중..." : "엑셀 다운로드"}</span>
-            </button>
-          </div>
-          <div className="flex w-full h-full bg-white overflow-y-auto p-4 justify-center">
-            {showContestRankingSummary ? (
-              noData ? (
-                <div className="text-center text-red-500">
-                  데이터가 없습니다.
-                </div>
+              </select>
+
+              <select
+                value={currentGradeId}
+                onChange={(e) => setCurrentGradeId(e.target.value)}
+                className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] disabled:bg-[#f4f4f5] disabled:text-[#737373] disabled:cursor-not-allowed focus:outline-none focus:border-[#2563eb]"
+                disabled={currentCategoryId === "all"}
+              >
+                <option value="all">체급 선택</option>
+                {currentCategoryId !== "all" &&
+                  gradesArray
+                    .filter((grade) => grade.refCategoryId === currentCategoryId)
+                    .map((grade) => (
+                      <option
+                        key={grade.contestGradeId}
+                        value={grade.contestGradeId}
+                      >
+                        {grade.contestGradeTitle || grade.gradeTitle}
+                      </option>
+                    ))}
+              </select>
+
+              <button
+                className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+                onClick={handleSearch}
+              >
+                <Search size={14} strokeWidth={1.5} />
+                <span>조회</span>
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] ml-auto font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-50"
+              >
+                <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                <span>{isExporting ? "생성 중..." : "엑셀 다운로드"}</span>
+              </button>
+            </div>
+
+            <div className="flex w-full bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-y-auto p-6 justify-center min-h-[320px] print:border-0 print:shadow-none print:p-0">
+              {showContestRankingSummary ? (
+                noData ? (
+                  <div className="py-16 text-center text-[13px] text-[#dc2626]">
+                    집계된 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <ContestRankingSummaryPrintAll
+                    props={searchParams}
+                    results={filteredResults}
+                    setClose={() => setShowContestRankingSummary(false)}
+                  />
+                )
               ) : (
-                <ContestRankingSummaryPrintAll
-                  props={searchParams}
-                  results={filteredResults}
-                  setClose={() => setShowContestRankingSummary(false)}
-                />
-              )
-            ) : (
-              <div className="text-center text-gray-500">
-                체급까지 선택하세요.
-              </div>
-            )}
-          </div>
-        </>
-      )}
+                <div className="py-16 text-center text-[13px] text-[#737373]">
+                  상단 필터에서 종목과 체급을 선택한 뒤 조회하세요.
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

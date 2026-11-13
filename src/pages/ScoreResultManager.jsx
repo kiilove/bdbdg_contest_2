@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useContext } from "react";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { BsTrash } from "react-icons/bs";
+import BibTag from "../components/ui/BibTag";
 
 const ScoreResultManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -36,7 +37,6 @@ const ScoreResultManager = () => {
     }
   };
 
-  /** 🔹 Category → Grade → Player 트리 구조 생성 */
   const buildHierarchy = (data) => {
     const grouped = {};
     data.forEach((item) => {
@@ -49,7 +49,6 @@ const ScoreResultManager = () => {
       grouped[cat][grade][playerKey].push(item);
     });
 
-    // 각 선수별로 seatIndex 오름차순 정렬
     Object.keys(grouped).forEach((cat) =>
       Object.keys(grouped[cat]).forEach((grade) =>
         Object.keys(grouped[cat][grade]).forEach((player) => {
@@ -71,109 +70,201 @@ const ScoreResultManager = () => {
     Object.keys(hierarchy[cat]).sort((a, b) => a.localeCompare(b));
   const getPlayers = (cat, grade) =>
     Object.keys(hierarchy[cat][grade]).sort((a, b) => {
-      const numA = parseInt(a.split(" ")[0]) || 0;
-      const numB = parseInt(b.split(" ")[0]) || 0;
-      return numA - numB; // 선수번호 오름차순
+      const numA = parseInt(a.split(" ")[0], 10) || 0;
+      const numB = parseInt(b.split(" ")[0], 10) || 0;
+      return numA - numB;
     });
 
   useEffect(() => {
     fetchScores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.collectionName]);
 
   return (
-    <div className="flex flex-col w-full p-4 bg-white rounded shadow-md">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">채점 결과 관리</h2>
-        <button
-          onClick={fetchScores}
-          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          🔄 새로고침
-        </button>
-      </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              채점 결과 관리
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              {currentContest?.contestInfo?.contestTitle || "선택된 대회 없음"} ·
+              종목·체급·선수별 심판 채점 원표를 확인하고 정리합니다
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+              총 {scores.length}건
+            </span>
+            <button
+              type="button"
+              onClick={fetchScores}
+              disabled={loading}
+              className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <RefreshCw
+                size={15}
+                strokeWidth={1.5}
+                className={`text-[#525252] ${loading ? "animate-spin" : ""}`}
+              />
+              <span>새로고침</span>
+            </button>
+          </div>
+        </header>
 
-      {loading ? (
-        <p className="text-gray-500">불러오는 중...</p>
-      ) : scores.length === 0 ? (
-        <p className="text-gray-500">저장된 채점 결과가 없습니다.</p>
-      ) : (
-        categoryKeys.map((cat) => (
-          <div key={cat} className="mb-8">
-            {/* ✅ 종목 */}
-            <h2 className="text-lg font-bold mb-2">🏆 종목: {cat}</h2>
+        {loading ? (
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-12 text-center text-[13px] text-[#737373]">
+            채점 결과를 불러오는 중입니다
+          </div>
+        ) : scores.length === 0 ? (
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-12 text-center text-[13px] text-[#737373]">
+            저장된 채점 결과가 없습니다
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {categoryKeys.map((cat) => (
+              <section
+                key={cat}
+                className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-6"
+              >
+                <div className="border-b border-[#171717]/[0.08] pb-3 flex items-center justify-between">
+                  <h2 className="text-[16px] font-medium text-[#171717]">
+                    {cat}
+                  </h2>
+                  <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+                    {getGrades(cat).length}체급
+                  </span>
+                </div>
 
-            {getGrades(cat).map((grade) => (
-              <div key={grade} className="mb-6 ml-4">
-                {/* ✅ 체급 */}
-                <h3 className="font-semibold mb-2 text-blue-600">
-                  ▶ 체급: {grade}
-                </h3>
+                <div className="space-y-6">
+                  {getGrades(cat).map((grade) => (
+                    <div key={grade} className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-[12px] font-medium">
+                          체급
+                        </span>
+                        <h3 className="text-[14px] font-medium text-[#171717]">
+                          {grade}
+                        </h3>
+                      </div>
 
-                {getPlayers(cat, grade).map((playerKey) => (
-                  <div key={playerKey} className="mb-3 ml-6">
-                    {/* ✅ 선수 */}
-                    <h4 className="font-medium text-gray-800 mb-1">
-                      선수: {playerKey}
-                    </h4>
-                    <div className="overflow-auto border rounded">
-                      <table className="table-auto w-full text-sm text-left">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="p-2 border">대회명</th>
-                            <th className="p-2 border">종목</th>
-                            <th className="p-2 border">체급</th>
-                            <th className="p-2 border">선수번호</th>{" "}
-                            {/* ✅ 추가 */}
-                            <th className="p-2 border">선수명</th>
-                            <th className="p-2 border">좌석</th>
-                            <th className="p-2 border">심판명</th>
-                            <th className="p-2 border">점수</th>
-                            <th className="p-2 border text-center">관리</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {hierarchy[cat][grade][playerKey].map((score) => (
-                            <tr key={score.id} className="hover:bg-gray-50">
-                              <td className="p-2 border">
-                                {currentContest?.contestInfo?.contestTitle ||
-                                  "-"}
-                              </td>
-                              <td className="p-2 border">
-                                {score.categoryTitle}
-                              </td>
-                              <td className="p-2 border">{score.gradeTitle}</td>
-                              <td className="p-2 border">
-                                {score.playerNumber}
-                              </td>{" "}
-                              {/* ✅ 추가 */}
-                              <td className="p-2 border">{score.playerName}</td>
-                              <td className="p-2 border">
-                                {score.seatIndex ?? "-"}
-                              </td>
-                              <td className="p-2 border">{score.judgeName}</td>
-                              <td className="p-2 border">
-                                {score.playerScore}
-                              </td>
-                              <td className="p-2 border text-center">
-                                <button
-                                  onClick={() => handleDelete(score.id)}
-                                  className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                >
-                                  <BsTrash />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <div className="space-y-3 pl-0 sm:pl-3">
+                        {getPlayers(cat, grade).map((playerKey) => {
+                          const spaceIdx = playerKey.indexOf(" ");
+                          const pNum =
+                            spaceIdx !== -1
+                              ? playerKey.slice(0, spaceIdx)
+                              : playerKey;
+                          const pName =
+                            spaceIdx !== -1 ? playerKey.slice(spaceIdx + 1) : "";
+
+                          return (
+                            <div
+                              key={playerKey}
+                              className="rounded-[8px] border border-[#171717]/[0.08] overflow-hidden"
+                            >
+                              <div className="bg-[#f4f4f5] px-3.5 py-2 border-b border-[#171717]/[0.08] flex items-center gap-2">
+                                <BibTag number={pNum} prefix="#" size="sm" />
+                                <span className="text-[13px] font-medium text-[#171717]">
+                                  {pName || "-"}
+                                </span>
+                              </div>
+
+                              <div className="overflow-x-auto bg-white">
+                                <table className="w-full text-left text-[13px] border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#fafafa] text-[#737373] border-b border-[#171717]/[0.06] h-9 text-[12px]">
+                                      <th className="px-3 font-medium">대회명</th>
+                                      <th className="px-3 font-medium">종목</th>
+                                      <th className="px-3 font-medium">체급</th>
+                                      <th className="px-3 font-medium text-center w-24">
+                                        선수번호
+                                      </th>
+                                      <th className="px-3 font-medium">선수명</th>
+                                      <th className="px-3 font-medium text-center w-20">
+                                        좌석
+                                      </th>
+                                      <th className="px-3 font-medium">심판명</th>
+                                      <th className="px-3 font-medium text-right w-24">
+                                        점수
+                                      </th>
+                                      <th className="px-3 font-medium text-center w-16">
+                                        관리
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#171717]/[0.06]">
+                                    {hierarchy[cat][grade][playerKey].map(
+                                      (score) => (
+                                        <tr
+                                          key={score.id}
+                                          className="hover:bg-[#f4f4f5]/50 transition-colors duration-150"
+                                        >
+                                          <td className="px-3 py-2 text-[#525252]">
+                                            {currentContest?.contestInfo
+                                              ?.contestTitle || "-"}
+                                          </td>
+                                          <td className="px-3 py-2 text-[#525252]">
+                                            {score.categoryTitle}
+                                          </td>
+                                          <td className="px-3 py-2 text-[#525252]">
+                                            {score.gradeTitle}
+                                          </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <BibTag
+                                              number={score.playerNumber}
+                                              size="sm"
+                                            />
+                                          </td>
+                                          <td className="px-3 py-2 font-medium text-[#171717]">
+                                            {score.playerName}
+                                          </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <BibTag
+                                              number={score.seatIndex ?? "-"}
+                                              size="sm"
+                                            />
+                                          </td>
+                                          <td className="px-3 py-2 text-[#525252]">
+                                            {score.judgeName || "-"}
+                                          </td>
+                                          <td className="px-3 py-2 text-right font-mono font-medium tabular-nums text-[#171717]">
+                                            {score.playerScore}
+                                          </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleDelete(score.id)
+                                              }
+                                              aria-label="채점 삭제"
+                                              className="h-8 w-8 rounded-[6px] inline-flex items-center justify-center text-[#dc2626] hover:bg-[#dc2626]/[0.08] transition-colors duration-150"
+                                            >
+                                              <Trash2
+                                                size={15}
+                                                strokeWidth={1.5}
+                                              />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      )
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
-        ))
-      )}
+        )}
+      </div>
     </div>
   );
 };

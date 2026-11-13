@@ -8,9 +8,14 @@ import React, {
 } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
-import { MdOutlineScale } from "react-icons/md";
-import { HiUserGroup } from "react-icons/hi";
-import { FaChartPie, FaPrint, FaFileExcel } from "react-icons/fa";
+import {
+  Scale,
+  Users,
+  PieChart,
+  Printer,
+  FileSpreadsheet,
+  RefreshCw,
+} from "lucide-react";
 import PrintTable from "./PrintTable";
 import {
   useFirestoreGetDocument,
@@ -49,9 +54,24 @@ const UnifiedPrint = () => {
 
   // 서브 출력 메뉴 탭 목록
   const printTabs = [
-    { type: "measurement", label: "계측 명단 출력", path: "/print/measurement", icon: <MdOutlineScale /> },
-    { type: "final", label: "출전 명단 출력", path: "/print/final", icon: <HiUserGroup /> },
-    { type: "ranking", label: "순위표 출력", path: "/print/ranking", icon: <FaChartPie /> },
+    {
+      type: "measurement",
+      label: "계측 명단 출력",
+      path: "/print/measurement",
+      icon: <Scale size={14} strokeWidth={1.5} />,
+    },
+    {
+      type: "final",
+      label: "출전 명단 출력",
+      path: "/print/final",
+      icon: <Users size={14} strokeWidth={1.5} />,
+    },
+    {
+      type: "ranking",
+      label: "순위표 출력",
+      path: "/print/ranking",
+      icon: <PieChart size={14} strokeWidth={1.5} />,
+    },
     { type: "gymgroup", label: "클럽별 집계 출력", path: "/printgymgroup", isExternal: true },
     { type: "judgeassign", label: "심판별 배정 출력", path: "/judgeassignmentPrint", isExternal: true },
     { type: "judgematrix", label: "심판배정 매트릭스", path: "/judgeseatmatrixprint", isExternal: true },
@@ -440,186 +460,190 @@ const UnifiedPrint = () => {
   }, [categoriesArray, printType]);
 
   return (
-    <div className="flex flex-col w-full h-full min-h-screen bg-slate-100 p-3 sm:p-5">
-      {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
-      <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-200 mb-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {printTabs.map((tab) => {
-            const isActive =
-              !tab.isExternal && printType === tab.type;
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
+        <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {printTabs.map((tab) => {
+              const isActive = !tab.isExternal && printType === tab.type;
 
-            return (
-              <Link
-                key={tab.type}
-                to={tab.path}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold no-underline whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-                }`}
-              >
-                {tab.icon && <span>{tab.icon}</span>}
-                <span>{tab.label}</span>
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={tab.type}
+                  to={tab.path}
+                  className={`h-9 px-3.5 rounded-[8px] text-[13px] font-medium no-underline whitespace-nowrap transition-colors duration-150 inline-flex items-center gap-1.5 ${
+                    isActive
+                      ? "bg-[#2563eb] text-[#ffffff]"
+                      : "text-[#525252] hover:bg-[#f4f4f5] hover:text-[#171717]"
+                  }`}
+                >
+                  {tab.icon && <span className="inline-flex items-center">{tab.icon}</span>}
+                  <span>{tab.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {isLoading ? (
-        <LoadingPage />
-      ) : (
-        <div className="space-y-4">
-          {/* 2. 문서 타이틀 바 및 컨트롤 패널 */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
-                {printType === "measurement" ? (
-                  <MdOutlineScale />
-                ) : printType === "final" ? (
-                  <HiUserGroup />
-                ) : (
-                  <FaChartPie />
-                )}
+        {isLoading ? (
+          <LoadingPage />
+        ) : (
+          <div className="space-y-5">
+            {/* 2. 문서 타이틀 바 및 컨트롤 패널 */}
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                  {printType === "measurement" ? (
+                    <Scale size={16} strokeWidth={1.5} />
+                  ) : printType === "final" ? (
+                    <Users size={16} strokeWidth={1.5} />
+                  ) : (
+                    <PieChart size={16} strokeWidth={1.5} />
+                  )}
+                </div>
+                <div>
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    {documentTitle}
+                  </h1>
+                  <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                    A4 용지 규격 인쇄 양식 · 미리보기 및 출력
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-black text-slate-800 m-0">
-                  {documentTitle}
-                </h1>
-                <p className="text-xs text-slate-500 m-0">
-                  A4 용지 규격 인쇄 양식 | 미리보기 및 출력
-                </p>
-              </div>
-            </div>
 
-            {/* 액션 버튼 그룹 (엑셀 다운로드 + 인쇄) */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleExportExcel}
-                disabled={isExporting}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0 active:scale-95"
-              >
-                <FaFileExcel className="text-base" />
-                <span>{isExporting ? "엑셀 생성중..." : "엑셀 다운로드 (Excel)"}</span>
-              </button>
-
-              {/* 인쇄 버튼 */}
-              <ReactToPrint
-                trigger={() => (
-                  <button className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0 active:scale-95">
-                    <FaPrint />
-                    <span>인쇄하기 (Print)</span>
-                  </button>
-                )}
-                content={() => printRef.current}
-              />
-            </div>
-          </div>
-
-          {/* 3. 섹션 & 종목/체급 필터 바 */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center gap-2.5">
-            <span className="text-xs font-bold text-slate-500 mr-1">부/종목 구분:</span>
-            {sectionList.map((section, idx) => (
-              <button
-                key={idx}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  currentSection === section
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                }`}
-                onClick={() => {
-                  setCurrentSection(section);
-                  if (printType === "ranking") {
-                    handleSearch("all", "all", section);
-                  }
-                }}
-              >
-                {section === "all" ? "전체 보기" : section}
-              </button>
-            ))}
-
-            {/* 순위표 검색 필터 */}
-            {printType === "ranking" && (
-              <div className="flex items-center gap-2 ml-auto">
-                <select
-                  value={currentCategoryId}
-                  onChange={(e) => {
-                    const catId = e.target.value;
-                    setCurrentCategoryId(catId);
-                    handleSearch(catId, "all", currentSection);
-                  }}
-                  className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium bg-white"
-                >
-                  <option value="all">전체 종목</option>
-                  {availableCategories.map((category) => (
-                    <option
-                      key={category.contestCategoryId}
-                      value={category.contestCategoryId}
-                    >
-                      {category.contestCategoryTitle}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={currentGradeId}
-                  onChange={(e) => {
-                    const grdId = e.target.value;
-                    setCurrentGradeId(grdId);
-                    handleSearch(currentCategoryId, grdId, currentSection);
-                  }}
-                  disabled={currentCategoryId === "all"}
-                  className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium bg-white disabled:bg-slate-100"
-                >
-                  <option value="all">전체 체급</option>
-                  {availableGrades.map((grade) => (
-                    <option
-                      key={grade.contestGradeId}
-                      value={grade.contestGradeId}
-                    >
-                      {grade.contestGradeTitle || grade.gradeTitle}
-                    </option>
-                  ))}
-                </select>
-
+              {/* 액션 버튼 그룹 (엑셀 다운로드 + 인쇄) */}
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    handleSearch(currentCategoryId, currentGradeId, currentSection)
-                  }
-                  className="bg-slate-800 text-white rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-slate-900 transition-colors"
+                  onClick={handleExportExcel}
+                  disabled={isExporting}
+                  className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] font-medium text-[13px] inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer disabled:opacity-50"
                 >
-                  새로고침
+                  <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                  <span>{isExporting ? "엑셀 생성 중..." : "엑셀 다운로드"}</span>
                 </button>
-              </div>
-            )}
-          </div>
 
-          {/* 4. 인쇄 출력 대상 종이 뷰어 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto p-4 sm:p-8">
-            <div
-              ref={printRef}
-              className="w-full max-w-4xl mx-auto bg-white min-h-[500px]"
-            >
-              {printType === "ranking" && resultArray.length === 0 ? (
-                <div className="py-20 text-center">
-                  <Empty description="확정된 순위표 데이터가 없습니다. 심판위원장 순위 확정 후 출력 가능합니다." />
-                </div>
-              ) : filteredPlayerList.length === 0 ? (
-                <div className="py-20 text-center">
-                  <Empty description="출력할 선수 데이터가 없습니다." />
-                </div>
-              ) : (
-                <PrintTable
-                  documentTitle={documentTitle}
-                  data={filteredPlayerList}
-                  columns={columns}
-                  addEmptyRows={printType === "measurement"}
+                {/* 인쇄 버튼 */}
+                <ReactToPrint
+                  trigger={() => (
+                    <button className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] font-medium text-[13px] inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer border-0">
+                      <Printer size={15} strokeWidth={1.5} />
+                      <span>인쇄하기</span>
+                    </button>
+                  )}
+                  content={() => printRef.current}
                 />
+              </div>
+            </div>
+
+            {/* 3. 섹션 & 종목/체급 필터 바 */}
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-medium text-[#737373] mr-1">부/종목 구분</span>
+              <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
+                {sectionList.map((section, idx) => (
+                  <button
+                    key={idx}
+                    className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                      currentSection === section
+                        ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        : "text-[#525252] hover:text-[#171717]"
+                    }`}
+                    onClick={() => {
+                      setCurrentSection(section);
+                      if (printType === "ranking") {
+                        handleSearch("all", "all", section);
+                      }
+                    }}
+                  >
+                    {section === "all" ? "전체 보기" : section}
+                  </button>
+                ))}
+              </div>
+
+              {/* 순위표 검색 필터 */}
+              {printType === "ranking" && (
+                <div className="flex flex-wrap items-center gap-2 ml-auto">
+                  <select
+                    value={currentCategoryId}
+                    onChange={(e) => {
+                      const catId = e.target.value;
+                      setCurrentCategoryId(catId);
+                      handleSearch(catId, "all", currentSection);
+                    }}
+                    className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] focus:outline-none focus:border-[#2563eb]"
+                  >
+                    <option value="all">전체 종목</option>
+                    {availableCategories.map((category) => (
+                      <option
+                        key={category.contestCategoryId}
+                        value={category.contestCategoryId}
+                      >
+                        {category.contestCategoryTitle}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={currentGradeId}
+                    onChange={(e) => {
+                      const grdId = e.target.value;
+                      setCurrentGradeId(grdId);
+                      handleSearch(currentCategoryId, grdId, currentSection);
+                    }}
+                    disabled={currentCategoryId === "all"}
+                    className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] disabled:bg-[#f4f4f5] disabled:text-[#737373] focus:outline-none focus:border-[#2563eb]"
+                  >
+                    <option value="all">전체 체급</option>
+                    {availableGrades.map((grade) => (
+                      <option
+                        key={grade.contestGradeId}
+                        value={grade.contestGradeId}
+                      >
+                        {grade.contestGradeTitle || grade.gradeTitle}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={() =>
+                      handleSearch(currentCategoryId, currentGradeId, currentSection)
+                    }
+                    className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+                  >
+                    <RefreshCw size={14} strokeWidth={1.5} className="text-[#525252]" />
+                    <span>새로고침</span>
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* 4. 인쇄 출력 대상 종이 뷰어 */}
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-x-auto p-4 sm:p-8 print:border-0 print:shadow-none print:p-0">
+              <div
+                ref={printRef}
+                className="w-full max-w-4xl mx-auto bg-white min-h-[500px]"
+              >
+                {printType === "ranking" && resultArray.length === 0 ? (
+                  <div className="py-20 text-center">
+                    <Empty description="확정된 순위표 데이터가 없습니다. 심판위원장 순위 확정 후 출력 가능합니다." />
+                  </div>
+                ) : filteredPlayerList.length === 0 ? (
+                  <div className="py-20 text-center">
+                    <Empty description="출력할 선수 데이터가 없습니다." />
+                  </div>
+                ) : (
+                  <PrintTable
+                    documentTitle={documentTitle}
+                    data={filteredPlayerList}
+                    columns={columns}
+                    addEmptyRows={printType === "measurement"}
+                  />
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

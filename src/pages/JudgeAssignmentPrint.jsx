@@ -8,27 +8,14 @@ import {
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import ReactToPrint from "react-to-print";
+import { Table, Checkbox } from "antd";
 import {
-  Card,
-  Table,
-  Tag,
-  Space,
-  Button,
-  Select,
-  Input,
-  Typography,
-  Checkbox,
-  Radio,
-  Divider,
-} from "antd";
-import {
-  PrinterOutlined,
-  ExportOutlined,
-  CheckSquareOutlined,
-  ClearOutlined,
-} from "@ant-design/icons";
-
-const { Text, Title } = Typography;
+  Printer,
+  ArrowDown,
+  CheckSquare,
+  Eraser,
+  UserCheck,
+} from "lucide-react";
 
 const sectionOrder = (s) => {
   if (!s) return 9999;
@@ -237,18 +224,16 @@ const JudgeAssignmentPrint = () => {
     {
       title: "심판",
       dataIndex: "judgeName",
-      width: 120,
+      width: 140,
       sorter: (a, b) => byName(a, b),
       defaultSortOrder: "ascend",
       render: (_, rec) => (
         <div className="flex flex-col">
-          <Text strong style={{ fontSize: 15 }}>
+          <span className="text-[13px] font-medium text-[#171717]">
             {rec.judgeName}
-          </Text>
+          </span>
           {rec.judgeGym ? (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {rec.judgeGym}
-            </Text>
+            <span className="text-[12px] text-[#737373]">{rec.judgeGym}</span>
           ) : null}
         </div>
       ),
@@ -283,7 +268,7 @@ const JudgeAssignmentPrint = () => {
         );
 
         return (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             {sectionKeys.map((sec) => {
               // 섹션 내 카테고리를 contestCategoryIndex 기준으로 정렬
               const cats = Object.values(groups[sec]).sort(
@@ -291,23 +276,18 @@ const JudgeAssignmentPrint = () => {
               );
 
               return (
-                <div key={sec} className="flex gap-8 flex-wrap">
-                  <Tag color="blue" style={{ borderRadius: 999 }}>
+                <div key={sec} className="flex items-center gap-1.5 flex-wrap">
+                  <span className="inline-flex items-center h-5 px-2 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] text-[11px] font-medium">
                     {sec}
-                  </Tag>
+                  </span>
 
                   {cats.map((c, i) => (
-                    <Tag
+                    <span
                       key={`${sec}-${c.title}-${i}`}
-                      style={{
-                        borderRadius: 999,
-                        background: "#f7f7fb",
-                        borderColor: "#e9e9f3",
-                      }}
+                      className="inline-flex items-center h-5 px-2 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] text-[11px] font-normal tabular-nums"
                     >
-                      {c.title} · 좌석{" "}
-                      {Array.from(c.seats).sort(byNum).join(",")}
-                    </Tag>
+                      {c.title} · 좌석 {Array.from(c.seats).sort(byNum).join(",")}
+                    </span>
                   ))}
                 </div>
               );
@@ -330,15 +310,21 @@ const JudgeAssignmentPrint = () => {
     setSelectedJudgeUids(filteredPersons.map((p) => p.judgeUid));
   const clearAll = () => setSelectedJudgeUids([]);
 
-  if (loading) return <div className="p-6">불러오는 중…</div>;
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen bg-[#fafafa] text-[#737373] p-6 text-[13px]">
+        심판 배정 데이터를 불러오는 중입니다...
+      </div>
+    );
+  }
 
   const orgLogo = currentContest?.contestInfo?.contestOrgLogo;
 
   return (
-    <div className="flex flex-col gap-12 p-4">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       <style>{`
         :root { --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --brand: #111827; }
-        .screen-card { background: #fff; border-radius: 10px; }
+        .screen-card { background: #fff; border-radius: 12px; }
 
         /* 화면에서 헤더도 약간 크게(인쇄는 더 크게 별도 지정) */
         .screen-header__logo {
@@ -387,130 +373,202 @@ const JudgeAssignmentPrint = () => {
         }
 
         /* 프린트 테이블 공통 */
-        table { border-collapse: collapse; width: 100%; font-size: 15.5px; line-height: 1.45; color: var(--ink); }
-        thead th { background: #f8fafc; font-weight: 700; border: 1px solid var(--line); padding: 8px 10px; }
-        tbody td { border: 1px solid var(--line); padding: 7px 10px; }
-        tbody tr:nth-child(odd) td { background: #fcfdff; }
+        #print-root table { border-collapse: collapse; width: 100%; font-size: 15.5px; line-height: 1.45; color: var(--ink); }
+        #print-root thead th { background: #f8fafc; font-weight: 700; border: 1px solid var(--line); padding: 8px 10px; }
+        #print-root tbody td { border: 1px solid var(--line); padding: 7px 10px; }
+        #print-root tbody tr:nth-child(odd) td { background: #fcfdff; }
       `}</style>
 
-      {/* 상단 제어바 + 인쇄 버튼 */}
-      <Card className="shadow-md screen-card">
-        <div className="flex flex-col md:flex-row gap-3 md:items-end">
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div>
-              <Text type="secondary">섹션</Text>
-              <Select
-                className="w-full"
-                value={sectionFilter}
-                onChange={setSectionFilter}
-                options={[
-                  { value: "ALL", label: "모든 섹션" },
-                  ...Array.from(
-                    new Set(
-                      categories
-                        .map((c) => c.contestCategorySection)
-                        .filter(Boolean)
-                    )
-                  )
-                    .sort((a, b) => sectionOrder(a) - sectionOrder(b))
-                    .map((s) => ({ value: s, label: s })),
-                ]}
-              />
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        {/* 타이틀 바 + 인쇄 버튼 */}
+        <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+              <UserCheck size={16} strokeWidth={1.5} />
             </div>
             <div>
-              <Text type="secondary">검색(이름/소속)</Text>
-              <Input
-                placeholder="예) 김판정 / 제이짐"
+              <div className="flex items-center gap-2">
+                <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                  심판별 배정 안내 출력
+                </h1>
+                <span className="inline-flex items-center h-5 px-2 rounded-[4px] bg-[#f4f4f5] text-[11px] font-medium text-[#525252] tabular-nums">
+                  선택 {selectedPersons.length} / 전체 {filteredPersons.length}명
+                </span>
+              </div>
+              <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                심판별 배정 좌석 및 원데이 비밀번호 안내서를 A4 용지로 인쇄합니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={selectedPersons.length === 0}
+              onClick={() => {
+                window.scrollTo({
+                  top: document.body.scrollHeight,
+                  behavior: "smooth",
+                });
+              }}
+              className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ArrowDown size={14} strokeWidth={1.5} className="text-[#525252]" />
+              <span>하단 미리보기로 이동</span>
+            </button>
+
+            <ReactToPrint
+              trigger={() => (
+                <button
+                  type="button"
+                  disabled={selectedPersons.length === 0}
+                  className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Printer size={15} strokeWidth={1.5} />
+                  <span>인쇄하기</span>
+                </button>
+              )}
+              content={() => printRef.current}
+              pageStyle="@page { size: A4; margin: 12mm; }"
+              onBeforeGetContent={onBeforeGetContent}
+            />
+          </div>
+        </div>
+
+        {/* 상단 제어바 */}
+        <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div>
+              <label className="block text-[12px] font-medium text-[#525252] mb-1.5">
+                섹션
+              </label>
+              <select
+                value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}
+                className="w-full h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] focus:outline-none focus:border-[#2563eb]"
+              >
+                <option value="ALL">모든 섹션</option>
+                {Array.from(
+                  new Set(
+                    categories
+                      .map((c) => c.contestCategorySection)
+                      .filter(Boolean)
+                  )
+                )
+                  .sort((a, b) => sectionOrder(a) - sectionOrder(b))
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-[#525252] mb-1.5">
+                이름 · 소속 검색
+              </label>
+              <input
+                type="text"
+                placeholder="예: 김판정, 제이짐"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                className="w-full h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] placeholder:text-[#737373] focus:outline-none focus:border-[#2563eb]"
               />
             </div>
+
             <div>
-              <Text type="secondary">출력 제목</Text>
-              <Input
+              <label className="block text-[12px] font-medium text-[#525252] mb-1.5">
+                출력 제목
+              </label>
+              <input
+                type="text"
                 placeholder="심판 배정 안내"
                 value={pageTitle}
                 onChange={(e) => setPageTitle(e.target.value)}
+                className="w-full h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] placeholder:text-[#737373] focus:outline-none focus:border-[#2563eb]"
               />
             </div>
+
             <div>
-              <Text type="secondary">보기 형태</Text>
-              <Radio.Group
-                className="mt-1"
-                value={viewMode}
-                onChange={(e) => setViewMode(e.target.value)}
-              >
-                <Radio.Button value="compact">간단히</Radio.Button>
-                <Radio.Button value="detail">자세히</Radio.Button>
-              </Radio.Group>
+              <label className="block text-[12px] font-medium text-[#525252] mb-1.5">
+                보기 형태
+              </label>
+              <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5] h-9 w-full">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("compact")}
+                  className={`flex-1 h-7 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    viewMode === "compact"
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  간단히
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("detail")}
+                  className={`flex-1 h-7 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    viewMode === "detail"
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  자세히
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-end">
-              <Space wrap>
-                <Button icon={<CheckSquareOutlined />} onClick={selectAll}>
-                  전체 선택
-                </Button>
-                <Button icon={<ClearOutlined />} onClick={clearAll}>
-                  선택 해제
-                </Button>
-              </Space>
-            </div>
-          </div>
-
-          <div className="flex gap-8">
-            <Space wrap>
-              <ReactToPrint
-                trigger={() => (
-                  <Button
-                    type="primary"
-                    icon={<PrinterOutlined />}
-                    disabled={selectedPersons.length === 0}
-                  >
-                    인쇄
-                  </Button>
-                )}
-                content={() => printRef.current}
-                pageStyle="@page { size: A4; margin: 12mm; }"
-                onBeforeGetContent={onBeforeGetContent}
-              />
-              <Button
-                icon={<ExportOutlined />}
-                disabled={selectedPersons.length === 0}
-                onClick={() => {
-                  window.scrollTo({
-                    top: document.body.scrollHeight,
-                    behavior: "smooth",
-                  });
-                }}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="flex-1 h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-[13px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors duration-150"
               >
-                하단 미리보기로 이동
-              </Button>
-            </Space>
+                <CheckSquare size={14} strokeWidth={1.5} className="text-[#525252]" />
+                <span>전체 선택</span>
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="flex-1 h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.12] text-[13px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors duration-150"
+              >
+                <Eraser size={14} strokeWidth={1.5} className="text-[#737373]" />
+                <span>해제</span>
+              </button>
+            </div>
           </div>
         </div>
-      </Card>
 
-      {/* 사람 목록 (이름 정렬) */}
-      <Card className="shadow-md screen-card">
-        <Table
-          rowKey={(r) => r.judgeUid}
-          columns={columns}
-          dataSource={filteredPersons}
-          pagination={{ pageSize: 10 }}
-          defaultSortOrder="ascend"
-        />
-      </Card>
+        {/* 사람 목록 (이름 정렬) */}
+        <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <Table
+            rowKey={(r) => r.judgeUid}
+            columns={columns}
+            dataSource={filteredPersons}
+            pagination={{ pageSize: 10 }}
+            defaultSortOrder="ascend"
+            size="small"
+          />
+        </div>
 
-      {/* 인쇄 미리보기 */}
-      <Card className="shadow-md screen-card">
-        <Title level={5} className="!mt-0">
-          인쇄 미리보기
-        </Title>
-        <Divider className="my-3" />
-        {selectedPersons.length === 0 ? (
-          <div className="text-gray-500">선택된 심판이 없습니다.</div>
-        ) : (
-          <div id="print-root" ref={printRef} key={printTick}>
+        {/* 인쇄 미리보기 */}
+        <div className="screen-card bg-[#ffffff] rounded-[12px] p-6 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="no-print print:hidden flex items-center justify-between pb-4 mb-4 border-b border-[#171717]/[0.08]">
+            <h2 className="text-[14px] font-semibold text-[#171717] m-0">
+              인쇄 미리보기
+            </h2>
+            <span className="text-[12px] text-[#737373] tabular-nums">
+              선택된 심판 {selectedPersons.length}명
+            </span>
+          </div>
+          {selectedPersons.length === 0 ? (
+            <div className="py-12 text-center text-[13px] text-[#737373]">
+              위 목록에서 인쇄할 심판을 선택하세요.
+            </div>
+          ) : (
+            <div id="print-root" ref={printRef} key={printTick}>
             <div className="p-2">
               {selectedPersons.map((person) => {
                 // 간단 모드 데이터 구성
@@ -814,9 +872,10 @@ const JudgeAssignmentPrint = () => {
                 );
               })}
             </div>
-          </div>
-        )}
-      </Card>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

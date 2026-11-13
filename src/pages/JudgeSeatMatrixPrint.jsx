@@ -10,11 +10,8 @@ import {
 import { where } from "firebase/firestore";
 import ReactToPrint from "react-to-print";
 
-import { Button, Typography } from "antd";
-import { PrinterOutlined, FileExcelOutlined } from "@ant-design/icons";
+import { Printer, FileSpreadsheet, LayoutGrid } from "lucide-react";
 import * as XLSX from "xlsx";
-
-const { Title } = Typography;
 
 const num = (v, d = 0) => {
   const n = Number.parseInt(String(v).replace(/[^\d.-]/g, ""), 10);
@@ -131,7 +128,13 @@ export default function JudgeSeatMatrixPrint() {
     return matrix;
   }, [categories, grades, judgesAssign, poolMap]);
 
-  if (loading) return <div className="p-6">불러오는 중…</div>;
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen bg-[#fafafa] text-[#737373] p-6 text-[13px]">
+        심판 좌석 배정 매트릭스를 불러오는 중입니다...
+      </div>
+    );
+  }
 
   const exportExcel = () => {
     const rows = [];
@@ -177,58 +180,62 @@ export default function JudgeSeatMatrixPrint() {
         }
       `}</style>
 
-      <div
-        style={{
-          padding: "24px",
-          backgroundColor: "#f5f5f5",
-          minHeight: "100vh",
-        }}
-      >
-        <div
-          className="print-hide"
-          style={{
-            backgroundColor: "#ffffff",
-            padding: "20px 24px",
-            borderRadius: "8px",
-            marginBottom: "24px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <Title level={4} style={{ margin: 0 }}>
-            심판 좌석 배정 매트릭스
-          </Title>
+      <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+          <div className="print-hide no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                <LayoutGrid size={16} strokeWidth={1.5} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    심판 좌석 배정 매트릭스
+                  </h1>
+                  <span className="inline-flex items-center h-5 px-2 rounded-[4px] bg-[#f4f4f5] text-[11px] font-medium text-[#525252] tabular-nums">
+                    {seatCount}인 심판제
+                  </span>
+                </div>
+                <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                  종목·체급별 심판 좌석 배정 현황표를 A4 세로 규격으로 출력합니다.
+                </p>
+              </div>
+            </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button icon={<FileExcelOutlined />} onClick={exportExcel}>
-              엑셀 다운로드
-            </Button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exportExcel}
+                className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+              >
+                <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                <span>엑셀 다운로드</span>
+              </button>
 
-            <ReactToPrint
-              trigger={() => (
-                <Button type="primary" icon={<PrinterOutlined />}>
-                  인쇄하기 (A4 세로)
-                </Button>
-              )}
-              content={() => printRef.current}
-              pageStyle="@page { size: A4 portrait; margin: 15mm 20mm; }"
-            />
+              <ReactToPrint
+                trigger={() => (
+                  <button
+                    type="button"
+                    className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border-0"
+                  >
+                    <Printer size={15} strokeWidth={1.5} />
+                    <span>인쇄하기 (A4 세로)</span>
+                  </button>
+                )}
+                content={() => printRef.current}
+                pageStyle="@page { size: A4 portrait; margin: 15mm 20mm; }"
+              />
+            </div>
           </div>
-        </div>
 
-        <div
-          className="print-area"
-          style={{
-            backgroundColor: "#ffffff",
-            padding: "48px",
-            borderRadius: "8px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            maxWidth: "1200px",
-            margin: "0 auto",
-          }}
-        >
+          <div
+            className="print-area bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+            style={{
+              padding: "48px",
+              maxWidth: "1200px",
+              margin: "0 auto",
+            }}
+          >
           <div ref={printRef}>
             <div
               style={{
@@ -427,6 +434,7 @@ export default function JudgeSeatMatrixPrint() {
               심판 배정 현황을 나타냅니다.
             </div>
           </div>
+        </div>
         </div>
       </div>
     </>

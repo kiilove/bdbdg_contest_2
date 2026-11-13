@@ -10,15 +10,16 @@ import {
 } from "../hooks/useFirestores";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Card, Button, Tag, Space } from "antd";
 import {
-  AppstoreOutlined,
-  ReloadOutlined,
-  SaveOutlined,
-  SyncOutlined,
-  SplitCellsOutlined,
-  TeamOutlined,
-} from "@ant-design/icons";
+  Layers,
+  RotateCcw,
+  Save,
+  RefreshCw,
+  Split,
+  Users,
+  GripVertical,
+} from "lucide-react";
+import BibTag from "../components/ui/BibTag";
 
 const ContestStagetable = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -475,13 +476,13 @@ const ContestStagetable = () => {
   }, [currentContest?.contests?.id, currentContest?.contests?.contestCategorysListId]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-4 gap-y-4">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
         </div>
       ) : (
-        <>
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
           <ConfirmationModal
             isOpen={msgOpen}
             message={message}
@@ -489,60 +490,70 @@ const ContestStagetable = () => {
             onConfirm={() => setMsgOpen(false)}
           />
 
-          <Card className="shadow-sm">
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
-                <AppstoreOutlined className="text-white text-xl" />
+              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
+                <Layers
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
               </div>
-              <h1 className="text-xl font-semibold">무대설정(4단계)</h1>
+              <div>
+                <h1 className="text-lg font-semibold text-[#171717] m-0 tracking-tight">
+                  무대 설정 (4단계)
+                </h1>
+                <p className="text-xs text-[#737373] m-0">
+                  무대 진행 순서 변경, 체급 통합 및 분리 설정
+                </p>
+              </div>
             </div>
-          </Card>
 
-          <Card className="shadow-sm">
-            <Space direction="vertical" size="middle" className="w-full">
-              <Space wrap className="w-full" size="middle">
-                <Button
-                  type="default"
-                  icon={<ReloadOutlined />}
-                  size="large"
-                  onClick={() =>
-                    handleInitStages(currentContest?.contests?.id)
-                  }
-                  className="flex-1 min-w-[200px]"
-                >
-                  초기화(계측명단 변동이 있는경우)
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<SaveOutlined />}
-                  size="large"
-                  onClick={() => {
-                    handleUpdateStages(
-                      currentContest?.contests?.contestStagesAssignId,
-                      {
-                        ...stagesInfo,
-                        stages: [...stagesArray],
-                      }
-                    );
-                  }}
-                  className="flex-1 min-w-[200px]"
-                >
-                  저장(대회진행을 위한 최종명단)
-                </Button>
-                <Button
-                  type="default"
-                  icon={<SyncOutlined />}
-                  size="large"
-                  onClick={() => handleRefreshCategories()}
-                  className="flex-1 min-w-[200px]"
-                >
-                  종목 새로고침
-                </Button>
-              </Space>
-            </Space>
-          </Card>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleInitStages(currentContest?.contests?.id)}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
+              >
+                <RotateCcw
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+                <span>초기화 (계측명단 변동 반영)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRefreshCategories()}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
+              >
+                <RefreshCw
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+                <span>종목 새로고침</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateStages(
+                    currentContest?.contests?.contestStagesAssignId,
+                    {
+                      ...stagesInfo,
+                      stages: [...stagesArray],
+                    }
+                  );
+                }}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
+              >
+                <Save size={15} strokeWidth={1.5} />
+                <span>무대 설정 저장</span>
+              </button>
+            </div>
+          </div>
 
-          <Card className="shadow-sm flex-1 overflow-auto">
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4">
             <DragDropContext onDragEnd={onDragEnd}>
               <Droppable droppableId="stages" type="STAGE">
                 {(provided) => (
@@ -567,108 +578,132 @@ const ContestStagetable = () => {
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                             >
-                              <Card
-                                className={`w-full transition-shadow ${
+                              <div
+                                className={`w-full rounded-[12px] border overflow-hidden transition-colors duration-150 ${
                                   snapshot.isDragging
-                                    ? "shadow-lg"
-                                    : "shadow-sm"
+                                    ? "bg-[#ffffff] border-[#2563eb] shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+                                    : "bg-[#ffffff] border-[#171717]/[0.08]"
                                 }`}
-                                title={
-                                  <div className="flex items-center gap-2">
-                                    <Tag
-                                      color="blue"
-                                      className="text-base px-3 py-1"
-                                    >
-                                      무대순서: {stageNumber}
-                                    </Tag>
-                                  </div>
-                                }
                               >
-                                <Droppable
-                                  droppableId={stageId}
-                                  type="DRAG_ITEM"
-                                >
-                                  {(provided) => (
-                                    <div
-                                      className="flex w-auto gap-2 flex-col"
-                                      ref={provided.innerRef}
-                                      {...provided.droppableProps}
-                                    >
-                                      {(grades || []).map((grade, gIdx) => {
-                                        const {
-                                          categoryId,
-                                          categoryTitle,
-                                          gradeId,
-                                          gradeTitle,
-                                          playerCount,
-                                        } = grade;
+                                <div className="bg-[#f4f4f5] px-4 py-2.5 border-b border-[#171717]/[0.08] flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <GripVertical
+                                      size={15}
+                                      strokeWidth={1.5}
+                                      className="text-[#737373]"
+                                    />
+                                    <span className="text-xs font-medium text-[#525252]">
+                                      무대 순서
+                                    </span>
+                                    <BibTag
+                                      prefix="#"
+                                      number={stageNumber}
+                                      size="sm"
+                                    />
+                                  </div>
+                                  <span className="text-xs text-[#737373] font-mono tabular-nums">
+                                    {(grades || []).length}개 체급
+                                  </span>
+                                </div>
 
-                                        return (
-                                          <Draggable
-                                            draggableId={`${stageId}-${gIdx}`}
-                                            index={gIdx}
-                                            key={`${stageId}-${gIdx}`}
-                                          >
-                                            {(provided, snapshot) => (
-                                              <div
-                                                ref={provided.innerRef}
-                                                {...provided.draggableProps}
-                                                {...provided.dragHandleProps}
-                                              >
-                                                <Card
-                                                  size="small"
-                                                  className={`transition-shadow ${
-                                                    snapshot.isDragging
-                                                      ? "shadow-md"
-                                                      : ""
-                                                  }`}
+                                <div className="p-3">
+                                  <Droppable
+                                    droppableId={stageId}
+                                    type="DRAG_ITEM"
+                                  >
+                                    {(provided) => (
+                                      <div
+                                        className="flex w-auto gap-2 flex-col"
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                      >
+                                        {(grades || []).map((grade, gIdx) => {
+                                          const {
+                                            categoryTitle,
+                                            gradeTitle,
+                                            playerCount,
+                                          } = grade;
+
+                                          return (
+                                            <Draggable
+                                              draggableId={`${stageId}-${gIdx}`}
+                                              index={gIdx}
+                                              key={`${stageId}-${gIdx}`}
+                                            >
+                                              {(provided, snapshot) => (
+                                                <div
+                                                  ref={provided.innerRef}
+                                                  {...provided.draggableProps}
+                                                  {...provided.dragHandleProps}
                                                 >
-                                                  <div className="flex items-center justify-between gap-3">
-                                                    <div className="flex items-center gap-2 flex-1">
-                                                      <span className="text-sm font-medium">
-                                                        {categoryTitle} -{" "}
-                                                        {gradeTitle}
-                                                      </span>
-                                                      <Tag
-                                                        color="blue"
-                                                        className="flex items-center gap-1"
+                                                  <div
+                                                    className={`rounded-[8px] border px-3.5 py-2.5 transition-colors duration-150 ${
+                                                      snapshot.isDragging
+                                                        ? "bg-[#2563eb]/[0.05] border-[#2563eb]/40 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+                                                        : "bg-[#fafafa] hover:bg-[#f4f4f5]/60 border-[#171717]/[0.08]"
+                                                    }`}
+                                                  >
+                                                    <div className="flex items-center justify-between gap-3">
+                                                      <div className="flex items-center gap-2.5 flex-1 flex-wrap">
+                                                        <GripVertical
+                                                          size={14}
+                                                          strokeWidth={1.5}
+                                                          className="text-[#737373]"
+                                                        />
+                                                        <span className="text-sm font-medium text-[#171717]">
+                                                          {categoryTitle}
+                                                          <span className="text-[#737373] mx-1.5 font-normal">
+                                                            ·
+                                                          </span>
+                                                          {gradeTitle}
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs font-medium text-[#525252] font-mono tabular-nums">
+                                                          <Users
+                                                            size={12}
+                                                            strokeWidth={1.5}
+                                                            className="text-[#737373]"
+                                                          />
+                                                          <span>
+                                                            {playerCount}명
+                                                          </span>
+                                                        </span>
+                                                      </div>
+                                                      <button
+                                                        type="button"
+                                                        disabled={
+                                                          (grades?.length ||
+                                                            0) <= 1
+                                                        }
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          splitStage(
+                                                            stageId,
+                                                            gIdx
+                                                          );
+                                                        }}
+                                                        className="inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                                       >
-                                                        <TeamOutlined />
-                                                        {playerCount}명
-                                                      </Tag>
+                                                        <Split
+                                                          size={13}
+                                                          strokeWidth={1.5}
+                                                          className="text-[#525252]"
+                                                        />
+                                                        <span>분리</span>
+                                                      </button>
                                                     </div>
-                                                    <Button
-                                                      type="primary"
-                                                      size="small"
-                                                      disabled={
-                                                        (grades?.length || 0) <= 1
-                                                      }
-                                                      icon={
-                                                        <SplitCellsOutlined />
-                                                      }
-                                                      onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        splitStage(
-                                                          stageId,
-                                                          gIdx
-                                                        );
-                                                      }}
-                                                    >
-                                                      분리
-                                                    </Button>
                                                   </div>
-                                                </Card>
-                                              </div>
-                                            )}
-                                          </Draggable>
-                                        );
-                                      })}
-                                      {provided.placeholder}
-                                    </div>
-                                  )}
-                                </Droppable>
-                              </Card>
+                                                </div>
+                                              )}
+                                            </Draggable>
+                                          );
+                                        })}
+                                        {provided.placeholder}
+                                      </div>
+                                    )}
+                                  </Droppable>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </Draggable>
@@ -679,8 +714,8 @@ const ContestStagetable = () => {
                 )}
               </Droppable>
             </DragDropContext>
-          </Card>
-        </>
+          </div>
+        </div>
       )}
     </div>
   );

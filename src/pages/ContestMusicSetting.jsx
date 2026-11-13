@@ -1,15 +1,6 @@
 import React, { useContext, useState, useEffect } from "react";
-import {
-  Table,
-  Select,
-  Button,
-  Card,
-  Typography,
-  Space,
-  Modal,
-  message,
-} from "antd";
-import { CustomerServiceOutlined, SaveOutlined } from "@ant-design/icons";
+import { Table, Select, Modal, message } from "antd";
+import { Music, Save } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   useFirestoreGetDocument,
@@ -20,24 +11,24 @@ import {
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import dayjs from "dayjs";
-
-const { Title } = Typography;
+import BibTag from "../components/ui/BibTag";
 
 const SelectWithLabel = ({ label, value, onChange, options, style }) => (
-  <Space direction="vertical" size={2} style={{ width: "100%", ...style }}>
-    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+  <div className="space-y-1 w-full" style={style}>
+    <span className="block text-[12px] font-medium text-[#737373]">
       {label}
-    </Typography.Text>
+    </span>
     <Select
       style={{ width: "100%" }}
       placeholder={`${label} 선택`}
       onChange={onChange}
-      value={value}
+      value={value || undefined}
       options={options}
+      allowClear
       showSearch
-      optionFilterProp="children"
+      optionFilterProp="label"
     />
-  </Space>
+  </div>
 );
 
 const ContestMusicSetting = () => {
@@ -46,7 +37,6 @@ const ContestMusicSetting = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { currentContest } = useContext(CurrentContestContext);
 
-  // Firestore hooks for each operation
   const categoryDocument = useFirestoreGetDocument("contest_categorys_list");
   const trackPlaylistQuery = useFirestoreQuery();
   const musicSettingsQuery = useFirestoreQuery();
@@ -63,13 +53,13 @@ const ContestMusicSetting = () => {
   const [duplicateDocs, setDuplicateDocs] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [currentDocId, setCurrentDocId] = useState(null);
-  const [createdAt, setCreatedAt] = useState(null); // createdAt state
+  const [createdAt, setCreatedAt] = useState(null);
 
   const fetchCategories = async (categoryId) => {
     try {
       const data = await categoryDocument.getDocument(categoryId);
       if (data?.categorys?.length > 0) {
-        const sortedCategories = data.categorys.sort(
+        const sortedCategories = [...data.categorys].sort(
           (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
         );
         setCategories(sortedCategories);
@@ -139,6 +129,7 @@ const ContestMusicSetting = () => {
     return () => {
       isCancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
 
   const checkDocumentStatus = async () => {
@@ -310,35 +301,36 @@ const ContestMusicSetting = () => {
     setIsModalVisible(false);
   };
 
-  // 공통 음원과 종목별 음원에 대한 테이블 컬럼 정의
+  const playlistOptions = playlists.map((p) => ({ label: p.name, value: p.id }));
+
   const commonColumns = [
     {
       title: "구분",
-      width: 120,
+      width: 140,
       render: () => (
-        <Space>
-          <CustomerServiceOutlined />
+        <div className="inline-flex items-center gap-2 text-[13px] font-medium text-[#171717]">
+          <Music size={16} strokeWidth={1.5} className="text-[#737373]" />
           <span>공통 음원</span>
-        </Space>
+        </div>
       ),
     },
     {
-      title: "대기음원",
+      title: "대기 음원",
       dataIndex: "waitingMusic",
-      width: 250,
+      width: 260,
       render: () => (
         <SelectWithLabel
           label="대기 음원"
           value={commonMusic.waitingMusic}
           onChange={(value) => handleCommonMusicChange("waitingMusic", value)}
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
     {
-      title: "성적발표음원",
+      title: "성적 발표 음원",
       dataIndex: "resultAnnouncementMusic",
-      width: 250,
+      width: 260,
       render: () => (
         <SelectWithLabel
           label="성적 발표 음원"
@@ -346,20 +338,20 @@ const ContestMusicSetting = () => {
           onChange={(value) =>
             handleCommonMusicChange("resultAnnouncementMusic", value)
           }
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
     {
-      title: "시상식음원",
+      title: "시상식 음원",
       dataIndex: "awardsMusic",
-      width: 250,
+      width: 260,
       render: () => (
         <SelectWithLabel
           label="시상식 음원"
           value={commonMusic.awardsMusic}
           onChange={(value) => handleCommonMusicChange("awardsMusic", value)}
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
@@ -369,27 +361,29 @@ const ContestMusicSetting = () => {
     {
       title: "순서",
       dataIndex: "contestCategoryIndex",
-      width: 70,
+      width: 76,
       align: "center",
-      render: (value) => <Typography.Text strong>{value}</Typography.Text>,
+      render: (value) => <BibTag number={value} size="sm" />,
     },
     {
       title: "종목명",
       dataIndex: "contestCategoryTitle",
       width: 200,
       render: (value, record) => (
-        <Space direction="vertical" size={0}>
-          <Typography.Text strong>{value}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {record.contestCategorySection}
-          </Typography.Text>
-        </Space>
+        <div className="space-y-0.5">
+          <div className="text-[14px] font-medium text-[#171717]">{value}</div>
+          {record.contestCategorySection && (
+            <div className="text-[12px] text-[#737373]">
+              {record.contestCategorySection}
+            </div>
+          )}
+        </div>
       ),
     },
     {
-      title: "출전음원",
+      title: "출전 음원",
       dataIndex: "entryMusic",
-      width: 250,
+      width: 240,
       render: (_, record) => (
         <SelectWithLabel
           label="출전 음원"
@@ -401,14 +395,14 @@ const ContestMusicSetting = () => {
               value
             )
           }
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
     {
-      title: "라인업음원",
+      title: "라인업 음원",
       dataIndex: "lineupMusic",
-      width: 250,
+      width: 240,
       render: (_, record) => (
         <SelectWithLabel
           label="라인업 음원"
@@ -420,14 +414,14 @@ const ContestMusicSetting = () => {
               value
             )
           }
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
     {
-      title: "포즈다운음원",
+      title: "포즈다운 음원",
       dataIndex: "poseDownMusic",
-      width: 250,
+      width: 240,
       render: (_, record) => (
         <SelectWithLabel
           label="포즈다운 음원"
@@ -439,104 +433,139 @@ const ContestMusicSetting = () => {
               value
             )
           }
-          options={playlists.map((p) => ({ label: p.name, value: p.id }))}
+          options={playlistOptions}
         />
       ),
     },
   ];
 
   return (
-    <Card bordered={false} style={{ background: "#f5f5f5" }}>
-      <Space direction="vertical" size={24} style={{ width: "100%" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              음원 설정
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              대회 진행 공통 음원과 종목별 출전·라인업·포즈다운 재생목록을 지정합니다
+            </p>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <Save size={16} strokeWidth={1.5} />
+              <span>설정 저장</span>
+            </button>
+          </div>
+        </header>
+
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">공통 음원</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <Table
+              columns={commonColumns}
+              dataSource={[{}]}
+              pagination={false}
+              loading={isLoading}
+              rowKey={() => "common"}
+            />
+          </div>
+        </section>
+
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">
+              종목별 음원
+            </h2>
+            <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+              총 {categories.length}종목
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <Table
+              columns={categoryColumns}
+              dataSource={categories}
+              pagination={false}
+              loading={isLoading}
+              rowKey="contestCategoryId"
+            />
+          </div>
+        </section>
+
+        <Modal
+          title="중복 음원 설정 문서 정리"
+          open={isModalVisible}
+          onOk={handleModalOk}
+          onCancel={handleModalCancel}
+          okText="정리 실행"
+          cancelText="취소"
+          width={680}
         >
-          <Title level={4} style={{ margin: 0 }}>
-            음원 설정
-          </Title>
-          <Button
-            type="primary"
-            icon={<SaveOutlined />}
-            onClick={handleSave}
-            size="large"
-          >
-            저장
-          </Button>
-        </div>
-
-        <Card title="공통 음원" bordered={false}>
           <Table
-            columns={commonColumns}
-            dataSource={[{}]}
-            pagination={false}
-            loading={isLoading}
-            rowKey={() => "common"}
-          />
-        </Card>
-
-        <Card title="종목별 음원" bordered={false}>
-          <Table
-            columns={categoryColumns}
-            dataSource={categories}
-            pagination={false}
-            loading={isLoading}
-            rowKey="contestCategoryId"
-          />
-        </Card>
-      </Space>
-
-      <Modal
-        title="중복 문서 관리"
-        open={isModalVisible}
-        onOk={handleModalOk}
-        onCancel={handleModalCancel}
-        okText="삭제 확인"
-        cancelText="취소"
-      >
-        <Table
-          columns={[
-            { title: "문서 ID", dataIndex: "id" },
-            {
-              title: "생성 날짜",
-              dataIndex: "createdAt",
-              render: (value) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"),
-            },
-            {
-              title: "수정 날짜",
-              dataIndex: "updatedAt",
-              render: (value) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"),
-            },
-            {
-              title: "삭제 선택",
-              dataIndex: "delete",
-              render: (_, record) => (
-                <Select
-                  options={[
-                    { label: "삭제", value: true },
-                    { label: "유지", value: false },
-                  ]}
-                  value={Boolean(record.delete)}
-                  onChange={(value) =>
-                    setDuplicateDocs((prev) =>
-                      prev.map((item) =>
-                        item.id === record.id ? { ...item, delete: value } : item
+            columns={[
+              {
+                title: "문서 ID",
+                dataIndex: "id",
+                render: (val) => (
+                  <span className="font-mono text-[12px] text-[#525252]">
+                    {val}
+                  </span>
+                ),
+              },
+              {
+                title: "생성 시각",
+                dataIndex: "createdAt",
+                render: (value) => (
+                  <span className="font-mono text-[12px] tabular-nums text-[#525252]">
+                    {value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"}
+                  </span>
+                ),
+              },
+              {
+                title: "수정 시각",
+                dataIndex: "updatedAt",
+                render: (value) => (
+                  <span className="font-mono text-[12px] tabular-nums text-[#525252]">
+                    {value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "-"}
+                  </span>
+                ),
+              },
+              {
+                title: "처리 구분",
+                dataIndex: "delete",
+                render: (_, record) => (
+                  <Select
+                    options={[
+                      { label: "삭제", value: true },
+                      { label: "유지", value: false },
+                    ]}
+                    value={Boolean(record.delete)}
+                    onChange={(value) =>
+                      setDuplicateDocs((prev) =>
+                        prev.map((item) =>
+                          item.id === record.id
+                            ? { ...item, delete: value }
+                            : item
+                        )
                       )
-                    )
-                  }
-                />
-              ),
-            },
-          ]}
-          dataSource={duplicateDocs}
-          rowKey="id"
-          pagination={false}
-        />
-      </Modal>
-    </Card>
+                    }
+                  />
+                ),
+              },
+            ]}
+            dataSource={duplicateDocs}
+            rowKey="id"
+            pagination={false}
+          />
+        </Modal>
+      </div>
+    </div>
   );
 };
 

@@ -1,19 +1,16 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { BsCheckAll } from "react-icons/bs";
+import React, { useContext, useEffect, useState } from "react";
 import LoadingPage from "./LoadingPage";
-import { TiInputChecked } from "react-icons/ti";
 import {
-  useFirestoreAddData,
   useFirestoreGetDocument,
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { Checkbox } from "@mui/material";
-import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateToday } from "../functions/functions";
+import { Trophy, Save, AlertCircle } from "lucide-react";
+import BibTag from "../components/ui/BibTag";
 
 const ContestPlayerOrderTableGrandPrix = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -373,185 +370,204 @@ const ContestPlayerOrderTableGrandPrix = () => {
   }, [resultPlayersArray, categoriesArray, gradesArray]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
         </div>
       ) : (
-        <>
-          <div className="flex w-full h-14">
-            <ConfirmationModal
-              isOpen={msgOpen}
-              onConfirm={() => setMsgOpen(false)}
-              onCancel={() => setMsgOpen(false)}
-              message={message}
-            />
-            <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-              <div className="flex w-2/3">
-                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                  <TiInputChecked />
-                </span>
-                <h1
-                  className="font-sans text-lg font-semibold"
-                  style={{ letterSpacing: "2px" }}
-                >
-                  그랑프리명단
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+          <ConfirmationModal
+            isOpen={msgOpen}
+            onConfirm={() => setMsgOpen(false)}
+            onCancel={() => setMsgOpen(false)}
+            message={message}
+          />
+
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
+                <Trophy
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-[#171717] m-0 tracking-tight">
+                  그랑프리 명단
                 </h1>
+                <p className="text-xs text-[#737373] m-0">
+                  체급별 1위 수상자 자동 집계 및 그랑프리 출전 명단 반영
+                </p>
               </div>
             </div>
+
+            {grandPrixArray?.length ? (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
+                onClick={() =>
+                  handleUpdatePlayersFinal(
+                    currentContest?.contests?.id,
+                    currentContest?.contests?.contestPlayersFinalId,
+                    grandPrixArray
+                  )
+                }
+              >
+                <Save size={15} strokeWidth={1.5} />
+                <span>그랑프리 명단 저장 ({grandPrixArray.length}명)</span>
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#b45309]/[0.08] text-[#b45309] border border-[#b45309]/20 text-xs font-medium">
+                <AlertCircle size={15} strokeWidth={1.5} />
+                <span>집계표가 저장되었는지 확인하세요</span>
+              </div>
+            )}
           </div>
-          <div className="flex w-full h-full">
-            <div className="flex w-full justify-start items-center">
-              <div className="flex w-full h-full justify-start lg:px-3 lg:pt-3 flex-col bg-gray-100 rounded-lg gap-y-2">
-                {grandPrixArray?.length ? (
-                  <div className="flex w-full gap-x-5">
-                    <button
-                      className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-200 rounded-lg"
-                      onClick={() =>
-                        handleUpdatePlayersFinal(
-                          currentContest?.contests?.id,
-                          currentContest?.contests?.contestPlayersFinalId,
-                          grandPrixArray
-                        )
-                      }
+
+          {matchedArray.length === 0 ? (
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-12 text-center">
+              <p className="text-sm text-[#737373] m-0">
+                집계된 그랑프리 출전 대상자가 없습니다. 각 체급 심사가 완료된 후 확인하세요.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {matchedArray
+                .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+                .map((matched, mIdx) => {
+                  const {
+                    contestCategoryTitle: categoryTitle,
+                    contestGradeId: gradeId,
+                    contestGradeTitle: gradeTitle,
+                    matchedPlayers,
+                  } = matched;
+
+                  if (matchedPlayers.length === 0) return null;
+
+                  return (
+                    <div
+                      className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+                      key={mIdx}
                     >
-                      그랑프리명단 저장
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex w-full gap-x-5">
-                    <button className="w-full h-12 bg-gradient-to-l from-green-300 to-green-200 rounded-lg">
-                      집계표가 저장되었는지 확인하세요
-                    </button>
-                  </div>
-                )}
-                {matchedArray.length > 0 &&
-                  matchedArray
-                    .sort(
-                      (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-                    )
-                    .map((matched, mIdx) => {
-                      const {
-                        contestCategoryId: categoryId,
-                        contestCategoryIndex: categoryIndex,
-                        contestCategoryTitle: categoryTitle,
-                        contestGradeId: gradeId,
-                        contestGradeIndex: gradeIndex,
-                        contestGradeTitle: gradeTitle,
-                        matchedPlayers,
-                        matchedGradesLength: gradeLength,
-                      } = matched;
+                      <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#171717]">
+                          {categoryTitle}
+                          <span className="text-[#525252] font-normal mx-1.5">
+                            /
+                          </span>
+                          <span className="font-medium">{gradeTitle}</span>
+                        </span>
+                        <span className="text-xs font-medium text-[#525252] font-mono tabular-nums">
+                          {matchedPlayers.length}명
+                        </span>
+                      </div>
 
-                      console.log(matched);
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-[#171717]/[0.08] bg-[#fafafa] text-xs font-medium text-[#525252]">
+                              <th className="w-20 py-2.5 px-4">순번</th>
+                              <th className="w-28 py-2.5 px-4">선수번호</th>
+                              <th className="w-44 py-2.5 px-4">이름</th>
+                              <th className="py-2.5 px-4">소속</th>
+                              <th className="w-44 py-2.5 px-4">출전 체급 / 비고</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#171717]/[0.06]">
+                            {matchedPlayers
+                              .sort((a, b) => a.playerIndex - b.playerIndex)
+                              .map((player, pIdx) => {
+                                const {
+                                  playerName,
+                                  playerGym,
+                                  playerUid,
+                                  playerNumber,
+                                  playerNoShow,
+                                  isGradeChanged,
+                                  originalgradeTitle,
+                                } = player;
 
-                      if (matchedPlayers.length === 0) return null;
-
-                      let categoryNumber = 0;
-                      return (
-                        <div
-                          className="flex w-full h-auto bg-blue-300 flex-col rounded-lg"
-                          key={mIdx}
-                        >
-                          <div className="flex flex-col p-1 lg:p-2 gap-y-2">
-                            <div className="flex flex-col bg-blue-100 rounded-lg">
-                              <div className="flex h-10 items-center px-2">
-                                {categoryTitle}({gradeTitle})
-                              </div>
-
-                              <div className="flex flex-col w-full lg:p-2">
-                                <div className="flex flex-col w-full bg-white p-2 border border-b-2 border-gray-400 rounded-lg">
-                                  <div className="flex w-full border-b border-gray-300 h-8 items-center text-sm lg:px-2">
-                                    <div className="flex w-1/6">순번</div>
-                                    <div className="flex w-1/6">선수번호</div>
-                                    <div className="flex w-1/6">이름</div>
-                                    <div className="flex w-2/6">소속</div>
-                                    <div className="flex w-1/6">비고</div>
-                                  </div>
-                                  <div>
-                                    {matchedPlayers
-                                      .sort(
-                                        (a, b) => a.playerIndex - b.playerIndex
-                                      )
-                                      .map((player, pIdx) => {
-                                        const {
-                                          playerName,
-                                          playerGym,
-                                          playerUid,
-                                          playerNumber,
-                                          playerNoShow,
-                                          isGradeChanged,
-                                        } = player;
-
-                                        return (
-                                          <div
-                                            key={`${gradeId}_${playerUid || playerNumber}_${pIdx}`}
-                                            className="flex w-full h-10 border-b border-gray-300 items-center text-sm lg:px-2"
-                                          >
-                                            <div
-                                              className={`${
-                                                !playerNoShow
-                                                  ? "flex w-1/6"
-                                                  : "flex w-1/6 text-gray-300 line-through"
-                                              }`}
-                                            >
-                                              {pIdx + 1}
-                                            </div>
-                                            <div
-                                              className={`${
-                                                !playerNoShow
-                                                  ? "flex w-1/6"
-                                                  : "flex w-1/6 text-gray-300 line-through"
-                                              }`}
-                                            >
-                                              {playerNumber}
-                                            </div>
-                                            <div
-                                              className={`${
-                                                !playerNoShow
-                                                  ? "flex w-1/6"
-                                                  : "flex w-1/6 text-gray-300 line-through"
-                                              }`}
-                                            >
-                                              {playerName}
-                                            </div>
-                                            <div
-                                              className={`${
-                                                !playerNoShow
-                                                  ? "flex w-2/6"
-                                                  : "flex w-2/6 text-gray-300 line-through"
-                                              }`}
-                                            >
-                                              {playerGym}
-                                            </div>
-                                            <div className="flex w-1/6 ">
-                                              {isGradeChanged && (
-                                                <span className="w-full font-bold">
-                                                  월체
-                                                </span>
-                                              )}
-                                              {playerNoShow && (
-                                                <span className="w-full font-bold">
-                                                  불참
-                                                </span>
-                                              )}
-                                              {playerUid}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-              </div>
+                                return (
+                                  <tr
+                                    key={`${gradeId}_${
+                                      playerUid || playerNumber
+                                    }_${pIdx}`}
+                                    className={`transition-colors duration-150 ${
+                                      playerNoShow
+                                        ? "bg-[#dc2626]/[0.03]"
+                                        : "hover:bg-[#fafafa]"
+                                    }`}
+                                  >
+                                    <td
+                                      className={`py-3 px-4 font-mono tabular-nums text-xs ${
+                                        playerNoShow
+                                          ? "text-[#737373] line-through"
+                                          : "text-[#737373]"
+                                      }`}
+                                    >
+                                      {pIdx + 1}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <BibTag
+                                        number={playerNumber}
+                                        className={
+                                          playerNoShow
+                                            ? "line-through opacity-50"
+                                            : ""
+                                        }
+                                      />
+                                    </td>
+                                    <td
+                                      className={`py-3 px-4 text-sm font-medium ${
+                                        playerNoShow
+                                          ? "text-[#dc2626] line-through"
+                                          : "text-[#171717]"
+                                      }`}
+                                    >
+                                      {playerName}
+                                    </td>
+                                    <td
+                                      className={`py-3 px-4 text-sm ${
+                                        playerNoShow
+                                          ? "text-[#737373] line-through"
+                                          : "text-[#525252]"
+                                      }`}
+                                    >
+                                      {playerGym || "-"}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        {originalgradeTitle && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
+                                            {originalgradeTitle} 1위
+                                          </span>
+                                        )}
+                                        {isGradeChanged && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
+                                            월체
+                                          </span>
+                                        )}
+                                        {playerNoShow && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] border border-[#dc2626]/20 text-[11px] font-medium">
+                                            불참
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
-          </div>
-        </>
+          )}
+        </div>
       )}
     </div>
   );

@@ -21,11 +21,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import {
-  Button,
-  Card,
-  Tag,
   Checkbox,
-  Space,
   Modal,
   InputNumber,
   Input,
@@ -34,20 +30,20 @@ import {
   message as antMessage,
 } from "antd";
 import {
-  SaveOutlined,
-  FileTextOutlined,
-  CalendarOutlined,
-  EditOutlined,
-  NumberOutlined,
-  SearchOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  SyncOutlined,
-  WarningOutlined,
-  FileImageOutlined,
-  UserOutlined,
-  DeleteOutlined,
-} from "@ant-design/icons";
+  Save,
+  Pencil,
+  Search,
+  Check,
+  RefreshCw,
+  AlertTriangle,
+  Image,
+  User,
+  Trash2,
+  ArrowLeftRight,
+  Plus,
+  Scale,
+} from "lucide-react";
+import BibTag, { StatusDot } from "../components/ui/BibTag";
 
 /** 🛡️ Firestore updateDoc 직전 undefined 제거 및 안전한 JSON 직렬화 정제 */
 const sanitizeDataForFirestore = (data) => {
@@ -2667,13 +2663,13 @@ const ContestPlayerWeighInTable = () => {
   }, [matchedArray, selectedSection, searchKeyword, filterWeighedStatus]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-slate-100 min-h-screen p-3 sm:p-5 gap-y-4">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
         </div>
       ) : (
-        <>
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
           <ConfirmationModal
             isOpen={msgOpen}
             onConfirm={() => setMsgOpen(false)}
@@ -2681,13 +2677,15 @@ const ContestPlayerWeighInTable = () => {
             message={message}
           />
 
-          {/* 선수 번호/인덱스/신장체중 수정 모달 */}
+          {/* 선수 번호/인덱스/신장·체중 수정 모달 */}
           <Modal
             open={numModalOpen}
             title={
-              <div className="flex items-center gap-2">
-                <EditOutlined className="text-blue-500" />
-                <span className="font-bold">선수 번호 / 인덱스 / 신장·체중 수정</span>
+              <div className="flex items-center gap-2 text-[#171717]">
+                <Pencil size={16} strokeWidth={1.5} className="text-[#525252]" />
+                <span className="text-sm font-semibold">
+                  선수 번호 · 순서 · 신장/체중 수정
+                </span>
               </div>
             }
             onOk={applyNumberChange}
@@ -2697,61 +2695,83 @@ const ContestPlayerWeighInTable = () => {
             }}
             okText="적용"
             cancelText="취소"
+            okButtonProps={{
+              className:
+                "h-9 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] font-medium shadow-none",
+            }}
+            cancelButtonProps={{
+              className: "h-9 rounded-[8px] font-medium",
+            }}
             destroyOnClose
           >
-            <div className="flex flex-col gap-4 py-2">
-              <div className="text-sm text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                선수 성명: <strong className="text-blue-600 text-base">{editValues.playerName}</strong>
+            <div className="flex flex-col gap-3.5 py-2">
+              <div className="flex items-center justify-between text-sm text-[#525252] bg-[#f4f4f5] px-3.5 py-2.5 rounded-[8px] border border-[#171717]/[0.08]">
+                <span>선수 성명</span>
+                <span className="font-semibold text-[#171717]">
+                  {editValues.playerName}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600">배부 번호표 (playerNumber)</span>
+                <span className="text-xs font-medium text-[#525252]">
+                  배부 번호표 (playerNumber)
+                </span>
                 <InputNumber
                   min={1}
                   value={editValues.playerNumber}
                   onChange={(v) =>
                     setEditValues((prev) => ({ ...prev, playerNumber: v }))
                   }
-                  className="w-40"
+                  className="w-40 h-9 rounded-[8px] font-mono tabular-nums"
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600">표시순서 Index (playerIndex)</span>
+                <span className="text-xs font-medium text-[#525252]">
+                  표시 순서 (playerIndex)
+                </span>
                 <InputNumber
                   min={1}
                   value={editValues.playerIndex}
                   onChange={(v) =>
                     setEditValues((prev) => ({ ...prev, playerIndex: v }))
                   }
-                  className="w-40"
+                  className="w-40 h-9 rounded-[8px] font-mono tabular-nums"
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600">신장 / 체중 (cm / kg)</span>
+                <span className="text-xs font-medium text-[#525252]">
+                  신장 / 체중 (cm / kg)
+                </span>
                 <div className="flex items-center gap-1.5">
                   <div className="relative flex items-center">
                     <Input
                       value={editValues.height}
                       onChange={(e) =>
-                        setEditValues((prev) => ({ ...prev, height: e.target.value }))
+                        setEditValues((prev) => ({
+                          ...prev,
+                          height: e.target.value,
+                        }))
                       }
                       placeholder="신장"
-                      className="w-24 text-xs font-bold pr-6 text-center"
+                      className="w-24 h-9 rounded-[8px] text-xs font-mono tabular-nums pr-6 text-center"
                     />
-                    <span className="absolute right-1 text-[10px] text-slate-400 font-bold pointer-events-none">
+                    <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                       cm
                     </span>
                   </div>
-                  <span className="text-slate-400 font-bold">/</span>
+                  <span className="text-[#737373] text-xs">/</span>
                   <div className="relative flex items-center">
                     <Input
                       value={editValues.weight}
                       onChange={(e) =>
-                        setEditValues((prev) => ({ ...prev, weight: e.target.value }))
+                        setEditValues((prev) => ({
+                          ...prev,
+                          weight: e.target.value,
+                        }))
                       }
                       placeholder="체중"
-                      className="w-24 text-xs font-bold pr-6 text-center"
+                      className="w-24 h-9 rounded-[8px] text-xs font-mono tabular-nums pr-6 text-center"
                     />
-                    <span className="absolute right-1 text-[10px] text-slate-400 font-bold pointer-events-none">
+                    <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                       kg
                     </span>
                   </div>
@@ -2760,14 +2780,14 @@ const ContestPlayerWeighInTable = () => {
             </div>
           </Modal>
 
-          {/* 📸 선수 사진 확인 및 무대용 사진 1, 2 지정 모달 */}
+          {/* 선수 사진 확인 및 무대용 사진 1, 2 지정 모달 */}
           <Modal
             open={photoModalOpen}
             title={
-              <div className="flex items-center gap-2">
-                <FileImageOutlined className="text-amber-500 text-lg" />
-                <span className="font-black text-slate-800 text-base">
-                  선수 무대 송출용 사진 지정 ({photoModalPlayer?.playerName} 선수)
+              <div className="flex items-center gap-2 text-[#171717]">
+                <Image size={16} strokeWidth={1.5} className="text-[#525252]" />
+                <span className="font-semibold text-sm text-[#171717]">
+                  무대 송출용 사진 지정 ({photoModalPlayer?.playerName})
                 </span>
               </div>
             }
@@ -2780,322 +2800,376 @@ const ContestPlayerWeighInTable = () => {
             width={680}
             destroyOnClose
           >
-            {photoModalPlayer && (() => {
-              const photos = extractPlayerPhotos(photoModalPlayer);
-              const stage1 =
-                (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) && photoModalPlayer.stagePhoto1) ||
-                (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) && photoModalPlayer.stagePhotoUrl1) ||
-                "";
-              const stage2 =
-                (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) && photoModalPlayer.stagePhoto2) ||
-                (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
-                "";
+            {photoModalPlayer &&
+              (() => {
+                const photos = extractPlayerPhotos(photoModalPlayer);
+                const stage1 =
+                  (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) &&
+                    photoModalPlayer.stagePhoto1) ||
+                  (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) &&
+                    photoModalPlayer.stagePhotoUrl1) ||
+                  "";
+                const stage2 =
+                  (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) &&
+                    photoModalPlayer.stagePhoto2) ||
+                  (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) &&
+                    photoModalPlayer.stagePhotoUrl2) ||
+                  "";
 
-              return (
-                <div className="flex flex-col gap-4 py-1">
-                  {/* 선수 기본 정보 */}
-                  <div className="flex items-center justify-between bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs">
-                    <div>
-                      <span className="text-slate-500 font-bold">배부번호:</span>{" "}
-                      <strong className="text-amber-600 font-black">
-                        #{photoModalPlayer.playerNumber || "미배부"}
-                      </strong>
-                      <span className="mx-2 text-slate-300">|</span>
-                      <span className="text-slate-500 font-bold">소속:</span>{" "}
-                      <strong className="text-slate-700">
-                        {photoModalPlayer.playerGym || "개인 / 무소속"}
-                      </strong>
-                    </div>
-                    <div>
-                      <Tag color={photos.length > 0 ? "gold" : "default"} className="font-bold mr-0">
-                        {photos.length > 0 ? `등록된 사진 총 ${photos.length}장` : "사진 미등록"}
-                      </Tag>
-                    </div>
-                  </div>
-
-                  {/* 📺 1. 무대용 사진 1, 2 슬롯 섹션 */}
-                  <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-400 font-black text-sm flex items-center gap-1.5">
-                          <span className="animate-pulse">📺</span>
-                          <span>무대 공식 송출용 지정 사진 (슬롯 1, 슬롯 2)</span>
+                return (
+                  <div className="flex flex-col gap-4 py-1">
+                    {/* 선수 기본 정보 */}
+                    <div className="flex items-center justify-between bg-[#f4f4f5] px-3.5 py-2.5 rounded-[8px] border border-[#171717]/[0.08] text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[#737373]">배부번호</span>
+                        <BibTag
+                          number={photoModalPlayer.playerNumber || "-"}
+                          size="sm"
+                        />
+                        <span className="text-[#171717]/[0.15]">|</span>
+                        <span className="text-[#737373]">소속</span>
+                        <span className="font-medium text-[#171717]">
+                          {photoModalPlayer.playerGym || "개인 / 무소속"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-[11px] font-medium text-[#525252] tabular-nums">
+                        {photos.length > 0
+                          ? `등록 사진 ${photos.length}장`
+                          : "사진 미등록"}
+                      </span>
+                    </div>
+
+                    {/* 1. 무대용 사진 1, 2 슬롯 섹션 */}
+                    <div className="bg-[#f4f4f5] rounded-[12px] p-4 border border-[#171717]/[0.08] space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-[#171717] font-semibold text-xs">
+                          무대 공식 송출 지정 사진 (슬롯 1 · 슬롯 2)
+                        </span>
                         <button
                           type="button"
                           onClick={handleSwapStageSlots}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 text-xs font-black border border-amber-500/40 cursor-pointer transition-all active:scale-95"
+                          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#fafafa] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] cursor-pointer transition-colors duration-150"
                         >
-                          <span>⇄ 1번 ↔ 2번 맞바꾸기</span>
+                          <ArrowLeftRight
+                            size={14}
+                            strokeWidth={1.5}
+                            className="text-[#525252]"
+                          />
+                          <span>1번 · 2번 맞바꾸기</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* 슬롯 1: 무대용 사진 1 */}
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between px-0.5">
+                            <span className="text-xs font-medium text-[#171717] flex items-center gap-1.5">
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-[4px] bg-[#2563eb] text-white text-[10px] font-mono tabular-nums">
+                                1
+                              </span>
+                              <span>무대용 사진 1 (전면 메인)</span>
+                            </span>
+                            {stage1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleClearStageSlot(1)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-[11px] font-medium border border-[#dc2626]/20 cursor-pointer transition-colors duration-150"
+                              >
+                                <Trash2 size={12} strokeWidth={1.5} />
+                                <span>비우기</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {stage1 ? (
+                            <div className="relative h-48 rounded-[8px] overflow-hidden bg-[#141415] border border-[#2563eb]/60 flex items-center justify-center">
+                              <img
+                                src={stage1}
+                                alt="무대용 사진 1"
+                                className="w-full h-full object-contain"
+                              />
+                              <div className="absolute inset-x-0 bottom-0 bg-black/70 py-1 text-center">
+                                <span className="text-white text-[11px] font-medium">
+                                  1번 전면 메인 송출용
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-48 rounded-[8px] border border-dashed border-[#171717]/[0.16] bg-[#ffffff] flex flex-col items-center justify-center p-4 text-center gap-1.5">
+                              <Plus
+                                size={18}
+                                strokeWidth={1.5}
+                                className="text-[#737373]"
+                              />
+                              <span className="text-xs font-medium text-[#525252]">
+                                무대용 사진 1 비어 있음
+                              </span>
+                              <span className="text-[11px] text-[#737373]">
+                                하단 갤러리에서 1번 지정을 선택하세요
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 슬롯 2: 무대용 사진 2 */}
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between px-0.5">
+                            <span className="text-xs font-medium text-[#171717] flex items-center gap-1.5">
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-[4px] bg-[#16a34a] text-white text-[10px] font-mono tabular-nums">
+                                2
+                              </span>
+                              <span>무대용 사진 2 (배경 와이드)</span>
+                            </span>
+                            {stage2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleClearStageSlot(2)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-[11px] font-medium border border-[#dc2626]/20 cursor-pointer transition-colors duration-150"
+                              >
+                                <Trash2 size={12} strokeWidth={1.5} />
+                                <span>비우기</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {stage2 ? (
+                            <div className="relative h-48 rounded-[8px] overflow-hidden bg-[#141415] border border-[#16a34a]/60 flex items-center justify-center">
+                              <img
+                                src={stage2}
+                                alt="무대용 사진 2"
+                                className="w-full h-full object-contain"
+                              />
+                              <div className="absolute inset-x-0 bottom-0 bg-black/70 py-1 text-center">
+                                <span className="text-white text-[11px] font-medium">
+                                  2번 배경 와이드 송출용
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-48 rounded-[8px] border border-dashed border-[#171717]/[0.16] bg-[#ffffff] flex flex-col items-center justify-center p-4 text-center gap-1.5">
+                              <Plus
+                                size={18}
+                                strokeWidth={1.5}
+                                className="text-[#737373]"
+                              />
+                              <span className="text-xs font-medium text-[#525252]">
+                                무대용 사진 2 비어 있음
+                              </span>
+                              <span className="text-[11px] text-[#737373]">
+                                하단 갤러리에서 2번 지정을 선택하세요
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. 전체 선수 등록 사진 갤러리 */}
+                    {photos.length === 0 ? (
+                      <div className="p-8 text-center bg-[#fafafa] rounded-[12px] border border-dashed border-[#171717]/[0.14] space-y-1.5">
+                        <Image
+                          size={24}
+                          strokeWidth={1.5}
+                          className="text-[#737373] mx-auto"
+                        />
+                        <h3 className="text-sm font-medium text-[#525252] m-0">
+                          참가신청서에 등록된 사진이 없습니다.
+                        </h3>
+                        <p className="text-xs text-[#737373] m-0">
+                          상단의 사진데이터 갱신 버튼으로 신청서 원본과 동기화할 수 있습니다.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-xs text-[#525252] mb-2.5 flex items-center justify-between flex-wrap gap-1">
+                          <span className="text-xs font-semibold text-[#171717] tabular-nums">
+                            선수 등록 사진 갤러리 ({photos.length}장)
+                          </span>
+                          <span className="text-xs text-[#737373]">
+                            1번 지정 또는 2번 지정 선택 시 즉시 저장됩니다
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-72 overflow-y-auto p-0.5">
+                          {photos.map((imgUrl, i) => {
+                            const isSlot1 = imgUrl === stage1;
+                            const isSlot2 = imgUrl === stage2;
+
+                            return (
+                              <div
+                                key={i}
+                                className={`flex flex-col rounded-[8px] border overflow-hidden transition-colors duration-150 bg-[#ffffff] ${
+                                  isSlot1
+                                    ? "border-[#2563eb] ring-1 ring-[#2563eb]/30"
+                                    : isSlot2
+                                    ? "border-[#16a34a] ring-1 ring-[#16a34a]/30"
+                                    : "border-[#171717]/[0.10] hover:border-[#171717]/[0.24]"
+                                }`}
+                              >
+                                <div
+                                  onClick={() => handleAssignStageSlot(imgUrl)}
+                                  className="relative h-28 bg-[#141415] cursor-pointer flex items-center justify-center overflow-hidden"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt={`사진 ${i + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+
+                                  {isSlot1 && (
+                                    <div className="absolute top-1.5 left-1.5 bg-[#2563eb] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-[4px]">
+                                      1번 지정됨
+                                    </div>
+                                  )}
+                                  {isSlot2 && (
+                                    <div className="absolute top-1.5 left-1.5 bg-[#16a34a] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-[4px]">
+                                      2번 지정됨
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* 1번 / 2번 직접 지정 버튼 */}
+                                <div className="grid grid-cols-2 gap-1 p-1.5 bg-[#fafafa] border-t border-[#171717]/[0.06]">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetStageSlot(1, imgUrl);
+                                    }}
+                                    className={`h-7 px-1 rounded-[4px] text-[11px] font-medium transition-colors duration-150 cursor-pointer border ${
+                                      isSlot1
+                                        ? "bg-[#2563eb] text-white border-[#2563eb]"
+                                        : "bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border-[#171717]/[0.10]"
+                                    }`}
+                                  >
+                                    {isSlot1 ? "1번 완료" : "1번 지정"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetStageSlot(2, imgUrl);
+                                    }}
+                                    className={`h-7 px-1 rounded-[4px] text-[11px] font-medium transition-colors duration-150 cursor-pointer border ${
+                                      isSlot2
+                                        ? "bg-[#16a34a] text-white border-[#16a34a]"
+                                        : "bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border-[#171717]/[0.10]"
+                                    }`}
+                                  >
+                                    {isSlot2 ? "2번 완료" : "2번 지정"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 하단 액션 버튼 바 */}
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#171717]/[0.08] flex-wrap">
+                      <div className="text-xs text-[#737373]">
+                        선택된 1번·2번 사진이 무대 전광판 및 시상식 화면에 송출됩니다.
+                      </div>
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhotoModalOpen(false);
+                            setPhotoModalPlayer(null);
+                          }}
+                          className="inline-flex items-center justify-center px-4 h-9 rounded-[8px] text-xs font-medium text-[#171717] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
+                        >
+                          닫기
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmSavePhotoModal}
+                          className="inline-flex items-center justify-center gap-1.5 px-4 h-9 rounded-[8px] font-medium text-xs text-white bg-[#2563eb] hover:bg-[#1d4ed8] transition-colors duration-150 cursor-pointer border-0"
+                        >
+                          <Save size={15} strokeWidth={1.5} />
+                          <span>무대 송출 사진 확정 저장</span>
                         </button>
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      {/* 🌟 슬롯 1: 무대용 사진 1 */}
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-xs font-black text-amber-300 flex items-center gap-1">
-                            <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
-                            <span>무대용 사진 1 (전면 메인)</span>
-                          </span>
-                          {stage1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleClearStageSlot(1)}
-                              className="px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 hover:text-rose-100 text-[11px] font-bold border border-rose-500/30 cursor-pointer transition-all"
-                            >
-                              🗑️ 비우기
-                            </button>
-                          )}
-                        </div>
-
-                        {stage1 ? (
-                          <div className="relative h-48 rounded-xl overflow-hidden bg-black border-2 border-amber-400 shadow-md group flex items-center justify-center">
-                            <img
-                              src={stage1}
-                              alt="무대용 사진 1"
-                              className="w-full h-full object-contain"
-                            />
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent py-1 text-center">
-                              <span className="text-amber-300 text-[11px] font-black">
-                                ★ 1번 전면 메인 송출용 (저장됨 ✓)
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-48 rounded-xl border-2 border-dashed border-amber-400/50 bg-amber-950/20 flex flex-col items-center justify-center p-4 text-center gap-1.5">
-                            <div className="text-2xl text-amber-400/60">➕</div>
-                            <span className="text-xs font-bold text-amber-200">
-                              [무대용 사진 1] 비어있음
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              하단 갤러리에서 [1번 지정] 버튼을 누르세요
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 🌟 슬롯 2: 무대용 사진 2 */}
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-xs font-black text-emerald-300 flex items-center gap-1">
-                            <span className="w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
-                            <span>무대용 사진 2 (배경 와이드)</span>
-                          </span>
-                          {stage2 && (
-                            <button
-                              type="button"
-                              onClick={() => handleClearStageSlot(2)}
-                              className="px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 hover:text-rose-100 text-[11px] font-bold border border-rose-500/30 cursor-pointer transition-all"
-                            >
-                              🗑️ 비우기
-                            </button>
-                          )}
-                        </div>
-
-                        {stage2 ? (
-                          <div className="relative h-48 rounded-xl overflow-hidden bg-black border-2 border-emerald-400 shadow-md group flex items-center justify-center">
-                            <img
-                              src={stage2}
-                              alt="무대용 사진 2"
-                              className="w-full h-full object-contain"
-                            />
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent py-1 text-center">
-                              <span className="text-emerald-300 text-[11px] font-black">
-                                ★ 2번 배경 와이드 송출용 (저장됨 ✓)
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-48 rounded-xl border-2 border-dashed border-emerald-400/50 bg-emerald-950/20 flex flex-col items-center justify-center p-4 text-center gap-1.5">
-                            <div className="text-2xl text-emerald-400/60">➕</div>
-                            <span className="text-xs font-bold text-emerald-200">
-                              [무대용 사진 2] 비어있음
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              하단 갤러리에서 [2번 지정] 버튼을 누르세요
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
-
-                  {/* 🖼️ 2. 전체 선수 등록 사진 갤러리 */}
-                  {photos.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-2">
-                      <div className="text-4xl text-slate-300">📷</div>
-                      <h3 className="text-sm font-bold text-slate-600 m-0">
-                        참가신청서에 등록된 사진이 없습니다.
-                      </h3>
-                      <p className="text-xs text-slate-400 m-0">
-                        상단의 [사진데이터 갱신]을 눌러 신청서 원본과 동기화해 보세요.
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="text-xs font-bold text-slate-700 mb-2.5 flex items-center justify-between">
-                        <span className="text-sm font-black text-slate-800">
-                          선수 등록 사진 갤러리 (총 {photos.length}장)
-                        </span>
-                        <span className="text-xs text-blue-600 font-bold">
-                          💡 아래 [1번 지정] 또는 [2번 지정] 버튼을 누르면 즉시 DB에 저장됩니다!
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-72 overflow-y-auto p-1">
-                        {photos.map((imgUrl, i) => {
-                          const isSlot1 = imgUrl === stage1;
-                          const isSlot2 = imgUrl === stage2;
-
-                          return (
-                            <div
-                              key={i}
-                              className={`flex flex-col rounded-2xl border-2 overflow-hidden transition-all bg-white shadow-sm ${
-                                isSlot1
-                                  ? "border-amber-400 ring-4 ring-amber-200/80 shadow-md"
-                                  : isSlot2
-                                  ? "border-emerald-400 ring-4 ring-emerald-200/80 shadow-md"
-                                  : "border-slate-200 hover:border-slate-300"
-                              }`}
-                            >
-                              <div
-                                onClick={() => handleAssignStageSlot(imgUrl)}
-                                className="relative h-28 bg-slate-900 cursor-pointer group flex items-center justify-center overflow-hidden"
-                              >
-                                <img
-                                  src={imgUrl}
-                                  alt={`사진 ${i + 1}`}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                />
-
-                                {isSlot1 && (
-                                  <div className="absolute top-1.5 left-1.5 bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow border border-white">
-                                    ★ 1번 등록됨
-                                  </div>
-                                )}
-                                {isSlot2 && (
-                                  <div className="absolute top-1.5 left-1.5 bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow border border-white">
-                                    ★ 2번 등록됨
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* 🔘 1번 / 2번 직접 지정 원터치 버튼 */}
-                              <div className="grid grid-cols-2 gap-1 p-1.5 bg-slate-50 border-t border-slate-100">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetStageSlot(1, imgUrl);
-                                  }}
-                                  className={`py-1 px-1 rounded-lg text-xs font-black transition-all cursor-pointer border-0 active:scale-95 ${
-                                    isSlot1
-                                      ? "bg-amber-500 text-slate-950 shadow-sm"
-                                      : "bg-amber-100 hover:bg-amber-200 text-amber-900"
-                                  }`}
-                                >
-                                  {isSlot1 ? "1번 완료✓" : "1번 지정"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetStageSlot(2, imgUrl);
-                                  }}
-                                  className={`py-1 px-1 rounded-lg text-xs font-black transition-all cursor-pointer border-0 active:scale-95 ${
-                                    isSlot2
-                                      ? "bg-emerald-600 text-white shadow-sm"
-                                      : "bg-emerald-100 hover:bg-emerald-200 text-emerald-900"
-                                  }`}
-                                >
-                                  {isSlot2 ? "2번 완료✓" : "2번 지정"}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 💾 하단 액션 버튼 바: [취소] 및 [무대 송출 사진 확정 저장] */}
-                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
-                    <div className="text-xs text-slate-500 font-semibold">
-                      선택된 1번/2번 사진이 무대 전광판 및 시상식 화면에 그대로 자동 송출됩니다.
-                    </div>
-                    <div className="flex items-center gap-2.5 ml-auto">
-                      <Button
-                        onClick={() => {
-                          setPhotoModalOpen(false);
-                          setPhotoModalPlayer(null);
-                        }}
-                        className="rounded-xl px-4 font-bold h-11 text-slate-600 border-slate-300 hover:bg-slate-50"
-                      >
-                        닫기
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={handleConfirmSavePhotoModal}
-                        className="inline-flex items-center justify-center gap-2 px-6 h-11 rounded-xl font-black text-sm text-white bg-blue-600 hover:bg-blue-500 active:scale-95 shadow-md hover:shadow-lg transition-all cursor-pointer border-0"
-                      >
-                        <SaveOutlined className="text-base" />
-                        <span>💾 무대 송출 사진 확정 저장</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
           </Modal>
 
-          {/* 1. 상단 타이틀 & 실시간 계측 현황 관제 카드 */}
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 text-white shadow-xl border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
+          {/* 1. 상단 타이틀 & 실시간 계측 현황 카드 */}
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div className="space-y-1.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-600 text-white">
-                  2단계 계측 현장 데스크
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08]">
+                  <Scale size={13} strokeWidth={1.5} className="text-[#525252]" />
+                  <span>2단계 계측 데스크</span>
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-600 text-white flex items-center gap-1.5 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                  <span>다중 데스크 실시간 자동 동기화 ON</span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#16a34a]/[0.08] text-[#16a34a] border border-[#16a34a]/20">
+                  <StatusDot status="live" live />
+                  <span>다중 데스크 실시간 자동 동기화</span>
                 </span>
-                <span className="text-xs font-semibold text-slate-400">
-                  {currentContest?.contests?.contestTitle}
-                </span>
+                {currentContest?.contests?.contestTitle && (
+                  <span className="text-xs text-[#737373]">
+                    {currentContest.contests.contestTitle}
+                  </span>
+                )}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white m-0 tracking-tight flex items-center gap-2">
-                <span>선수 계측 & 월체/불참 관리</span>
+              <h1 className="text-xl font-semibold text-[#171717] m-0 tracking-tight">
+                선수 계측 및 월체·불참 관리
               </h1>
-              <p className="text-xs text-slate-400 m-0">
-                신장(cm) / 체중(kg) 2개 필드 분리 입력 및 스마트 병합 저장 지원
+              <p className="text-xs text-[#737373] m-0">
+                신장(cm) · 체중(kg) 분리 입력 및 다중 데스크 병합 저장
               </p>
             </div>
 
-            {/* 계측 통계 & 최종 저장 버튼 */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-800/90 p-3.5 rounded-xl border border-slate-700">
-              <div className="min-w-[190px]">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-300 mb-1">
+            {/* 계측 통계 & 액션 버튼 */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+              <div className="min-w-[210px] bg-[#fafafa] px-3.5 py-2.5 rounded-[8px] border border-[#171717]/[0.08]">
+                <div className="flex items-center justify-between text-xs font-medium text-[#525252] mb-1.5">
                   <span>출전 선수 현황</span>
-                  <span className="text-emerald-400 font-black">{activePlayersCount} / {totalPlayersCount}명</span>
+                  <span className="font-mono tabular-nums font-semibold text-[#171717]">
+                    {activePlayersCount} / {totalPlayersCount}명
+                  </span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-[#e4e4e7] rounded-[4px] h-1.5 overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
-                    style={{ width: `${totalPlayersCount > 0 ? Math.round((activePlayersCount / totalPlayersCount) * 100) : 0}%` }}
+                    className="bg-[#16a34a] h-1.5 rounded-[4px] transition-all duration-300"
+                    style={{
+                      width: `${
+                        totalPlayersCount > 0
+                          ? Math.round(
+                              (activePlayersCount / totalPlayersCount) * 100
+                            )
+                          : 0
+                      }%`,
+                    }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5 gap-2">
-                  <span>출전: <strong className="text-emerald-400">{activePlayersCount}</strong>명</span>
-                  <span>불참: <strong className="text-rose-400">{noShowCount}</strong>명</span>
-                  <span>월체: <strong className="text-orange-400">{gradeChangedCount}</strong>명</span>
+                <div className="flex items-center justify-between text-[11px] text-[#737373] mt-1.5 gap-3 tabular-nums">
+                  <span>
+                    출전{" "}
+                    <strong className="font-semibold text-[#16a34a]">
+                      {activePlayersCount}
+                    </strong>
+                    명
+                  </span>
+                  <span>
+                    불참{" "}
+                    <strong className="font-semibold text-[#dc2626]">
+                      {noShowCount}
+                    </strong>
+                    명
+                  </span>
+                  <span>
+                    월체{" "}
+                    <strong className="font-semibold text-[#b45309]">
+                      {gradeChangedCount}
+                    </strong>
+                    명
+                  </span>
                 </div>
               </div>
-
-              <div className="w-px h-8 bg-slate-700 hidden sm:block" />
 
               {/* 저장 및 갱신/초기화 버튼 그룹 */}
               <div className="flex flex-wrap items-center gap-2">
@@ -3109,46 +3183,57 @@ const ContestPlayerWeighInTable = () => {
                   <button
                     type="button"
                     title="1단계 배정본 기준으로 명단 최신 갱신"
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-blue-100 font-bold text-xs border border-blue-700/60 shadow-sm transition-all cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] font-medium text-xs border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
                   >
-                    <SyncOutlined />
+                    <RefreshCw
+                      size={15}
+                      strokeWidth={1.5}
+                      className="text-[#525252]"
+                    />
                     <span>명단 갱신</span>
                   </button>
                 </Popconfirm>
 
-                {/* 🚨 [비상 원상복구] 기존 계측/월체 데이터 무시하고 1단계 배정본으로 완전 덮어쓰기 */}
                 <Popconfirm
-                  title="🚨 계측 데이터 완전 초기화 (배정본 덮어쓰기)"
-                  description="기존의 모든 월체, 불참, 신장/체중 계측 데이터를 완전히 무시(폐기)하고, 1단계 선수 번호 배정 원본 체급과 번호로 계측 데이터를 깨끗하게 덮어씌웁니다. 정말 초기화하시겠습니까?"
+                  title="계측 데이터 완전 초기화 (배정본 덮어쓰기)"
+                  description="기존의 모든 월체, 불참, 신장/체중 계측 데이터를 폐기하고, 1단계 선수 번호 배정 원본 체급과 번호로 덮어씌웁니다. 진행하시겠습니까?"
                   onConfirm={handleForceResetToAssign}
-                  okText="위험: 배정본으로 완전 덮어쓰기"
+                  okText="배정본으로 덮어쓰기"
                   cancelText="취소"
                   okButtonProps={{ danger: true }}
                 >
                   <button
                     type="button"
-                    title="기존 계측/월체 데이터를 완전히 지우고 1단계 번호 배정 원본으로 덮어씁니다."
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-300 hover:text-rose-100 font-black text-xs border border-rose-600 shadow-sm transition-all cursor-pointer active:scale-95"
+                    title="기존 계측/월체 데이터를 지우고 1단계 번호 배정 원본으로 덮어씁니다."
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#dc2626]/[0.06] hover:bg-[#dc2626]/[0.12] text-[#dc2626] font-medium text-xs border border-[#dc2626]/25 transition-colors duration-150 cursor-pointer"
                   >
-                    <WarningOutlined className="text-rose-400" />
-                    <span>계측 완전 초기화 (배정본 덮어쓰기)</span>
+                    <AlertTriangle size={15} strokeWidth={1.5} />
+                    <span>계측 초기화</span>
                   </button>
                 </Popconfirm>
 
-                {/* 📸 사진 데이터 정밀 갱신/동기화 버튼 */}
                 <button
                   type="button"
                   onClick={handleSyncCleanPhotoData}
                   disabled={isSyncingPhotos}
-                  title="신청서 원본에서 순수 선수 사진만 다시 정밀 추출하여 포스터/오류 사진을 정리하고 계측 명단에 동기화합니다."
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 font-black text-xs border border-amber-500/40 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                  title="신청서 원본에서 선수 사진만 정밀 추출하여 계측 명단에 동기화합니다."
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] font-medium text-xs border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer disabled:opacity-50"
                 >
-                  <SyncOutlined spin={isSyncingPhotos} className="text-amber-400" />
-                  <span>{isSyncingPhotos ? "사진 정리 중..." : "사진데이터 갱신"}</span>
+                  <RefreshCw
+                    size={15}
+                    strokeWidth={1.5}
+                    className={`text-[#525252] ${
+                      isSyncingPhotos ? "animate-spin" : ""
+                    }`}
+                  />
+                  <span>
+                    {isSyncingPhotos ? "사진 정리 중..." : "사진데이터 갱신"}
+                  </span>
                 </button>
 
                 {playersArray?.length > 0 ? (
                   <button
+                    type="button"
                     onClick={() =>
                       handleUpdatePlayersFinal(
                         currentContest?.contests?.id,
@@ -3157,50 +3242,56 @@ const ContestPlayerWeighInTable = () => {
                         playersArray
                       )
                     }
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer border-0 active:scale-95"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium text-xs transition-colors duration-150 cursor-pointer border-0"
                   >
-                    <SaveOutlined className="text-lg" />
-                    <span>계측 최종명단 안전 저장</span>
+                    <Save size={16} strokeWidth={1.5} />
+                    <span>계측 최종명단 저장</span>
                   </button>
                 ) : (
-                  <Button
-                    type="default"
-                    onClick={() => navigate("/contesttimetable", { state: { tabId: 1 } })}
-                    className="font-bold"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate("/contesttimetable", { state: { tabId: 1 } })
+                    }
+                    className="inline-flex items-center justify-center h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] font-medium text-xs border border-[#171717]/[0.10] transition-colors duration-150 cursor-pointer"
                   >
                     선수번호 배정 필요
-                  </Button>
+                  </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 2. 초고속 검색 & 부문 필터 & 상태 필터 바 */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* 검색창 */}
-            <div className="w-full md:w-84">
+          {/* 2. 검색 & 부문 필터 & 상태 필터 바 */}
+          <div className="bg-[#ffffff] rounded-[12px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-[#171717]/[0.08] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="w-full lg:w-80">
               <Input
-                placeholder="선수명, 배부번호, 소속, 전화번호 뒤4자리 검색..."
-                prefix={<SearchOutlined className="text-blue-500" />}
+                placeholder="선수명, 배부번호, 소속, 전화번호 뒤 4자리 검색"
+                prefix={
+                  <Search
+                    size={15}
+                    strokeWidth={1.5}
+                    className="text-[#737373] mr-1"
+                  />
+                }
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 allowClear
-                size="large"
-                className="rounded-xl border-slate-300 font-medium text-sm"
+                className="h-9 rounded-[8px] border-[#171717]/[0.14] text-sm"
               />
             </div>
 
-            {/* 부문 및 상태 필터 */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex flex-wrap items-center gap-1 bg-[#f4f4f5] p-1 rounded-[8px]">
                 {sectionOptions.map((sec) => (
                   <button
                     key={sec}
+                    type="button"
                     onClick={() => setSelectedSection(sec)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer ${
+                    className={`h-7 px-2.5 rounded-[6px] text-xs font-medium transition-colors duration-150 border-0 cursor-pointer ${
                       selectedSection === sec
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-transparent text-slate-600 hover:bg-slate-200"
+                        ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        : "bg-transparent text-[#525252] hover:text-[#171717]"
                     }`}
                   >
                     {sec === "all" ? "전체 부문" : sec}
@@ -3208,46 +3299,64 @@ const ContestPlayerWeighInTable = () => {
                 ))}
               </div>
 
-              {/* 출전상태 필터 */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex flex-wrap items-center gap-1 bg-[#f4f4f5] p-1 rounded-[8px] tabular-nums">
                 <button
+                  type="button"
                   onClick={() => setFilterWeighedStatus("all")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-all ${
+                  className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
                     filterWeighedStatus === "all"
-                      ? "bg-slate-800 text-white shadow-sm"
-                      : "bg-transparent text-slate-600 hover:bg-slate-200"
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "bg-transparent text-[#525252] hover:text-[#171717]"
                   }`}
                 >
                   전체 ({totalPlayersCount})
                 </button>
                 <button
+                  type="button"
                   onClick={() => setFilterWeighedStatus("active")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-all ${
+                  className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
                     filterWeighedStatus === "active"
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : "bg-transparent text-emerald-700 hover:bg-slate-200"
+                      ? "bg-[#16a34a] text-white"
+                      : "bg-transparent text-[#16a34a] hover:bg-[#16a34a]/[0.08]"
                   }`}
                 >
                   정상출전 ({activePlayersCount})
                 </button>
                 <button
-                  onClick={() => setFilterWeighedStatus("noshow")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-all ${
-                    filterWeighedStatus === "noshow"
-                      ? "bg-rose-600 text-white shadow-sm"
-                      : "bg-transparent text-rose-700 hover:bg-slate-200"
+                  type="button"
+                  onClick={() => setFilterWeighedStatus("gradeChanged")}
+                  className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
+                    filterWeighedStatus === "gradeChanged"
+                      ? "bg-[#b45309] text-white"
+                      : "bg-transparent text-[#b45309] hover:bg-[#b45309]/[0.08]"
                   }`}
                 >
-                  🚨 불참({noShowCount})
+                  월체 ({gradeChangedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterWeighedStatus("noshow")}
+                  className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
+                    filterWeighedStatus === "noshow"
+                      ? "bg-[#dc2626] text-white"
+                      : "bg-transparent text-[#dc2626] hover:bg-[#dc2626]/[0.08]"
+                  }`}
+                >
+                  불참 ({noShowCount})
                 </button>
               </div>
 
               <button
+                type="button"
                 onClick={fetchPool}
                 title="최신 DB 동기화"
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 cursor-pointer flex items-center gap-1"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
               >
-                <SyncOutlined />
+                <RefreshCw
+                  size={14}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
                 <span>새로고침</span>
               </button>
             </div>
@@ -3256,8 +3365,8 @@ const ContestPlayerWeighInTable = () => {
           {/* 3. 종목 및 체급별 선수 계측 테이블 목록 */}
           <div className="space-y-4">
             {filteredMatchedArray.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
-                <p className="text-slate-400 font-bold text-base m-0">
+              <div className="bg-[#ffffff] rounded-[12px] p-12 text-center border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                <p className="text-[#737373] font-medium text-sm m-0">
                   검색 조건에 일치하는 선수가 없습니다.
                 </p>
               </div>
@@ -3269,37 +3378,40 @@ const ContestPlayerWeighInTable = () => {
                   contestGradeId: gradeId,
                   contestGradeTitle: gradeTitle,
                   matchedPlayers,
-                  matchedGradesLength: gradeLength,
-                  contestGradeIndex: gradeIndex,
                 } = matched;
 
-                const gradeNoShowCount = matchedPlayers.filter((p) => p.playerNoShow).length;
-                const gradeActiveCount = matchedPlayers.length - gradeNoShowCount;
+                const gradeNoShowCount = matchedPlayers.filter(
+                  (p) => p.playerNoShow
+                ).length;
 
                 return (
                   <div
                     key={mIdx}
-                    className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+                    className="bg-[#ffffff] rounded-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-[#171717]/[0.08] overflow-hidden"
                   >
                     {/* 체급 헤더 */}
-                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                        <h2 className="text-base font-black text-slate-900 m-0">
+                        <h2 className="text-sm font-semibold text-[#171717] m-0">
                           {categoryTitle}
-                          <span className="text-indigo-600 ml-2 font-black">
-                            / {gradeTitle}
+                          <span className="text-[#525252] font-normal mx-1.5">
+                            /
+                          </span>
+                          <span className="text-[#171717] font-medium">
+                            {gradeTitle}
                           </span>
                         </h2>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Tag
-                          color={gradeNoShowCount === 0 ? "blue" : "default"}
-                          className="font-bold text-xs px-2.5 py-0.5 rounded-md mr-0"
-                        >
-                          출전 {matchedPlayers.length - gradeNoShowCount} / {matchedPlayers.length}명
-                          {gradeNoShowCount > 0 && ` (불참 ${gradeNoShowCount}명)`}
-                        </Tag>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs font-medium text-[#525252] tabular-nums">
+                          출전 {matchedPlayers.length - gradeNoShowCount} /{" "}
+                          {matchedPlayers.length}명
+                          {gradeNoShowCount > 0 && (
+                            <span className="text-[#dc2626] ml-1">
+                              (불참 {gradeNoShowCount}명)
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </div>
 
@@ -3308,20 +3420,35 @@ const ContestPlayerWeighInTable = () => {
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                           <thead>
-                            {/* 테이블 헤더 (넉넉한 높이 & 높은 시인성) */}
-                            <tr className="border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
-                              <th className="py-4 px-3 w-14 text-center">순번</th>
-                              <th className="py-4 px-2 w-20 text-center">사진</th>
-                              <th className="py-4 px-3 w-28 text-center">선수번호</th>
-                              <th className="py-4 px-4 w-48">선수 성명 / 상태</th>
-                              <th className="py-4 px-3 w-36">소속</th>
-                              <th className="py-4 px-4 min-w-[340px]">신장(cm) / 체중(kg) 계측 & 저장</th>
-                              <th className="py-4 px-3 w-20 text-center">월체</th>
-                              <th className="py-4 px-3 w-24 text-center">불참 (NoShow)</th>
-                              <th className="py-4 px-3 w-20 text-center">관리</th>
+                            <tr className="border-b border-[#171717]/[0.08] bg-[#fafafa] text-xs font-medium text-[#525252]">
+                              <th className="py-2.5 px-3 w-14 text-center">
+                                순번
+                              </th>
+                              <th className="py-2.5 px-2 w-20 text-center">
+                                사진
+                              </th>
+                              <th className="py-2.5 px-3 w-28 text-center">
+                                선수번호
+                              </th>
+                              <th className="py-2.5 px-4 w-48">
+                                선수 성명 / 상태
+                              </th>
+                              <th className="py-2.5 px-3 w-40">소속</th>
+                              <th className="py-2.5 px-4 min-w-[330px]">
+                                신장(cm) / 체중(kg) 계측
+                              </th>
+                              <th className="py-2.5 px-3 w-16 text-center">
+                                월체
+                              </th>
+                              <th className="py-2.5 px-3 w-20 text-center">
+                                불참
+                              </th>
+                              <th className="py-2.5 px-3 w-20 text-center">
+                                관리
+                              </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100">
+                          <tbody className="divide-y divide-[#171717]/[0.06]">
                             {matchedPlayers
                               .sort((a, b) => a.playerIndex - b.playerIndex)
                               .map((player, pIdx) => {
@@ -3334,31 +3461,31 @@ const ContestPlayerWeighInTable = () => {
                                   isGradeChanged,
                                   isWeighedIn,
                                   heightWeight,
-                                  playerIndex,
                                 } = player;
 
                                 const entryKey = getPlayerEntryKey(player);
-                                const { height, weight } = parseHeightWeight(heightWeight);
+                                const { height, weight } =
+                                  parseHeightWeight(heightWeight);
                                 const playerPhotos = extractPlayerPhotos(player);
 
                                 return (
                                   <tr
                                     key={entryKey || playerUid}
-                                    className={`transition-colors ${
+                                    className={`transition-colors duration-150 ${
                                       playerNoShow
-                                        ? "bg-rose-100/80 border-l-4 border-l-rose-600"
+                                        ? "bg-[#dc2626]/[0.04]"
                                         : isWeighedIn
-                                        ? "bg-emerald-50/50 hover:bg-emerald-50/80 border-l-4 border-l-emerald-500"
-                                        : "hover:bg-slate-50"
+                                        ? "bg-[#16a34a]/[0.03] hover:bg-[#16a34a]/[0.06]"
+                                        : "hover:bg-[#fafafa]"
                                     }`}
                                   >
                                     {/* 순번 */}
-                                    <td className="py-5 px-3 text-center font-black text-sm text-slate-400">
+                                    <td className="py-3.5 px-3 text-center font-mono tabular-nums text-xs text-[#737373]">
                                       {pIdx + 1}
                                     </td>
 
-                                    {/* 📸 선수 사진 썸네일 (확대 & 클릭 쉬운 타겟) */}
-                                    <td className="py-4 px-2 text-center">
+                                    {/* 선수 사진 썸네일 */}
+                                    <td className="py-3 px-2 text-center">
                                       {playerPhotos.length > 0 ? (
                                         <Tooltip title="클릭하여 무대 송출 사진 지정 및 갤러리 확인">
                                           <div
@@ -3366,15 +3493,20 @@ const ContestPlayerWeighInTable = () => {
                                               setPhotoModalPlayer(player);
                                               setPhotoModalOpen(true);
                                             }}
-                                            className="relative inline-block cursor-pointer group"
+                                            className="relative inline-block cursor-pointer"
                                           >
                                             <img
-                                              src={player.stagePhoto1 || player.stagePhotoUrl1 || player.stagePhotoUrl || playerPhotos[0]}
+                                              src={
+                                                player.stagePhoto1 ||
+                                                player.stagePhotoUrl1 ||
+                                                player.stagePhotoUrl ||
+                                                playerPhotos[0]
+                                              }
                                               alt={playerName}
-                                              className="w-12 h-12 rounded-2xl object-cover border-2 border-amber-400 shadow-md group-hover:scale-110 group-hover:border-amber-300 transition-all mx-auto"
+                                              className="w-10 h-10 rounded-[8px] object-cover border border-[#171717]/[0.14] mx-auto"
                                             />
                                             {playerPhotos.length > 1 && (
-                                              <span className="absolute -bottom-1 -right-1 bg-amber-500 text-[10px] text-slate-950 font-black px-1.5 py-0.2 rounded-full border border-white shadow">
+                                              <span className="absolute -bottom-1 -right-1 bg-[#171717] text-[10px] text-white font-mono tabular-nums px-1 py-0.2 rounded-[4px]">
                                                 +{playerPhotos.length - 1}
                                               </span>
                                             )}
@@ -3383,146 +3515,181 @@ const ContestPlayerWeighInTable = () => {
                                       ) : (
                                         <Tooltip title="사진 미등록 (클릭하여 확인)">
                                           <button
+                                            type="button"
                                             onClick={() => {
                                               setPhotoModalPlayer(player);
                                               setPhotoModalOpen(true);
                                             }}
-                                            className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-400 hover:text-slate-600 text-base flex items-center justify-center cursor-pointer transition-all mx-auto"
+                                            className="w-10 h-10 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.08] text-[#737373] hover:text-[#171717] flex items-center justify-center cursor-pointer transition-colors duration-150 mx-auto"
                                           >
-                                            <UserOutlined />
+                                            <User
+                                              size={16}
+                                              strokeWidth={1.5}
+                                            />
                                           </button>
                                         </Tooltip>
                                       )}
                                     </td>
 
-                                    {/* 선수번호 뱃지 (크고 뚜렷하게) */}
-                                    <td className="py-5 px-3 text-center">
-                                      <span
-                                        className={`inline-flex items-center px-4 py-2 rounded-xl font-mono font-black text-base sm:text-lg shadow-sm ${
+                                    {/* 선수번호 뱃지 */}
+                                    <td className="py-3.5 px-3 text-center">
+                                      <BibTag
+                                        number={playerNumber}
+                                        variant={
+                                          isWeighedIn && !playerNoShow
+                                            ? "active"
+                                            : "default"
+                                        }
+                                        size="md"
+                                        className={
                                           playerNoShow
-                                            ? "bg-rose-800 text-rose-200 line-through opacity-80"
-                                            : "bg-slate-900 text-amber-400"
-                                        }`}
-                                      >
-                                        {playerNumber}
-                                      </span>
+                                            ? "line-through opacity-50"
+                                            : ""
+                                        }
+                                      />
                                     </td>
 
-                                    {/* 선수 성명 & 불참/월체 뱃지 */}
-                                    <td className="py-5 px-4">
-                                      <div className="flex flex-col gap-1.5">
-                                        <div className="flex items-center gap-2">
+                                    {/* 선수 성명 & 불참/월체 상태 */}
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
                                           <span
-                                            className={`font-black text-base tracking-tight ${
+                                            className={`font-medium text-sm ${
                                               playerNoShow
-                                                ? "text-rose-700 line-through font-extrabold"
-                                                : "text-slate-900"
+                                                ? "text-[#dc2626] line-through"
+                                                : "text-[#171717]"
                                             }`}
                                           >
                                             {playerName}
                                           </span>
                                           {isGradeChanged && !playerNoShow && (
-                                            <Tag color="orange" className="text-[11px] px-1.5 py-0.5 mr-0 font-black rounded-md">
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
                                               월체
-                                            </Tag>
+                                            </span>
+                                          )}
+                                          {playerNoShow && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] border border-[#dc2626]/20 text-[11px] font-medium">
+                                              불참
+                                            </span>
                                           )}
                                         </div>
-
-                                        {/* 🚨 불참 시 눈에 띄는 확실한 경고 뱃지 */}
-                                        {playerNoShow && (
-                                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 text-white font-black text-xs w-fit shadow animate-pulse">
-                                            <WarningOutlined />
-                                            <span>불참 확정 (No-Show)</span>
-                                          </div>
-                                        )}
                                       </div>
                                     </td>
 
-                                    <td className={`py-5 px-3 font-semibold text-sm ${playerNoShow ? "text-rose-400 line-through" : "text-slate-600"}`}>
+                                    <td
+                                      className={`py-3.5 px-3 text-sm ${
+                                        playerNoShow
+                                          ? "text-[#737373] line-through"
+                                          : "text-[#525252]"
+                                      }`}
+                                    >
                                       {playerGym || "무소속 / 개인"}
                                     </td>
 
-                                    {/* 📏 대형 신장(cm) / 체중(kg) 분리 입력란 + 일체형 [계측완료] 버튼 */}
-                                    <td className="py-5 px-4">
-                                      <div className="flex items-center gap-2.5">
-                                        {/* 신장 입력 */}
+                                    {/* 신장(cm) / 체중(kg) 분리 입력란 + 저장 버튼 */}
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex items-center gap-2">
                                         <div className="relative flex items-center">
                                           <Input
                                             value={height}
                                             disabled={playerNoShow}
                                             placeholder="신장"
                                             onFocus={() => {
-                                              focusedPlayerKeyRef.current = entryKey;
+                                              focusedPlayerKeyRef.current =
+                                                entryKey;
                                             }}
                                             onBlur={() => {
-                                              if (focusedPlayerKeyRef.current === entryKey) {
-                                                focusedPlayerKeyRef.current = null;
+                                              if (
+                                                focusedPlayerKeyRef.current ===
+                                                entryKey
+                                              ) {
+                                                focusedPlayerKeyRef.current =
+                                                  null;
                                               }
                                             }}
                                             onChange={(e) =>
-                                              handleHeightChange(entryKey, e.target.value)
+                                              handleHeightChange(
+                                                entryKey,
+                                                e.target.value
+                                              )
                                             }
-                                            className={`w-24 sm:w-28 h-11 text-base font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
+                                            className={`w-24 h-9 text-sm font-medium font-mono tabular-nums pr-7 text-center rounded-[8px] transition-colors duration-150 ${
                                               playerNoShow
-                                                ? "bg-slate-100 text-slate-400 border-slate-200"
-                                                : "border-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 bg-white text-blue-950 shadow-sm"
+                                                ? "bg-[#f4f4f5] text-[#737373] border-[#171717]/[0.08]"
+                                                : "border-[#171717]/[0.14] focus:border-[#2563eb] bg-[#ffffff] text-[#171717]"
                                             }`}
                                           />
-                                          <span className="absolute right-2 text-xs font-black text-slate-400 pointer-events-none">
+                                          <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                                             cm
                                           </span>
                                         </div>
 
-                                        <span className="text-slate-300 font-black text-lg">/</span>
+                                        <span className="text-[#737373] text-sm">
+                                          /
+                                        </span>
 
-                                        {/* 체중 입력 */}
                                         <div className="relative flex items-center">
                                           <Input
                                             value={weight}
                                             disabled={playerNoShow}
                                             placeholder="체중"
                                             onFocus={() => {
-                                              focusedPlayerKeyRef.current = entryKey;
+                                              focusedPlayerKeyRef.current =
+                                                entryKey;
                                             }}
                                             onBlur={() => {
-                                              if (focusedPlayerKeyRef.current === entryKey) {
-                                                focusedPlayerKeyRef.current = null;
+                                              if (
+                                                focusedPlayerKeyRef.current ===
+                                                entryKey
+                                              ) {
+                                                focusedPlayerKeyRef.current =
+                                                  null;
                                               }
                                             }}
                                             onChange={(e) =>
-                                              handleWeightChange(entryKey, e.target.value)
+                                              handleWeightChange(
+                                                entryKey,
+                                                e.target.value
+                                              )
                                             }
-                                            className={`w-24 sm:w-28 h-11 text-base font-black font-mono pr-7 text-center rounded-xl border-2 transition-all ${
+                                            className={`w-24 h-9 text-sm font-medium font-mono tabular-nums pr-7 text-center rounded-[8px] transition-colors duration-150 ${
                                               playerNoShow
-                                                ? "bg-slate-100 text-slate-400 border-slate-200"
-                                                : "border-slate-300 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 bg-white text-blue-950 shadow-sm"
+                                                ? "bg-[#f4f4f5] text-[#737373] border-[#171717]/[0.08]"
+                                                : "border-[#171717]/[0.14] focus:border-[#2563eb] bg-[#ffffff] text-[#171717]"
                                             }`}
                                           />
-                                          <span className="absolute right-2 text-xs font-black text-slate-400 pointer-events-none">
+                                          <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                                             kg
                                           </span>
                                         </div>
 
-                                        {/* 💾 신장/체중 바로 옆에 딱 붙어있는 [신체정보입력완료] 버튼 */}
                                         <button
                                           type="button"
                                           disabled={playerNoShow}
-                                          onClick={() => handleSavePlayerWeighIn(player)}
-                                          className={`inline-flex items-center justify-center gap-1.5 px-3.5 h-11 rounded-xl font-black text-xs shadow-sm transition-all cursor-pointer border-0 shrink-0 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                          onClick={() =>
+                                            handleSavePlayerWeighIn(player)
+                                          }
+                                          className={`inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-[8px] font-medium text-xs transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
                                             isWeighedIn && !playerNoShow
-                                              ? "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-300"
-                                              : "bg-blue-600 hover:bg-blue-500 text-white"
+                                              ? "bg-[#16a34a]/[0.10] hover:bg-[#16a34a]/[0.16] text-[#16a34a] border border-[#16a34a]/25"
+                                              : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-transparent"
                                           }`}
                                         >
                                           {isWeighedIn && !playerNoShow ? (
                                             <>
-                                              <CheckCircleOutlined className="text-sm" />
-                                              <span>신체정보입력완료 ✓</span>
+                                              <Check
+                                                size={14}
+                                                strokeWidth={1.75}
+                                              />
+                                              <span>계측 완료</span>
                                             </>
                                           ) : (
                                             <>
-                                              <SaveOutlined className="text-sm" />
-                                              <span>신체정보입력완료</span>
+                                              <Save
+                                                size={14}
+                                                strokeWidth={1.5}
+                                              />
+                                              <span>계측 저장</span>
                                             </>
                                           )}
                                         </button>
@@ -3530,7 +3697,7 @@ const ContestPlayerWeighInTable = () => {
                                     </td>
 
                                     {/* 월체 체크 */}
-                                    <td className="py-5 px-3 text-center">
+                                    <td className="py-3.5 px-3 text-center">
                                       <Checkbox
                                         checked={isGradeChanged}
                                         disabled={playerNoShow}
@@ -3543,33 +3710,28 @@ const ContestPlayerWeighInTable = () => {
                                             entryKey
                                           )
                                         }
-                                        className="scale-150"
                                       />
                                     </td>
 
-                                    {/* 🚨 불참 체크박스 */}
-                                    <td className="py-5 px-3 text-center">
+                                    {/* 불참 체크박스 */}
+                                    <td className="py-3.5 px-3 text-center">
                                       <Checkbox
                                         checked={playerNoShow}
-                                        onChange={(e) => handleNoShow(playerNumber, entryKey, e)}
-                                        className={`scale-150 ${playerNoShow ? "accent-red-600" : ""}`}
+                                        onChange={(e) =>
+                                          handleNoShow(playerNumber, entryKey, e)
+                                        }
                                       />
-                                      {playerNoShow && (
-                                        <div className="text-xs text-rose-600 font-black mt-1">
-                                          불참
-                                        </div>
-                                      )}
                                     </td>
 
-                                    <td className="py-5 px-3 text-center">
-                                      <Button
-                                        size="middle"
-                                        icon={<EditOutlined />}
+                                    <td className="py-3.5 px-3 text-center">
+                                      <button
+                                        type="button"
                                         onClick={() => openNumberModal(player)}
-                                        className="text-xs font-bold rounded-xl px-3"
+                                        className="inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
                                       >
-                                        수정
-                                      </Button>
+                                        <Pencil size={13} strokeWidth={1.5} />
+                                        <span>수정</span>
+                                      </button>
                                     </td>
                                   </tr>
                                 );
@@ -3578,11 +3740,11 @@ const ContestPlayerWeighInTable = () => {
                         </table>
                       </div>
                     ) : (
-                      /* 모바일 카드 뷰 (여유로운 입력 터치 공간) */
-                      <div className="p-3 space-y-3">
+                      /* 모바일 카드 뷰 */
+                      <div className="p-3 space-y-2.5">
                         {matchedPlayers
                           .sort((a, b) => a.playerIndex - b.playerIndex)
-                          .map((player, pIdx) => {
+                          .map((player) => {
                             const {
                               playerName,
                               playerGym,
@@ -3595,88 +3757,103 @@ const ContestPlayerWeighInTable = () => {
                             } = player;
 
                             const entryKey = getPlayerEntryKey(player);
-                            const { height, weight } = parseHeightWeight(heightWeight);
+                            const { height, weight } =
+                              parseHeightWeight(heightWeight);
 
                             return (
                               <div
                                 key={entryKey || playerUid}
-                                className={`p-4 rounded-2xl border-2 ${
+                                className={`p-3.5 rounded-[8px] border ${
                                   playerNoShow
-                                    ? "bg-rose-100/90 border-rose-400"
-                                    : "bg-white border-slate-200 shadow-sm"
-                                } space-y-3.5`}
+                                    ? "bg-[#dc2626]/[0.04] border-[#dc2626]/25"
+                                    : isWeighedIn
+                                    ? "bg-[#16a34a]/[0.03] border-[#16a34a]/25"
+                                    : "bg-[#ffffff] border-[#171717]/[0.08]"
+                                } space-y-3`}
                               >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2.5">
-                                    {/* 📸 모바일 사진 썸네일 */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     {(() => {
-                                      const mPhotos = extractPlayerPhotos(player);
+                                      const mPhotos =
+                                        extractPlayerPhotos(player);
                                       if (mPhotos.length > 0) {
                                         return (
                                           <img
-                                            src={player.stagePhoto1 || player.stagePhotoUrl1 || player.stagePhotoUrl || mPhotos[0]}
+                                            src={
+                                              player.stagePhoto1 ||
+                                              player.stagePhotoUrl1 ||
+                                              player.stagePhotoUrl ||
+                                              mPhotos[0]
+                                            }
                                             alt={playerName}
                                             onClick={() => {
                                               setPhotoModalPlayer(player);
                                               setPhotoModalOpen(true);
                                             }}
-                                            className="w-11 h-11 rounded-xl object-cover border-2 border-amber-400 shadow-sm shrink-0 cursor-pointer"
+                                            className="w-10 h-10 rounded-[8px] object-cover border border-[#171717]/[0.14] shrink-0 cursor-pointer"
                                           />
                                         );
                                       }
                                       return (
                                         <button
+                                          type="button"
                                           onClick={() => {
                                             setPhotoModalPlayer(player);
                                             setPhotoModalOpen(true);
                                           }}
-                                          className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-300 text-slate-400 text-sm flex items-center justify-center shrink-0"
+                                          className="w-10 h-10 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#737373] flex items-center justify-center shrink-0 cursor-pointer"
                                         >
-                                          <UserOutlined />
+                                          <User size={16} strokeWidth={1.5} />
                                         </button>
                                       );
                                     })()}
-                                    <span
-                                      className={`px-3 py-1 rounded-xl font-mono font-black text-base shadow-sm ${
+                                    <BibTag
+                                      number={playerNumber}
+                                      variant={
+                                        isWeighedIn && !playerNoShow
+                                          ? "active"
+                                          : "default"
+                                      }
+                                      className={
                                         playerNoShow
-                                          ? "bg-rose-800 text-rose-200 line-through"
-                                          : "bg-slate-900 text-amber-400"
-                                      }`}
-                                    >
-                                      #{playerNumber}
-                                    </span>
+                                          ? "line-through opacity-50"
+                                          : ""
+                                      }
+                                    />
                                     <span
-                                      className={`font-black text-base tracking-tight ${
-                                        playerNoShow ? "line-through text-rose-700" : "text-slate-900"
+                                      className={`font-medium text-sm ${
+                                        playerNoShow
+                                          ? "line-through text-[#dc2626]"
+                                          : "text-[#171717]"
                                       }`}
                                     >
                                       {playerName}
                                     </span>
                                     {isGradeChanged && !playerNoShow && (
-                                      <Tag color="orange" className="font-black rounded-md">
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] text-[11px] font-medium">
                                         월체
-                                      </Tag>
+                                      </span>
+                                    )}
+                                    {playerNoShow && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] text-[11px] font-medium">
+                                        불참
+                                      </span>
                                     )}
                                   </div>
-                                  <Button
-                                    size="small"
-                                    icon={<EditOutlined />}
+                                  <button
+                                    type="button"
                                     onClick={() => openNumberModal(player)}
-                                  />
+                                    className="inline-flex items-center justify-center h-8 w-8 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.12] cursor-pointer"
+                                  >
+                                    <Pencil size={14} strokeWidth={1.5} />
+                                  </button>
                                 </div>
 
-                                {playerNoShow && (
-                                  <div className="px-2 py-0.5 rounded bg-rose-600 text-white font-black text-xs w-fit">
-                                    🚨 불참 확정 (No-Show)
-                                  </div>
-                                )}
-
-                                <div className="text-xs text-slate-500 font-semibold">
+                                <div className="text-xs text-[#525252]">
                                   소속: {playerGym || "개인 / 무소속"}
                                 </div>
 
-                                {/* 대형 신장/체중 2개 분리 입력란 + 일체형 [계측완료] 버튼 */}
-                                <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                <div className="flex items-center gap-2 bg-[#fafafa] p-2.5 rounded-[8px] border border-[#171717]/[0.08]">
                                   <div className="relative flex-1 flex items-center">
                                     <Input
                                       value={height}
@@ -3686,20 +3863,28 @@ const ContestPlayerWeighInTable = () => {
                                         focusedPlayerKeyRef.current = entryKey;
                                       }}
                                       onBlur={() => {
-                                        if (focusedPlayerKeyRef.current === entryKey) {
+                                        if (
+                                          focusedPlayerKeyRef.current ===
+                                          entryKey
+                                        ) {
                                           focusedPlayerKeyRef.current = null;
                                         }
                                       }}
                                       onChange={(e) =>
-                                        handleHeightChange(entryKey, e.target.value)
+                                        handleHeightChange(
+                                          entryKey,
+                                          e.target.value
+                                        )
                                       }
-                                      className="h-11 text-base font-black font-mono text-center pr-7 rounded-xl border-2 border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white shadow-sm"
+                                      className="h-9 text-sm font-medium font-mono tabular-nums text-center pr-7 rounded-[8px] border-[#171717]/[0.14] bg-[#ffffff]"
                                     />
-                                    <span className="absolute right-2 text-xs font-black text-slate-400 pointer-events-none">
+                                    <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                                       cm
                                     </span>
                                   </div>
-                                  <span className="text-slate-300 font-black text-lg">/</span>
+                                  <span className="text-[#737373] text-sm">
+                                    /
+                                  </span>
                                   <div className="relative flex-1 flex items-center">
                                     <Input
                                       value={weight}
@@ -3709,37 +3894,46 @@ const ContestPlayerWeighInTable = () => {
                                         focusedPlayerKeyRef.current = entryKey;
                                       }}
                                       onBlur={() => {
-                                        if (focusedPlayerKeyRef.current === entryKey) {
+                                        if (
+                                          focusedPlayerKeyRef.current ===
+                                          entryKey
+                                        ) {
                                           focusedPlayerKeyRef.current = null;
                                         }
                                       }}
                                       onChange={(e) =>
-                                        handleWeightChange(entryKey, e.target.value)
+                                        handleWeightChange(
+                                          entryKey,
+                                          e.target.value
+                                        )
                                       }
-                                      className="h-11 text-base font-black font-mono text-center pr-7 rounded-xl border-2 border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white shadow-sm"
+                                      className="h-9 text-sm font-medium font-mono tabular-nums text-center pr-7 rounded-[8px] border-[#171717]/[0.14] bg-[#ffffff]"
                                     />
-                                    <span className="absolute right-2 text-xs font-black text-slate-400 pointer-events-none">
+                                    <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
                                       kg
                                     </span>
                                   </div>
 
-                                  {/* 💾 모바일 일체형 [신체정보입력완료] 버튼 */}
                                   <button
                                     type="button"
                                     disabled={playerNoShow}
-                                    onClick={() => handleSavePlayerWeighIn(player)}
-                                    className={`inline-flex items-center justify-center gap-1 px-3 h-11 rounded-xl font-black text-xs shadow-sm transition-all cursor-pointer border-0 shrink-0 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                    onClick={() =>
+                                      handleSavePlayerWeighIn(player)
+                                    }
+                                    className={`inline-flex items-center justify-center gap-1 px-3 h-9 rounded-[8px] font-medium text-xs transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
                                       isWeighedIn && !playerNoShow
-                                        ? "bg-emerald-600 text-white"
-                                        : "bg-blue-600 text-white"
+                                        ? "bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/25"
+                                        : "bg-[#2563eb] text-white border border-transparent"
                                     }`}
                                   >
-                                    {isWeighedIn && !playerNoShow ? "신체정보입력완료 ✓" : "신체정보입력완료"}
+                                    {isWeighedIn && !playerNoShow
+                                      ? "계측 완료"
+                                      : "계측 저장"}
                                   </button>
                                 </div>
 
-                                <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-                                  <label className="flex items-center gap-1 text-xs font-bold text-slate-600 cursor-pointer">
+                                <div className="flex items-center justify-end gap-4 pt-2 border-t border-[#171717]/[0.06]">
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-[#525252] cursor-pointer">
                                     <Checkbox
                                       checked={isGradeChanged}
                                       disabled={playerNoShow}
@@ -3752,18 +3946,18 @@ const ContestPlayerWeighInTable = () => {
                                           entryKey
                                         )
                                       }
-                                      className="scale-110"
                                     />
-                                    <span>월체 (즉시반영)</span>
+                                    <span>월체</span>
                                   </label>
 
-                                  <label className="flex items-center gap-1 text-xs text-rose-700 font-black cursor-pointer">
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-[#dc2626] cursor-pointer">
                                     <Checkbox
                                       checked={playerNoShow}
-                                      onChange={(e) => handleNoShow(playerNumber, entryKey, e)}
-                                      className="scale-110"
+                                      onChange={(e) =>
+                                        handleNoShow(playerNumber, entryKey, e)
+                                      }
                                     />
-                                    <span>🚨 불참 (즉시반영)</span>
+                                    <span>불참</span>
                                   </label>
                                 </div>
                               </div>
@@ -3776,7 +3970,7 @@ const ContestPlayerWeighInTable = () => {
               })
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

@@ -1,17 +1,22 @@
 import React, { useEffect, useState, useContext } from "react";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import {
+  RefreshCw,
+  Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { BsTrash } from "react-icons/bs";
 
 const SimpleInvoicesAdmin = () => {
   const { currentContest } = useContext(CurrentContestContext);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔹 정렬 상태
   const [sortKey, setSortKey] = useState("invoiceCreateAt");
-  const [sortOrder, setSortOrder] = useState("desc"); // asc | desc
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const fetchInvoices = async () => {
     if (!currentContest?.contests?.id) return;
@@ -25,7 +30,7 @@ const SimpleInvoicesAdmin = () => {
       );
       setInvoices(filtered);
     } catch (err) {
-      console.error("❌ 참가신청서 불러오기 실패:", err);
+      console.error("참가신청서 불러오기 실패:", err);
     } finally {
       setLoading(false);
     }
@@ -43,10 +48,8 @@ const SimpleInvoicesAdmin = () => {
     }
   };
 
-  // 🔹 정렬 클릭 시 처리
   const handleSort = (key) => {
     if (sortKey === key) {
-      // 동일 키 클릭 → 정렬 방향 반전
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
@@ -54,18 +57,15 @@ const SimpleInvoicesAdmin = () => {
     }
   };
 
-  // 🔹 정렬된 데이터 생성
   const sortedInvoices = [...invoices].sort((a, b) => {
     let valA = a[sortKey];
     let valB = b[sortKey];
 
-    // 접수일자는 문자열을 Date로 변환
     if (sortKey === "invoiceCreateAt") {
       valA = new Date(valA);
       valB = new Date(valB);
     }
 
-    // 문자열 비교
     if (typeof valA === "string") valA = valA.toLowerCase();
     if (typeof valB === "string") valB = valB.toLowerCase();
 
@@ -76,136 +76,223 @@ const SimpleInvoicesAdmin = () => {
 
   useEffect(() => {
     fetchInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
 
   const renderSortIcon = (key) => {
-    if (sortKey !== key) return "↕️";
-    return sortOrder === "asc" ? "▲" : "▼";
+    if (sortKey !== key) {
+      return <ArrowUpDown size={13} strokeWidth={1.5} className="text-[#737373]" />;
+    }
+    return sortOrder === "asc" ? (
+      <ArrowUp size={13} strokeWidth={1.5} className="text-[#2563eb]" />
+    ) : (
+      <ArrowDown size={13} strokeWidth={1.5} className="text-[#2563eb]" />
+    );
   };
 
   return (
-    <div className="p-4 bg-white rounded shadow">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">
-          참가신청서 수동 관리 (
-          {currentContest?.contestInfo?.contestTitle || "대회 선택"})
-        </h2>
-        <button
-          onClick={fetchInvoices}
-          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          🔄 새로고침
-        </button>
-      </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              참가신청서 수동 관리
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              {currentContest?.contestInfo?.contestTitle || "선택된 대회 없음"} ·
+              접수된 원본 신청서를 조회하고 삭제합니다
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+              총 {invoices.length}건
+            </span>
+            <button
+              type="button"
+              onClick={fetchInvoices}
+              disabled={loading}
+              className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <RefreshCw
+                size={15}
+                strokeWidth={1.5}
+                className={`text-[#525252] ${loading ? "animate-spin" : ""}`}
+              />
+              <span>새로고침</span>
+            </button>
+          </div>
+        </header>
 
-      {loading ? (
-        <p className="text-gray-500">불러오는 중...</p>
-      ) : invoices.length === 0 ? (
-        <p className="text-gray-500">해당 대회에 접수된 신청서가 없습니다.</p>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="table-auto w-full text-sm">
-            <thead className="bg-gray-100">
-              <tr>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("index")}
-                >
-                  순번 {renderSortIcon("index")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("invoiceCreateAt")}
-                >
-                  접수일자 {renderSortIcon("invoiceCreateAt")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("playerName")}
-                >
-                  이름 {renderSortIcon("playerName")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("playerGender")}
-                >
-                  성별 {renderSortIcon("playerGender")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("playerTel")}
-                >
-                  연락처 {renderSortIcon("playerTel")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("playerGym")}
-                >
-                  소속 {renderSortIcon("playerGym")}
-                </th>
-                <th className="p-2 border">참가 종목/체급</th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("invoiceEdited")}
-                >
-                  수정됨 {renderSortIcon("invoiceEdited")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("isCanceled")}
-                >
-                  취소됨 {renderSortIcon("isCanceled")}
-                </th>
-                <th
-                  className="p-2 border cursor-pointer"
-                  onClick={() => handleSort("isPriceCheck")}
-                >
-                  입금확인 {renderSortIcon("isPriceCheck")}
-                </th>
-                <th className="p-2 border text-center">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedInvoices.map((inv, idx) => (
-                <tr key={inv.id} className="hover:bg-gray-50">
-                  <td className="p-2 border text-center">{idx + 1}</td>
-                  <td className="p-2 border">{inv.invoiceCreateAt || "-"}</td>
-                  <td className="p-2 border">{inv.playerName}</td>
-                  <td className="p-2 border">
-                    {inv.playerGender === "m" ? "남" : "여"}
-                  </td>
-                  <td className="p-2 border">{inv.playerTel}</td>
-                  <td className="p-2 border">{inv.playerGym}</td>
-                  <td className="p-2 border">
-                    {inv.joins?.map((j, i) => (
-                      <div key={i}>
-                        {j.contestCategoryTitle} ({j.contestGradeTitle})
-                      </div>
-                    ))}
-                  </td>
-                  <td className="p-2 border text-center">
-                    {inv.invoiceEdited ? "예" : "아니오"}
-                  </td>
-                  <td className="p-2 border text-center">
-                    {inv.isCanceled ? "예" : "아니오"}
-                  </td>
-                  <td className="p-2 border text-center">
-                    {inv.isPriceCheck ? "예" : "아니오"}
-                  </td>
-                  <td className="p-2 border text-center">
-                    <button
-                      onClick={() => handleDelete(inv.id)}
-                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+          {loading ? (
+            <div className="p-12 text-center text-[13px] text-[#737373]">
+              신청서 목록을 불러오는 중입니다
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="p-12 text-center text-[13px] text-[#737373]">
+              해당 대회에 접수된 신청서가 없습니다
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px] border-collapse">
+                <thead>
+                  <tr className="bg-[#f4f4f5] text-[#525252] border-b border-[#171717]/[0.08] h-10 select-none">
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717] w-16"
+                      onClick={() => handleSort("index")}
                     >
-                      <BsTrash />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      <span className="inline-flex items-center gap-1">
+                        순번 {renderSortIcon("index")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("invoiceCreateAt")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        접수일자 {renderSortIcon("invoiceCreateAt")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("playerName")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        이름 {renderSortIcon("playerName")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("playerGender")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        성별 {renderSortIcon("playerGender")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("playerTel")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        연락처 {renderSortIcon("playerTel")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("playerGym")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        소속 {renderSortIcon("playerGym")}
+                      </span>
+                    </th>
+                    <th className="px-3 font-medium">참가 종목 및 체급</th>
+                    <th
+                      className="px-3 font-medium text-center cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("invoiceEdited")}
+                    >
+                      <span className="inline-flex items-center justify-center gap-1">
+                        수정 {renderSortIcon("invoiceEdited")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium text-center cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("isCanceled")}
+                    >
+                      <span className="inline-flex items-center justify-center gap-1">
+                        취소 {renderSortIcon("isCanceled")}
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 font-medium text-center cursor-pointer hover:text-[#171717]"
+                      onClick={() => handleSort("isPriceCheck")}
+                    >
+                      <span className="inline-flex items-center justify-center gap-1">
+                        입금 {renderSortIcon("isPriceCheck")}
+                      </span>
+                    </th>
+                    <th className="px-3 font-medium text-center w-16">관리</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#171717]/[0.06]">
+                  {sortedInvoices.map((inv, idx) => (
+                    <tr
+                      key={inv.id}
+                      className="hover:bg-[#f4f4f5]/50 transition-colors duration-150"
+                    >
+                      <td className="px-3 py-2.5 font-mono text-[12px] tabular-nums text-[#737373]">
+                        {idx + 1}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] tabular-nums text-[#525252]">
+                        {inv.invoiceCreateAt || "-"}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-[#171717]">
+                        {inv.playerName || "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-[#525252]">
+                        {inv.playerGender === "m" ? "남" : "여"}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] tabular-nums text-[#525252]">
+                        {inv.playerTel || "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-[#525252]">
+                        {inv.playerGym || "-"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {inv.joins?.map((j, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[12px] text-[#171717]"
+                            >
+                              {j.contestCategoryTitle}
+                              <span className="text-[#737373] ml-1">
+                                · {j.contestGradeTitle}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-[#525252]">
+                        {inv.invoiceEdited ? "수정됨" : "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {inv.isCanceled ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                            취소
+                          </span>
+                        ) : (
+                          <span className="text-[12px] text-[#737373]">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {inv.isPriceCheck ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#16a34a]/[0.08] text-[#16a34a]">
+                            완료
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#f4f4f5] text-[#737373]">
+                            대기
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(inv.id)}
+                          aria-label="신청서 삭제"
+                          className="h-8 w-8 rounded-[6px] inline-flex items-center justify-center text-[#dc2626] hover:bg-[#dc2626]/[0.08] transition-colors duration-150"
+                        >
+                          <Trash2 size={15} strokeWidth={1.5} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 };

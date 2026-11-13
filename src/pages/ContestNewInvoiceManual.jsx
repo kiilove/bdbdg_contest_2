@@ -1,16 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useContext, useEffect } from "react";
+import { Save } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useContext } from "react";
-import { useEffect } from "react";
 import {
   useFirestoreAddData,
   useFirestoreGetDocument,
 } from "../hooks/useFirestores";
-import { BsCheckAll } from "react-icons/bs";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateToday, generateUUID } from "../functions/functions";
+import BibTag from "../components/ui/BibTag";
+
+const inputClass =
+  "w-full h-9 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 text-[14px] text-[#171717] placeholder:text-[#737373] focus:outline-none focus:border-[#2563eb] transition-colors duration-150";
 
 const ContestNewInvoiceManual = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -27,6 +29,16 @@ const ContestNewInvoiceManual = () => {
   const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
   const [message, setMessage] = useState("");
   const invoiceInfoRef = useRef({});
+
+  void playerList;
+  void setPlayerList;
+  void playerArray;
+  void setPlayerArray;
+  void categorysList;
+  void entrysArray;
+  void setEntrysArray;
+  void unDelMsgOpen;
+  void setUnDelMsgOpen;
 
   const fetchCategoryDocument = useFirestoreGetDocument(
     "contest_categorys_list"
@@ -134,7 +146,6 @@ const ContestNewInvoiceManual = () => {
     } = infoObj;
 
     const initInfo = {
-      //invoicePoolId: invoicePoolId,
       contestId: contestId,
       contestTitle,
       contestDate,
@@ -198,342 +209,316 @@ const ContestNewInvoiceManual = () => {
   useEffect(() => {
     if (!currentContest?.contests?.id) return;
     setInvoiceInfo(initInvoiceInfo());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
 
   useEffect(() => {
     if (!currentContest?.contests?.id) return;
     fetchPool();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
 
-  useEffect(() => {
-    //console.log(invoiceInfo);
-  }, [invoiceInfo]);
-
-  useEffect(() => {
-    console.log({ categorysArray, gradesArray });
-  }, [categorysArray, gradesArray]);
-
   return (
-    <>
-      {currentContest?.contests?.id ? (
-        <div className="flex w-full flex-col gap-y-3 h-auto pt-4 pb-10 lg:pt-0 lg:pb-0 overflow-y-auto px-2 lg:px-0">
-          <ConfirmationModal
-            isOpen={addMsgOpen}
-            onConfirm={() => {
-              setInvoiceInfo(initInvoiceInfo());
-              setAddMsgOpen(false);
-            }}
-            onCancel={() => setAddMsgOpen(false)}
-            message={message}
-          />
-          <div className="flex w-full h-auto min-h-14">
-            <div className="flex w-full bg-gradient-to-r from-blue-50 to-cyan-50 justify-start items-center rounded-lg px-4 py-3 shadow-sm border border-blue-100">
-              <div className="flex w-full items-center gap-x-3">
-                <span className="font-sans text-lg font-semibold w-7 h-7 flex justify-center items-center rounded-full bg-blue-500 text-white flex-shrink-0">
-                  <BsCheckAll />
-                </span>
-                <h1
-                  className="font-sans text-base lg:text-lg font-semibold text-gray-800"
-                  style={{ letterSpacing: "1px" }}
-                >
-                  참가신청서 수동작성
-                </h1>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <ConfirmationModal
+          isOpen={addMsgOpen}
+          onConfirm={() => {
+            setInvoiceInfo(initInvoiceInfo());
+            setAddMsgOpen(false);
+          }}
+          onCancel={() => setAddMsgOpen(false)}
+          message={message}
+        />
+
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              참가신청서 수동 작성
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              현장 또는 유선으로 접수된 선수의 참가신청서를 수동으로 등록합니다
+            </p>
           </div>
-          <div className="flex bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 p-4 rounded-lg shadow-sm border border-blue-100">
-            <div className="flex w-full bg-white h-auto rounded-lg justify-start items-start flex-col p-4 lg:p-6 gap-y-4">
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
+          {currentContest?.contests?.id && (
+            <div>
+              <button
+                type="button"
+                onClick={() => handleAddInvoice(invoiceInfo)}
+                className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+              >
+                <Save size={16} strokeWidth={1.5} />
+                <span>신청서 저장</span>
+              </button>
+            </div>
+          )}
+        </header>
+
+        {currentContest?.contests?.id ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* 좌측: 선수 기본 정보 */}
+            <section className="lg:col-span-6 bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+              <div className="border-b border-[#171717]/[0.06] pb-3">
+                <h2 className="text-[15px] font-medium text-[#171717]">
+                  선수 인적사항 및 참가비
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
                     이름
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
+                  </label>
                   <input
                     type="text"
-                    value={invoiceInfo.playerName}
+                    name="playerName"
+                    placeholder="선수 이름"
+                    value={invoiceInfo.playerName || ""}
                     onChange={(e) => handleInputValues(e)}
                     ref={(ref) => (invoiceInfoRef.current.playerName = ref)}
-                    name="playerName"
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent"
+                    className={inputClass}
                   />
                 </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
+
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
+                    성별
+                  </label>
+                  <select
+                    name="playerGender"
+                    value={invoiceInfo.playerGender || "m"}
+                    onChange={(e) => handleInputValues(e)}
+                    ref={(ref) => (invoiceInfoRef.current.playerGender = ref)}
+                    className={inputClass}
                   >
-                    연락처
-                  </h3>
+                    <option value="m">남성</option>
+                    <option value="f">여성</option>
+                  </select>
                 </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
+
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
+                    연락처
+                  </label>
                   <input
                     type="text"
                     name="playerTel"
-                    placeholder="010-0000-0000 형식으로 입력"
-                    value={invoiceInfo.playerTel}
+                    placeholder="010-0000-0000"
+                    value={invoiceInfo.playerTel || ""}
                     onChange={(e) => handleInputValues(e)}
                     ref={(ref) => (invoiceInfoRef.current.playerTel = ref)}
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
+                    className={`${inputClass} font-mono tabular-nums`}
                   />
                 </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
+
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
                     생년월일
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
+                  </label>
                   <input
                     type="text"
                     name="playerBirth"
-                    placeholder="2000-01-01 형식으로 입력"
-                    value={invoiceInfo.playerBirth}
+                    placeholder="YYYY-MM-DD"
+                    value={invoiceInfo.playerBirth || ""}
                     onChange={(e) => handleInputValues(e)}
                     ref={(ref) => (invoiceInfoRef.current.playerBirth = ref)}
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
+                    className={`${inputClass} font-mono tabular-nums`}
                   />
                 </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
+
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
                     소속
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
+                  </label>
                   <input
                     type="text"
                     name="playerGym"
-                    value={invoiceInfo.playerGym}
-                    placeholder="소속없거나 모르면 무소속"
+                    placeholder="소속이 없으면 무소속 입력"
+                    value={invoiceInfo.playerGym || ""}
                     onChange={(e) => handleInputValues(e)}
                     ref={(ref) => (invoiceInfoRef.current.playerGym = ref)}
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#525252]">
+                    이메일
+                  </label>
+                  <input
+                    type="email"
+                    name="playerEmail"
+                    placeholder="example@email.com"
+                    value={invoiceInfo.playerEmail || ""}
+                    onChange={(e) => handleInputValues(e)}
+                    ref={(ref) => (invoiceInfoRef.current.playerEmail = ref)}
+                    className={inputClass}
                   />
                 </div>
               </div>
 
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
-                    성별
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all overflow-hidden">
-                  <select
-                    name="playerGender"
-                    onChange={(e) => handleInputValues(e)}
-                    ref={(ref) => (invoiceInfoRef.current.playerGender = ref)}
-                    className="w-full h-full px-3 text-sm lg:text-base bg-transparent outline-none cursor-pointer"
-                  >
-                    <option
-                      selected={invoiceInfo.playerGender === "m"}
-                      value="m"
-                    >
-                      남
-                    </option>
-                    <option
-                      selected={invoiceInfo.playerGender === "f"}
-                      value="f"
-                    >
-                      여
-                    </option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
-                    이메일
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
-                  <input
-                    type="email"
-                    name="playerEmail"
-                    value={invoiceInfo.playerEmail}
-                    placeholder="abc@abc.com 형식으로 입력"
-                    onChange={(e) => handleInputValues(e)}
-                    ref={(ref) => (invoiceInfoRef.current.playerEmail = ref)}
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
-                  />
-                </div>
-              </div>
-              <div className="flex w-full justify-start items-center gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
-                    참가비용
-                  </h3>
-                </div>
-                <div className="flex-1 h-10 lg:h-12 rounded-lg px-3 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
+              <div className="space-y-1.5">
+                <label className="block text-[13px] font-medium text-[#525252]">
+                  참가비용 합계
+                </label>
+                <div className="relative flex items-center">
                   <input
                     type="text"
                     name="contestPriceSum"
-                    value={invoiceInfo.contestPriceSum?.toLocaleString()}
-                    placeholder="참가비 수동으로 계산입력"
+                    value={invoiceInfo.contestPriceSum?.toLocaleString() ?? "0"}
+                    placeholder="수동 계산 금액 입력"
                     onChange={(e) => handleInputValues(e)}
                     ref={(ref) =>
                       (invoiceInfoRef.current.contestPriceSum = ref)
                     }
-                    className="w-full h-full outline-none text-sm lg:text-base bg-transparent placeholder:text-gray-400"
+                    className={`${inputClass} pr-8 text-right font-mono tabular-nums`}
                   />
+                  <span className="absolute right-3 text-[13px] text-[#737373] pointer-events-none">
+                    원
+                  </span>
                 </div>
               </div>
 
-              <div className="flex w-full justify-start items-start gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0 pt-2">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
-                    출전동기
-                  </h3>
-                </div>
-                <div className="flex-1 rounded-lg px-3 py-2 bg-gray-50 border border-gray-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
-                  <textarea
-                    name="playerText"
-                    value={invoiceInfo.playerText}
-                    onChange={(e) => handleInputValues(e)}
-                    ref={(ref) => (invoiceInfoRef.current.playerText = ref)}
-                    className="w-full h-20 lg:h-24 outline-none text-sm lg:text-base bg-transparent resize-none placeholder:text-gray-400"
-                    placeholder="출전동기를 입력해주세요"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <label className="block text-[13px] font-medium text-[#525252]">
+                  출전 동기 및 메모
+                </label>
+                <textarea
+                  name="playerText"
+                  value={invoiceInfo.playerText || ""}
+                  onChange={(e) => handleInputValues(e)}
+                  ref={(ref) => (invoiceInfoRef.current.playerText = ref)}
+                  placeholder="출전 동기 또는 참고 메모 입력"
+                  className="w-full h-24 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 py-2 text-[14px] text-[#171717] placeholder:text-[#737373] resize-none focus:outline-none focus:border-[#2563eb] transition-colors duration-150"
+                />
               </div>
-              <div className="flex w-full justify-start items-start gap-x-3">
-                <div className="flex w-24 lg:w-28 justify-end flex-shrink-0 pt-2">
-                  <h3
-                    className="font-sans font-semibold text-sm lg:text-base text-gray-700"
-                    style={{ letterSpacing: "1px" }}
-                  >
-                    참가종목
-                  </h3>
-                </div>
-                <div className="flex-1 rounded-lg p-3 bg-gray-50 border border-gray-200 max-h-80 overflow-y-auto">
-                  <div className="flex flex-col w-full h-auto gap-y-2">
-                    {categorysArray?.length > 0 &&
-                      categorysArray.map((category, cIdx) => {
-                        const {
-                          contestCategoryId: categoryId,
-                          contestCategoryIndex: categoryIndex,
-                          contestCategoryTitle: categoryTitle,
-                          contestCategoryPriceType: categoryType,
-                        } = category;
+            </section>
 
-                        const matchedGrades = gradesArray
-                          .filter((grade) => grade.refCategoryId === categoryId)
-                          .sort(
-                            (a, b) => a.contestGradeIndex - b.contestGradeIndex
-                          );
+            {/* 우측: 참가종목 선택 */}
+            <section className="lg:col-span-6 bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#171717]/[0.06] pb-3">
+                <h2 className="text-[15px] font-medium text-[#171717]">
+                  참가 종목 및 체급 선택
+                </h2>
+                <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+                  선택됨 {(invoiceInfo?.joins || []).length}종목
+                </span>
+              </div>
 
-                        const isSelected = invoiceInfo?.joins?.some(
-                          (join) => join.contestCategoryId === categoryId
-                        );
+              <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1">
+                {categorysArray?.length > 0 ? (
+                  categorysArray.map((category, cIdx) => {
+                    const {
+                      contestCategoryId: categoryId,
+                      contestCategoryIndex: categoryIndex,
+                      contestCategoryTitle: categoryTitle,
+                      contestCategoryPriceType: categoryType,
+                    } = category;
 
-                        return (
-                          <div
-                            key={cIdx}
-                            className={`flex flex-col lg:flex-row w-full border rounded-lg overflow-hidden transition-all ${
-                              isSelected
-                                ? "bg-blue-500 border-blue-600 shadow-md"
-                                : "bg-white border-gray-200 hover:border-blue-300"
+                    const matchedGrades = gradesArray
+                      .filter((grade) => grade.refCategoryId === categoryId)
+                      .sort(
+                        (a, b) => a.contestGradeIndex - b.contestGradeIndex
+                      );
+
+                    const selectedJoin = invoiceInfo?.joins?.find(
+                      (join) => join.contestCategoryId === categoryId
+                    );
+                    const isSelected = Boolean(selectedJoin);
+
+                    const selectVal = selectedJoin
+                      ? `${selectedJoin.contestGradeId},${selectedJoin.contestGradeTitle},${categoryType}`
+                      : "체급선택";
+
+                    return (
+                      <div
+                        key={categoryId || cIdx}
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-[8px] border transition-colors duration-150 ${
+                          isSelected
+                            ? "bg-[#2563eb]/[0.06] border-[#2563eb]/40"
+                            : "bg-[#fafafa] border-[#171717]/[0.08] hover:border-[#171717]/[0.16]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <BibTag
+                            number={categoryIndex ?? cIdx + 1}
+                            size="sm"
+                            variant={isSelected ? "active" : "default"}
+                          />
+                          <span
+                            className={`text-[14px] font-medium ${
+                              isSelected ? "text-[#2563eb]" : "text-[#171717]"
                             }`}
                           >
-                            <div className="flex w-full lg:w-1/2 p-3 items-center">
-                              <span
-                                className={`text-sm lg:text-base font-medium ${
-                                  isSelected ? "text-white" : "text-gray-800"
-                                }`}
-                              >
-                                {categoryTitle}
-                              </span>
-                            </div>
-                            <div className="flex w-full lg:w-1/2 p-3 lg:justify-end items-center border-t lg:border-t-0 lg:border-l border-gray-200">
-                              <select
-                                id={categoryId}
-                                name={categoryTitle}
-                                className={`w-full lg:w-auto text-sm lg:text-base px-2 py-1 rounded outline-none cursor-pointer ${
-                                  isSelected
-                                    ? "bg-blue-600 text-white border border-blue-400"
-                                    : "bg-gray-50 text-gray-700 border border-gray-300"
-                                }`}
-                                onChange={(e) => handleJoins(e)}
-                              >
-                                <option>체급선택</option>
-                                {matchedGrades?.length > 0 &&
-                                  matchedGrades.map((match, mIdx) => {
-                                    const {
-                                      contestGradeId: gradeId,
-                                      contestGradeTitle: gradeTitle,
-                                      contestGradeIndex: gradeIndex,
-                                    } = match;
+                            {categoryTitle}
+                          </span>
+                        </div>
 
-                                    return (
-                                      <option
-                                        key={mIdx}
-                                        className="text-sm"
-                                        id={gradeId}
-                                        selected={invoiceInfo?.joins?.some(
-                                          (i) => i.contestGradeId === gradeId
-                                        )}
-                                        value={
-                                          gradeId +
-                                          "," +
-                                          gradeTitle +
-                                          "," +
-                                          categoryType
-                                        }
-                                      >
-                                        {gradeTitle}
-                                      </option>
-                                    );
-                                  })}
-                              </select>
-                            </div>
-                          </div>
-                        );
-                      })}
+                        <select
+                          id={categoryId}
+                          name={categoryTitle}
+                          value={selectVal}
+                          onChange={(e) => handleJoins(e)}
+                          className={`h-9 sm:w-52 rounded-[8px] px-3 text-[13px] font-medium focus:outline-none transition-colors duration-150 ${
+                            isSelected
+                              ? "bg-white border border-[#2563eb]/50 text-[#2563eb]"
+                              : "bg-white border border-[#171717]/[0.12] text-[#525252]"
+                          }`}
+                        >
+                          <option value="체급선택">체급선택</option>
+                          {matchedGrades?.length > 0 &&
+                            matchedGrades.map((match, mIdx) => {
+                              const {
+                                contestGradeId: gradeId,
+                                contestGradeTitle: gradeTitle,
+                              } = match;
+
+                              return (
+                                <option
+                                  key={gradeId || mIdx}
+                                  id={gradeId}
+                                  value={
+                                    gradeId +
+                                    "," +
+                                    gradeTitle +
+                                    "," +
+                                    categoryType
+                                  }
+                                >
+                                  {gradeTitle}
+                                </option>
+                              );
+                            })}
+                        </select>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-12 text-center text-[13px] text-[#737373]">
+                    등록된 종목이 없습니다
                   </div>
-                </div>
+                )}
               </div>
-            </div>
+
+              <div className="pt-2 border-t border-[#171717]/[0.06] flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleAddInvoice(invoiceInfo)}
+                  className="w-full sm:w-auto h-10 px-6 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[14px] font-medium inline-flex items-center justify-center gap-2 transition-colors duration-150"
+                >
+                  <Save size={16} strokeWidth={1.5} />
+                  <span>참가신청서 저장</span>
+                </button>
+              </div>
+            </section>
           </div>
-          <div className="flex w-full gap-x-2 h-auto">
-            <button
-              className="w-full h-12 lg:h-14 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 rounded-lg text-white font-semibold text-base lg:text-lg shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
-              onClick={() => handleAddInvoice(invoiceInfo)}
-            >
-              저장
-            </button>
+        ) : (
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-10 text-center text-[14px] text-[#737373]">
+            상단에서 대회를 먼저 선택해주세요
           </div>
-        </div>
-      ) : (
-        <div></div>
-      )}
-    </>
+        )}
+      </div>
+    </div>
   );
 };
 

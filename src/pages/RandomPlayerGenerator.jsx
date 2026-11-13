@@ -1,10 +1,11 @@
 import React, { useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { Shuffle, RefreshCw, Upload } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   useFirestoreAddData,
   useFirestoreGetDocument,
-} from "../hooks/useFirestores"; // Custom hook for Firestore
+} from "../hooks/useFirestores";
 import {
   FEMALE_NAMES,
   FITNESS_CLUBS,
@@ -15,7 +16,6 @@ import {
 import { PHONE_NUMBERS } from "../functions/mobileNumber";
 import dayjs from "dayjs";
 
-// Import the distribution functions
 import {
   initializeDistributions,
   updateDistributions,
@@ -32,11 +32,10 @@ const RandomPlayerGenerator = () => {
   const [categorysArray, setCategorysArray] = useState([]);
   const [gradesArray, setGradesArray] = useState([]);
   const [isButtonEnabled, setIsButtonEnabled] = useState(false);
-  const [selectedPlayers, setSelectedPlayers] = useState([]); // Track selected players
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [playerCount, setPlayerCount] = useState(0);
 
-  // Firestore hook to add data
-  const addInvoice = useFirestoreAddData("invoices_pool"); // Collection name is 'invoices_pool'
+  const addInvoice = useFirestoreAddData("invoices_pool");
 
   const fetchCategoryDocument = useFirestoreGetDocument(
     "contest_categorys_list"
@@ -45,18 +44,17 @@ const RandomPlayerGenerator = () => {
 
   const fetchPool = async () => {
     try {
-      if (currentContest.contests.contestCategorysListId) {
+      if (currentContest?.contests?.contestCategorysListId) {
         const returnCategorys = await fetchCategoryDocument.getDocument(
           currentContest.contests.contestCategorysListId
         );
-        setCategorysArray([...returnCategorys?.categorys]);
+        setCategorysArray([...(returnCategorys?.categorys || [])]);
 
         const returnGrades = await fetchGradeDocument.getDocument(
           currentContest.contests.contestGradesListId
         );
-        setGradesArray([...returnGrades?.grades]);
+        setGradesArray([...(returnGrades?.grades || [])]);
 
-        // Initialize category and grade distributions
         const { initialCategoryDistribution, initialGradeDistribution } =
           initializeDistributions(
             returnCategorys?.categorys,
@@ -122,8 +120,7 @@ const RandomPlayerGenerator = () => {
   const calculateContestPriceSum = (player) => {
     let priceSum = 0;
 
-    // 첫 번째 종목에 대해 contestCategoryPriceType에 따라 기본 참가비 결정
-    const firstJoin = player.joins[0]; // 첫 번째 종목
+    const firstJoin = player.joins[0];
     if (firstJoin.contestCategoryPriceType === "기본참가비") {
       priceSum += player.contestPriceBasic || 0;
     } else if (firstJoin.contestCategoryPriceType === "타입1") {
@@ -132,16 +129,13 @@ const RandomPlayerGenerator = () => {
       priceSum += player.contestPriceType2 || 0;
     }
 
-    // 종목이 2개 이상일 경우 추가 참가비 계산
     if (player.joins.length > 1) {
-      const extraJoinCount = player.joins.length - 1; // 추가 종목 수
+      const extraJoinCount = player.joins.length - 1;
       const isAccumulated = player.contestPriceExtraType === "누적";
 
       if (isAccumulated) {
-        // "누적"일 경우, 추가 참가비를 종목 수에 맞게 계산
         priceSum += (player.contestPriceExtra || 0) * extraJoinCount;
       } else {
-        // "정액"일 경우, 추가 참가비를 한 번만 더함
         priceSum += player.contestPriceExtra || 0;
       }
     }
@@ -165,9 +159,7 @@ const RandomPlayerGenerator = () => {
 
   const generatePlayer = () => {
     try {
-      console.log("Starting generatePlayer...");
       const age = generateAgeBasedOnDistribution();
-      console.log("Generated age:", age);
       const currentYear = dayjs().year();
       const birthYear = currentYear - age;
       const birthMonth = Math.floor(Math.random() * 12) + 1;
@@ -198,11 +190,11 @@ const RandomPlayerGenerator = () => {
       }
 
       const playerTexts = [
-        "우승하자",
-        "최고를 향해!",
-        "한계를 넘어서!",
-        "최고의 순간을 위해",
-        "끝까지 포기하지 않는다!",
+        "우승을 목표로 준비했습니다",
+        "최선을 다해 무대에 오르겠습니다",
+        "꾸준한 훈련의 결과를 확인하고 싶습니다",
+        "최고의 컨디션으로 출전합니다",
+        "끝까지 집중하겠습니다",
       ];
       const playerText =
         playerTexts[Math.floor(Math.random() * playerTexts.length)];
@@ -222,26 +214,22 @@ const RandomPlayerGenerator = () => {
         createBy: "manual",
         invoiceCreateAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
         ...currentContest?.contestInfo,
-        contestId: currentContest?.contestInfo.refContestId,
+        contestId: currentContest?.contestInfo?.refContestId,
       };
 
       delete newPlayer.id;
       delete newPlayer.refContestId;
 
-      // 카테고리 선택 로직 개선
       const availableCategories = filterCategories(age, isFemale);
       if (!availableCategories || availableCategories.length === 0) {
-        console.log("No valid categories found for this player");
         return null;
       }
 
-      // 카테고리 수 결정 (1-3개)
       const numberOfCategories = Math.min(
         age <= 19 ? 1 : Math.floor(Math.random() * 3) + 1,
         availableCategories.length
       );
 
-      // 사용 가능한 카테고리에서 무작위로 선택
       const shuffledCategories = [...availableCategories].sort(
         () => Math.random() - 0.5
       );
@@ -252,7 +240,6 @@ const RandomPlayerGenerator = () => {
 
       const selectedGrades = [];
 
-      // 각 선택된 카테고리에 대해 등급 선택
       for (const category of selectedCategories) {
         const relatedGrades = gradesArray.filter(
           (grade) => grade.refCategoryId === category.contestCategoryId
@@ -271,9 +258,7 @@ const RandomPlayerGenerator = () => {
         }
       }
 
-      // 최소한 하나의 등급이 선택되었는지 확인
       if (selectedGrades.length === 0) {
-        console.log("No valid grades found for selected categories");
         return null;
       }
 
@@ -286,30 +271,24 @@ const RandomPlayerGenerator = () => {
   };
 
   const handleGeneratePlayers = () => {
-    console.log("Starting handleGeneratePlayers with count:", playerCount);
     const newPlayers = [];
     let attempts = 0;
-    const MAX_ATTEMPTS = playerCount * 2; // 최대 시도 횟수 제한
+    const MAX_ATTEMPTS = playerCount * 2;
 
     for (let i = 0; i < playerCount; i++) {
-      console.log(`Attempting to generate player ${i + 1} of ${playerCount}`);
       const player = generatePlayer();
       if (player) {
         newPlayers.push(player);
-        console.log(`Successfully generated player ${i + 1}`);
       } else {
-        console.log(`Failed to generate player ${i + 1}, retrying...`);
-        i--; // 실패한 경우 다시 시도
+        i--;
       }
 
       attempts++;
       if (attempts >= MAX_ATTEMPTS) {
-        console.log("Reached maximum attempts, stopping generation");
         break;
       }
     }
 
-    console.log(`Generation complete. Generated ${newPlayers.length} players`);
     setPlayers([...newPlayers]);
 
     const {
@@ -344,18 +323,15 @@ const RandomPlayerGenerator = () => {
   };
 
   const handleSubmitSelectedPlayers = async () => {
-    // Send selected players to Firestore
     const selectedPlayersData = players.filter((player) =>
       selectedPlayers.includes(player.playerUid)
     );
-
-    // console.log(selectedPlayersData);
 
     try {
       for (const player of selectedPlayersData) {
         const contestPriceSum = calculateContestPriceSum(player);
         const newValue = { ...player, contestPriceSum };
-        await addInvoice.addData(newValue); // Add each selected player to the Firestore collection
+        await addInvoice.addData(newValue);
       }
       alert(
         "Selected players have been successfully submitted to the invoice pool."
@@ -372,8 +348,12 @@ const RandomPlayerGenerator = () => {
     const categoryB = categorysArray.find(
       (category) => category.contestCategoryTitle === b
     );
-    return categoryA.contestCategoryIndex - categoryB.contestCategoryIndex;
+    return (
+      (categoryA?.contestCategoryIndex || 0) -
+      (categoryB?.contestCategoryIndex || 0)
+    );
   });
+  void sortedCategoryKeys;
 
   const formatCategoryDataForChart = () => {
     return Object.keys(categoryDistribution).map((category) => ({
@@ -383,7 +363,7 @@ const RandomPlayerGenerator = () => {
   };
 
   const formatGradeDataForStackedChart = () => {
-    if (!selectedCategory) return [];
+    if (!selectedCategory || !gradeDistribution[selectedCategory]) return [];
 
     const formattedData = [
       {
@@ -400,99 +380,216 @@ const RandomPlayerGenerator = () => {
 
   useEffect(() => {
     fetchPool();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest]);
 
   return (
-    <div
-      className="w-full"
-      style={{ backgroundColor: "white", padding: "20px" }}
-    >
-      <h1>Random Player Generator</h1>
-      <div>
-        <label>Number of Players to Generate: </label>
-        <input
-          type="number"
-          value={playerCount}
-          onChange={(e) => setPlayerCount(Number(e.target.value))}
-        />
-        <button onClick={handleGeneratePlayers} disabled={!isButtonEnabled}>
-          Generate Players
-        </button>
-        <button onClick={handleGeneratePlayers} disabled={!isButtonEnabled}>
-          Clear Players
-        </button>
-      </div>
-      <table border="1" cellPadding="5">
-        <thead>
-          <tr>
-            <th>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              테스트 선수 생성기
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              종목·체급 분포 시뮬레이션 및 리허설용 가상 참가신청서를 생성합니다
+            </p>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={handleSubmitSelectedPlayers}
+              disabled={selectedPlayers.length === 0}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:bg-[#f4f4f5] disabled:text-[#737373] disabled:border disabled:border-[#171717]/[0.08] text-white text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <Upload size={16} strokeWidth={1.5} />
+              <span className="tabular-nums">
+                선택 선수 접수 풀 등록 ({selectedPlayers.length}명)
+              </span>
+            </button>
+          </div>
+        </header>
+
+        {/* 생성 컨트롤 바 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-[13px] font-medium text-[#525252]">
+              생성 인원 수
+            </label>
+            <div className="relative flex items-center w-28">
               <input
-                type="checkbox"
-                onChange={handleSelectAll}
-                checked={
-                  players.length > 0 &&
-                  selectedPlayers.length === players.length
-                }
+                type="number"
+                min={0}
+                value={playerCount}
+                onChange={(e) => setPlayerCount(Number(e.target.value))}
+                className="w-full h-9 rounded-[8px] bg-white border border-[#171717]/[0.12] pl-3 pr-7 text-right font-mono text-[14px] tabular-nums text-[#171717] focus:outline-none focus:border-[#2563eb] transition-colors duration-150"
               />
-            </th>
-            <th>Name</th>
-            <th>Gym</th>
-            <th>Phone</th>
-            <th>Email</th>
-            <th>Birth Date</th>
-            <th>Age</th>
-            <th>Gender</th>
-            <th>Categories</th>
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((player) => (
-            <tr key={player.playerUid}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selectedPlayers.includes(player.playerUid)}
-                  onChange={(e) => handleSelectPlayer(e, player.playerUid)}
-                />
-              </td>
-              <td>{player.playerName}</td>
-              <td>{player.playerGym}</td>
-              <td>{player.playerTel}</td>
-              <td>{player.playerEmail}</td>
-              <td>{player.playerBirth}</td>
-              <td>{calculateAge(player.playerBirth)}</td>
-              <td>{player.playerGender === "f" ? "Female" : "Male"}</td>
-              <td>
-                {player.joins.map((join) => (
-                  <div key={join.contestGradeId}>
-                    {join.contestCategoryTitle} - {join.contestGradeTitle}
-                  </div>
-                ))}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              <span className="absolute right-2.5 text-[12px] text-[#737373] pointer-events-none">
+                명
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleGeneratePlayers}
+              disabled={!isButtonEnabled}
+              className="h-9 px-4 rounded-[8px] bg-[#171717] hover:bg-[#262626] disabled:opacity-40 text-white text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <Shuffle size={15} strokeWidth={1.5} />
+              <span>선수 생성</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleGeneratePlayers}
+              disabled={!isButtonEnabled}
+              className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] disabled:opacity-40 text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <RefreshCw size={15} strokeWidth={1.5} className="text-[#525252]" />
+              <span>다시 생성</span>
+            </button>
+          </div>
+          <div className="text-[12px] font-mono tabular-nums text-[#737373]">
+            {!isButtonEnabled
+              ? "종목·체급 데이터 불러오는 중"
+              : `생성됨 ${players.length}명 · 선택됨 ${selectedPlayers.length}명`}
+          </div>
+        </section>
 
-      <button
-        onClick={handleSubmitSelectedPlayers}
-        disabled={selectedPlayers.length === 0}
-      >
-        Submit Selected Players to Invoice Pool
-      </button>
+        {/* 분포 차트 */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <section
+            className={`${
+              selectedCategory ? "lg:col-span-7" : "lg:col-span-12"
+            } bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-3`}
+          >
+            <h2 className="text-[15px] font-medium text-[#171717]">
+              종목별 생성 분포
+            </h2>
+            <CategoryChart
+              data={formatCategoryDataForChart()}
+              title="종목별 인원 분포"
+              onBarClick={handleCategoryClick}
+            />
+          </section>
 
-      <CategoryChart
-        data={formatCategoryDataForChart()}
-        title="Category Distribution"
-        onBarClick={handleCategoryClick}
-      />
+          {selectedCategory && (
+            <section className="lg:col-span-5 bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-3">
+              <h2 className="text-[15px] font-medium text-[#171717]">
+                {selectedCategory} · 체급 분포
+              </h2>
+              <GradeStackBarChart
+                data={formatGradeDataForStackedChart()}
+                title={`${selectedCategory} 체급별 분포`}
+              />
+            </section>
+          )}
+        </div>
 
-      {selectedCategory && (
-        <GradeStackBarChart
-          data={formatGradeDataForStackedChart()}
-          title={`Grade Distribution for ${selectedCategory}`}
-        />
-      )}
+        {/* 생성된 선수 테이블 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#171717]/[0.06] flex items-center justify-between">
+            <h2 className="text-[15px] font-medium text-[#171717]">
+              생성된 가상 선수 목록
+            </h2>
+            <span className="text-[12px] font-mono tabular-nums text-[#737373]">
+              총 {players.length}명
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[13px] border-collapse">
+              <thead>
+                <tr className="bg-[#f4f4f5] text-[#525252] border-b border-[#171717]/[0.08] h-10">
+                  <th className="w-12 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      onChange={handleSelectAll}
+                      checked={
+                        players.length > 0 &&
+                        selectedPlayers.length === players.length
+                      }
+                      className="w-4 h-4 rounded-[4px] accent-[#2563eb] cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-3 font-medium">이름</th>
+                  <th className="px-3 font-medium">소속</th>
+                  <th className="px-3 font-medium">연락처</th>
+                  <th className="px-3 font-medium">이메일</th>
+                  <th className="px-3 font-medium">생년월일</th>
+                  <th className="px-3 font-medium text-right">나이</th>
+                  <th className="px-3 font-medium text-center">성별</th>
+                  <th className="px-3 font-medium">신청 종목 및 체급</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#171717]/[0.06]">
+                {players.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="px-4 py-12 text-center text-[13px] text-[#737373]"
+                    >
+                      생성 인원 수를 입력하고 선수 생성 버튼을 눌러주세요
+                    </td>
+                  </tr>
+                ) : (
+                  players.map((player) => (
+                    <tr
+                      key={player.playerUid}
+                      className="hover:bg-[#f4f4f5]/50 transition-colors duration-150"
+                    >
+                      <td className="px-3 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlayers.includes(player.playerUid)}
+                          onChange={(e) =>
+                            handleSelectPlayer(e, player.playerUid)
+                          }
+                          className="w-4 h-4 rounded-[4px] accent-[#2563eb] cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-[#171717]">
+                        {player.playerName}
+                      </td>
+                      <td className="px-3 py-2.5 text-[#525252]">
+                        {player.playerGym}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] tabular-nums text-[#525252]">
+                        {player.playerTel}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] text-[#737373]">
+                        {player.playerEmail}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] tabular-nums text-[#525252]">
+                        {player.playerBirth}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[12px] tabular-nums text-[#525252]">
+                        {calculateAge(player.playerBirth)}세
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-[#525252]">
+                        {player.playerGender === "f" ? "여" : "남"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {player.joins.map((join) => (
+                            <span
+                              key={join.contestGradeId}
+                              className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[12px] text-[#171717]"
+                            >
+                              {join.contestCategoryTitle}
+                              <span className="text-[#737373] ml-1">
+                                · {join.contestGradeTitle}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

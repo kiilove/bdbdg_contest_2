@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, Select, Button, Space, Tag } from "antd";
+import { Select } from "antd";
 import {
-  UserOutlined,
-  PhoneOutlined,
-  TeamOutlined,
-  ReloadOutlined,
-  ThunderboltOutlined,
-  ClearOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+  User,
+  Phone,
+  Users,
+  RotateCcw,
+  Shuffle,
+  Trash2,
+  AlertTriangle,
+} from "lucide-react";
 
 const SectionAssign = ({
-  judgesAssignInfo, // ← 부모에서 파생(카테고리 제목 포함) 버전을 내려줌 (표시용)
+  judgesAssignInfo,
   judgesPoolArray,
   filteredBySection,
-  setJudgesAssignInfo, // ← 반드시 원본만 업데이트하도록 부모에서 감싸 전달
+  setJudgesAssignInfo,
   currentContest,
   generateUUID,
   setMessage,
@@ -33,7 +33,7 @@ const SectionAssign = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  /** 🔤 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
+  /** 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
   const sortJudgesByName = (arr = []) =>
     [...arr].sort((a, b) =>
       (a?.judgeName || "").localeCompare(b?.judgeName || "", "ko", {
@@ -126,7 +126,6 @@ const SectionAssign = ({
     );
     if (!selectedJudge) return;
 
-    // 현재 좌석에 기존 배정이 있었는지 확인 (최초 배정인지 판단)
     const existingForSeat = (judgesAssignInfo.judges || []).filter(
       (assign) =>
         assign.sectionName === sectionName && assign.seatIndex === seatIndex
@@ -135,7 +134,6 @@ const SectionAssign = ({
       existingForSeat.length > 0 &&
       existingForSeat.some((a) => a.judgeUid !== selectedJudge.judgeUid);
 
-    // 기존 해당 좌석 배정 제거
     const updatedJudges = (judgesAssignInfo.judges || []).filter(
       (assign) =>
         !(
@@ -144,7 +142,6 @@ const SectionAssign = ({
         )
     );
 
-    // 이 섹션의 모든 grade를 가져와서 일괄 배정
     const sectionInfo = filteredBySection.find(
       (section) => section.sectionName === sectionName
     );
@@ -163,7 +160,6 @@ const SectionAssign = ({
         currentContest
       )
     ) {
-      // ✅ 최초 배정(기존 없음)일 때는 모달을 띄우지 않음
       if (isBatchReplace) {
         setMessage({
           body: "이 좌석을 새 심판으로 변경하면, 이 섹션의 하위 카테고리에 이미 배정된 동일 좌석 심판이 모두 함께 변경됩니다.",
@@ -282,11 +278,6 @@ const SectionAssign = ({
     }));
   };
 
-  useEffect(() => {
-    console.log("filteredBySection", filteredBySection);
-  }, [filteredBySection]);
-
-  /** 🔎 공통 Select props: 검색/자동완성 설정 */
   const commonSelectProps = {
     showSearch: true,
     allowClear: true,
@@ -301,7 +292,7 @@ const SectionAssign = ({
   };
 
   return (
-    <div className="flex w-full flex-col gap-4 p-4">
+    <div className="flex w-full flex-col gap-4 pt-2">
       {filteredBySection.map((section, sectionIdx) => {
         const allSeats = Array.from(
           {
@@ -324,52 +315,58 @@ const SectionAssign = ({
         const assignedJudges = getAssignedJudgesForSection(section.sectionName);
 
         return (
-          <Card
+          <div
             key={sectionIdx}
-            className="shadow-md"
-            title={
-              <div className="flex items-center gap-2">
-                <TeamOutlined className="text-blue-600" />
-                <span className="text-lg font-semibold">
-                  {section.sectionName}
+            className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Users size={16} strokeWidth={1.5} className="text-[#525252]" />
+                <span className="text-[15px] font-semibold text-[#171717]">
+                  {section.sectionName || "미지정 섹션"}
+                </span>
+                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#ffffff] border border-[#171717]/[0.08] px-2 py-0.5 rounded-[4px]">
+                  {allSeats.length}석
                 </span>
               </div>
-            }
-            extra={
-              <Space wrap>
-                <Button
-                  type="primary"
-                  icon={<ReloadOutlined />}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
                   onClick={() =>
                     handleRandomAssign(section.sectionName, unassignedSeats)
                   }
-                  size={isMobile ? "small" : "middle"}
+                  className="h-9 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  {isMobile ? "랜덤" : "랜덤배정"}
-                </Button>
-                <Button
-                  type="default"
-                  icon={<ThunderboltOutlined />}
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  <span>{isMobile ? "랜덤" : "빈 좌석 랜덤"}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() =>
                     handleAllRandomAssign(section.sectionName, allSeats)
                   }
-                  size={isMobile ? "small" : "middle"}
-                  className="bg-yellow-50 border-yellow-400 text-yellow-700 hover:bg-yellow-100"
+                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#eaeaea] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  {isMobile ? "전체" : "모두랜덤"}
-                </Button>
-                <Button
-                  danger
-                  icon={<ClearOutlined />}
+                  <Shuffle
+                    size={14}
+                    strokeWidth={1.5}
+                    className="text-[#525252]"
+                  />
+                  <span>{isMobile ? "전체" : "모두 재배정"}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleResetAssign(section.sectionName)}
-                  size={isMobile ? "small" : "middle"}
+                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  초기화
-                </Button>
-              </Space>
-            }
-          >
-            <div className="flex flex-col gap-3">
+                  <Trash2 size={14} strokeWidth={1.5} />
+                  <span>초기화</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 flex flex-col gap-2">
               {allSeats.map((seatNumber) => {
                 const seatStatus = getSeatStatus(
                   section.sectionName,
@@ -385,7 +382,6 @@ const SectionAssign = ({
                   (j) => j.judgeUid === selectedJudge.judgeUid
                 );
 
-                // 🔤 섹션별 “선택 가능 목록”을 이름순 정렬해서 준비
                 const selectableSorted = sortJudgesByName(
                   judgesPoolArray.filter(
                     (judge) =>
@@ -396,39 +392,48 @@ const SectionAssign = ({
 
                 if (isMobile) {
                   return (
-                    <Card
+                    <div
                       key={seatNumber}
-                      size="small"
-                      className="bg-gray-50"
-                      title={
-                        <div className="flex items-center justify-between">
-                          <span className="text-base font-semibold">
-                            좌석 {seatNumber}
-                          </span>
-                          {seatStatus === "multi" && (
-                            <Tag color="error" icon={<WarningOutlined />}>
-                              다중 심판
-                            </Tag>
-                          )}
-                        </div>
-                      }
+                      className="p-3 bg-[#fafafa] border border-[#171717]/[0.08] rounded-[8px] space-y-2.5"
                     >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-sm font-medium tabular-nums text-[#171717]">
+                          좌석 {seatNumber}
+                        </span>
+                        {seatStatus === "multi" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-xs font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                            <AlertTriangle size={12} strokeWidth={1.5} />
+                            <span>다중 심판</span>
+                          </span>
+                        )}
+                      </div>
+
                       {selectedJudgeInfo && (
-                        <div className="mb-3 p-2 bg-blue-50 rounded">
-                          <div className="flex items-center gap-2 mb-1">
-                            <UserOutlined className="text-blue-600" />
-                            <span className="font-medium">
+                        <div className="p-2.5 bg-[#ffffff] border border-[#171717]/[0.08] rounded-[8px] space-y-1">
+                          <div className="flex items-center gap-2">
+                            <User
+                              size={14}
+                              strokeWidth={1.5}
+                              className="text-[#525252]"
+                            />
+                            <span className="text-sm font-medium text-[#171717]">
                               {selectedJudgeInfo.judgeName}
                             </span>
                             {selectedJudgeInfo.isHead && (
-                              <Tag color="gold">위원장</Tag>
+                              <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.08] text-[#b45309]">
+                                위원장
+                              </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <PhoneOutlined />
+                          <div className="flex items-center gap-2 text-xs text-[#525252] tabular-nums">
+                            <Phone
+                              size={12}
+                              strokeWidth={1.5}
+                              className="text-[#737373]"
+                            />
                             <span>{selectedJudgeInfo.judgeTel}</span>
                           </div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-xs text-[#737373]">
                             {selectedJudgeInfo.judgePromoter}
                           </div>
                         </div>
@@ -470,27 +475,24 @@ const SectionAssign = ({
                           );
                         })}
                       </Select>
-                    </Card>
+                    </div>
                   );
                 }
 
                 return (
                   <div
                     key={seatNumber}
-                    className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-4 px-3.5 py-2 bg-[#fafafa] border border-[#171717]/[0.06] rounded-[8px] hover:bg-[#f4f4f5] transition-colors duration-150"
                   >
-                    <div className="flex items-center gap-2 w-32">
-                      <span className="font-semibold text-gray-700">
+                    <div className="flex items-center gap-2 w-32 shrink-0">
+                      <span className="font-mono text-sm font-medium tabular-nums text-[#525252]">
                         좌석 {seatNumber}
                       </span>
                       {seatStatus === "multi" && (
-                        <Tag
-                          color="error"
-                          icon={<WarningOutlined />}
-                          className="text-xs"
-                        >
-                          다중
-                        </Tag>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                          <AlertTriangle size={12} strokeWidth={1.5} />
+                          <span>다중</span>
+                        </span>
                       )}
                     </div>
 
@@ -536,7 +538,7 @@ const SectionAssign = ({
                 );
               })}
             </div>
-          </Card>
+          </div>
         );
       })}
     </div>

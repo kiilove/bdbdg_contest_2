@@ -1,8 +1,4 @@
-import React, { useContext, useRef } from "react";
-import { useState } from "react";
-import { BsCheckAll } from "react-icons/bs";
-import { MdOutlineSearch } from "react-icons/md";
-
+import React, { useContext, useRef, useState, useEffect, useMemo } from "react";
 import {
   useFirestoreQuery,
   useFirestoreUpdateData,
@@ -12,14 +8,10 @@ import {
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useEffect } from "react";
-import { useMemo } from "react";
 import LoadingPage from "./LoadingPage";
-import { Link } from "react-router-dom";
 import { Modal } from "@mui/material";
-import judgeInfoModal from "../modals/JudgeInfoModal";
 import CanvasWithImageData from "../components/CanvasWithImageData";
-import { FaCrown } from "react-icons/fa";
+import { UserCheck, Search, Crown, KeyRound } from "lucide-react";
 
 const ContestJudgeTable = () => {
   const [currentTab, setCurrentTab] = useState(1);
@@ -463,246 +455,249 @@ const ContestJudgeTable = () => {
   }, [currentContest?.contests?.id]);
 
   const ContestInvoiceUncompleteRender = (
-    <div className="flex flex-col lg:flex-row gap-y-2 w-full h-auto bg-white mb-3 rounded-tr-lg rounded-b-lg p-2 gap-x-4">
-      <Modal open={isOpen.judge} onClose={handleJudgeClose}>
+    <div className="w-full space-y-4">
+      <Modal open={Boolean(isOpen.judge)} onClose={handleJudgeClose}>
         <div
-          className="flex w-full lg:w-1/2 h-screen lg:h-auto absolute top-1/2 left-1/2 lg:shadow-md lg:rounded-lg bg-white p-3"
+          className="flex w-full lg:w-1/2 h-screen lg:h-auto absolute top-1/2 left-1/2 rounded-[12px] bg-[#ffffff] border border-[#171717]/[0.08] p-4"
           style={{
             transform: "translate(-50%, -50%)",
           }}
-        >
-          {/* <judgeInfoModal
-            setClose={handleJudgeClose}
-            propState={isOpen}
-            setState={setJudgeList}
-          /> */}
-        </div>
+        />
       </Modal>
-      <div className="w-full bg-blue-100 flex rounded-lg flex-col p-2 h-full gap-y-2">
-        <div className="flex bg-gray-100 h-auto rounded-lg justify-start categoryIdart lg:items-center gay-y-2 flex-col p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center ">
-            <div className="h-12 w-full rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center h-full">
-                <h1 className="text-2xl text-gray-600 mr-3">
-                  <MdOutlineSearch />
-                </h1>
-                <input
-                  type="text"
-                  name="contestCategoryTitle"
-                  value={searchInfo}
-                  onChange={(e) => setSearchInfo(e.target.value.trim())}
-                  onKeyDown={(e) => {
-                    e.key === "Enter" && handleSearchKeyword();
-                  }}
-                  className="h-12 outline-none w-full"
-                  placeholder="검색(이름, 전화번호, 소속)"
-                />
-                <button
-                  className="w-20 bg-blue-200 h-full"
-                  onClick={handleSearchKeyword}
-                >
-                  검색
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex bg-gray-100 h-auto rounded-lg justify-start categoryIdart lg:items-center gay-y-2 flex-col p-0 lg:p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center ">
-            <div className="w-full rounded-lg px-0 lg:px-3 h-auto py-0 lg:py-2">
-              <table className="w-full bg-white">
-                <tr className="bg-gray-200 h-10">
-                  <th
-                    className="text-center text-sm font-normal lg:font-semibold lg:text-base"
-                    style={{ width: "8%" }}
-                  >
-                    배정
-                  </th>
-                  <th
-                    className="text-center text-sm font-normal lg:font-semibold lg:text-base"
-                    style={{ width: "8%" }}
-                  >
-                    위원장
-                  </th>
-                  <th
-                    className="text-left text-sm font-normal lg:font-semibold lg:text-base"
-                    style={{ width: "20%" }}
-                  >
-                    이름
-                  </th>
-                  <th
-                    className="text-left text-sm font-normal hidden lg:table-cell lg:font-semibold lg:text-base"
-                    style={{ width: "20%" }}
-                  >
-                    연락처
-                  </th>
-                  <th
-                    className="text-left hidden lg:table-cell"
-                    style={{ width: "14%" }}
-                  >
-                    소속
-                  </th>
-                  <th
-                    className="text-left hidden lg:table-cell"
-                    style={{ width: "22%" }}
-                  >
-                    사인
-                  </th>
-                  <th
-                    className="text-left text-sm font-normal lg:font-semibold lg:text-base"
-                    style={{ width: "10%" }}
-                  >
-                    개인비밀번호
-                  </th>
-                </tr>
-                {filteredData?.length > 0 &&
-                  filteredData.map((filtered, fIdx) => {
-                    const {
-                      id,
-                      judgeUid,
-                      judgeName,
-                      judgePromoter,
-                      judgeTel,
-                      judgeSignature,
-                      isHead,
-                      isJoined,
-                      isConfirmed,
-                      onedayPassword,
-                      judgeAssignId,
-                    } = filtered;
 
-                    return (
-                      <tr
-                        className="border border-t-0 border-x-0"
-                        key={judgeAssignId || judgeUid || fIdx}
-                      >
-                        <td className="text-center h-10">
-                          {!isConfirmed ? (
-                            <span className="text-sm">불가</span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              name="judgeAssignJoin"
-                              checked={isJoined}
-                              onChange={(e) =>
-                                handleJudgesAssignPool(
-                                  e,
-                                  filtered,
-                                  currentContest.contests.id,
-                                  judgeAssignId,
-                                  fIdx
-                                )
-                              }
-                            />
-                          )}
-                        </td>
-                        <td className="text-center h-10 ">
+      {/* 검색 바 */}
+      <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 w-full sm:max-w-md">
+          <div className="relative flex-1 flex items-center">
+            <Search
+              size={15}
+              strokeWidth={1.5}
+              className="absolute left-3 text-[#737373] pointer-events-none"
+            />
+            <input
+              type="text"
+              name="contestCategoryTitle"
+              value={searchInfo || ""}
+              onChange={(e) => setSearchInfo(e.target.value.trim())}
+              onKeyDown={(e) => {
+                e.key === "Enter" && handleSearchKeyword();
+              }}
+              className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] pl-9 pr-3 text-sm text-[#171717] placeholder:text-[#737373] outline-none focus:border-[#2563eb] transition-colors duration-150"
+              placeholder="이름, 연락처, 소속 검색"
+            />
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0 shrink-0"
+            onClick={handleSearchKeyword}
+          >
+            검색
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-[#525252] font-mono tabular-nums">
+          <span>선발 심판 {judgesAssignPool.length}명</span>
+          <span className="text-[#171717]/[0.15]">|</span>
+          <span>조회 {filteredData?.length || 0}명</span>
+        </div>
+      </div>
+
+      {/* 심판 목록 테이블 */}
+      <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] text-xs font-medium text-[#525252]">
+                <th className="py-3 px-3 text-center w-20">배정</th>
+                <th className="py-3 px-3 text-center w-20">위원장</th>
+                <th className="py-3 px-4">이름</th>
+                <th className="py-3 px-4 hidden lg:table-cell">연락처</th>
+                <th className="py-3 px-4 hidden lg:table-cell">소속</th>
+                <th className="py-3 px-4 hidden lg:table-cell w-36">서명</th>
+                <th className="py-3 px-4 w-36">개인 비밀번호</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#171717]/[0.06]">
+              {filteredData?.length > 0 ? (
+                filteredData.map((filtered, fIdx) => {
+                  const {
+                    judgeUid,
+                    judgeName,
+                    judgePromoter,
+                    judgeTel,
+                    judgeSignature,
+                    isHead,
+                    isJoined,
+                    isConfirmed,
+                    onedayPassword,
+                    judgeAssignId,
+                  } = filtered;
+
+                  return (
+                    <tr
+                      className={`transition-colors duration-150 ${
+                        isJoined
+                          ? "bg-[#2563eb]/[0.02] hover:bg-[#2563eb]/[0.04]"
+                          : "hover:bg-[#fafafa]"
+                      }`}
+                      key={judgeAssignId || judgeUid || fIdx}
+                    >
+                      <td className="py-2.5 px-3 text-center">
+                        {!isConfirmed ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.08] text-[#dc2626] text-[11px] font-medium">
+                            불가
+                          </span>
+                        ) : (
                           <input
                             type="checkbox"
-                            name="judgeAssignHead"
-                            checked={isHead}
-                            disabled={!isJoined || !judgeAssignId}
+                            name="judgeAssignJoin"
+                            checked={isJoined}
                             onChange={(e) =>
-                              handleJudgeHeadAssign(e, judgeAssignId)
+                              handleJudgesAssignPool(
+                                e,
+                                filtered,
+                                currentContest.contests.id,
+                                judgeAssignId,
+                                fIdx
+                              )
                             }
+                            className="w-4 h-4 rounded-[4px] accent-[#2563eb] cursor-pointer"
                           />
-                        </td>
-                        <td className="text-left text-sm  lg:text-base">
-                          <div className="flex justify-start items-center gap-x-2">
-                            <span
-                              className={`${
-                                !isConfirmed
-                                  ? " cursor-pointer line-through text-gray-500"
-                                  : " cursor-pointer underline"
-                              } `}
-                            >
-                              {judgeName}
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          name="judgeAssignHead"
+                          checked={isHead}
+                          disabled={!isJoined || !judgeAssignId}
+                          onChange={(e) =>
+                            handleJudgeHeadAssign(e, judgeAssignId)
+                          }
+                          className="w-4 h-4 rounded-[4px] accent-[#2563eb] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                      </td>
+                      <td className="py-2.5 px-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-medium ${
+                              !isConfirmed
+                                ? "line-through text-[#737373]"
+                                : "text-[#171717]"
+                            }`}
+                          >
+                            {judgeName}
+                          </span>
+                          {isHead && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
+                              <Crown size={11} strokeWidth={1.5} />
+                              <span>위원장</span>
                             </span>
-                            {isHead && (
-                              <span className="text-orange-500">
-                                <FaCrown />
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="text-left text-sm hidden lg:table-cell lg:text-base">
-                          {judgeTel}
-                        </td>
-
-                        <td className="text-left hidden lg:table-cell">
-                          {judgePromoter}
-                        </td>
-                        <td className="text-left hidden lg:table-cell ">
-                          <CanvasWithImageData
-                            imageData={judgeSignature}
-                            style={{
-                              width: "90px",
-                              height: "90px",
-                              padding: "0",
-                            }}
-                          />
-                        </td>
-                        <td className="text-left lg:table-cell">
-                          {onedayPassword}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </table>
-            </div>
-          </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-sm text-[#525252] font-mono tabular-nums hidden lg:table-cell">
+                        {judgeTel || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 text-sm text-[#525252] hidden lg:table-cell">
+                        {judgePromoter || "-"}
+                      </td>
+                      <td className="py-2 px-4 hidden lg:table-cell">
+                        <CanvasWithImageData
+                          imageData={judgeSignature}
+                          style={{
+                            width: "76px",
+                            height: "52px",
+                            padding: "0",
+                          }}
+                        />
+                      </td>
+                      <td className="py-2.5 px-4">
+                        {onedayPassword ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] font-mono tabular-nums text-xs font-semibold text-[#171717]">
+                            <KeyRound
+                              size={12}
+                              strokeWidth={1.5}
+                              className="text-[#737373]"
+                            />
+                            <span>{onedayPassword}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[#737373]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="py-12 text-center text-sm text-[#737373]"
+                  >
+                    해당 조건에 일치하는 심판이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
+
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
         </div>
       ) : (
-        <>
-          <div className="flex w-full h-14">
-            <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-              <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                <BsCheckAll />
-              </span>
-              <h1
-                className="font-sans text-lg font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                심판배정
-              </h1>
-            </div>
-          </div>
-          <div className="flex w-full h-full ">
-            <div className="flex w-full justify-start items-center">
-              <div className="flex w-full h-full justify-start categoryIdart px-3 pt-3 flex-col bg-gray-100 rounded-lg">
-                <div className="flex w-full">
-                  {tabArray.map((tab, tIdx) => (
-                    <>
-                      <button
-                        className={`${
-                          currentTab === tab.id
-                            ? " flex w-auto h-10 bg-white px-4"
-                            : " flex w-auto h-10 bg-gray-100 px-4"
-                        }  h-14 rounded-t-lg justify-center items-center`}
-                        onClick={() => setCurrentTab(tIdx)}
-                      >
-                        <span>{tab.title}</span>
-                      </button>
-                    </>
-                  ))}
-                </div>
-
-                {currentTab === 0 && ContestInvoiceUncompleteRender}
-                {currentTab === 1 && ContestInvoiceUncompleteRender}
-                {currentTab === 2 && ContestInvoiceUncompleteRender}
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+          {/* 상단 헤더 */}
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
+                <UserCheck
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-[#171717] m-0 tracking-tight">
+                  심판 선발 및 비밀번호 배정
+                </h1>
+                <p className="text-xs text-[#737373] m-0">
+                  {tabArray[currentTab]?.subTitle ||
+                    "이번 대회 심판진 선발 및 일회용 인증번호 관리"}
+                </p>
               </div>
             </div>
+
+            {/* 탭 필터 */}
+            <div className="inline-flex items-center gap-1 bg-[#f4f4f5] p-1 rounded-[8px]">
+              {tabArray.map((tab, tIdx) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`h-8 px-3.5 rounded-[6px] text-xs font-medium transition-colors duration-150 cursor-pointer border-0 ${
+                    currentTab === tab.id
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "bg-transparent text-[#525252] hover:text-[#171717]"
+                  }`}
+                  onClick={() => setCurrentTab(tIdx)}
+                >
+                  {tab.title}
+                </button>
+              ))}
+            </div>
           </div>
-        </>
+
+          {currentTab === 0 && ContestInvoiceUncompleteRender}
+          {currentTab === 1 && ContestInvoiceUncompleteRender}
+          {currentTab === 2 && ContestInvoiceUncompleteRender}
+        </div>
       )}
     </div>
   );

@@ -1,9 +1,8 @@
 "use client";
 
 import { useContext, useEffect, useState } from "react";
-import { BsInfoLg } from "react-icons/bs";
-import { message, Progress, Card, Input, Button } from "antd";
-import { UploadOutlined, SaveOutlined, PlusOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { message } from "antd";
+import { Upload, Save, Plus, ShieldCheck } from "lucide-react";
 import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
 import "react-datepicker/dist/react-datepicker.css";
 import dayjs from "dayjs";
@@ -37,6 +36,9 @@ const generatePasswords = () => {
     used: false,
   }));
 };
+
+const inputBaseClass =
+  "w-full h-9 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 text-[14px] text-[#171717] placeholder:text-[#737373] focus:outline-none focus:border-[#2563eb] transition-colors duration-150";
 
 const ContestInfo = () => {
   const [currentContestInfo, setCurrentContestInfo] = useState({});
@@ -73,6 +75,10 @@ const ContestInfo = () => {
   const addComparesList = useFirestoreAddData("contest_compares_list");
   const updateContest = useFirestoreUpdateData("contests");
   const params = useParams();
+
+  void errors;
+  void orgLogoErrors;
+  void params;
 
   const initContestInfo = {
     contestAccountNumber: "",
@@ -278,6 +284,7 @@ const ContestInfo = () => {
         ...currentContest.contestInfo,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contestInfo]);
 
   useEffect(() => {
@@ -302,35 +309,44 @@ const ContestInfo = () => {
   }, [orgLogoUrls]);
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <Card className="mb-6 shadow-sm border-0">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white shadow-md">
-                <BsInfoLg className="text-xl" />
-              </div>
-              <h1 className="text-2xl font-bold text-gray-800">대회정보관리</h1>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                type="primary"
-                icon={<SafetyCertificateOutlined />}
-                onClick={() => setHealthModalOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-500 font-bold shadow-sm"
-              >
-                대회 구조 무결성 점검 & 자동 복구
-              </Button>
-              {changed && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-lg border border-red-200">
-                  <span className="text-red-600 text-sm font-medium">
-                    수정사항이 저장되지 않았습니다
-                  </span>
-                </div>
-              )}
-            </div>
+    <div className="w-full min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              대회 정보 관리
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              대회 기본 요강, 입금 계좌, 참가비 및 운영 컬렉션을 관리합니다
+            </p>
           </div>
-        </Card>
+          <div className="flex items-center gap-2 flex-wrap">
+            {changed && (
+              <span className="inline-flex items-center h-9 px-3 rounded-[8px] bg-[#dc2626]/[0.08] text-[#dc2626] text-[12px] font-medium">
+                저장되지 않은 변경사항 있음
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setHealthModalOpen(true)}
+              className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <ShieldCheck size={16} strokeWidth={1.5} className="text-[#525252]" />
+              <span>구조 무결성 점검</span>
+            </button>
+            <button
+              type="button"
+              disabled={!changed || loading}
+              onClick={() =>
+                handleUpdateContestInfo(currentContest?.contests?.contestNoticeId)
+              }
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:bg-[#f4f4f5] disabled:text-[#737373] disabled:border disabled:border-[#171717]/[0.08] text-white text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <Save size={16} strokeWidth={1.5} />
+              <span>{loading ? "저장 중" : "변경사항 저장"}</span>
+            </button>
+          </div>
+        </header>
 
         <ContestHealthCheckModal
           isOpen={healthModalOpen}
@@ -338,50 +354,60 @@ const ContestInfo = () => {
         />
 
         {progress > 0 && progress < 100 && (
-          <Card className="mb-4 shadow-sm border-0">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-600">
-                포스터 업로드 중
-              </span>
-              <Progress
-                percent={Math.round(progress)}
-                size="small"
-                status="active"
-                className="flex-1"
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex items-center gap-4">
+            <span className="text-[13px] font-medium text-[#525252] shrink-0">
+              포스터 업로드 중
+            </span>
+            <div className="flex-1 h-2 bg-[#f4f4f5] rounded-[4px] overflow-hidden">
+              <div
+                className="h-full bg-[#2563eb] transition-colors duration-150"
+                style={{ width: `${Math.round(progress)}%` }}
               />
             </div>
-          </Card>
-        )}
-        {orgLogoProgress > 0 && orgLogoProgress < 100 && (
-          <Card className="mb-4 shadow-sm border-0">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-600">
-                로고 업로드 중
-              </span>
-              <Progress
-                percent={Math.round(orgLogoProgress)}
-                size="small"
-                status="active"
-                className="flex-1"
-              />
-            </div>
-          </Card>
+            <span className="text-[12px] font-mono tabular-nums text-[#525252]">
+              {Math.round(progress)}%
+            </span>
+          </div>
         )}
 
-        <Card title="이미지 관리" className="mb-6 shadow-sm border-0">
+        {orgLogoProgress > 0 && orgLogoProgress < 100 && (
+          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex items-center gap-4">
+            <span className="text-[13px] font-medium text-[#525252] shrink-0">
+              로고 업로드 중
+            </span>
+            <div className="flex-1 h-2 bg-[#f4f4f5] rounded-[4px] overflow-hidden">
+              <div
+                className="h-full bg-[#2563eb] transition-colors duration-150"
+                style={{ width: `${Math.round(orgLogoProgress)}%` }}
+              />
+            </div>
+            <span className="text-[12px] font-mono tabular-nums text-[#525252]">
+              {Math.round(orgLogoProgress)}%
+            </span>
+          </div>
+        )}
+
+        {/* 이미지 관리 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">이미지 관리</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 포스터 업로드 */}
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-2">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 대회 포스터
               </label>
-              <div className="flex flex-col items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors bg-gray-50">
-                {currentContestInfo?.contestPoster && (
+              <div className="flex flex-col items-center justify-between gap-4 p-5 border border-dashed border-[#171717]/[0.14] rounded-[8px] bg-[#fafafa] min-h-[180px]">
+                {currentContestInfo?.contestPoster ? (
                   <img
                     src={currentContestInfo.contestPoster || "/placeholder.svg"}
-                    className="w-full max-w-[200px] h-auto rounded-lg shadow-md"
+                    className="w-full max-w-[180px] h-auto rounded-[8px] border border-[#171717]/[0.08]"
                     alt="poster"
                   />
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-[13px] text-[#737373]">
+                    등록된 포스터가 없습니다
+                  </div>
                 )}
                 <input
                   type="file"
@@ -394,34 +420,34 @@ const ContestInfo = () => {
                     e.target.value = "";
                   }}
                 />
-                <Button
-                  icon={<UploadOutlined />}
-                  className="w-full"
-                  size="large"
-                  type="primary"
+                <button
+                  type="button"
                   onClick={() =>
                     document.getElementById("contestPoster")?.click()
                   }
+                  className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
                 >
-                  포스터 업로드
-                </Button>
+                  <Upload size={16} strokeWidth={1.5} className="text-[#525252]" />
+                  <span>포스터 업로드</span>
+                </button>
               </div>
             </div>
 
-            {/* 로고 업로드 */}
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-2">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 협회 로고
               </label>
-              <div className="flex flex-col items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors bg-gray-50">
-                {currentContestInfo?.contestOrgLogo && (
+              <div className="flex flex-col items-center justify-between gap-4 p-5 border border-dashed border-[#171717]/[0.14] rounded-[8px] bg-[#fafafa] min-h-[180px]">
+                {currentContestInfo?.contestOrgLogo ? (
                   <img
-                    src={
-                      currentContestInfo.contestOrgLogo || "/placeholder.svg"
-                    }
-                    className="w-full max-w-[200px] h-auto rounded-lg shadow-md"
+                    src={currentContestInfo.contestOrgLogo || "/placeholder.svg"}
+                    className="w-full max-w-[180px] h-auto rounded-[8px] border border-[#171717]/[0.08]"
                     alt="logo"
                   />
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-[13px] text-[#737373]">
+                    등록된 협회 로고가 없습니다
+                  </div>
                 )}
                 <input
                   type="file"
@@ -434,297 +460,251 @@ const ContestInfo = () => {
                     e.target.value = "";
                   }}
                 />
-                <Button
-                  icon={<UploadOutlined />}
-                  className="w-full"
-                  size="large"
-                  type="primary"
+                <button
+                  type="button"
                   onClick={() => document.getElementById("orgLogo")?.click()}
+                  className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
                 >
-                  로고 업로드
-                </Button>
+                  <Upload size={16} strokeWidth={1.5} className="text-[#525252]" />
+                  <span>로고 업로드</span>
+                </button>
               </div>
             </div>
           </div>
-        </Card>
+        </section>
 
-        <Card title="기본 정보" className="mb-6 shadow-sm border-0">
+        {/* 기본 정보 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">기본 정보</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 대회명
               </label>
-              <Input
+              <input
                 name="contestTitle"
-                placeholder="대회명을 입력하세요"
+                placeholder="대회명 입력"
                 value={currentContestInfo?.contestTitle || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 짧은 대회명
               </label>
-              <Input
+              <input
                 name="contestTitleShort"
-                placeholder="짧은 대회명을 입력하세요"
+                placeholder="약칭 입력"
                 value={currentContestInfo?.contestTitleShort || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 대회 장소
               </label>
-              <Input
+              <input
                 name="contestLocation"
-                placeholder="대회 장소를 입력하세요"
+                placeholder="개최 장소 입력"
                 value={currentContestInfo?.contestLocation || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 대회 일자
               </label>
-              <Input
+              <input
                 name="contestDate"
                 placeholder="YYYY-MM-DD"
                 value={currentContestInfo?.contestDate || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={`${inputBaseClass} tabular-nums`}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 주관
               </label>
-              <Input
+              <input
                 name="contestAssociate"
-                placeholder="주관 기관을 입력하세요"
+                placeholder="주관 기관 입력"
                 value={currentContestInfo?.contestAssociate || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 주최
               </label>
-              <Input
+              <input
                 name="contestPromoter"
-                placeholder="주최 기관을 입력하세요"
+                placeholder="주최 기관 입력"
                 value={currentContestInfo?.contestPromoter || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
           </div>
-        </Card>
+        </section>
 
-        <Card title="계좌 정보" className="mb-6 shadow-sm border-0">
+        {/* 계좌 정보 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">계좌 정보</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 은행명
               </label>
-              <Input
+              <input
                 name="contestBankName"
                 placeholder="은행명"
                 value={currentContestInfo?.contestBankName || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 계좌번호
               </label>
-              <Input
+              <input
                 name="contestAccountNumber"
                 placeholder="계좌번호"
                 value={currentContestInfo?.contestAccountNumber || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={`${inputBaseClass} tabular-nums`}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 예금주
               </label>
-              <Input
+              <input
                 name="contestAccountOwner"
                 placeholder="예금주"
                 value={currentContestInfo?.contestAccountOwner || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
           </div>
-        </Card>
+        </section>
 
-        <Card title="참가비 정보" className="mb-6 shadow-sm border-0">
+        {/* 참가비 정보 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">참가비 정보</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                기본 참가비
-              </label>
-              <Input
-                name="contestPriceBasic"
-                placeholder="기본 참가비"
-                value={
-                  currentContestInfo?.contestPriceBasic?.toLocaleString?.() ||
-                  ""
-                }
-                onChange={handleContestInfo}
-                onBlur={handelContestInfoPrice}
-                size="large"
-                className="rounded-lg"
-                suffix="원"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                중복 참가비
-              </label>
-              <Input
-                name="contestPriceExtra"
-                placeholder="중복 참가비"
-                value={
-                  currentContestInfo?.contestPriceExtra?.toLocaleString?.() ||
-                  ""
-                }
-                onChange={handleContestInfo}
-                onBlur={handelContestInfoPrice}
-                size="large"
-                className="rounded-lg"
-                suffix="원"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                타입1 참가비 (예: 학생부)
-              </label>
-              <Input
-                name="contestPriceType1"
-                placeholder="타입1 참가비"
-                value={
-                  currentContestInfo?.contestPriceType1?.toLocaleString?.() ||
-                  ""
-                }
-                onChange={handleContestInfo}
-                onBlur={handelContestInfoPrice}
-                size="large"
-                className="rounded-lg"
-                suffix="원"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                타입2 참가비 (예: 대학생부)
-              </label>
-              <Input
-                name="contestPriceType2"
-                placeholder="타입2 참가비"
-                value={
-                  currentContestInfo?.contestPriceType2?.toLocaleString?.() ||
-                  ""
-                }
-                onChange={handleContestInfo}
-                onBlur={handelContestInfoPrice}
-                size="large"
-                className="rounded-lg"
-                suffix="원"
-              />
-            </div>
+            {[
+              { name: "contestPriceBasic", label: "기본 참가비" },
+              { name: "contestPriceExtra", label: "중복 참가비" },
+              { name: "contestPriceType1", label: "타입1 참가비 · 학생부" },
+              { name: "contestPriceType2", label: "타입2 참가비 · 대학생부" },
+            ].map((item) => (
+              <div key={item.name} className="space-y-1.5">
+                <label className="block text-[13px] font-medium text-[#525252]">
+                  {item.label}
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    name={item.name}
+                    placeholder="0"
+                    value={
+                      currentContestInfo?.[item.name]?.toLocaleString?.() || ""
+                    }
+                    onChange={handleContestInfo}
+                    onBlur={handelContestInfoPrice}
+                    className={`${inputBaseClass} pr-8 text-right tabular-nums`}
+                  />
+                  <span className="absolute right-3 text-[13px] text-[#737373] pointer-events-none">
+                    원
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        </Card>
+        </section>
 
-        <Card title="추가 정보" className="mb-6 shadow-sm border-0">
+        {/* 추가 정보 */}
+        <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+          <div className="border-b border-[#171717]/[0.06] pb-3">
+            <h2 className="text-[15px] font-medium text-[#171717]">추가 정보</h2>
+          </div>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#525252]">
                 공고문 링크
               </label>
-              <Input
+              <input
                 name="contestCollectionFileLink"
-                placeholder="공고문 링크를 입력하세요"
+                placeholder="https://"
                 value={currentContestInfo?.contestCollectionFileLink || ""}
                 onChange={handleContestInfo}
-                size="large"
-                className="rounded-lg"
+                className={inputBaseClass}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                컬렉션 이름{" "}
-                <span className="text-red-500 text-xs">(임의 수정 금지)</span>
-              </label>
-              <div className="flex gap-3">
-                <Input
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[13px] font-medium text-[#525252]">
+                  컬렉션 이름
+                </label>
+                <span className="text-[12px] text-[#dc2626]">
+                  운영 중 임의 수정 금지
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
                   name="contestCollectionName"
-                  placeholder="컬렉션 이름"
+                  placeholder="컬렉션 식별자 입력"
                   value={currentContestInfo?.contestCollectionName || ""}
                   onChange={handleContestInfo}
-                  size="large"
-                  className="rounded-lg flex-1"
+                  className={`${inputBaseClass} flex-1 font-mono text-[13px]`}
                 />
                 {currentContestInfo?.contestCollectionName && (
-                  <Button
-                    icon={<PlusOutlined />}
+                  <button
+                    type="button"
                     onClick={handleCollectionAdd}
-                    size="large"
-                    type="dashed"
+                    className="h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center justify-center gap-2 shrink-0 transition-colors duration-150"
                   >
-                    컬렉션 생성
-                  </Button>
+                    <Plus size={16} strokeWidth={1.5} className="text-[#525252]" />
+                    <span>컬렉션 생성</span>
+                  </button>
                 )}
               </div>
             </div>
           </div>
-        </Card>
+        </section>
 
-        <div className="flex justify-end sticky bottom-4 z-10">
-          <Button
-            type="primary"
-            size="large"
-            icon={<SaveOutlined />}
-            loading={loading}
-            disabled={!changed}
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            disabled={!changed || loading}
             onClick={() =>
               handleUpdateContestInfo(currentContest?.contests?.contestNoticeId)
             }
-            className={`px-8 h-12 rounded-xl shadow-lg ${
-              changed
-                ? "bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 border-0"
-                : ""
-            }`}
+            className="h-10 px-6 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:bg-[#f4f4f5] disabled:text-[#737373] disabled:border disabled:border-[#171717]/[0.08] text-white text-[14px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
           >
-            저장하기
-          </Button>
+            <Save size={16} strokeWidth={1.5} />
+            <span>{loading ? "저장 중" : "변경사항 저장"}</span>
+          </button>
         </div>
       </div>
     </div>

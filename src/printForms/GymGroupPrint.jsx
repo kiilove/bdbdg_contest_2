@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useContext } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
-import { MdOutlineScale } from "react-icons/md";
-import { HiUserGroup } from "react-icons/hi";
-import { Empty, Radio } from "antd";
+import { Award, Printer } from "lucide-react";
+import { Empty } from "antd";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
@@ -234,77 +233,122 @@ const GymGroupPrint = () => {
   }, ${rankingLimit.toUpperCase()})`;
 
   return (
-    <div
-      className={`flex flex-col w-full h-full ${
-        isTabletOrMobile ? "bg-gray-100 p-2" : "bg-gray-50 p-4"
-      }`}
-    >
-      {isLoading ? (
-        <LoadingPage />
-      ) : (
-        <>
-          <div
-            className={`flex w-full h-14 mb-2 ${
-              isTabletOrMobile ? "bg-gray-200" : "bg-gray-100"
-            } justify-start items-center rounded-lg px-3`}
-          >
-            <span
-              className={`font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl ${
-                isTabletOrMobile ? "bg-blue-300" : "bg-blue-400"
-              } text-white mr-3`}
-            >
-              <MdOutlineScale />
-            </span>
-            <h1 className="font-sans text-lg font-semibold">클럽별 집계</h1>
-          </div>
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        {isLoading ? (
+          <LoadingPage />
+        ) : (
+          <>
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                  <Award size={16} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    클럽별 집계 출력
+                  </h1>
+                  <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                    소속 클럽별 입상 현황을 집계하여 A4 규격으로 인쇄합니다.
+                  </p>
+                </div>
+              </div>
 
-          <div className="flex w-full mb-4 gap-2 items-center">
-            <Radio.Group
-              onChange={(e) =>
-                setIncludeUnaffiliated(e.target.value === "include")
-              }
-              value={includeUnaffiliated ? "include" : "exclude"}
-            >
-              <Radio.Button value="include">무소속 포함</Radio.Button>
-              <Radio.Button value="exclude">무소속 제외</Radio.Button>
-            </Radio.Group>
+              <ReactToPrint
+                trigger={() => (
+                  <button className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] font-medium text-[13px] inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer border-0">
+                    <Printer size={15} strokeWidth={1.5} />
+                    <span>인쇄하기</span>
+                  </button>
+                )}
+                content={() => printRef.current}
+              />
+            </div>
 
-            <Radio.Group
-              onChange={(e) =>
-                setIncludeGrandPrix(e.target.value === "include")
-              }
-              value={includeGrandPrix ? "include" : "exclude"}
-            >
-              <Radio.Button value="include">그랑프리 포함</Radio.Button>
-              <Radio.Button value="exclude">그랑프리 제외</Radio.Button>
-            </Radio.Group>
-
-            <Radio.Group
-              onChange={(e) => setRankingLimit(e.target.value)}
-              value={rankingLimit}
-            >
-              <Radio.Button value="top3">TOP 3</Radio.Button>
-              <Radio.Button value="top5">TOP 5</Radio.Button>
-              <Radio.Button value="all">전체</Radio.Button>
-            </Radio.Group>
-
-            <ReactToPrint
-              trigger={() => (
-                <button className="bg-blue-800 text-white rounded-lg px-4 py-2">
-                  출력
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
+                <button
+                  type="button"
+                  onClick={() => setIncludeUnaffiliated(true)}
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    includeUnaffiliated
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  무소속 포함
                 </button>
-              )}
-              content={() => printRef.current}
-            />
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setIncludeUnaffiliated(false)}
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    !includeUnaffiliated
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  무소속 제외
+                </button>
+              </div>
 
-          <div className="flex w-full h-full bg-white overflow-y-auto p-4">
-            <div
-              ref={printRef}
-              className={`w-full h-full flex justify-center items-start bg-white ${
-                isTabletOrMobile ? "p-2" : "p-4"
-              }`}
-            >
+              <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
+                <button
+                  type="button"
+                  onClick={() => setIncludeGrandPrix(true)}
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    includeGrandPrix
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  그랑프리 포함
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIncludeGrandPrix(false)}
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    !includeGrandPrix
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                >
+                  그랑프리 제외
+                </button>
+              </div>
+
+              <div className="inline-flex items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
+                {[
+                  { value: "top3", label: "상위 3위" },
+                  { value: "top5", label: "상위 5위" },
+                  { value: "all", label: "전체 순위" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setRankingLimit(opt.value)}
+                    className={`h-7 px-3 rounded-[6px] text-[12px] font-medium tabular-nums transition-colors duration-150 ${
+                      rankingLimit === opt.value
+                        ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        : "text-[#525252] hover:text-[#171717]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <span className="ml-auto text-[12px] text-[#737373] tabular-nums">
+                집계 클럽 {topGroupedData.length}곳
+              </span>
+            </div>
+
+            <div className="flex w-full bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-y-auto p-4 sm:p-6 print:border-0 print:shadow-none print:p-0">
+              <div
+                ref={printRef}
+                className={`w-full h-full flex justify-center items-start bg-white ${
+                  isTabletOrMobile ? "p-2" : "p-4"
+                }`}
+              >
               {topGroupedData.length === 0 ? (
                 <div className="text-center text-gray-500">
                   <Empty description="데이터가 없습니다." />
@@ -369,9 +413,10 @@ const GymGroupPrint = () => {
                 </div>
               )}
             </div>
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

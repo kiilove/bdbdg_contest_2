@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { TbWeight } from "react-icons/tb";
+import { SlidersHorizontal } from "lucide-react";
 import {
   useFirestoreGetDocument,
   useFirestoreUpdateData,
@@ -141,123 +141,75 @@ const GradeInfoModal = ({ setClose, propState, setState }) => {
     console.log(propState);
   }, []);
   return (
-    <div className="flex w-full flex-col gap-y-2 h-auto">
-      <div className="flex w-full h-14">
-        <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-          <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-            <TbWeight />
-          </span>
-          <h1
-            className="font-sans text-lg font-semibold"
-            style={{ letterSpacing: "2px" }}
-          >
-            {propState.title}
-          </h1>
+    <div className="flex w-full flex-col gap-4 h-auto bg-[#ffffff] text-[#171717] p-2">
+      <div className="flex w-full items-center gap-2.5 pb-3 border-b border-[#171717]/[0.08]">
+        <div className="w-8 h-8 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
+          <SlidersHorizontal
+            size={15}
+            strokeWidth={1.5}
+            className="text-[#525252]"
+          />
+        </div>
+        <h1 className="text-base font-semibold text-[#171717] m-0">
+          {propState.title}
+        </h1>
+      </div>
+
+      <div className="bg-[#fafafa] rounded-[12px] border border-[#171717]/[0.08] p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            소속 종목
+          </label>
+          <div className="h-9 w-full rounded-[8px] border border-[#171717]/[0.08] bg-[#f4f4f5] px-3 flex items-center text-sm font-medium text-[#525252]">
+            {propState.categoryTitle}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            개최 순서
+          </label>
+          <input
+            type="text"
+            name="contestGradeIndex"
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            value={gradeInfo.contestGradeIndex ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (gradeInfoRef.current.contestGradeIndex = ref)}
+            placeholder="개최 순서 (숫자)"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            체급명
+          </label>
+          <input
+            type="text"
+            name="contestGradeTitle"
+            onChange={(e) => handleInputValues(e)}
+            value={gradeInfo.contestGradeTitle ?? ""}
+            ref={(ref) => (gradeInfoRef.current.contestGradeTitle = ref)}
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            placeholder="예: -65kg, +175cm"
+          />
         </div>
       </div>
-      <div className="flex bg-gradient-to-r from-blue-200 to-cyan-200 p-3 rounded-lg">
-        <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center gay-y-2 flex-col p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                소속종목
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full h-full justify-start items-center text-gray-400">
-                {propState.categoryTitle}
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                개최순서
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestGradeIndex"
-                  className="h-12 outline-none"
-                  value={gradeInfo.contestGradeIndex}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (gradeInfoRef.current.contestGradeIndex = ref)}
-                  placeholder="개최순서(숫자)"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                체급명
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestGradeTitle"
-                  onChange={(e) => handleInputValues(e)}
-                  value={gradeInfo.contestGradeTitle}
-                  ref={(ref) => (gradeInfoRef.current.contestGradeTitle = ref)}
-                  className="h-12 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-          {/* <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                비교심사
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="checkbox"
-                  name="isCompared"
-                  onChange={(e) =>
-                    setGradeInfo({
-                      ...gradeInfo,
-                      isCompared: e.target.checked,
-                    })
-                  }
-                  checked={gradeInfo.isCompared}
-                  ref={(ref) => (gradeInfoRef.current.isCompared = ref)}
-                  className="h-12 outline-none"
-                />
-              </div>
-            </div>
-          </div> */}
-        </div>
-      </div>
-      <div className="flex w-full gap-x-2 h-auto">
+
+      <div className="flex w-full justify-end gap-2 pt-1">
         <button
-          className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
-          onClick={() => handleUpdateGrades()}
-        >
-          저장
-        </button>
-        <button
-          className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-300 rounded-lg"
+          type="button"
+          className="inline-flex items-center justify-center h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
           onClick={() => setClose()}
         >
           닫기
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center h-9 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
+          onClick={() => handleUpdateGrades()}
+        >
+          저장
         </button>
       </div>
     </div>

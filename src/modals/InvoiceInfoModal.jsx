@@ -1,7 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { BiCategory } from "react-icons/bi";
+import { Save, RotateCcw, Trash2, X } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { v4 as uuidv4 } from "uuid";
 import {
   useFirestoreAddData,
   useFirestoreDeleteData,
@@ -9,10 +8,9 @@ import {
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { TbUsers } from "react-icons/tb";
-import { BsCheckAll } from "react-icons/bs";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { where } from "firebase/firestore";
+import BibTag from "../components/ui/BibTag";
 
 const initPlayerInfo = {
   contestPlayerIndex: "",
@@ -24,6 +22,9 @@ const initPlayerInfo = {
   contestPlayerPhoneNumber: "",
   contestPlayerEmail: "",
 };
+
+const inputClass =
+  "w-full h-9 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 text-[13px] text-[#171717] placeholder:text-[#737373] focus:outline-none focus:border-[#2563eb] transition-colors duration-150";
 
 const InvoiceInfoModal = ({ setClose, propState, setState }) => {
   const { currentContest, setCurrentContest } = useContext(
@@ -42,10 +43,19 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
 
   const [delMsgOpen, setDelMsgOpen] = useState(false);
   const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // 로딩 상태 추가
-  const [saveMsgOpen, setSaveMsgOpen] = useState(false); // 저장 완료 메시지 상태 추가
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveMsgOpen, setSaveMsgOpen] = useState(false);
   const [message, setMessage] = useState("");
   const invoiceInfoRef = useRef({});
+
+  void setCurrentContest;
+  void playerList;
+  void setPlayerList;
+  void playerArray;
+  void setPlayerArray;
+  void categorysList;
+  void entrysArray;
+  void setEntrysArray;
 
   const contestInvoiceDocument = useFirestoreGetDocument("invoices_pool");
   const fetchCategoryDocument = useFirestoreGetDocument(
@@ -56,35 +66,33 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
   const deleteEntry = useFirestoreDeleteData("contest_entrys_list");
   const addEntry = useFirestoreAddData("contest_entrys_list");
 
+  void contestInvoiceDocument;
+  void addEntry;
+
   const getQuery = useFirestoreQuery();
 
   const fetchPool = async () => {
-    if (currentContest.contests.contestCategorysListId) {
+    if (currentContest?.contests?.contestCategorysListId) {
       const returnCategorys = await fetchCategoryDocument.getDocument(
         currentContest.contests.contestCategorysListId
       );
       setCategorysList({ ...returnCategorys });
-      setCategorysArray([
-        ...returnCategorys?.categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
-      ]);
+      setCategorysArray(
+        Array.isArray(returnCategorys?.categorys)
+          ? [...returnCategorys.categorys].sort(
+              (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+            )
+          : []
+      );
 
       const returnGrades = await fetchGradeDocument.getDocument(
         currentContest.contests.contestGradesListId
       );
 
-      setGradesArray([...returnGrades?.grades]);
+      setGradesArray(
+        Array.isArray(returnGrades?.grades) ? [...returnGrades.grades] : []
+      );
     }
-  };
-
-  const getInvoice = async () => {
-    console.log(propState.info.id);
-    const returnInvoices = await contestInvoiceDocument.getDocument(
-      propState.info.id
-    );
-    console.log(returnInvoices);
-    //setInvoiceInfo({ ...returnInvoices[0] });
   };
 
   const handleInputValues = (e) => {
@@ -102,8 +110,10 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
     const gradeId = splitValue[0];
     const gradeTitle = splitValue[1];
     const categoryPriceType = splitValue[2];
-    let dummy = [...invoiceInfo.joins];
-    let newInvoiceInfo = { ...invoiceInfo };
+    const dummy = Array.isArray(invoiceInfo.joins)
+      ? [...invoiceInfo.joins]
+      : [];
+    const newInvoiceInfo = { ...invoiceInfo };
     const findCategory = dummy.some(
       (category) => category.contestCategoryId === id
     );
@@ -120,7 +130,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
     };
 
     if (gradeId === "체급선택") {
-      dummy.splice(findIndex, 1);
+      if (findIndex !== -1) dummy.splice(findIndex, 1);
     } else if (!findCategory) {
       dummy.push({ ...newValue });
     } else {
@@ -142,7 +152,7 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
 
   const handleOpenUnDelMsgBox = () => {
     setMessage({
-      body: "참가신청를 복원하시겠습니까?",
+      body: "참가신청을 복원하시겠습니까?",
       isButton: true,
       cancelButtonText: "닫기",
       confirmButtonText: "복원",
@@ -157,23 +167,22 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       "contest_entrys_list",
       invoiceCondition
     );
-    const filteredEntryByPlayerUid = returnEntry.filter(
+    const filteredEntryByPlayerUid = (returnEntry || []).filter(
       (entry) => entry.playerUid === playerUid
     );
 
-    if (filteredEntryByPlayerUid <= 0) {
+    if (filteredEntryByPlayerUid.length <= 0) {
       console.log("일치하는 선수명단이 없습니다.");
     }
-    if (filteredEntryByPlayerUid) {
-      filteredEntryByPlayerUid.map(async (filter, fIdx) => {
+    if (filteredEntryByPlayerUid.length > 0) {
+      filteredEntryByPlayerUid.map(async (filter) => {
         await deleteEntry.deleteData(filter.id);
       });
     }
   };
 
-  // 새롭게 추가된 함수: id로 리스트 업데이트
   const updateInvoiceInList = (newInvoiceInfo) => {
-    const dummy = [...propState.list];
+    const dummy = [...(propState?.list || [])];
     const findInvoiceIndex = dummy.findIndex(
       (invoice) => invoice.id === newInvoiceInfo.id
     );
@@ -182,11 +191,16 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       setState([...dummy]);
     }
   };
+
   const handleUpdateInvoice = async () => {
     setIsLoading(true);
     const newInvoice = { ...invoiceInfo };
     deleteInvocieJoins(newInvoice.contestId, newInvoice.playerUid);
-    newInvoice.contestPriceSum = parseInt(invoiceInfo.contestPriceSum);
+    const cleanedPrice = String(invoiceInfo.contestPriceSum ?? 0).replace(
+      /,/g,
+      ""
+    );
+    newInvoice.contestPriceSum = parseInt(cleanedPrice, 10) || 0;
     newInvoice.isPriceCheck = false;
     newInvoice.invoiceEdited = true;
     try {
@@ -202,16 +216,17 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
             isButton: true,
             confirmButtonText: "확인",
           }));
-          updateInvoiceInList(newInvoice); // 리스트 업데이트 호출
+          updateInvoiceInList(newInvoice);
           setSaveMsgOpen(true);
         });
     } catch (error) {
       console.log(error);
+      setIsLoading(false);
     }
   };
 
   const handleCancelUndo = async () => {
-    const dummy = [...propState.list];
+    const dummy = [...(propState?.list || [])];
     const findInvoiceIndex = dummy.findIndex(
       (invoice) => invoice.id === invoiceInfo.id
     );
@@ -220,7 +235,9 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       isCanceled: false,
       isPriceCheck: false,
     };
-    dummy.splice(findInvoiceIndex, 1, newInvoiceInfo);
+    if (findInvoiceIndex !== -1) {
+      dummy.splice(findInvoiceIndex, 1, newInvoiceInfo);
+    }
 
     await updateInvoice
       .updateData(invoiceInfo.id, { ...newInvoiceInfo })
@@ -236,8 +253,9 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       .then(() => setUnDelMsgOpen(false))
       .catch((error) => console.log(error));
   };
+
   const handleCancelDo = async () => {
-    const dummy = [...propState.list];
+    const dummy = [...(propState?.list || [])];
     const findInvoiceIndex = dummy.findIndex(
       (invoice) => invoice.id === invoiceInfo.id
     );
@@ -246,7 +264,9 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
       isCanceled: true,
       isPriceCheck: false,
     };
-    dummy.splice(findInvoiceIndex, 1, newInvoiceInfo);
+    if (findInvoiceIndex !== -1) {
+      dummy.splice(findInvoiceIndex, 1, newInvoiceInfo);
+    }
 
     await updateInvoice
       .updateData(invoiceInfo.id, { ...newInvoiceInfo })
@@ -264,18 +284,20 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
   };
 
   useEffect(() => {
-    //getInvoice();
     fetchPool();
-    //invoiceInfoRef.current.playerName.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    console.log("propState:", propState);
-    setInvoiceInfo({ ...propState.info });
+    if (propState?.info) {
+      setInvoiceInfo({ ...propState.info });
+    }
   }, [propState]);
 
+  const joinsList = Array.isArray(invoiceInfo?.joins) ? invoiceInfo.joins : [];
+
   return (
-    <div className="flex w-full flex-col gap-y-2 h-auto pt-4 pb-10 lg:pt-0 lg:pb-0 overflow-y-auto">
+    <div className="flex flex-col w-full max-h-[90vh] bg-white text-[#171717]">
       <ConfirmationModal
         isOpen={delMsgOpen}
         onCancel={() => setDelMsgOpen(false)}
@@ -294,325 +316,283 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
         onConfirm={() => setSaveMsgOpen(false)}
         message={message}
       />
-      <div className="flex w-full h-14">
-        <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-          <div className="flex w-5/6">
-            <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-              <BsCheckAll />
+
+      {/* 모달 헤더 */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-[#171717]/[0.08] bg-[#fafafa] shrink-0">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-[16px] font-medium text-[#171717]">
+            {propState?.title || "참가신청서 상세"}
+          </h2>
+          {invoiceInfo.isCanceled && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+              취소됨
             </span>
-            <h1
-              className="font-sans text-lg font-semibold"
-              style={{ letterSpacing: "2px" }}
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {invoiceInfo.isCanceled ? (
+            <button
+              type="button"
+              onClick={() => handleOpenUnDelMsgBox()}
+              className="h-8 px-3 rounded-[6px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
             >
-              {propState?.title || ""}
-            </h1>
-          </div>
-          <div className="flex w-1/6">
-            {invoiceInfo.isCanceled ? (
-              <button
-                className="w-full h-12 bg-gradient-to-r from-orange-300 to-red-300 rounded-lg text-sm"
-                onClick={() => handleOpenUnDelMsgBox()}
-              >
-                복원
-              </button>
-            ) : (
-              <button
-                className="w-full h-12 bg-gradient-to-r from-orange-300 to-red-300 rounded-lg text-sm"
-                onClick={() => handleOpenDelMsgBox()}
-              >
-                삭제
-              </button>
-            )}
-          </div>
+              <RotateCcw size={13} strokeWidth={1.5} className="text-[#525252]" />
+              <span>복원</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleOpenDelMsgBox()}
+              className="h-8 px-3 rounded-[6px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+            >
+              <Trash2 size={13} strokeWidth={1.5} />
+              <span>신청 취소</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setClose()}
+            aria-label="닫기"
+            className="h-8 w-8 rounded-[6px] inline-flex items-center justify-center text-[#737373] hover:bg-[#f4f4f5] hover:text-[#171717] transition-colors duration-150"
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
         </div>
       </div>
-      <div className="flex bg-gradient-to-r from-blue-200 to-cyan-200 p-3 rounded-lg">
-        <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center gay-y-2 flex-col p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                이름
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  value={invoiceInfo.playerName}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerName = ref)}
-                  name="playerName"
-                  className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                연락처
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="playerTel"
-                  value={invoiceInfo.playerTel}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerTel = ref)}
-                  className="h-8 lg:h-12 outline-none  text-sm lg:text-base"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                생년월일
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="playerBirth"
-                  value={invoiceInfo.playerBirth}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerBirth = ref)}
-                  className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                소속
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="playerGym"
-                  value={invoiceInfo.playerGym}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerGym = ref)}
-                  className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                />
-              </div>
-            </div>
+
+      {/* 본문 폼 */}
+      <div className="p-5 space-y-4 overflow-y-auto flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              이름
+            </label>
+            <input
+              type="text"
+              name="playerName"
+              value={invoiceInfo.playerName || ""}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (invoiceInfoRef.current.playerName = ref)}
+              className={inputClass}
+            />
           </div>
 
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                성별
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg">
-              <div className="flex w-full justify-start items-center h-8 lg:h-12 bg-white rounded-lg">
-                <select
-                  name="playerGender"
-                  onChange={(e) => handleInputValues(e)}
-                  //value={invoiceInfo.playerGender}
-
-                  ref={(ref) => (invoiceInfoRef.current.playerGender = ref)}
-                  className="w-full h-full pl-2 text-sm lg:text-base bg-transparent rounded-lg"
-                >
-                  <option selected={invoiceInfo.playerGender === "m"} value="m">
-                    남
-                  </option>
-                  <option selected={invoiceInfo.playerGender === "f"} value="f">
-                    여
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                이메일
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="email"
-                  name="playerEmail"
-                  value={invoiceInfo.playerEmail}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerEmail = ref)}
-                  className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                참가비용
-              </h3>
-            </div>
-            <div className="h-8 lg:h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="email"
-                  name="contestPriceSum"
-                  value={invoiceInfo.contestPriceSum?.toLocaleString()}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.contestPriceSum = ref)}
-                  className="h-8 lg:h-12 outline-none text-sm lg:text-base"
-                />
-              </div>
-            </div>
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              성별
+            </label>
+            <select
+              name="playerGender"
+              value={invoiceInfo.playerGender || "m"}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (invoiceInfoRef.current.playerGender = ref)}
+              className={inputClass}
+            >
+              <option value="m">남</option>
+              <option value="f">여</option>
+            </select>
           </div>
 
-          <div className="flex w-full justify-start items-center h-auto ">
-            <div className="flex w-1/4 justify-end mr-2 h-14 items-start">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                출전동기
-              </h3>
-            </div>
-            <div className="h-auto w-3/4 rounded-lg px-3 bg-white pt-1">
-              <div className="flex w-full justify-start items-center">
-                <textarea
-                  name="playerText"
-                  value={invoiceInfo.playerText}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) => (invoiceInfoRef.current.playerText = ref)}
-                  className="h-16 outline-none w-full text-sm lg:text-base"
-                />
-              </div>
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              연락처
+            </label>
+            <input
+              type="text"
+              name="playerTel"
+              value={invoiceInfo.playerTel || ""}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (invoiceInfoRef.current.playerTel = ref)}
+              className={`${inputClass} font-mono tabular-nums`}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              생년월일
+            </label>
+            <input
+              type="text"
+              name="playerBirth"
+              value={invoiceInfo.playerBirth || ""}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (invoiceInfoRef.current.playerBirth = ref)}
+              className={`${inputClass} font-mono tabular-nums`}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              소속
+            </label>
+            <input
+              type="text"
+              name="playerGym"
+              value={invoiceInfo.playerGym || ""}
+              onChange={(e) => handleInputValues(e)}
+              ref={(ref) => (invoiceInfoRef.current.playerGym = ref)}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              참가비용
+            </label>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                name="contestPriceSum"
+                value={invoiceInfo.contestPriceSum?.toLocaleString() ?? "0"}
+                onChange={(e) => handleInputValues(e)}
+                ref={(ref) => (invoiceInfoRef.current.contestPriceSum = ref)}
+                className={`${inputClass} pr-8 text-right font-mono tabular-nums`}
+              />
+              <span className="absolute right-3 text-[12px] text-[#737373] pointer-events-none">
+                원
+              </span>
             </div>
           </div>
-          <div className="flex w-full justify-start items-center h-auto ">
-            <div className="flex w-1/4 justify-end mr-2 h-full items-start">
-              <h3
-                className="font-sans font-semibold text-sm lg:text-base"
-                style={{ letterSpacing: "2px" }}
-              >
-                참가신청종목
-              </h3>
-            </div>
-            <div className="h-44 w-3/4 rounded-lg px-3 bg-white pt-1 overflow-y-auto">
-              <div className="flex w-full justify-start items-center">
-                <div className="flex flex-col w-full h-auto gap-y-1">
-                  {categorysArray?.length > 0 &&
-                    categorysArray.map((category, cIdx) => {
-                      const {
-                        contestCategoryId: categoryId,
-                        contestCategoryIndex: categoryIndex,
-                        contestCategoryTitle: categoryTitle,
-                        contestCategoryPriceType: categoryType,
-                      } = category;
+        </div>
 
-                      const matchedGrades = gradesArray
-                        .filter((grade) => grade.refCategoryId === categoryId)
-                        .sort(
-                          (a, b) => a.contestGradeIndex - b.contestGradeIndex
-                        );
+        <div className="space-y-1">
+          <label className="block text-[12px] font-medium text-[#525252]">
+            이메일
+          </label>
+          <input
+            type="email"
+            name="playerEmail"
+            value={invoiceInfo.playerEmail || ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (invoiceInfoRef.current.playerEmail = ref)}
+            className={inputClass}
+          />
+        </div>
 
-                      return (
-                        <div
-                          className={`${
-                            invoiceInfo?.joins.some(
-                              (join) => join.contestCategoryId === categoryId
-                            )
-                              ? "flex w-full  border  bg-blue-300 rounded-lg"
-                              : "flex w-full  border rounded-lg "
-                          }`}
-                        >
-                          <div className="flex w-1/2 p-2">
-                            <span className="text-sm">{categoryTitle}</span>
-                          </div>
-                          <div className="flex p-2">
-                            <select
-                              id={categoryId}
-                              name={categoryTitle}
-                              className="text-sm bg-transparent"
-                              onChange={(e) => handleJoins(e)}
+        <div className="space-y-1">
+          <label className="block text-[12px] font-medium text-[#525252]">
+            출전 동기
+          </label>
+          <textarea
+            name="playerText"
+            value={invoiceInfo.playerText || ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (invoiceInfoRef.current.playerText = ref)}
+            className="w-full h-16 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 py-2 text-[13px] text-[#171717] resize-none focus:outline-none focus:border-[#2563eb] transition-colors duration-150"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="block text-[12px] font-medium text-[#525252]">
+              참가 신청 종목
+            </label>
+            <span className="font-mono text-[11px] tabular-nums text-[#737373]">
+              선택됨 {joinsList.length}종목
+            </span>
+          </div>
+          <div className="rounded-[8px] border border-[#171717]/[0.08] bg-[#fafafa] p-2.5 max-h-56 overflow-y-auto space-y-1.5">
+            {categorysArray?.length > 0 &&
+              categorysArray.map((category, cIdx) => {
+                const {
+                  contestCategoryId: categoryId,
+                  contestCategoryIndex: categoryIndex,
+                  contestCategoryTitle: categoryTitle,
+                  contestCategoryPriceType: categoryType,
+                } = category;
+
+                const matchedGrades = gradesArray
+                  .filter((grade) => grade.refCategoryId === categoryId)
+                  .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex);
+
+                const selectedJoin = joinsList.find(
+                  (join) => join.contestCategoryId === categoryId
+                );
+                const isSelected = Boolean(selectedJoin);
+
+                const selectVal = selectedJoin
+                  ? `${selectedJoin.contestGradeId},${selectedJoin.contestGradeTitle},${categoryType}`
+                  : "체급선택";
+
+                return (
+                  <div
+                    key={categoryId || cIdx}
+                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-[6px] border transition-colors duration-150 ${
+                      isSelected
+                        ? "bg-[#2563eb]/[0.06] border-[#2563eb]/40"
+                        : "bg-white border-[#171717]/[0.06]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <BibTag
+                        number={categoryIndex ?? cIdx + 1}
+                        size="sm"
+                        variant={isSelected ? "active" : "default"}
+                      />
+                      <span
+                        className={`text-[13px] font-medium truncate ${
+                          isSelected ? "text-[#2563eb]" : "text-[#171717]"
+                        }`}
+                      >
+                        {categoryTitle}
+                      </span>
+                    </div>
+                    <select
+                      id={categoryId}
+                      name={categoryTitle}
+                      value={selectVal}
+                      onChange={(e) => handleJoins(e)}
+                      className={`h-8 rounded-[6px] px-2 text-[12px] font-medium focus:outline-none ${
+                        isSelected
+                          ? "bg-white border border-[#2563eb]/50 text-[#2563eb]"
+                          : "bg-[#fafafa] border border-[#171717]/[0.12] text-[#525252]"
+                      }`}
+                    >
+                      <option value="체급선택">체급선택</option>
+                      {matchedGrades?.length > 0 &&
+                        matchedGrades.map((match, mIdx) => {
+                          const {
+                            contestGradeId: gradeId,
+                            contestGradeTitle: gradeTitle,
+                          } = match;
+
+                          return (
+                            <option
+                              key={gradeId || mIdx}
+                              id={gradeId}
+                              value={
+                                gradeId + "," + gradeTitle + "," + categoryType
+                              }
                             >
-                              <option>체급선택</option>
-                              {matchedGrades?.length > 0 &&
-                                matchedGrades.map((match, mIdx) => {
-                                  const {
-                                    contestGradeId: gradeId,
-                                    contestGradeTitle: gradeTitle,
-                                    contestGradeIndex: gradeIndex,
-                                  } = match;
-
-                                  return (
-                                    <option
-                                      className="text-sm"
-                                      id={gradeId}
-                                      selected={invoiceInfo?.joins.some(
-                                        (i) => i.contestGradeId === gradeId
-                                      )}
-                                      value={
-                                        gradeId +
-                                        "," +
-                                        gradeTitle +
-                                        "," +
-                                        categoryType
-                                      }
-                                    >
-                                      {gradeTitle}
-                                    </option>
-                                  );
-                                })}
-                            </select>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
+                              {gradeTitle}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
+                );
+              })}
           </div>
         </div>
       </div>
-      <div className="flex w-full gap-x-2 h-auto">
+
+      {/* 모달 푸터 */}
+      <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[#171717]/[0.08] bg-[#fafafa] shrink-0">
         <button
-          className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
-          disabled={isLoading}
-          onClick={() => {
-            handleUpdateInvoice();
-          }}
-        >
-          {isLoading ? "수정중.." : "수정"}
-        </button>
-        <button
-          className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-300 rounded-lg"
+          type="button"
           onClick={() => setClose()}
+          className="h-9 px-4 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium transition-colors duration-150"
         >
           닫기
+        </button>
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => handleUpdateInvoice()}
+          className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-60 text-white text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150"
+        >
+          <Save size={15} strokeWidth={1.5} />
+          <span>{isLoading ? "저장 중" : "수정 저장"}</span>
         </button>
       </div>
     </div>

@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useContext, useMemo } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { HiUserGroup } from "react-icons/hi";
-import { FaFileExcel } from "react-icons/fa";
+import { Trophy, FileSpreadsheet, Printer } from "lucide-react";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
@@ -263,142 +262,77 @@ const PrintPlayerStanding = () => {
   }, [resultArray, isLoading]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
-      {isLoading && <LoadingPage />}
-      {!isLoading && resultArray.length === 0 && (
-        <>
-          <div className="flex w-full h-14">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        {isLoading && <LoadingPage />}
+        {!isLoading && resultArray.length === 0 && (
+          <>
             <ConfirmationModal
               isOpen={msgOpen}
               message={message}
               onCancel={() => setMsgOpen(false)}
               onConfirm={() => setMsgOpen(false)}
             />
-            <div className="flex w-full bg-gray-100 justify-between items-center rounded-lg px-3">
-              <div className="flex items-center">
-                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                  <HiUserGroup />
-                </span>
-                <h1
-                  className="font-sans text-lg font-semibold"
-                  style={{ letterSpacing: "2px" }}
-                >
-                  순위표 출력
-                </h1>
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                  <Trophy size={16} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    순위표 출력
+                  </h1>
+                  <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                    확정된 종목·체급별 순위표를 A4 규격으로 출력합니다.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex w-full flex-1 min-h-[240px] justify-center items-center bg-gray-50 rounded-lg border border-gray-200 text-gray-500 font-medium">
-            확정된 순위표 데이터가 없습니다.
-          </div>
-        </>
-      )}
-      {!isLoading && resultArray.length > 0 && (
-        <>
-          <div className="flex w-full h-14">
+            <div className="flex w-full min-h-[240px] justify-center items-center bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] text-[13px] text-[#737373]">
+              확정된 순위표 데이터가 없습니다.
+            </div>
+          </>
+        )}
+        {!isLoading && resultArray.length > 0 && (
+          <>
             <ConfirmationModal
               isOpen={msgOpen}
               message={message}
               onCancel={() => setMsgOpen(false)}
               onConfirm={() => setMsgOpen(false)}
             />
-            <div className="flex w-full bg-gray-100 justify-between items-center rounded-lg px-3">
-              <div className="flex items-center">
-                <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-                  <HiUserGroup />
-                </span>
-                <h1
-                  className="font-sans text-lg font-semibold"
-                  style={{ letterSpacing: "2px" }}
-                >
-                  순위표 출력
-                </h1>
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
+                  <Trophy size={16} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[#171717] m-0">
+                    순위표 출력
+                  </h1>
+                  <p className="text-[12px] text-[#737373] m-0 mt-0.5">
+                    확정된 종목·체급별 순위표를 A4 규격으로 출력합니다.
+                  </p>
+                </div>
               </div>
-              <button
-                onClick={handleExportExcel}
-                disabled={isExporting}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all text-white font-bold px-4 py-2 rounded-lg shadow-md cursor-pointer text-sm"
-              >
-                <FaFileExcel className="w-4 h-4" />
-                <span>{isExporting ? "엑셀 생성중..." : "전체 최종순위표 엑셀 다운로드"}</span>
-              </button>
-            </div>
-          </div>{" "}
-          <div
-            className="flex w-full h-full justify-start px-3 pt-3 flex-col
-            bg-gray-100 rounded-lg gay-y-2"
-          >
-            <div className="flex h-full w-full gap-x-2 bg-gray-100">
-              <div className="flex flex-col w-full h-full bg-white rounded-b-lg p-2 gap-y-2">
-                {/* Category and Grade Selection */}
-                <div className="flex w-full justify-center px-5 gap-x-2">
-                  <button
-                    className="w-24 h-10 bg-white rounded-lg border border-blue-500"
-                    onClick={() => {
-                      setCurrentSection("all");
-                      clearDeafult();
-                    }}
-                  >
-                    전체
-                  </button>
-                  {sectionArray?.length > 0 &&
-                    sectionArray.map((section, sIdx) => {
-                      const { contestCategorySection } = section;
-                      return (
-                        <button
-                          key={contestCategorySection || sIdx}
-                          className="w-24 h-10 bg-white rounded-lg border border-blue-500"
-                          onClick={() => {
-                            setCurrentSection(contestCategorySection);
-                            clearDeafult();
-                          }}
-                        >
-                          {contestCategorySection}
-                        </button>
-                      );
-                    })}
-
-                  <select
-                    value={currentCategoryId}
-                    onChange={(e) => setCurrentCategoryId(e.target.value)}
-                    className="w-48 h-10 border border-blue-500"
-                  >
-                    <option value="all">종목선택</option>
-                    {findResults.length > 0 &&
-                      findResults.map((category) => (
-                        <option
-                          key={category.categoryId}
-                          value={category.categoryId}
-                        >
-                          {category?.contestCategoryTitle}
-                        </option>
-                      ))}
-                  </select>
-                  <select
-                    value={currentGradeId}
-                    onChange={(e) => setCurrentGradeId(e.target.value)}
-                    className="w-48 h-10 border border-blue-500 ml-2"
-                  >
-                    <option value="all">체급선택</option>
-                    {findResults
-                      .find((f) => f.categoryId === currentCategoryId)
-                      ?.matchedGrades?.map((grade) => {
-                        return (
-                          <option key={grade.gradeId} value={grade.gradeId}>
-                            {grade.gradeTitle}
-                          </option>
-                        );
-                      })}
-                  </select>
-                  {/* Print Button */}
-                  <ReactToPrint
-                    trigger={() => (
-                      <button className="w-28 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium">
-                        출력
-                      </button>
-                    )}
-                    content={() => printRef.current}
-                    pageStyle={`
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportExcel}
+                  disabled={isExporting}
+                  className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                >
+                  <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                  <span>{isExporting ? "엑셀 생성 중..." : "전체 최종순위표 엑셀 다운로드"}</span>
+                </button>
+                <ReactToPrint
+                  trigger={() => (
+                    <button className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-[#ffffff] rounded-[8px] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer">
+                      <Printer size={15} strokeWidth={1.5} />
+                      <span>인쇄하기</span>
+                    </button>
+                  )}
+                  content={() => printRef.current}
+                  pageStyle={`
                        @page {
       size: A4;
       margin: 0;
@@ -428,20 +362,97 @@ const PrintPlayerStanding = () => {
       .page-break { page-break-inside:avoid; page-break-after:auto }
     }
                     `}
-                  />
-                  <button
-                    onClick={handleExportExcel}
-                    disabled={isExporting}
-                    className="flex items-center justify-center gap-1.5 px-4 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm transition-all"
-                  >
-                    <FaFileExcel className="w-4 h-4" />
-                    <span>{isExporting ? "생성중..." : "엑셀 다운로드"}</span>
-                  </button>
-                </div>
-                <div
-                  className="flex w-full h-full p-5 flex-col gap-y-2"
-                  ref={printRef}
+                />
+              </div>
+            </div>
+
+            {/* Category and Grade Selection */}
+            <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-4 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-2">
+              <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-[8px] bg-[#f4f4f5]">
+                <button
+                  className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                    currentSection === "all"
+                      ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-[#525252] hover:text-[#171717]"
+                  }`}
+                  onClick={() => {
+                    setCurrentSection("all");
+                    clearDeafult();
+                  }}
                 >
+                  전체
+                </button>
+                {sectionArray?.length > 0 &&
+                  sectionArray.map((section, sIdx) => {
+                    const { contestCategorySection } = section;
+                    return (
+                      <button
+                        key={contestCategorySection || sIdx}
+                        className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+                          currentSection === contestCategorySection
+                            ? "bg-[#ffffff] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                            : "text-[#525252] hover:text-[#171717]"
+                        }`}
+                        onClick={() => {
+                          setCurrentSection(contestCategorySection);
+                          clearDeafult();
+                        }}
+                      >
+                        {contestCategorySection}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              <select
+                value={currentCategoryId}
+                onChange={(e) => setCurrentCategoryId(e.target.value)}
+                className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] focus:outline-none focus:border-[#2563eb]"
+              >
+                <option value="all">전체 종목</option>
+                {findResults.length > 0 &&
+                  findResults.map((category) => (
+                    <option
+                      key={category.categoryId}
+                      value={category.categoryId}
+                    >
+                      {category?.contestCategoryTitle}
+                    </option>
+                  ))}
+              </select>
+
+              <select
+                value={currentGradeId}
+                onChange={(e) => setCurrentGradeId(e.target.value)}
+                className="h-9 border border-[#171717]/[0.12] rounded-[8px] px-3 text-[13px] font-normal text-[#171717] bg-[#ffffff] focus:outline-none focus:border-[#2563eb]"
+              >
+                <option value="all">전체 체급</option>
+                {findResults
+                  .find((f) => f.categoryId === currentCategoryId)
+                  ?.matchedGrades?.map((grade) => {
+                    return (
+                      <option key={grade.gradeId} value={grade.gradeId}>
+                        {grade.gradeTitle}
+                      </option>
+                    );
+                  })}
+              </select>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] ml-auto font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-50"
+              >
+                <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
+                <span>{isExporting ? "생성 중..." : "엑셀 다운로드"}</span>
+              </button>
+            </div>
+
+            <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-x-auto print:border-0 print:shadow-none">
+              <div
+                className="flex w-full h-full p-5 flex-col gap-y-2"
+                ref={printRef}
+              >
                   {findResults?.length > 0 &&
                     findResults.map((result) => {
                       const { contestCategoryTitle, matchedGrades } = result;
@@ -535,12 +546,11 @@ const PrintPlayerStanding = () => {
                         </div>
                       );
                     })}
-                </div>
               </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

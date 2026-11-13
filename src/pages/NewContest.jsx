@@ -1,6 +1,6 @@
 import React, { useContext, useState } from "react";
-import { ThreeDots } from "react-loader-spinner";
 import { useNavigate } from "react-router-dom";
+import { Plus, Loader2, FolderPlus } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   useFirestoreAddData,
@@ -22,6 +22,11 @@ const NewContest = () => {
   const invoicesPoolHook = useFirestoreAddData("invoices_pool");
   const { setCurrentContest } = useContext(CurrentContestContext);
   const navigate = useNavigate();
+
+  // Keep unused hook references intact
+  void contestJudgesListHook;
+  void contestEntrysListHook;
+  void invoicesPoolHook;
 
   const handleStart = async () => {
     setIsLoading(true);
@@ -125,31 +130,75 @@ const NewContest = () => {
   };
 
   return (
-    <div className="flex flex-col justify-center items-center w-full h-screen bg-gray-100">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
-        <h1 className="text-2xl text-center mb-4">새로운 대회를 개설합니다</h1>
-        <div className="flex justify-center">
-          {isLoading ? (
-            <button className="w-40 h-12 bg-gray-900 text-white font-bold rounded-lg flex justify-center items-center">
-              <ThreeDots
-                height="40"
-                width="40"
-                radius="9"
-                color="#fff"
-                ariaLabel="three-dots-loading"
-                wrapperStyle={{}}
-                wrapperClassName=""
-                visible={true}
-              />
-            </button>
-          ) : (
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              새 대회 개설
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              신규 대회의 기본 요강 문서와 종목·체급 컬렉션을 초기화합니다
+            </p>
+          </div>
+        </header>
+
+        <div className="max-w-xl bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-6">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
+              <FolderPlus size={18} strokeWidth={1.5} className="text-[#525252]" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-[15px] font-medium text-[#171717]">
+                대회 데이터 공간 생성
+              </h2>
+              <p className="text-[13px] text-[#525252] leading-5">
+                개설 즉시 접수 상태의 기본 대회가 생성되며, 완료 후 대회 정보 설정 화면으로 이동합니다
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-[#f4f4f5] rounded-[8px] p-4 space-y-2 border border-[#171717]/[0.06]">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-[#525252]">초기 상태</span>
+              <span className="font-medium text-[#171717]">접수중</span>
+            </div>
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-[#525252]">자동 생성 컬렉션</span>
+              <span className="font-mono text-[12px] text-[#525252] tabular-nums">
+                notice · categorys · grades
+              </span>
+            </div>
+            {newContestId && (
+              <div className="flex items-center justify-between text-[13px] pt-1 border-t border-[#171717]/[0.06]">
+                <span className="text-[#525252]">생성된 대회 ID</span>
+                <span className="font-mono text-[12px] text-[#171717] tabular-nums">
+                  {newContestId}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-1">
             <button
-              className="w-40 h-12 bg-blue-600 text-white font-bold rounded-lg"
+              type="button"
+              disabled={isLoading}
               onClick={() => handleStart()}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-60 text-white text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors duration-150"
             >
-              대회개설
+              {isLoading ? (
+                <>
+                  <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
+                  <span>개설 처리 중</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={16} strokeWidth={1.5} />
+                  <span>대회 개설</span>
+                </>
+              )}
             </button>
-          )}
+          </div>
         </div>
       </div>
     </div>

@@ -10,13 +10,8 @@ import LoadingPage from "./LoadingPage";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateUUID } from "../functions/functions";
-import { Tabs, Button, Card } from "antd";
-import {
-  SaveOutlined,
-  TeamOutlined,
-  TrophyOutlined,
-  StarOutlined,
-} from "@ant-design/icons";
+import { Tabs } from "antd";
+import { Save, Layers, Trophy, SlidersHorizontal } from "lucide-react";
 
 // Child components
 import SectionAssign from "../components/SectionAssign";
@@ -29,7 +24,7 @@ const ContestJudgeAssignTable = () => {
   const [currentSubTab, setCurrentSubTab] = useState("0");
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
-  // ✅ 부모는 “원본”만 보관
+  // 부모는 “원본”만 보관
   const [judgesAssignInfoRaw, setJudgesAssignInfoRaw] = useState({
     id: "",
     judges: [],
@@ -60,7 +55,6 @@ const ContestJudgeAssignTable = () => {
       ]);
 
       setJudgesPoolArray(judgesPool || []);
-      // 원본 상태에 저장
       setJudgesAssignInfoRaw(
         judgesAssign && judgesAssign.id ? judgesAssign : { id: "", judges: [] }
       );
@@ -73,7 +67,7 @@ const ContestJudgeAssignTable = () => {
     }
   };
 
-  // 🔎 섹션/종목/체급 필터 구조: 자식들이 재사용
+  // 섹션/종목/체급 필터 구조: 자식들이 재사용
   const filteredBySection = useMemo(() => {
     return (categoriesArray || []).reduce((acc, curr) => {
       const section = acc.find(
@@ -98,7 +92,7 @@ const ContestJudgeAssignTable = () => {
     }, []);
   }, [categoriesArray, gradesArray]);
 
-  // 🔎 카테고리 ID → 제목 일괄 맵
+  // 카테고리 ID → 제목 일괄 맵
   const categoryTitleMap = useMemo(() => {
     const map = {};
     (categoriesArray || []).forEach((cat) => {
@@ -109,7 +103,7 @@ const ContestJudgeAssignTable = () => {
     return map;
   }, [categoriesArray]);
 
-  // ✅ 파생: 원본 judges에 categoryTitle을 붙인 버전 (표시/저장 둘 다 이걸 사용)
+  // 파생: 원본 judges에 categoryTitle을 붙인 버전 (표시/저장 둘 다 이걸 사용)
   const judgesAssignInfoEnriched = useMemo(() => {
     const cloned = {
       ...(judgesAssignInfoRaw || {}),
@@ -127,7 +121,6 @@ const ContestJudgeAssignTable = () => {
   const setJudgesAssignInfoFromChild = (updater) => {
     setJudgesAssignInfoRaw((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      // 안전 가드
       if (!next || !Array.isArray(next.judges)) {
         return { ...(next || {}), judges: [] };
       }
@@ -138,7 +131,7 @@ const ContestJudgeAssignTable = () => {
   // 저장: 파생(제목 포함) 버전을 통째로 저장
   const handleUpdateJudgesAssign = async () => {
     try {
-      setMessage({ body: "저장중...", isButton: false });
+      setMessage({ body: "저장 중입니다...", isButton: false });
       setMsgOpen(true);
 
       const targetId = judgesAssignInfoEnriched?.id || judgesAssignInfoRaw?.id;
@@ -149,14 +142,14 @@ const ContestJudgeAssignTable = () => {
       await setDoc(ref, judgesAssignInfoEnriched, { merge: false });
 
       setMessage({
-        body: "저장되었습니다.",
+        body: "저장되었습니다",
         isButton: true,
         confirmButtonText: "확인",
       });
     } catch (error) {
       console.log(error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다.",
+        body: "저장 중 오류가 발생했습니다",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -175,17 +168,17 @@ const ContestJudgeAssignTable = () => {
     {
       key: "0",
       label: (
-        <span className="flex items-center gap-2">
-          <TeamOutlined />
-          섹션별
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <Layers size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>섹션별 배정</span>
         </span>
       ),
       children: (
         <SectionAssign
-          judgesAssignInfo={judgesAssignInfoEnriched} // 표시/랜더용 (제목 포함)
+          judgesAssignInfo={judgesAssignInfoEnriched}
           judgesPoolArray={judgesPoolArray}
           filteredBySection={filteredBySection}
-          setJudgesAssignInfo={setJudgesAssignInfoFromChild} // 원본만 업데이트
+          setJudgesAssignInfo={setJudgesAssignInfoFromChild}
           currentContest={currentContest}
           generateUUID={generateUUID}
           setMessage={setMessage}
@@ -196,9 +189,9 @@ const ContestJudgeAssignTable = () => {
     {
       key: "1",
       label: (
-        <span className="flex items-center gap-2">
-          <TrophyOutlined />
-          종목별
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <Trophy size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>종목별 배정</span>
         </span>
       ),
       children: (
@@ -218,9 +211,13 @@ const ContestJudgeAssignTable = () => {
     {
       key: "2",
       label: (
-        <span className="flex items-center gap-2">
-          <StarOutlined />
-          체급별
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <SlidersHorizontal
+            size={16}
+            strokeWidth={1.5}
+            className="text-[#737373]"
+          />
+          <span>체급별 배정</span>
         </span>
       ),
       children: (
@@ -240,7 +237,7 @@ const ContestJudgeAssignTable = () => {
   ];
 
   return (
-    <div className="w-full mb-3">
+    <div className="w-full space-y-4 pt-2">
       {isLoading ? (
         <LoadingPage />
       ) : (
@@ -254,26 +251,43 @@ const ContestJudgeAssignTable = () => {
               setMsgOpen(false);
             }}
           />
-          <Card className="shadow-md">
-            <div className="mb-4">
-              <Button
-                type="primary"
-                size="large"
-                icon={<SaveOutlined />}
-                onClick={handleUpdateJudgesAssign}
-                className="w-full"
-              >
-                저장
-              </Button>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#fafafa] border border-[#171717]/[0.08] rounded-[12px] px-4 py-3">
+            <div className="text-xs text-[#737373] flex items-center gap-3">
+              <span>
+                선발 심판 풀{" "}
+                <strong className="font-mono font-medium tabular-nums text-[#171717]">
+                  {judgesPoolArray.length}
+                </strong>
+                명
+              </span>
+              <span className="text-[#171717]/15">·</span>
+              <span>
+                누적 체급·좌석 배정{" "}
+                <strong className="font-mono font-medium tabular-nums text-[#171717]">
+                  {judgesAssignInfoEnriched?.judges?.length || 0}
+                </strong>
+                건
+              </span>
             </div>
 
+            <button
+              type="button"
+              onClick={handleUpdateJudgesAssign}
+              className="h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-sm font-medium text-white inline-flex items-center justify-center gap-2 transition-colors duration-150"
+            >
+              <Save size={16} strokeWidth={1.5} />
+              <span>심판 배정 저장</span>
+            </button>
+          </div>
+
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] p-4">
             <Tabs
               activeKey={currentSubTab}
               onChange={setCurrentSubTab}
               items={tabItems}
-              size="large"
             />
-          </Card>
+          </div>
         </>
       )}
     </div>

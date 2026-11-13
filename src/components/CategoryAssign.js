@@ -1,32 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, Select, Button, Space, Tag, Tabs, Badge } from "antd";
+import { Select, Tabs } from "antd";
 import {
-  UserOutlined,
-  PhoneOutlined,
-  TeamOutlined,
-  ReloadOutlined,
-  ThunderboltOutlined,
-  ClearOutlined,
-  WarningOutlined,
-  AppstoreOutlined,
-  PartitionOutlined,
-} from "@ant-design/icons";
+  User,
+  Phone,
+  Users,
+  RotateCcw,
+  Shuffle,
+  Trash2,
+  AlertTriangle,
+  LayoutGrid,
+  Layers,
+} from "lucide-react";
 
 const CategoryAssign = ({
-  judgesAssignInfo, // 표시용: 부모에서 파생(제목 포함) 내려와도, 저장은 원본 필드만
+  judgesAssignInfo,
   judgesPoolArray,
-  setJudgesAssignInfo, // 부모가 감싼 '원본 업데이트' setter
+  setJudgesAssignInfo,
   categoriesArray,
   gradesArray,
   currentContest,
   generateUUID,
-  setMessage, // ✨ 부모에서 내려주는 모달 메시지
-  setMsgOpen, // ✨ 부모에서 내려주는 모달 오픈
+  setMessage,
+  setMsgOpen,
 }) => {
   const [isMobile, setIsMobile] = useState(false);
-  const [activeSection, setActiveSection] = useState("__ALL__"); // "__ALL__" = 전체, 나머지는 섹션명
+  const [activeSection, setActiveSection] = useState("__ALL__");
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -35,7 +35,7 @@ const CategoryAssign = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  /** 🔤 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
+  /** 이름 정렬 유틸 (ko 로케일, 대소문자 무시) */
   const sortJudgesByName = (arr = []) =>
     [...arr].sort((a, b) =>
       (a?.judgeName || "").localeCompare(b?.judgeName || "", "ko", {
@@ -78,10 +78,10 @@ const CategoryAssign = ({
       if (!selectedJudge?.judgeUid) missing.push("judgeUid");
       if (!selectedJudge?.judgeName) missing.push("judgeName");
       if (!currentContest?.contests?.id) missing.push("contestId");
-      if (seatNumber == null) missing.push("seatIndex"); // 0 허용
+      if (seatNumber == null) missing.push("seatIndex");
 
       if (grade?.contestGradeId == null) missing.push("contestGradeId");
-      if (grade?.contestGradeIndex == null) missing.push("contestGradeIndex"); // 0 허용
+      if (grade?.contestGradeIndex == null) missing.push("contestGradeIndex");
       if (!grade?.contestGradeTitle) missing.push("contestGradeTitle");
       if (grade?.refCategoryId == null) missing.push("refCategoryId");
 
@@ -91,10 +91,9 @@ const CategoryAssign = ({
           grade?.contestGradeId ??
           "(알 수 없는 체급)";
         allErrors.push(`${label} → ${missing.join(", ")}`);
-        return; // 이 grade는 skip
+        return;
       }
 
-      // ✅ 원본 필드만 저장 (categoryTitle 등 파생 필드는 저장하지 않음)
       updatedJudges.push({
         sectionName: category.contestCategorySection,
         categoryId: category.contestCategoryId,
@@ -156,7 +155,6 @@ const CategoryAssign = ({
         updatedJudges
       )
     ) {
-      // 부모의 원본 상태를 업데이트 → 부모가 파생(제목) 붙여서 렌더/저장
       setJudgesAssignInfo((prev) => ({
         ...(prev || {}),
         judges: updatedJudges,
@@ -264,7 +262,6 @@ const CategoryAssign = ({
     }));
   };
 
-  /** 🔎 공통 Select props: 검색/자동완성 설정 */
   const commonSelectProps = {
     showSearch: true,
     allowClear: true,
@@ -278,8 +275,8 @@ const CategoryAssign = ({
     placeholder: "심판 선택",
   };
 
-  /** 🧭 섹션 목록 (빈/미지정은 '미지정'으로 정규화) + 탭 아이템 생성 */
-  const { sectionNames, sectionTabs } = useMemo(() => {
+  /** 섹션 목록 + 탭 아이템 생성 */
+  const { sectionTabs } = useMemo(() => {
     const namesSet = new Set(
       (categoriesArray || []).map(
         (c) => c?.contestCategorySection?.trim() || "미지정"
@@ -293,18 +290,22 @@ const CategoryAssign = ({
       {
         key: "__ALL__",
         label: (
-          <span className="flex items-center gap-2">
-            <AppstoreOutlined />
-            전체
+          <span className="inline-flex items-center gap-1.5">
+            <LayoutGrid
+              size={14}
+              strokeWidth={1.5}
+              className="text-[#737373]"
+            />
+            <span>전체</span>
           </span>
         ),
       },
       ...names.map((name) => ({
         key: name,
         label: (
-          <span className="flex items-center gap-2">
-            <PartitionOutlined />
-            {name}
+          <span className="inline-flex items-center gap-1.5">
+            <Layers size={14} strokeWidth={1.5} className="text-[#737373]" />
+            <span>{name}</span>
           </span>
         ),
       })),
@@ -312,7 +313,6 @@ const CategoryAssign = ({
     return { sectionNames: names, sectionTabs: items };
   }, [categoriesArray]);
 
-  /** 현재 탭에 맞춰 카테고리 필터 */
   const filteredCategories = useMemo(() => {
     if (activeSection === "__ALL__") return categoriesArray || [];
     return (categoriesArray || []).filter(
@@ -321,12 +321,11 @@ const CategoryAssign = ({
   }, [categoriesArray, activeSection]);
 
   return (
-    <div className="flex w-full flex-col gap-4 p-4">
+    <div className="flex w-full flex-col gap-4 pt-2">
       <Tabs
         activeKey={activeSection}
         onChange={setActiveSection}
         items={sectionTabs.map((tab) => {
-          // 탭 우측에 개수 뱃지
           const count =
             tab.key === "__ALL__"
               ? (categoriesArray || []).length
@@ -338,13 +337,11 @@ const CategoryAssign = ({
           return {
             ...tab,
             label: (
-              <span className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 text-sm">
                 {tab.label}
-                <Badge
-                  count={count}
-                  overflowCount={999}
-                  style={{ backgroundColor: "#1677ff" }}
-                />
+                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#f4f4f5] px-1.5 py-0.5 rounded-[4px]">
+                  {count}
+                </span>
               </span>
             ),
           };
@@ -353,7 +350,7 @@ const CategoryAssign = ({
 
       {(filteredCategories || []).map((category, idx) => {
         const allSeats = Array.from(
-          { length: Number(category.contestCategoryJudgeCount || 0) }, // 안전 캐스팅
+          { length: Number(category.contestCategoryJudgeCount || 0) },
           (_, i) => i + 1
         );
 
@@ -371,54 +368,60 @@ const CategoryAssign = ({
         );
 
         return (
-          <Card
+          <div
             key={idx}
-            className="shadow-md"
-            title={
-              <div className="flex items-center gap-2">
-                <TeamOutlined className="text-blue-600" />
-                <span className="text-lg font-semibold">
+            className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Users size={16} strokeWidth={1.5} className="text-[#525252]" />
+                <span className="text-[15px] font-semibold text-[#171717]">
                   {category.contestCategoryTitle ||
                     category.contestCategoryName ||
                     category.contestCategoryInfo?.name ||
                     "이름 없는 카테고리"}
                 </span>
-                <Tag color="default">
-                  섹션: {category.contestCategorySection?.trim() || "미지정"}
-                </Tag>
+                <span className="px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs text-[#525252]">
+                  {category.contestCategorySection?.trim() || "미지정"}
+                </span>
+                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#ffffff] border border-[#171717]/[0.08] px-2 py-0.5 rounded-[4px]">
+                  {allSeats.length}석
+                </span>
               </div>
-            }
-            extra={
-              <Space wrap>
-                <Button
-                  type="primary"
-                  icon={<ReloadOutlined />}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
                   onClick={() => handleRandomAssign(category, unassignedSeats)}
-                  size={isMobile ? "small" : "middle"}
+                  className="h-9 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  {isMobile ? "랜덤" : "랜덤배정"}
-                </Button>
-                <Button
-                  type="default"
-                  icon={<ThunderboltOutlined />}
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  <span>{isMobile ? "랜덤" : "빈 좌석 랜덤"}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleAllRandomAssign(category, allSeats)}
-                  size={isMobile ? "small" : "middle"}
-                  className="bg-yellow-50 border-yellow-400 text-yellow-700 hover:bg-yellow-100"
+                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#eaeaea] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  {isMobile ? "전체" : "모두랜덤"}
-                </Button>
-                <Button
-                  danger
-                  icon={<ClearOutlined />}
+                  <Shuffle
+                    size={14}
+                    strokeWidth={1.5}
+                    className="text-[#525252]"
+                  />
+                  <span>{isMobile ? "전체" : "모두 재배정"}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleResetAssign(category)}
-                  size={isMobile ? "small" : "middle"}
+                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1.5 transition-colors duration-150"
                 >
-                  초기화
-                </Button>
-              </Space>
-            }
-          >
-            <div className="flex flex-col gap-3">
+                  <Trash2 size={14} strokeWidth={1.5} />
+                  <span>초기화</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 flex flex-col gap-2">
               {allSeats.map((seatNumber) => {
                 const seatStatus = getSeatStatus(
                   category.contestCategoryId,
@@ -435,7 +438,6 @@ const CategoryAssign = ({
                   (j) => j.judgeUid === selectedJudge.judgeUid
                 );
 
-                // 🔤 이 카테고리에서 선택 가능한 후보 → 이름순 정렬
                 const selectableSorted = sortJudgesByName(
                   judgesPoolArray.filter(
                     (judge) =>
@@ -446,39 +448,48 @@ const CategoryAssign = ({
 
                 if (isMobile) {
                   return (
-                    <Card
+                    <div
                       key={seatNumber}
-                      size="small"
-                      className="bg-gray-50"
-                      title={
-                        <div className="flex items-center justify-between">
-                          <span className="text-base font-semibold">
-                            좌석 {seatNumber}
-                          </span>
-                          {seatStatus === "multi" && (
-                            <Tag color="error" icon={<WarningOutlined />}>
-                              다중 심판
-                            </Tag>
-                          )}
-                        </div>
-                      }
+                      className="p-3 bg-[#fafafa] border border-[#171717]/[0.08] rounded-[8px] space-y-2.5"
                     >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-sm font-medium tabular-nums text-[#171717]">
+                          좌석 {seatNumber}
+                        </span>
+                        {seatStatus === "multi" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-xs font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                            <AlertTriangle size={12} strokeWidth={1.5} />
+                            <span>다중 심판</span>
+                          </span>
+                        )}
+                      </div>
+
                       {selectedJudgeInfo && (
-                        <div className="mb-3 p-2 bg-blue-50 rounded">
-                          <div className="flex items-center gap-2 mb-1">
-                            <UserOutlined className="text-blue-600" />
-                            <span className="font-medium">
+                        <div className="p-2.5 bg-[#ffffff] border border-[#171717]/[0.08] rounded-[8px] space-y-1">
+                          <div className="flex items-center gap-2">
+                            <User
+                              size={14}
+                              strokeWidth={1.5}
+                              className="text-[#525252]"
+                            />
+                            <span className="text-sm font-medium text-[#171717]">
                               {selectedJudgeInfo.judgeName}
                             </span>
                             {selectedJudgeInfo.isHead && (
-                              <Tag color="gold">위원장</Tag>
+                              <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.08] text-[#b45309]">
+                                위원장
+                              </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <PhoneOutlined />
+                          <div className="flex items-center gap-2 text-xs text-[#525252] tabular-nums">
+                            <Phone
+                              size={12}
+                              strokeWidth={1.5}
+                              className="text-[#737373]"
+                            />
                             <span>{selectedJudgeInfo.judgeTel}</span>
                           </div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-xs text-[#737373]">
                             {selectedJudgeInfo.judgePromoter}
                           </div>
                         </div>
@@ -515,27 +526,24 @@ const CategoryAssign = ({
                           );
                         })}
                       </Select>
-                    </Card>
+                    </div>
                   );
                 }
 
                 return (
                   <div
                     key={seatNumber}
-                    className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-4 px-3.5 py-2 bg-[#fafafa] border border-[#171717]/[0.06] rounded-[8px] hover:bg-[#f4f4f5] transition-colors duration-150"
                   >
-                    <div className="flex items-center gap-2 w-32">
-                      <span className="font-semibold text-gray-700">
+                    <div className="flex items-center gap-2 w-32 shrink-0">
+                      <span className="font-mono text-sm font-medium tabular-nums text-[#525252]">
                         좌석 {seatNumber}
                       </span>
                       {seatStatus === "multi" && (
-                        <Tag
-                          color="error"
-                          icon={<WarningOutlined />}
-                          className="text-xs"
-                        >
-                          다중
-                        </Tag>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                          <AlertTriangle size={12} strokeWidth={1.5} />
+                          <span>다중</span>
+                        </span>
                       )}
                     </div>
 
@@ -576,7 +584,7 @@ const CategoryAssign = ({
                 );
               })}
             </div>
-          </Card>
+          </div>
         );
       })}
     </div>

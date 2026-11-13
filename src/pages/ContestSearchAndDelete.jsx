@@ -6,8 +6,12 @@ import {
   doc,
   query,
   where,
-} from "firebase/firestore"; // Firestore methods
-import { db } from "../firebase"; // Ensure your Firestore is correctly configured
+} from "firebase/firestore";
+import { Search, Trash2, Terminal, AlertCircle } from "lucide-react";
+import { db } from "../firebase";
+
+const inputClass =
+  "w-full h-9 rounded-[8px] bg-white border border-[#171717]/[0.12] px-3 font-mono text-[13px] text-[#171717] placeholder:text-[#737373] placeholder:font-sans focus:outline-none focus:border-[#2563eb] transition-colors duration-150";
 
 const ContestSearchAndDelete = () => {
   const [contestId, setContestId] = useState("");
@@ -22,15 +26,16 @@ const ContestSearchAndDelete = () => {
   const [entryDocs, setEntryDocs] = useState([]);
   const [resultDocs, setResultDocs] = useState([]);
   const [errorMessage, setErrorMessage] = useState("");
-  const [logs, setLogs] = useState([]); // Logs state for easier debugging
-  const [showLogs, setShowLogs] = useState(false); // Control log display
+  const [logs, setLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
 
-  // Helper function to add logs
+  void inputId;
+  void setInputId;
+
   const addLog = (message) => {
     setLogs((prevLogs) => [...prevLogs, message]);
   };
 
-  // Search by contestId in both invoices_pool and contest_entrys_list
   const handleSearchByContestId = async () => {
     setErrorMessage("");
     if (!contestId) {
@@ -72,7 +77,6 @@ const ContestSearchAndDelete = () => {
     }
   };
 
-  // Search by contestId in contest_results_list (separate)
   const handleSearchResultsByContestId = async () => {
     setErrorMessage("");
     if (!resultContestId) {
@@ -103,7 +107,6 @@ const ContestSearchAndDelete = () => {
     }
   };
 
-  // Delete documents by contestId in both invoices_pool and contest_entrys_list
   const handleDeleteByContestId = async () => {
     addLog(`Deleting documents for contestId: ${contestId}`);
 
@@ -129,7 +132,6 @@ const ContestSearchAndDelete = () => {
     }
   };
 
-  // Delete documents from contest_results_list by contestId
   const handleDeleteResultsByContestId = async () => {
     addLog(
       `Deleting documents from contest_results_list for contestId: ${resultContestId}`
@@ -149,7 +151,6 @@ const ContestSearchAndDelete = () => {
       }
     }
 
-    // Retry failed deletions
     if (failedDeletions.length > 0) {
       addLog("Retrying failed deletions...");
       for (const failedId of failedDeletions) {
@@ -171,7 +172,6 @@ const ContestSearchAndDelete = () => {
     addLog("Deletion of all contest results completed.");
   };
 
-  // Search all documents in a specific collection
   const handleSearchByCollectionName = async () => {
     setErrorMessage("");
     if (!collectionName) {
@@ -200,7 +200,6 @@ const ContestSearchAndDelete = () => {
     }
   };
 
-  // Delete all documents in a specific collection
   const handleDeleteByCollectionName = async () => {
     if (collectionDocs.length === 0) {
       setErrorMessage("삭제할 문서가 없습니다.");
@@ -209,8 +208,8 @@ const ContestSearchAndDelete = () => {
 
     try {
       for (const docItem of collectionDocs) {
-        const docRef = doc(db, collectionName, docItem.id); // Corrected document reference
-        await deleteDoc(docRef); // Delete each document in the collection
+        const docRef = doc(db, collectionName, docItem.id);
+        await deleteDoc(docRef);
         addLog(`Deleted document ${docItem.id} from ${collectionName}`);
       }
 
@@ -224,135 +223,261 @@ const ContestSearchAndDelete = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-2xl font-bold mb-4">대회 검색 및 삭제</h1>
-
-      {/* Search by contestId in invoices_pool and contest_entrys_list */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-2">
-          대회 접수 및 송장 검색/삭제
-        </h2>
-        <label htmlFor="contestId" className="block mb-1">
-          대회 ID:
-        </label>
-        <input
-          type="text"
-          id="contestId"
-          value={contestId}
-          onChange={(e) => setContestId(e.target.value)}
-          className="w-full p-2 border mb-2"
-        />
-        <button
-          onClick={handleSearchByContestId}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          대회 ID로 검색
-        </button>
-
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold">검색 결과</h3>
-          <p>invoices_pool: {invoiceCount}</p>
-          <p>contest_entrys_list: {entryCount}</p>
-        </div>
-
-        {invoiceCount > 0 || entryCount > 0 ? (
-          <button
-            onClick={handleDeleteByContestId}
-            className="bg-red-500 text-white px-4 py-2 mt-2 rounded"
-          >
-            모든 접수/송장 삭제
-          </button>
-        ) : (
-          <p className="mt-2">해당하는 문서가 없습니다.</p>
-        )}
-      </div>
-
-      {/* Search by contestId in contest_results_list (separate) */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-2">대회 결과 검색/삭제</h2>
-        <label htmlFor="resultContestId" className="block mb-1">
-          결과 대회 ID:
-        </label>
-        <input
-          type="text"
-          id="resultContestId"
-          value={resultContestId}
-          onChange={(e) => setResultContestId(e.target.value)}
-          className="w-full p-2 border mb-2"
-        />
-        <button
-          onClick={handleSearchResultsByContestId}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          결과 대회 ID로 검색
-        </button>
-
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold">검색 결과</h3>
-          <p>contest_results_list: {resultCount}</p>
-        </div>
-
-        {resultCount > 0 ? (
-          <button
-            onClick={handleDeleteResultsByContestId}
-            className="bg-red-500 text-white px-4 py-2 mt-2 rounded"
-          >
-            모든 결과 삭제
-          </button>
-        ) : (
-          <p className="mt-2">해당하는 문서가 없습니다.</p>
-        )}
-      </div>
-
-      {/* Search and delete all documents in a specific collection */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-2">컬렉션 문서 전체 삭제</h2>
-        <label htmlFor="collectionName" className="block mb-1">
-          컬렉션 이름:
-        </label>
-        <input
-          type="text"
-          id="collectionName"
-          value={collectionName}
-          onChange={(e) => setCollectionName(e.target.value)}
-          className="w-full p-2 border mb-2"
-        />
-        <button
-          onClick={handleSearchByCollectionName}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          컬렉션 검색
-        </button>
-
-        {collectionDocs.length > 0 && (
-          <>
-            <h3 className="text-lg font-semibold mt-4">
-              {collectionDocs.length}개의 문서를 찾았습니다.
-            </h3>
-            <button
-              onClick={handleDeleteByCollectionName}
-              className="bg-red-500 text-white px-4 py-2 mt-2 rounded"
-            >
-              모든 문서 삭제
-            </button>
-          </>
-        )}
-        {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
-      </div>
-
-      {/* Logs display */}
-      <div className="bg-gray-200 p-4 rounded-lg mt-6">
-        <h2 className="text-lg font-bold mb-2">디버그 로그</h2>
-        <button
-          onClick={() => setShowLogs(!showLogs)}
-          className="bg-gray-500 text-white px-4 py-2 mb-2 rounded"
-        >
-          {showLogs ? "로그 숨기기" : "로그 보기"}
-        </button>
-        {showLogs && (
-          <div className="overflow-y-auto h-40 bg-gray-100 p-2 border">
-            <pre className="text-xs">{logs.join("\n")}</pre>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
+              대회 데이터 검색 및 삭제
+            </h1>
+            <p className="text-[13px] text-[#737373] mt-1">
+              대회 ID 또는 컬렉션 단위로 접수·출전·집계 문서를 조회하고 일괄 정리합니다
+            </p>
           </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowLogs(!showLogs)}
+              className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-[#171717] text-[13px] font-medium inline-flex items-center gap-2 transition-colors duration-150"
+            >
+              <Terminal size={15} strokeWidth={1.5} className="text-[#525252]" />
+              <span>{showLogs ? "디버그 로그 숨기기" : "디버그 로그 보기"}</span>
+              <span className="font-mono text-[11px] tabular-nums text-[#737373]">
+                ({logs.length})
+              </span>
+            </button>
+          </div>
+        </header>
+
+        {errorMessage && (
+          <div className="rounded-[8px] bg-[#dc2626]/[0.08] border border-[#dc2626]/20 px-4 py-3 flex items-center gap-2.5 text-[13px] text-[#dc2626]">
+            <AlertCircle size={16} strokeWidth={1.5} className="shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* 1. 접수 및 출전 명단 검색/삭제 */}
+          <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+            <div className="border-b border-[#171717]/[0.06] pb-3">
+              <h2 className="text-[15px] font-medium text-[#171717]">
+                접수 신청서 및 출전 명단
+              </h2>
+              <p className="text-[12px] text-[#737373] mt-0.5">
+                invoices_pool · contest_entrys_list
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="contestId"
+                className="block text-[13px] font-medium text-[#525252]"
+              >
+                대회 ID
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="contestId"
+                  placeholder="contestId 입력"
+                  value={contestId}
+                  onChange={(e) => setContestId(e.target.value)}
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchByContestId}
+                  className="h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-colors duration-150"
+                >
+                  <Search size={15} strokeWidth={1.5} />
+                  <span>검색</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#f4f4f5] rounded-[8px] p-3.5 space-y-2 border border-[#171717]/[0.06]">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="font-mono text-[12px] text-[#525252]">
+                  invoices_pool
+                </span>
+                <span className="font-mono font-medium tabular-nums text-[#171717]">
+                  {invoiceCount}건
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="font-mono text-[12px] text-[#525252]">
+                  contest_entrys_list
+                </span>
+                <span className="font-mono font-medium tabular-nums text-[#171717]">
+                  {entryCount}건
+                </span>
+              </div>
+            </div>
+
+            {invoiceCount > 0 || entryCount > 0 ? (
+              <button
+                type="button"
+                onClick={handleDeleteByContestId}
+                className="w-full h-9 px-4 rounded-[8px] bg-[#dc2626] hover:bg-[#b91c1c] text-white text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors duration-150"
+              >
+                <Trash2 size={15} strokeWidth={1.5} />
+                <span>조회된 접수·출전 문서 전체 삭제</span>
+              </button>
+            ) : (
+              <p className="text-[12px] text-[#737373]">
+                조회된 대상 문서가 없습니다
+              </p>
+            )}
+          </section>
+
+          {/* 2. 대회 결과 검색/삭제 */}
+          <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+            <div className="border-b border-[#171717]/[0.06] pb-3">
+              <h2 className="text-[15px] font-medium text-[#171717]">
+                대회 최종 결과 문서
+              </h2>
+              <p className="text-[12px] text-[#737373] mt-0.5">
+                contest_results_list
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="resultContestId"
+                className="block text-[13px] font-medium text-[#525252]"
+              >
+                결과 대회 ID
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="resultContestId"
+                  placeholder="contestId 입력"
+                  value={resultContestId}
+                  onChange={(e) => setResultContestId(e.target.value)}
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchResultsByContestId}
+                  className="h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-colors duration-150"
+                >
+                  <Search size={15} strokeWidth={1.5} />
+                  <span>검색</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#f4f4f5] rounded-[8px] p-3.5 space-y-2 border border-[#171717]/[0.06]">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="font-mono text-[12px] text-[#525252]">
+                  contest_results_list
+                </span>
+                <span className="font-mono font-medium tabular-nums text-[#171717]">
+                  {resultCount}건
+                </span>
+              </div>
+            </div>
+
+            {resultCount > 0 ? (
+              <button
+                type="button"
+                onClick={handleDeleteResultsByContestId}
+                className="w-full h-9 px-4 rounded-[8px] bg-[#dc2626] hover:bg-[#b91c1c] text-white text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors duration-150"
+              >
+                <Trash2 size={15} strokeWidth={1.5} />
+                <span>조회된 결과 문서 전체 삭제</span>
+              </button>
+            ) : (
+              <p className="text-[12px] text-[#737373]">
+                조회된 대상 문서가 없습니다
+              </p>
+            )}
+          </section>
+
+          {/* 3. 컬렉션 전체 삭제 */}
+          <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 sm:p-6 space-y-4">
+            <div className="border-b border-[#171717]/[0.06] pb-3">
+              <h2 className="text-[15px] font-medium text-[#171717]">
+                지정 컬렉션 전체 비우기
+              </h2>
+              <p className="text-[12px] text-[#737373] mt-0.5">
+                특정 채점·임시 컬렉션의 모든 문서 삭제
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="collectionName"
+                className="block text-[13px] font-medium text-[#525252]"
+              >
+                컬렉션 이름
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="collectionName"
+                  placeholder="컬렉션 식별자 입력"
+                  value={collectionName}
+                  onChange={(e) => setCollectionName(e.target.value)}
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchByCollectionName}
+                  className="h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-colors duration-150"
+                >
+                  <Search size={15} strokeWidth={1.5} />
+                  <span>검색</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#f4f4f5] rounded-[8px] p-3.5 space-y-2 border border-[#171717]/[0.06]">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="font-mono text-[12px] text-[#525252] truncate max-w-[160px]">
+                  {collectionName || "대상 미지정"}
+                </span>
+                <span className="font-mono font-medium tabular-nums text-[#171717]">
+                  {collectionDocs.length}건
+                </span>
+              </div>
+            </div>
+
+            {collectionDocs.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleDeleteByCollectionName}
+                className="w-full h-9 px-4 rounded-[8px] bg-[#dc2626] hover:bg-[#b91c1c] text-white text-[13px] font-medium inline-flex items-center justify-center gap-2 transition-colors duration-150"
+              >
+                <Trash2 size={15} strokeWidth={1.5} />
+                <span>{collectionDocs.length}개 문서 전체 삭제</span>
+              </button>
+            ) : (
+              <p className="text-[12px] text-[#737373]">
+                조회된 대상 문서가 없습니다
+              </p>
+            )}
+          </section>
+        </div>
+
+        {/* 디버그 로그 패널 */}
+        {showLogs && (
+          <section className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[14px] font-medium text-[#171717]">
+                실행 로그
+              </h2>
+              <span className="font-mono text-[12px] tabular-nums text-[#737373]">
+                {logs.length} lines
+              </span>
+            </div>
+            <div className="overflow-y-auto h-48 rounded-[8px] bg-[#141415] p-3.5 border border-[#171717]/[0.08]">
+              <pre className="font-mono text-[12px] leading-5 text-[#ededed] whitespace-pre-wrap">
+                {logs.length > 0 ? logs.join("\n") : "기록된 로그가 없습니다"}
+              </pre>
+            </div>
+          </section>
         )}
       </div>
     </div>

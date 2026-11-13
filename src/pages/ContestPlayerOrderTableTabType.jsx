@@ -2,9 +2,7 @@
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import LoadingPage from "./LoadingPage";
-import { TfiWrite } from "react-icons/tfi";
 import {
-  useFirestoreAddData,
   useFirestoreGetDocument,
   useFirestoreQuery,
   useFirestoreUpdateData,
@@ -13,22 +11,23 @@ import { doc, runTransaction, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
-import { TbWorldWww } from "react-icons/tb";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
-import { Button, Card, Space, Tag, Checkbox, Alert, Divider, Popconfirm } from "antd";
+import { Checkbox, Popconfirm } from "antd";
 import {
-  SaveOutlined,
-  DragOutlined,
-  CalendarOutlined,
-  ExclamationCircleOutlined,
-  DeleteOutlined,
-  CheckSquareOutlined,
-  ClearOutlined,
-  ReloadOutlined,
-  FolderOpenOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+  Save,
+  GripVertical,
+  Calendar,
+  AlertTriangle,
+  Trash2,
+  CheckSquare,
+  Eraser,
+  RotateCcw,
+  FolderOpen,
+  Globe,
+  PenLine,
+} from "lucide-react";
+import BibTag from "../components/ui/BibTag";
 
 let orderRowCounter = 0;
 const createOrderRowId = () =>
@@ -751,25 +750,36 @@ const ContestPlayerOrderTable = () => {
     const checked = selectedEntries.has(entryKey);
 
     return (
-      <Card
-        size="small"
-        className={`mb-2 ${
-          snapshot.isDragging ? "shadow-lg border-blue-500" : ""
-        } ${isDuplicate ? "border-red-400" : ""}`}
+      <div
+        className={`rounded-[8px] border p-3.5 bg-[#ffffff] transition-colors duration-150 ${
+          snapshot.isDragging
+            ? "border-[#2563eb] shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+            : isDuplicate
+            ? "border-[#dc2626]/40 bg-[#dc2626]/[0.03]"
+            : "border-[#171717]/[0.08]"
+        }`}
         ref={provided.innerRef}
         {...provided.dragHandleProps}
         {...provided.draggableProps}
       >
         <div className="flex flex-col gap-2">
-          <div className="flex justify-between items-center">
-            <Space>
-              <DragOutlined className="text-gray-400" />
-              <span className="font-semibold text-base">순번: {index + 1}</span>
-            </Space>
-            <Space>
+          <div className="flex justify-between items-center gap-2">
+            <div className="flex items-center gap-2">
+              <GripVertical
+                size={16}
+                strokeWidth={1.5}
+                className="text-[#737373]"
+              />
+              <span className="text-xs font-medium text-[#737373] font-mono tabular-nums">
+                순번 {index + 1}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
               {isDuplicate && (
                 <>
-                  <Tag color="red">중복</Tag>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] text-[11px] font-medium">
+                    중복
+                  </span>
                   <Checkbox
                     checked={checked}
                     onChange={(e) => {
@@ -781,47 +791,41 @@ const ContestPlayerOrderTable = () => {
                       });
                     }}
                   >
-                    삭제 대상
+                    <span className="text-xs text-[#dc2626]">삭제 대상</span>
                   </Checkbox>
                 </>
               )}
-              <Tag color="gold" className="text-base font-semibold px-2 py-0.5">
-                {playerNumber}
-              </Tag>
-            </Space>
+              <BibTag number={playerNumber} />
+            </div>
           </div>
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{playerName}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-sm text-[#171717]">
+                {playerName}
+              </span>
               {createBy === "manual" && (
-                <Tag
-                  color="green"
-                  className="flex items-center justify-center gap-1 min-w-[60px]"
-                >
-                  <TfiWrite />
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#16a34a]/[0.08] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
+                  <PenLine size={11} strokeWidth={1.5} />
                   <span>수기</span>
-                </Tag>
+                </span>
               )}
               {(createBy === undefined || createBy === "web") && (
-                <Tag
-                  color="blue"
-                  className="flex items-center justify-center gap-1 min-w-[60px]"
-                >
-                  <TbWorldWww />
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
+                  <Globe size={11} strokeWidth={1.5} />
                   <span>웹</span>
-                </Tag>
+                </span>
               )}
             </div>
-            <div className="text-gray-600 text-sm">{playerGym}</div>
+            <div className="text-[#525252] text-xs">{playerGym || "-"}</div>
             {invoiceCreateAt && (
-              <div className="text-gray-500 text-xs flex items-center gap-1">
-                <CalendarOutlined />
-                {invoiceCreateAt}
+              <div className="text-[#737373] text-xs flex items-center gap-1 font-mono tabular-nums">
+                <Calendar size={12} strokeWidth={1.5} />
+                <span>{invoiceCreateAt}</span>
               </div>
             )}
           </div>
         </div>
-      </Card>
+      </div>
     );
   };
 
@@ -840,98 +844,101 @@ const ContestPlayerOrderTable = () => {
     const clearAll = () => setSelectedEntries(new Set());
 
     return (
-      <Card className="shadow-sm border-red-200">
-        <Alert
-          type="warning"
-          showIcon
-          icon={<ExclamationCircleOutlined />}
-          message={<div className="font-semibold">중복 감지</div>}
-          description={
-            <div className="mt-2 text-sm">
-              <div className="mb-2">
-                <Space wrap>
-                  <Button
-                    icon={<CheckSquareOutlined />}
-                    onClick={selectAll}
-                    size="small"
-                  >
-                    모두 선택
-                  </Button>
-                  <Button
-                    icon={<ClearOutlined />}
-                    onClick={clearAll}
-                    size="small"
-                  >
-                    선택 해제
-                  </Button>
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={deleteSelectedDuplicates}
-                    size="small"
-                  >
-                    선택 항목 삭제
-                  </Button>
-                </Space>
+      <div className="bg-[#ffffff] rounded-[12px] border border-[#dc2626]/25 shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[#dc2626]">
+            <AlertTriangle size={16} strokeWidth={1.5} />
+            <span className="text-sm font-semibold">
+              동일 체급 내 중복 출전 감지 ({dupEntries.length}그룹)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
+            >
+              <CheckSquare size={14} strokeWidth={1.5} className="text-[#525252]" />
+              <span>모두 선택</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearAll}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
+            >
+              <Eraser size={14} strokeWidth={1.5} className="text-[#525252]" />
+              <span>선택 해제</span>
+            </button>
+            <button
+              type="button"
+              onClick={deleteSelectedDuplicates}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-[#dc2626]/[0.08] hover:bg-[#dc2626]/[0.14] text-[#dc2626] text-xs font-medium border border-[#dc2626]/25 transition-colors duration-150 cursor-pointer"
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+              <span>선택 항목 삭제</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-2 border-t border-[#171717]/[0.06]">
+          {dupEntries.map(([groupKey, info]) => (
+            <div
+              key={groupKey}
+              className="rounded-[8px] border border-[#171717]/[0.08] bg-[#fafafa] p-3 space-y-1.5"
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] text-[11px] font-medium tabular-nums">
+                  중복 {info.entries.length}건
+                </span>
+                <span className="text-xs font-semibold text-[#171717]">
+                  {info.metaGroup.playerName}
+                </span>
+                <span className="text-xs text-[#525252]">
+                  ({info.metaGroup.categoryTitle} / {info.metaGroup.gradeTitle})
+                </span>
               </div>
-              <Divider className="my-2" />
-              <div className="flex flex-col gap-3">
-                {dupEntries.map(([groupKey, info]) => (
-                  <div key={groupKey} className="border rounded p-2">
-                    <div className="mb-1">
-                      <Tag color="red">중복 {info.entries.length}건</Tag>
-                      <span className="font-medium ml-2">
-                        {info.metaGroup.playerName} (
-                        {info.metaGroup.categoryTitle} /{" "}
-                        {info.metaGroup.gradeTitle})
+              <div className="flex flex-col gap-1">
+                {info.entries.map((e, idx) => {
+                  const checked = selectedEntries.has(e.entryKey);
+                  return (
+                    <div
+                      key={e.entryKey}
+                      className="flex items-center justify-between gap-2 text-xs"
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={checked}
+                          onChange={(evt) =>
+                            setSelectedEntries((prev) => {
+                              const next = new Set(prev);
+                              if (evt.target.checked) next.add(e.entryKey);
+                              else next.delete(e.entryKey);
+                              return next;
+                            })
+                          }
+                        />
+                        <span className="text-xs text-[#525252] tabular-nums">
+                          항목 {idx + 1} · 번호 #{e.meta.playerNumber} · 소속{" "}
+                          {e.meta.playerGym || "-"} · 신청일{" "}
+                          {e.meta.invoiceCreateAt || "-"}
+                        </span>
+                      </label>
+                      <span className="text-[11px] font-mono text-[#737373]">
+                        {e.entryKey}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      {info.entries.map((e, idx) => {
-                        const checked = selectedEntries.has(e.entryKey);
-                        return (
-                          <div
-                            key={e.entryKey}
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={checked}
-                                onChange={(evt) =>
-                                  setSelectedEntries((prev) => {
-                                    const next = new Set(prev);
-                                    if (evt.target.checked)
-                                      next.add(e.entryKey);
-                                    else next.delete(e.entryKey);
-                                    return next;
-                                  })
-                                }
-                              />
-                              <span className="text-xs text-gray-600">
-                                항목 {idx + 1} · 선수번호 {e.meta.playerNumber}{" "}
-                                · 소속 {e.meta.playerGym || "-"} · 신청일{" "}
-                                {e.meta.invoiceCreateAt || "-"}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-gray-400">
-                              entryKey: {e.entryKey}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          }
-        />
-      </Card>
+          ))}
+        </div>
+      </div>
     );
   };
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-2 gap-y-2">
+    <div className="flex flex-col w-full space-y-4 pt-2 text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
@@ -951,83 +958,93 @@ const ContestPlayerOrderTable = () => {
           />
 
           {!currentContest?.contests?.contestPlayersAssignId && (
-            <Alert
-              type="warning"
-              showIcon
-              message="관련 문서를 확인할 수 없습니다."
-              description="대회 필수 데이터 구조가 아직 생성되지 않았거나 연결이 누락되었을 수 있습니다."
-              action={
-                <Button
-                  size="small"
-                  type="primary"
-                  danger
-                  onClick={() => setHealthModalOpen(true)}
-                  className="font-bold"
-                >
-                  대회 구조 점검 & 즉시 복구
-                </Button>
-              }
-              className="mb-3"
-            />
+            <div className="bg-[#b45309]/[0.06] border border-[#b45309]/25 rounded-[12px] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#b45309] mt-0.5 shrink-0"
+                />
+                <div className="space-y-0.5">
+                  <div className="text-sm font-semibold text-[#171717]">
+                    관련 문서를 확인할 수 없습니다
+                  </div>
+                  <div className="text-xs text-[#525252]">
+                    대회 필수 데이터 구조가 아직 생성되지 않았거나 연결이 누락되었을 수 있습니다.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHealthModalOpen(true)}
+                className="inline-flex items-center justify-center h-9 px-3.5 rounded-[8px] bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0 shrink-0"
+              >
+                대회 구조 점검 및 복구
+              </button>
+            </div>
           )}
 
-          {/* ✅ 상단 중복 요약 */}
+          {/* 상단 중복 요약 */}
           <DuplicateSummary />
 
-          <div className="flex flex-col sm:flex-row w-full justify-between items-center mb-2 gap-2">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* 액션 툴바 */}
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex flex-col lg:flex-row w-full justify-between lg:items-center gap-3">
+            <div className="flex items-center gap-2">
               <Popconfirm
                 title="배정 및 최종 명단 완전 초기화"
-                description="현재 대회의 contest_players_assign 및 contest_players_final 문서를 모두 빈 상태로 클리어합니다. 정말 진행하시겠습니까?"
+                description="현재 대회의 contest_players_assign 및 contest_players_final 문서를 모두 빈 상태로 초기화합니다. 진행하시겠습니까?"
                 onConfirm={handleClearAssignAndFinal}
                 okText="완전 초기화 실행"
                 cancelText="취소"
                 okButtonProps={{ danger: true }}
               >
-                <Button
-                  danger
-                  type="dashed"
-                  size="large"
-                  icon={<DeleteOutlined />}
-                  className="font-bold border-red-400 bg-red-50 text-red-700 hover:bg-red-100"
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#dc2626]/[0.06] hover:bg-[#dc2626]/[0.12] text-[#dc2626] text-xs font-medium border border-[#dc2626]/25 transition-colors duration-150 cursor-pointer"
                 >
-                  배정명단 초기화(비우기)
-                </Button>
+                  <Trash2 size={15} strokeWidth={1.5} />
+                  <span>배정명단 초기화 (비우기)</span>
+                </button>
               </Popconfirm>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button
-                type="default"
-                size="large"
-                icon={<ReloadOutlined />}
-                className="w-full sm:w-auto font-bold"
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
                 onClick={() => initEntryList()}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
               >
-                신청서 기준 번호 재계산
-              </Button>
-              <Button
-                color="cyan"
-                size="large"
-                icon={<FolderOpenOutlined />}
-                className="w-full sm:w-auto font-bold"
+                <RotateCcw
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+                <span>신청서 기준 번호 재계산</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => rebuildFromAssign()}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
               >
-                저장본 불러오기
-              </Button>
-              <Button
-                type="primary"
-                size="large"
-                icon={<SaveOutlined />}
-                className="w-full sm:w-auto font-black bg-blue-600 hover:bg-blue-500"
+                <FolderOpen
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+                <span>저장본 불러오기</span>
+              </button>
+              <button
+                type="button"
                 onClick={() =>
                   handleUpdatePlayersAssign(
                     currentContest?.contests?.contestPlayersAssignId
                   )
                 }
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
               >
-                계측명단 저장(덮어씌우기)
-              </Button>
+                <Save size={15} strokeWidth={1.5} />
+                <span>계측명단 저장</span>
+              </button>
             </div>
           </div>
 
@@ -1044,15 +1061,23 @@ const ContestPlayerOrderTable = () => {
                 if (matchedPlayers.length === 0) return null;
 
                 return (
-                  <Card
+                  <div
                     key={`${contestGradeId}_${mIdx}`}
-                    title={
-                      <span className="text-lg font-semibold">
-                        {categoryTitle} / {gradeTitle}
-                      </span>
-                    }
-                    className="shadow-sm"
+                    className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
                   >
+                    <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-[#171717]">
+                        {categoryTitle}
+                        <span className="text-[#525252] font-normal mx-1.5">
+                          /
+                        </span>
+                        <span className="font-medium">{gradeTitle}</span>
+                      </span>
+                      <span className="text-xs font-medium text-[#525252] font-mono tabular-nums">
+                        {matchedPlayers.length}명
+                      </span>
+                    </div>
+
                     <DragDropContext onDragEnd={onDragPlayerEnd}>
                       <Droppable droppableId={`players_${contestGradeId}`}>
                         {(provided) => (
@@ -1063,15 +1088,21 @@ const ContestPlayerOrderTable = () => {
                             {/* 데스크톱 테이블 */}
                             {!isMobile && (
                               <div className="flex flex-col w-full">
-                                <div className="flex w-full border-b-2 border-gray-200 h-12 items-center font-semibold bg-gray-50 px-4 rounded-t-lg">
-                                  <div className="flex w-1/12">
-                                    <DragOutlined />
+                                <div className="flex w-full border-b border-[#171717]/[0.08] h-10 items-center text-xs font-medium text-[#525252] bg-[#fafafa] px-4">
+                                  <div className="flex w-12 items-center">
+                                    <GripVertical
+                                      size={14}
+                                      strokeWidth={1.5}
+                                      className="text-[#737373]"
+                                    />
                                   </div>
-                                  <div className="flex w-1/12">순번</div>
-                                  <div className="flex w-2/12">선수번호</div>
-                                  <div className="flex w-[30%]">이름</div>
+                                  <div className="flex w-16">순번</div>
+                                  <div className="flex w-28">선수번호</div>
+                                  <div className="flex flex-1 min-w-[200px]">
+                                    이름
+                                  </div>
                                   <div className="flex w-3/12">소속</div>
-                                  <div className="flex w-3/12">신청일</div>
+                                  <div className="flex w-2/12">신청일</div>
                                 </div>
 
                                 {matchedPlayers.map((player, pIdx) => {
@@ -1111,57 +1142,55 @@ const ContestPlayerOrderTable = () => {
                                     >
                                       {(provided, snapshot) => (
                                         <div
-                                          className={`flex w-full h-14 border-b items-center px-4 hover:bg-gray-50 transition-colors ${
+                                          className={`flex w-full min-h-[48px] py-2 border-b last:border-b-0 items-center px-4 transition-colors duration-150 ${
                                             snapshot.isDragging
-                                              ? "bg-blue-50 shadow-lg"
-                                              : ""
-                                          } ${
-                                            isDuplicate
-                                              ? "border-red-400 bg-red-50/20"
-                                              : "border-gray-200"
+                                              ? "bg-[#2563eb]/[0.06] border-[#2563eb]/30 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+                                              : isDuplicate
+                                              ? "border-[#dc2626]/25 bg-[#dc2626]/[0.03]"
+                                              : "border-[#171717]/[0.06] hover:bg-[#fafafa]"
                                           }`}
                                           ref={provided.innerRef}
                                           {...provided.dragHandleProps}
                                           {...provided.draggableProps}
                                         >
-                                          <div className="flex w-1/12 text-gray-400">
-                                            <DragOutlined />
+                                          <div className="flex w-12 text-[#737373]">
+                                            <GripVertical
+                                              size={15}
+                                              strokeWidth={1.5}
+                                            />
                                           </div>
-                                          <div className="flex w-1/12">
+                                          <div className="flex w-16 font-mono tabular-nums text-xs text-[#737373]">
                                             {pIdx + 1}
                                           </div>
-                                          <div className="flex w-2/12">
-                                            <Tag
-                                              color="gold"
-                                              className="text-base font-semibold px-2 py-0.5"
-                                            >
-                                              {playerNumber}
-                                            </Tag>
+                                          <div className="flex w-28">
+                                            <BibTag number={playerNumber} />
                                           </div>
-                                          <div className="flex w-[30%] items-center gap-2">
-                                            {playerName}
+                                          <div className="flex flex-1 min-w-[200px] items-center gap-2 flex-wrap text-sm font-medium text-[#171717]">
+                                            <span>{playerName}</span>
                                             {createBy === "manual" && (
-                                              <Tag
-                                                color="green"
-                                                className="flex items-center justify-center gap-1 min-w-[60px]"
-                                              >
-                                                <TfiWrite />
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#16a34a]/[0.08] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
+                                                <PenLine
+                                                  size={11}
+                                                  strokeWidth={1.5}
+                                                />
                                                 <span>수기</span>
-                                              </Tag>
+                                              </span>
                                             )}
                                             {(createBy === undefined ||
                                               createBy === "web") && (
-                                              <Tag
-                                                color="blue"
-                                                className="flex items-center justify-center gap-1 min-w-[60px]"
-                                              >
-                                                <TbWorldWww />
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
+                                                <Globe
+                                                  size={11}
+                                                  strokeWidth={1.5}
+                                                />
                                                 <span>웹</span>
-                                              </Tag>
+                                              </span>
                                             )}
                                             {isDuplicate && (
                                               <>
-                                                <Tag color="red">중복</Tag>
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] text-[11px] font-medium">
+                                                  중복
+                                                </span>
                                                 <Checkbox
                                                   checked={checked}
                                                   onChange={(e) => {
@@ -1179,16 +1208,18 @@ const ContestPlayerOrderTable = () => {
                                                     );
                                                   }}
                                                 >
-                                                  삭제 대상
+                                                  <span className="text-xs text-[#dc2626]">
+                                                    삭제 대상
+                                                  </span>
                                                 </Checkbox>
                                               </>
                                             )}
                                           </div>
-                                          <div className="flex w-3/12">
-                                            {playerGym}
+                                          <div className="flex w-3/12 text-sm text-[#525252]">
+                                            {playerGym || "-"}
                                           </div>
-                                          <div className="flex w-3/12 text-gray-600">
-                                            {invoiceCreateAt}
+                                          <div className="flex w-2/12 text-xs text-[#737373] font-mono tabular-nums">
+                                            {invoiceCreateAt || "-"}
                                           </div>
                                         </div>
                                       )}
@@ -1200,7 +1231,7 @@ const ContestPlayerOrderTable = () => {
 
                             {/* 모바일 카드 */}
                             {isMobile && (
-                              <div className="flex flex-col w-full gap-2">
+                              <div className="flex flex-col w-full gap-2 p-3">
                                 {matchedPlayers.map((player, pIdx) => {
                                   const uidOrIdentity =
                                     player.playerUid ||
@@ -1247,7 +1278,7 @@ const ContestPlayerOrderTable = () => {
                         )}
                       </Droppable>
                     </DragDropContext>
-                  </Card>
+                  </div>
                 );
               })}
           </div>

@@ -1,30 +1,13 @@
 import React, { useContext, useEffect, useState } from "react";
+import { Modal, Spin, message as antMessage } from "antd";
 import {
-  Modal,
-  Button,
-  Tag,
-  Space,
-  Card,
-  Alert,
-  Spin,
-  Typography,
-  Tooltip,
-  Divider,
-  Progress,
-  message as antMessage,
-} from "antd";
-import {
-  CheckCircleFilled,
-  CloseCircleFilled,
-  ExclamationCircleFilled,
-  SyncOutlined,
-  ToolOutlined,
-  SafetyCertificateOutlined,
-  DatabaseOutlined,
-  ThunderboltOutlined,
-  CheckOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 import {
   collection,
   doc,
@@ -37,8 +20,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-
-const { Text, Title } = Typography;
 
 const COMPANION_SPECS = [
   {
@@ -401,105 +382,143 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
     <Modal
       open={isOpen}
       onCancel={onClose}
-      width={780}
-      footer={[
-        <Button key="close" onClick={onClose}>
-          닫기
-        </Button>,
-        <Button
-          key="recheck"
-          icon={<ReloadOutlined />}
-          onClick={runHealthCheck}
-          loading={checking}
-        >
-          다시 진단
-        </Button>,
-        <Button
-          key="heal"
-          type="primary"
-          icon={<ThunderboltOutlined />}
-          onClick={handleAutoHeal}
-          loading={healing}
-          danger={!isAllHealthy}
-          className={
-            isAllHealthy
-              ? "bg-green-600 hover:bg-green-500 font-bold"
-              : "bg-blue-600 hover:bg-blue-500 font-bold"
-          }
-        >
-          {isAllHealthy ? "구조 재검증 및 동기화" : "누락 문서 자동 생성 및 연결 (원클릭 복구)"}
-        </Button>,
-      ]}
+      width={760}
+      footer={
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
+          >
+            닫기
+          </button>
+          <button
+            type="button"
+            onClick={runHealthCheck}
+            disabled={checking}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw
+              size={14}
+              strokeWidth={1.5}
+              className={`text-[#525252] ${checking ? "animate-spin" : ""}`}
+            />
+            <span>다시 진단</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleAutoHeal}
+            disabled={healing}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0 disabled:opacity-50"
+          >
+            <Zap size={14} strokeWidth={1.5} />
+            <span>
+              {healing
+                ? "복구 진행 중..."
+                : isAllHealthy
+                ? "구조 재검증 및 동기화"
+                : "누락 문서 자동 생성 및 연결"}
+            </span>
+          </button>
+        </div>
+      }
       title={
-        <div className="flex items-center gap-2 text-lg">
-          <SafetyCertificateOutlined className="text-blue-600 text-xl" />
-          <span>대회 데이터 구조 무결성 검사 & 자동 복구</span>
+        <div className="flex items-center gap-2 text-[#171717]">
+          <ShieldCheck size={16} strokeWidth={1.5} className="text-[#525252]" />
+          <span className="text-sm font-semibold">
+            대회 데이터 구조 무결성 점검 및 복구
+          </span>
         </div>
       }
     >
-      <div className="py-2 space-y-4">
+      <div className="py-2 space-y-4 text-[#171717]">
         {/* 상단 대회 요약 카드 */}
-        <Card size="small" className="bg-slate-50 border-slate-200">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-              <div className="text-xs text-slate-500 font-medium">선택된 대회</div>
-              <div className="text-base font-bold text-slate-800">
-                {contestInfo?.contestTitle || "대회명 미설정"}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                <span>Contest ID: <code className="bg-slate-200 px-1 rounded">{contestId || "없음"}</code></span>
-                <span>•</span>
-                <span>컬렉션명: <code className="bg-slate-200 px-1 rounded">{collectionNameVal || "미설정"}</code></span>
-              </div>
+        <div className="bg-[#f4f4f5] rounded-[8px] border border-[#171717]/[0.08] p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <div className="text-[11px] text-[#737373] font-medium">
+              선택된 대회
             </div>
-            <div className="text-right">
-              <Tag color="cyan" className="font-bold">
-                접수 신청서: {entryCount}건
-              </Tag>
+            <div className="text-sm font-semibold text-[#171717] mt-0.5">
+              {contestInfo?.contestTitle || "대회명 미설정"}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[#525252] mt-1 flex-wrap">
+              <span>
+                Contest ID:{" "}
+                <code className="bg-[#ffffff] border border-[#171717]/[0.08] px-1.5 py-0.5 rounded-[4px] font-mono text-[11px]">
+                  {contestId || "없음"}
+                </code>
+              </span>
+              <span className="text-[#171717]/[0.2]">·</span>
+              <span>
+                컬렉션명:{" "}
+                <code className="bg-[#ffffff] border border-[#171717]/[0.08] px-1.5 py-0.5 rounded-[4px] font-mono text-[11px]">
+                  {collectionNameVal || "미설정"}
+                </code>
+              </span>
             </div>
           </div>
-        </Card>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs font-medium text-[#171717] font-mono tabular-nums">
+            접수 신청서 {entryCount}건
+          </span>
+        </div>
 
         {/* 상태 요약 배너 */}
         {checking ? (
-          <div className="py-8 text-center">
-            <Spin tip="대회 구조 및 Firestore 문서를 정밀 진단 중입니다..." size="large" />
+          <div className="py-10 text-center">
+            <Spin tip="대회 구조 및 문서를 진단하는 중입니다..." />
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-4 p-3.5 rounded-[8px] border border-[#171717]/[0.08] bg-[#ffffff]">
               <div className="flex items-center gap-3">
                 {isAllHealthy ? (
-                  <CheckCircleFilled className="text-3xl text-emerald-500" />
+                  <CheckCircle2
+                    size={20}
+                    strokeWidth={1.5}
+                    className="text-[#16a34a] shrink-0"
+                  />
                 ) : (
-                  <ExclamationCircleFilled className="text-3xl text-amber-500" />
+                  <AlertCircle
+                    size={20}
+                    strokeWidth={1.5}
+                    className="text-[#b45309] shrink-0"
+                  />
                 )}
                 <div>
-                  <div className="font-bold text-slate-800 text-sm">
+                  <div className="font-semibold text-[#171717] text-sm">
                     {isAllHealthy
-                      ? "대회 필수 데이터 구조가 완벽하게 준비되었습니다."
-                      : `${totalCount - okCount}개의 필수 문서 또는 연결이 누락되었습니다.`}
+                      ? "대회 필수 데이터 구조가 모두 정상 연결되어 있습니다."
+                      : `${
+                          totalCount - okCount
+                        }개의 필수 문서 또는 연결이 누락되었습니다.`}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-[#737373] mt-0.5">
                     {isAllHealthy
                       ? "심판 배정, 계측명단, 무대 순서 등 모든 기능이 정상 작동합니다."
-                      : "아래 [누락 문서 자동 생성 및 연결] 버튼을 누르면 즉시 자동 복구 및 동기화됩니다."}
+                      : "누락 문서 자동 생성 및 연결 버튼을 선택하면 즉시 복구됩니다."}
                   </div>
                 </div>
               </div>
-              <div className="text-right w-36">
-                <Progress
-                  percent={percent}
-                  size="small"
-                  status={isAllHealthy ? "success" : "active"}
-                  strokeColor={isAllHealthy ? "#10b981" : "#f59e0b"}
-                />
-                <span className="text-xs text-slate-500">{okCount} / {totalCount} 정상</span>
+              <div className="text-right min-w-[120px]">
+                <div className="flex items-center justify-end gap-1.5 text-xs font-mono tabular-nums text-[#171717] font-medium mb-1">
+                  <span>{percent}%</span>
+                  <span className="text-[#737373]">
+                    ({okCount}/{totalCount})
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-[#f4f4f5] rounded-[4px] overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-[4px] transition-all duration-300 ${
+                      isAllHealthy ? "bg-[#16a34a]" : "bg-[#b45309]"
+                    }`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
               </div>
             </div>
 
             {/* 컴패니언 문서 진단 리스트 */}
-            <div className="border rounded-lg divide-y bg-white overflow-hidden max-h-[380px] overflow-y-auto">
+            <div className="border border-[#171717]/[0.08] rounded-[8px] divide-y divide-[#171717]/[0.06] bg-[#ffffff] overflow-hidden max-h-[380px] overflow-y-auto">
               {healthResults.map((item) => {
                 const isOk = item.status === "ok";
                 const isUnlinked = item.status === "found_unlinked";
@@ -507,44 +526,80 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
                 return (
                   <div
                     key={item.key}
-                    className={`p-3 flex items-center justify-between transition-colors ${
-                      isOk ? "hover:bg-slate-50" : "bg-red-50/50 hover:bg-red-50"
+                    className={`p-3.5 flex items-center justify-between gap-3 transition-colors duration-150 ${
+                      isOk
+                        ? "hover:bg-[#fafafa]"
+                        : "bg-[#dc2626]/[0.03] hover:bg-[#dc2626]/[0.05]"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5">
-                        {isOk && <CheckCircleFilled className="text-emerald-500 text-base" />}
-                        {isUnlinked && <SyncOutlined className="text-blue-500 text-base" />}
-                        {!isOk && !isUnlinked && <CloseCircleFilled className="text-rose-500 text-base" />}
+                    <div className="flex items-start gap-2.5">
+                      <div className="mt-0.5 shrink-0">
+                        {isOk && (
+                          <CheckCircle2
+                            size={16}
+                            strokeWidth={1.5}
+                            className="text-[#16a34a]"
+                          />
+                        )}
+                        {isUnlinked && (
+                          <RefreshCw
+                            size={16}
+                            strokeWidth={1.5}
+                            className="text-[#2563eb]"
+                          />
+                        )}
+                        {!isOk && !isUnlinked && (
+                          <XCircle
+                            size={16}
+                            strokeWidth={1.5}
+                            className="text-[#dc2626]"
+                          />
+                        )}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-800">{item.label}</span>
-                          <Tag className="text-[11px] font-mono" color="default">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-xs text-[#171717]">
+                            {item.label}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[11px] font-mono text-[#525252]">
                             {item.collectionName}
-                          </Tag>
+                          </span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="text-xs text-[#737373] mt-0.5">
                           {item.description}
                         </div>
-                        <div className="text-xs text-slate-600 mt-1 flex items-center gap-1 font-mono">
+                        <div className="text-[11px] text-[#525252] mt-1 flex items-center gap-1 font-mono">
                           <span>문서 ID:</span>
                           {item.docId ? (
-                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
+                            <code className="text-[#171717] bg-[#f4f4f5] px-1.5 py-0.2 rounded-[4px]">
                               {item.docId}
                             </code>
                           ) : (
-                            <span className="text-red-500 font-bold">없음 (미생성)</span>
+                            <span className="text-[#dc2626] font-medium">
+                              미생성
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      {isOk && <Tag color="success">✅ 정상 연결</Tag>}
-                      {isUnlinked && <Tag color="processing">🔄 재연결 가능</Tag>}
-                      {!isOk && !isUnlinked && <Tag color="error">⚠️ 누락됨</Tag>}
-                      <div className="text-xs text-slate-500 mt-1 font-medium">
+                    <div className="text-right shrink-0">
+                      {isOk && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
+                          정상 연결
+                        </span>
+                      )}
+                      {isUnlinked && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.10] text-[#2563eb] border border-[#2563eb]/20 text-[11px] font-medium">
+                          재연결 가능
+                        </span>
+                      )}
+                      {!isOk && !isUnlinked && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] border border-[#dc2626]/20 text-[11px] font-medium">
+                          누락됨
+                        </span>
+                      )}
+                      <div className="text-[11px] text-[#525252] mt-1 tabular-nums">
                         {item.details}
                       </div>
                     </div>

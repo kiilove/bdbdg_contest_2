@@ -1,8 +1,8 @@
 "use client";
 
 import { useContext, useState, useEffect } from "react";
-import { Tabs, Card } from "antd";
-import { BsClipboardData } from "react-icons/bs";
+import { Tabs } from "antd";
+import { ClipboardList, ListOrdered, Users, UserCheck } from "lucide-react";
 import {
   useFirestoreAddData,
   useFirestoreGetDocument,
@@ -63,17 +63,32 @@ const ContestTimetable = () => {
   const tabItems = [
     {
       key: "0",
-      label: "종목/체급진행순서",
+      label: (
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <ListOrdered size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>종목·체급 진행순서</span>
+        </span>
+      ),
       children: <ContestCategoryOrderTable />,
     },
     {
       key: "1",
-      label: "선수번호배정",
+      label: (
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <Users size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>선수번호 배정</span>
+        </span>
+      ),
       children: <ContestPlayerOrderTableTabType />,
     },
     {
       key: "2",
-      label: "심판배정",
+      label: (
+        <span className="inline-flex items-center gap-2 text-sm font-medium">
+          <UserCheck size={16} strokeWidth={1.5} className="text-[#737373]" />
+          <span>심판 좌석 배정</span>
+        </span>
+      ),
       children: <ContestJudgeAssignTable />,
     },
   ];
@@ -139,7 +154,7 @@ const ContestTimetable = () => {
     prevOrder.map((item, idx) =>
       newOrder.push({ ...item, contestGradeIndex: idx + 1 })
     );
-    newOrder.map((order) => {
+    newOrder.forEach((order) => {
       const findIndex = dummy.findIndex(
         (grade) => grade.contestGradeId === order.contestGradeId
       );
@@ -256,6 +271,27 @@ const ContestTimetable = () => {
     );
   };
 
+  // Preserve state references for compatibility
+  void currentOrders;
+  void setCurrentOrders;
+  void entrysArray;
+  void judgesArray;
+  void judgeAssignTable;
+  void setCurrentCategoryId;
+  void currentSubMenu;
+  void setCurrentSubMenu;
+  void setCurrentContest;
+  void isOpen;
+  void updateAssignTable;
+  void updateContests;
+  void addAssignTable;
+  void onDragCategoryEnd;
+  void onDragGradeEnd;
+  void handleCategoryClose;
+  void handleGradeClose;
+  void handlePlayerClose;
+  void handleJudgeClose;
+
   useEffect(() => {
     if (location?.state?.tabId) {
       setCurrentTab(location.state.tabId.toString());
@@ -265,28 +301,47 @@ const ContestTimetable = () => {
   useEffect(() => {
     if (!currentContest?.contests?.id) return;
     fetchPool();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
 
-  return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 md:p-6 gap-y-4">
-      <Card className="shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex justify-center items-center w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
-            <BsClipboardData className="text-xl" />
-          </div>
-          <h1 className="text-xl font-bold tracking-wide">기초데이터(1단계)</h1>
-        </div>
-      </Card>
+  const contestTitle =
+    currentContest?.contestInfo?.contestTitle ||
+    currentContest?.contests?.contestTitle ||
+    "";
 
-      <Card className="shadow-sm">
-        <Tabs
-          activeKey={currentTab}
-          onChange={(key) => setCurrentTab(key)}
-          items={tabItems}
-          size="large"
-          className="contest-timetable-tabs"
-        />
-      </Card>
+  return (
+    <div className="w-full min-h-screen bg-[#fafafa]">
+      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex justify-center items-center w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] shrink-0">
+              <ClipboardList size={16} strokeWidth={1.5} />
+            </div>
+            <div>
+              <h1 className="text-[18px] leading-6 font-semibold text-[#171717] m-0">
+                기초데이터 (1단계)
+              </h1>
+              <p className="text-xs text-[#737373] m-0 mt-0.5">
+                종목·체급 순서 구성, 선수 등번호 배정, 심판 좌석 배정
+              </p>
+            </div>
+          </div>
+          {contestTitle && (
+            <span className="text-xs text-[#737373] bg-[#f4f4f5] border border-[#171717]/[0.08] px-2.5 py-1 rounded-[4px]">
+              {contestTitle}
+            </span>
+          )}
+        </div>
+
+        <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
+          <Tabs
+            activeKey={currentTab}
+            onChange={(key) => setCurrentTab(key)}
+            items={tabItems}
+            className="contest-timetable-tabs"
+          />
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { BiCategory } from "react-icons/bi";
+import { Layers } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -183,7 +183,7 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   }, [propState]);
 
   return (
-    <div className="flex w-full flex-col gap-y-2 h-auto">
+    <div className="flex w-full flex-col gap-4 h-auto bg-[#ffffff] text-[#171717] p-2">
       <ConfirmationModal
         isOpen={msgOpen}
         message={message}
@@ -196,274 +196,186 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
           setClose();
         }}
       />
-      <div className="flex w-full h-14">
-        <div className="flex w-full bg-gray-100 justify-start items-center rounded-lg px-3">
-          <span className="font-sans text-lg font-semibold w-6 h-6 flex justify-center items-center rounded-2xl bg-blue-400 text-white mr-3">
-            <BiCategory />
-          </span>
-          <h1
-            className="font-sans text-lg font-semibold"
-            style={{ letterSpacing: "2px" }}
+
+      <div className="flex w-full items-center gap-2.5 pb-3 border-b border-[#171717]/[0.08]">
+        <div className="w-8 h-8 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center">
+          <Layers size={15} strokeWidth={1.5} className="text-[#525252]" />
+        </div>
+        <h1 className="text-base font-semibold text-[#171717] m-0">
+          {propState?.title || "종목 설정"}
+        </h1>
+      </div>
+
+      <div className="bg-[#fafafa] rounded-[12px] border border-[#171717]/[0.08] p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            개최 순서
+          </label>
+          <input
+            type="text"
+            value={categoryInfo.contestCategoryIndex ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (categoryInfoRef.current.contestCategoryIndex = ref)}
+            name="contestCategoryIndex"
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            placeholder="개최 순서 (숫자)"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            구분 (부문)
+          </label>
+          <input
+            type="text"
+            name="contestCategorySection"
+            value={categoryInfo.contestCategorySection ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) =>
+              (categoryInfoRef.current.contestCategorySection = ref)
+            }
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            placeholder="예: 1부, 2부"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            종목 대분류
+          </label>
+          <input
+            type="text"
+            name="contestCategoryType"
+            placeholder="예: 피지크, 보디빌딩"
+            value={categoryInfo.contestCategoryType ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (categoryInfoRef.current.contestCategoryType = ref)}
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            종목명
+          </label>
+          <input
+            type="text"
+            name="contestCategoryTitle"
+            value={categoryInfo.contestCategoryTitle ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) => (categoryInfoRef.current.contestCategoryTitle = ref)}
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            placeholder="종목명 입력"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            참가 가능 성별
+          </label>
+          <select
+            name="contestCategoryGender"
+            onChange={(e) => handleInputValues(e)}
+            value={categoryInfo.contestCategoryGender}
+            ref={(ref) =>
+              (categoryInfoRef.current.contestCategoryGender = ref)
+            }
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
           >
-            {propState?.title || ""}
-          </h1>
+            <option>남</option>
+            <option>여</option>
+            <option>무관</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            참가비 종류
+          </label>
+          <select
+            name="contestCategoryPriceType"
+            onChange={(e) => handleInputValues(e)}
+            value={categoryInfo.contestCategoryPriceType}
+            ref={(ref) =>
+              (categoryInfoRef.current.contestCategoryPriceType = ref)
+            }
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+          >
+            <option>기본참가비</option>
+            <option>타입1</option>
+            <option>타입2</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            심사 종류
+          </label>
+          <select
+            name="contestCategoryJudgeType"
+            onChange={(e) => handleInputValues(e)}
+            value={categoryInfo.contestCategoryJudgeType}
+            ref={(ref) =>
+              (categoryInfoRef.current.contestCategoryJudgeType = ref)
+            }
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+          >
+            <option value="ranking">랭킹형</option>
+            <option value="point">점수형</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            심판 수
+          </label>
+          <input
+            type="text"
+            name="contestCategoryJudgeCount"
+            value={categoryInfo.contestCategoryJudgeCount ?? ""}
+            onChange={(e) => handleInputValues(e)}
+            ref={(ref) =>
+              (categoryInfoRef.current.contestCategoryJudgeCount = ref)
+            }
+            className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            placeholder="예: 7, 9"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2 pt-1">
+          <label className="text-xs font-medium text-[#525252] sm:text-right">
+            오버롤 종목
+          </label>
+          <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-[#525252]">
+            <input
+              type="checkbox"
+              name="contestCategoryIsOverall"
+              checked={Boolean(categoryInfo.contestCategoryIsOverall)}
+              ref={(ref) =>
+                (categoryInfoRef.current.contestCategoryIsOverall = ref)
+              }
+              onChange={(e) => handleInputValues(e)}
+              className="w-4 h-4 rounded-[4px] accent-[#2563eb]"
+            />
+            <span>그랑프리(오버롤) 진출 대상 종목으로 지정</span>
+          </label>
         </div>
       </div>
-      <div className="flex bg-gradient-to-r from-blue-200 to-cyan-200 p-3 rounded-lg">
-        <div className="flex w-full bg-gray-100 h-auto rounded-lg justify-start items-start lg:items-center gay-y-2 flex-col p-2 gap-y-2">
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                개최순서
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  value={categoryInfo.contestCategoryIndex}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryIndex = ref)
-                  }
-                  name="contestCategoryIndex"
-                  className="h-12 outline-none"
-                  placeholder="개최순서(숫자)"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                구분
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestCategorySection"
-                  value={categoryInfo.contestCategorySection}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategorySection = ref)
-                  }
-                  className="h-12 outline-none"
-                  placeholder="예)1부, 2부"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                종목대분류
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestCategoryType"
-                  placeholder="예)피지크, 보디빌딩"
-                  value={categoryInfo.contestCategoryType}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryType = ref)
-                  }
-                  className="h-12 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                종목명
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestCategoryTitle"
-                  value={categoryInfo.contestCategoryTitle}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryTitle = ref)
-                  }
-                  className="h-12 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                참가가능성별
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg ">
-              <div className="flex w-full justify-start items-center h-12">
-                <select
-                  name="contestCategoryGender"
-                  onChange={(e) => handleInputValues(e)}
-                  value={categoryInfo.contestCategoryGender}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryGender = ref)
-                  }
-                  className="w-full h-full pl-2"
-                >
-                  <option>남</option>
-                  <option>여</option>
-                  <option>무관</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                참가비종류
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg ">
-              <div className="flex w-full justify-start items-center h-12">
-                <select
-                  name="contestCategoryPriceType"
-                  onChange={(e) => handleInputValues(e)}
-                  value={categoryInfo.contestCategoryPriceType}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryPriceType = ref)
-                  }
-                  className="w-full h-full pl-2"
-                >
-                  <option>기본참가비</option>
-                  <option>타입1</option>
-                  <option>타입2</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                심사종류
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg ">
-              <div className="flex w-full justify-start items-center h-12">
-                <select
-                  name="contestCategoryJudgeType"
-                  onChange={(e) => handleInputValues(e)}
-                  value={categoryInfo.contestCategoryJudgeType}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryJudgeType = ref)
-                  }
-                  className="w-full h-full pl-2"
-                >
-                  <option
-                    value="ranking"
-                    selected={
-                      categoryInfo.contestCategoryJudgeType === "ranking"
-                    }
-                  >
-                    랭킹형
-                  </option>
-                  <option
-                    value="point"
-                    selected={categoryInfo.contestCategoryJudgeType === "point"}
-                  >
-                    점수형
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                심판수
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg px-3 bg-white">
-              <div className="flex w-full justify-start items-center">
-                <input
-                  type="text"
-                  name="contestCategoryJudgeCount"
-                  value={categoryInfo.contestCategoryJudgeCount}
-                  onChange={(e) => handleInputValues(e)}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryJudgeCount = ref)
-                  }
-                  className="h-12 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex w-full justify-start items-center ">
-            <div className="flex w-1/4 justify-end mr-2">
-              <h3
-                className="font-sans font-semibold"
-                style={{ letterSpacing: "2px" }}
-              >
-                오버롤종목
-              </h3>
-            </div>
-            <div className="h-12 w-3/4 rounded-lg ">
-              <div className="flex w-full justify-start items-center h-12">
-                <input
-                  type="checkbox"
-                  name="contestCategoryIsOverall"
-                  checked={categoryInfo.contestCategoryIsOverall}
-                  ref={(ref) =>
-                    (categoryInfoRef.current.contestCategoryIsOverall = ref)
-                  }
-                  onChange={(e) => handleInputValues(e)}
-                  className="w-6"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="flex w-full gap-x-2 h-auto">
+
+      <div className="flex w-full justify-end gap-2 pt-1">
         <button
-          className="w-full h-12 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-lg"
-          onClick={() => handleUpdateCategorys()}
-        >
-          저장
-        </button>
-        <button
-          className="w-full h-12 bg-gradient-to-r from-blue-300 to-cyan-300 rounded-lg"
+          type="button"
+          className="inline-flex items-center justify-center h-9 px-4 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
           onClick={() => setClose()}
         >
           닫기
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center h-9 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
+          onClick={() => handleUpdateCategorys()}
+        >
+          저장
         </button>
       </div>
     </div>

@@ -5,8 +5,8 @@ import LoadingPage from "./LoadingPage";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Card, Tag } from "antd";
-import { FileTextOutlined } from "@ant-design/icons";
+import { FileText } from "lucide-react";
+import BibTag from "../components/ui/BibTag";
 
 const ContestPlayerOrderTableAfter = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -114,26 +114,35 @@ const ContestPlayerOrderTableAfter = () => {
   }, [playersArray]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-lg p-3 gap-y-2">
+    <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />
         </div>
       ) : (
-        <>
-          <Card className="mb-4">
+        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600">
-                <FileTextOutlined className="text-white text-xl" />
+              <div className="flex items-center justify-center w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08]">
+                <FileText
+                  size={16}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
               </div>
-              <h1
-                className="text-xl font-bold"
-                style={{ letterSpacing: "1px" }}
-              >
-                선수확정명단(계측후)
-              </h1>
+              <div>
+                <h1 className="text-lg font-semibold text-[#171717] m-0 tracking-tight">
+                  선수 확정 명단 (계측 후)
+                </h1>
+                <p className="text-xs text-[#737373] m-0">
+                  계측 및 월체·불참 반영이 완료된 체급별 출전 선수 명단
+                </p>
+              </div>
             </div>
-          </Card>
+            <span className="text-xs font-medium text-[#525252] font-mono tabular-nums bg-[#f4f4f5] px-2.5 py-1 rounded-[4px] border border-[#171717]/[0.08]">
+              총 {playersArray.length}명
+            </span>
+          </div>
 
           <ConfirmationModal
             isOpen={msgOpen}
@@ -148,125 +157,124 @@ const ContestPlayerOrderTableAfter = () => {
                 .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
                 .map((matched, mIdx) => {
                   const {
-                    contestCategoryId: categoryId,
-                    contestCategoryIndex: categoryIndex,
                     contestCategoryTitle: categoryTitle,
-                    contestGradeId: gradeId,
-                    contestGradeIndex: gradeIndex,
                     contestGradeTitle: gradeTitle,
                     matchedPlayers,
-                    matchedGradesLength: gradeLength,
                   } = matched;
 
                   if (matchedPlayers.length === 0) return null;
 
+                  const noShowCount = matchedPlayers.filter(
+                    (p) => p.playerNoShow
+                  ).length;
+
                   return (
-                    <Card
+                    <div
                       key={mIdx}
-                      title={
-                        <span className="text-lg font-semibold">
-                          {categoryTitle} / {gradeTitle}
-                        </span>
-                      }
-                      className="shadow-sm"
+                      className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
                     >
+                      <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#171717]">
+                          {categoryTitle}
+                          <span className="text-[#525252] font-normal mx-1.5">
+                            /
+                          </span>
+                          <span className="font-medium">{gradeTitle}</span>
+                        </span>
+                        <span className="text-xs font-medium text-[#525252] font-mono tabular-nums">
+                          출전 {matchedPlayers.length - noShowCount} /{" "}
+                          {matchedPlayers.length}명
+                        </span>
+                      </div>
+
                       {isMobile ? (
-                        // 모바일 카드 뷰
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2.5 p-3">
                           {matchedPlayers
                             .sort((a, b) => a.playerIndex - b.playerIndex)
                             .map((player, pIdx) => {
                               const {
                                 playerName,
                                 playerGym,
-                                playerUid,
                                 playerNumber,
                                 playerNoShow,
                                 isGradeChanged,
                               } = player;
 
                               return (
-                                <Card
+                                <div
                                   key={pIdx}
-                                  size="small"
-                                  className={`${
+                                  className={`rounded-[8px] border p-3.5 ${
                                     playerNoShow
-                                      ? "bg-gray-50 opacity-60"
-                                      : "bg-white"
+                                      ? "bg-[#dc2626]/[0.03] border-[#dc2626]/20"
+                                      : "bg-[#ffffff] border-[#171717]/[0.08]"
                                   }`}
                                 >
                                   <div className="flex flex-col gap-2">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex items-center justify-between gap-2">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm text-gray-500">
-                                          순번: {pIdx + 1}
+                                        <span className="text-xs text-[#737373] font-mono tabular-nums">
+                                          순번 {pIdx + 1}
                                         </span>
-                                        <Tag
-                                          color="gold"
-                                          className="text-base font-semibold px-2 py-0.5"
-                                        >
-                                          {playerNumber}
-                                        </Tag>
+                                        <BibTag
+                                          number={playerNumber}
+                                          className={
+                                            playerNoShow
+                                              ? "line-through opacity-50"
+                                              : ""
+                                          }
+                                        />
                                       </div>
                                       <div className="flex gap-1">
                                         {isGradeChanged && (
-                                          <Tag color="orange">월체</Tag>
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] text-[11px] font-medium">
+                                            월체
+                                          </span>
                                         )}
                                         {playerNoShow && (
-                                          <Tag color="red">불참</Tag>
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] text-[11px] font-medium">
+                                            불참
+                                          </span>
                                         )}
                                       </div>
                                     </div>
                                     <div
-                                      className={`${
+                                      className={
                                         playerNoShow
-                                          ? "line-through text-gray-400"
+                                          ? "line-through text-[#737373]"
                                           : ""
-                                      }`}
+                                      }
                                     >
-                                      <div className="text-base font-semibold">
+                                      <div className="text-sm font-medium text-[#171717]">
                                         {playerName}
                                       </div>
-                                      <div className="text-sm text-gray-600">
-                                        {playerGym}
+                                      <div className="text-xs text-[#525252]">
+                                        {playerGym || "-"}
                                       </div>
                                     </div>
                                   </div>
-                                </Card>
+                                </div>
                               );
                             })}
                         </div>
                       ) : (
-                        // 데스크톱 테이블 뷰
                         <div className="overflow-x-auto">
-                          <table className="w-full">
+                          <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b-2 border-gray-200">
-                                <th className="w-16 text-left py-3 px-4 font-semibold text-gray-700">
-                                  순번
-                                </th>
-                                <th className="w-24 text-left py-3 px-4 font-semibold text-gray-700">
-                                  선수번호
-                                </th>
-                                <th className="w-32 text-left py-3 px-4 font-semibold text-gray-700">
-                                  이름
-                                </th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                                  소속
-                                </th>
-                                <th className="w-32 text-left py-3 px-4 font-semibold text-gray-700">
-                                  비고
-                                </th>
+                              <tr className="border-b border-[#171717]/[0.08] bg-[#fafafa] text-xs font-medium text-[#525252]">
+                                <th className="w-20 py-2.5 px-4">순번</th>
+                                <th className="w-28 py-2.5 px-4">선수번호</th>
+                                <th className="w-44 py-2.5 px-4">이름</th>
+                                <th className="py-2.5 px-4">소속</th>
+                                <th className="w-36 py-2.5 px-4">비고</th>
                               </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-[#171717]/[0.06]">
                               {matchedPlayers
                                 .sort((a, b) => a.playerIndex - b.playerIndex)
                                 .map((player, pIdx) => {
                                   const {
                                     playerName,
                                     playerGym,
-                                    playerUid,
                                     playerNumber,
                                     playerNoShow,
                                     isGradeChanged,
@@ -275,50 +283,60 @@ const ContestPlayerOrderTableAfter = () => {
                                   return (
                                     <tr
                                       key={pIdx}
-                                      className="border-b border-gray-100 hover:bg-gray-50"
+                                      className={`transition-colors duration-150 ${
+                                        playerNoShow
+                                          ? "bg-[#dc2626]/[0.03]"
+                                          : "hover:bg-[#fafafa]"
+                                      }`}
                                     >
                                       <td
-                                        className={`w-16 py-3 px-4 ${
+                                        className={`w-20 py-3 px-4 font-mono tabular-nums text-xs ${
                                           playerNoShow
-                                            ? "text-gray-300 line-through"
-                                            : ""
+                                            ? "text-[#737373] line-through"
+                                            : "text-[#737373]"
                                         }`}
                                       >
                                         {pIdx + 1}
                                       </td>
-                                      <td className="w-24 py-3 px-4">
-                                        <Tag
-                                          color="gold"
-                                          className="text-base font-semibold px-2 py-0.5"
-                                        >
-                                          {playerNumber}
-                                        </Tag>
+                                      <td className="w-28 py-3 px-4">
+                                        <BibTag
+                                          number={playerNumber}
+                                          className={
+                                            playerNoShow
+                                              ? "line-through opacity-50"
+                                              : ""
+                                          }
+                                        />
                                       </td>
                                       <td
-                                        className={`w-32 py-3 px-4 font-medium ${
+                                        className={`w-44 py-3 px-4 text-sm font-medium ${
                                           playerNoShow
-                                            ? "text-gray-300 line-through"
-                                            : ""
+                                            ? "text-[#dc2626] line-through"
+                                            : "text-[#171717]"
                                         }`}
                                       >
                                         {playerName}
                                       </td>
                                       <td
-                                        className={`py-3 px-4 ${
+                                        className={`py-3 px-4 text-sm ${
                                           playerNoShow
-                                            ? "text-gray-300 line-through"
-                                            : ""
+                                            ? "text-[#737373] line-through"
+                                            : "text-[#525252]"
                                         }`}
                                       >
-                                        {playerGym}
+                                        {playerGym || "-"}
                                       </td>
-                                      <td className="w-32 py-3 px-4">
-                                        <div className="flex gap-1">
+                                      <td className="w-36 py-3 px-4">
+                                        <div className="flex gap-1.5">
                                           {isGradeChanged && (
-                                            <Tag color="orange">월체</Tag>
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] border border-[#b45309]/20 text-[11px] font-medium">
+                                              월체
+                                            </span>
                                           )}
                                           {playerNoShow && (
-                                            <Tag color="red">불참</Tag>
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#dc2626]/[0.10] text-[#dc2626] border border-[#dc2626]/20 text-[11px] font-medium">
+                                              불참
+                                            </span>
                                           )}
                                         </div>
                                       </td>
@@ -329,11 +347,11 @@ const ContestPlayerOrderTableAfter = () => {
                           </table>
                         </div>
                       )}
-                    </Card>
+                    </div>
                   );
                 })}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
