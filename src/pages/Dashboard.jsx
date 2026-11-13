@@ -11,6 +11,8 @@ import {
   Scale,
   Printer,
   CalendarClock,
+  AlertTriangle,
+  ArrowUpRight,
 } from "lucide-react";
 
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
@@ -23,6 +25,7 @@ import {
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { writePriceCheckLog } from "../utils/priceCheckLogger";
+import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 import LiveStageStatusCard from "../components/dashboard/LiveStageStatusCard";
@@ -59,6 +62,8 @@ const Dashboard = () => {
   const [confirmedPlayers, setConfirmedPlayers] = useState([]);
   const [pendingPlayers, setPendingPlayers] = useState([]);
   const [judgesPool, setJudgesPool] = useState([]);
+  const [judgesAssignList, setJudgesAssignList] = useState([]);
+  const [stagesList, setStagesList] = useState([]);
   const [activeTabKey, setActiveTabKey] = useState("analytics");
   const [isUpdatingInvoiceId, setIsUpdatingInvoiceId] = useState(null);
   const [msgOpen, setMsgOpen] = useState(false);
@@ -72,6 +77,8 @@ const Dashboard = () => {
 
   const fetchCategories = useFirestoreGetDocument("contest_categorys_list");
   const fetchGrades = useFirestoreGetDocument("contest_grades_list");
+  const fetchJudgesAssign = useFirestoreGetDocument("contest_judges_assign");
+  const fetchStagesAssign = useFirestoreGetDocument("contest_stages_assign");
   const queryInvoices = useFirestoreQuery();
   const queryJudges = useFirestoreQuery();
   const addEntry = useFirestoreAddData("contest_entrys_list");
@@ -102,20 +109,38 @@ const Dashboard = () => {
     setPendingPlayers(pending);
   };
 
-  const fetchPool = async (categoryListId, gradeListId, targetContestId) => {
+  const fetchPool = async (
+    categoryListId,
+    gradeListId,
+    targetContestId,
+    judgesAssignId,
+    stagesAssignId
+  ) => {
     const condition = [where("contestId", "==", targetContestId)];
     try {
-      const [categoryArray, gradeArray, invoiceArray, judgesArray] =
-        await Promise.all([
-          categoryListId
-            ? fetchCategories.getDocument(categoryListId)
-            : Promise.resolve(null),
-          gradeListId
-            ? fetchGrades.getDocument(gradeListId)
-            : Promise.resolve(null),
-          queryInvoices.getDocuments("invoices_pool", condition),
-          queryJudges.getDocuments("contest_judges_pool", condition),
-        ]);
+      const [
+        categoryArray,
+        gradeArray,
+        invoiceArray,
+        judgesArray,
+        judgesAssignDoc,
+        stagesAssignDoc,
+      ] = await Promise.all([
+        categoryListId
+          ? fetchCategories.getDocument(categoryListId)
+          : Promise.resolve(null),
+        gradeListId
+          ? fetchGrades.getDocument(gradeListId)
+          : Promise.resolve(null),
+        queryInvoices.getDocuments("invoices_pool", condition),
+        queryJudges.getDocuments("contest_judges_pool", condition),
+        judgesAssignId
+          ? fetchJudgesAssign.getDocument(judgesAssignId)
+          : Promise.resolve(null),
+        stagesAssignId
+          ? fetchStagesAssign.getDocument(stagesAssignId)
+          : Promise.resolve(null),
+      ]);
 
       const sortedCats =
         categoryArray?.categorys
@@ -128,6 +153,12 @@ const Dashboard = () => {
       setGrades(loadedGrades);
       setInvoices(loadedInvoices);
       setJudgesPool(judgesArray || []);
+      setJudgesAssignList(
+        Array.isArray(judgesAssignDoc?.judges) ? judgesAssignDoc.judges : []
+      );
+      setStagesList(
+        Array.isArray(stagesAssignDoc?.stages) ? stagesAssignDoc.stages : []
+      );
       splitPlayersByStatus(loadedInvoices);
     } catch (error) {
       console.error("대시보드 데이터 로드 오류:", error);
@@ -139,11 +170,24 @@ const Dashboard = () => {
       fetchPool(
         currentContest.contests.contestCategorysListId,
         currentContest.contests.contestGradesListId,
-        currentContest.contests.id
+        currentContest.contests.id,
+        currentContest.contests.contestJudgesAssignId,
+        currentContest.contests.contestStagesAssignId
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest?.contests?.id]);
+
+  const judgeSeatGapSummary = useMemo(
+    () =>
+      summarizeJudgeSeatGaps({
+        judges: judgesAssignList,
+        categories,
+        grades,
+        stages: stagesList,
+      }),
+    [judgesAssignList, categories, grades, stagesList]
+  );
 
   // 종목 + 체급별 확정 인원 / 입금대기 인원 매칭
   const categoriesWithPlayers = useMemo(() => {
@@ -530,6 +574,31 @@ const Dashboard = () => {
           ))}
         </div>
       </div>
+
+      {judgeSeatGapSummary?.hasGap && (
+        <div className="rounded-[12px] border border-[#f59e0b]/40 bg-[#fffbeb] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <span className="w-7 h-7 rounded-[8px] bg-[#f59e0b]/15 border border-[#f59e0b]/30 inline-flex items-center justify-center shrink-0 text-[#b45309]">
+              <AlertTriangle size={15} strokeWidth={2} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[#92400e]">
+                심판 좌석 미배정 사전 예고 · {judgeSeatGapSummary.headlineText}
+              </div>
+              <div className="text-xs text-[#78350f] leading-relaxed mt-0.5">
+                {judgeSeatGapSummary.preWarningText}
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/contesttimetable?tab=2"
+            className="h-8 px-3 rounded-[8px] bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-semibold no-underline inline-flex items-center justify-center gap-1 shrink-0 transition-colors"
+          >
+            <span>심판 좌석배정 바로가기</span>
+            <ArrowUpRight size={13} strokeWidth={1.8} />
+          </Link>
+        </div>
+      )}
 
       {/* Slim Contest-Day Status Strip (평상시 1줄 최소화 · 당일 진행 시 상태 표시) */}
       <LiveStageStatusCard

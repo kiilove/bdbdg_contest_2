@@ -293,7 +293,10 @@ const ContestTimetable = () => {
   void handleJudgeClose;
 
   useEffect(() => {
-    if (location?.state?.tabId) {
+    const queryTab = new URLSearchParams(location.search).get("tab");
+    if (queryTab !== null && queryTab !== "") {
+      setCurrentTab(String(queryTab));
+    } else if (location?.state?.tabId) {
       setCurrentTab(location.state.tabId.toString());
     }
   }, [location]);

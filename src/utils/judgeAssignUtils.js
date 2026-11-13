@@ -488,3 +488,266 @@ export const analyzeJudgeAssignmentHealth = ({
     isHealthy,
   };
 };
+
+/**
+ * 사전 점검 · 모니터링 공용: 전체 부(1부/2부/그랑프리)·종목·무대 기준 심판 빈 좌석 사전 예고 요약기
+ * - 삭제된 유령 체급 배정(orphan row)은 자동 제외하고 실제 유효 좌석만 집계합니다.
+ * - categories+grades 또는 stages 어느 쪽이 주어져도 정확히 빈 좌석(예: "2부 7번석")을 탐지합니다.
+ */
+export const summarizeJudgeSeatGaps = ({
+  judges = [],
+  categories = [],
+  grades = [],
+  stages = [],
+} = {}) => {
+  const categoryById = {};
+  (Array.isArray(categories) ? categories : []).forEach((c) => {
+    if (c?.contestCategoryId) {
+      categoryById[c.contestCategoryId] = c;
+    }
+  });
+
+  const sectionHintByGradeId = {};
+  const sectionHintByCategoryId = {};
+  const assignedSeatsByGradeId = {};
+
+  (Array.isArray(judges) ? judges : []).forEach((r) => {
+    const gid = r?.contestGradeId || r?.gradeId;
+    const cid = r?.categoryId || r?.refCategoryId;
+    const rawSec = (r?.sectionName ?? "").toString().trim();
+    if (rawSec && rawSec !== "미지정") {
+      if (gid && !sectionHintByGradeId[gid]) sectionHintByGradeId[gid] = rawSec;
+      if (cid && !sectionHintByCategoryId[cid]) sectionHintByCategoryId[cid] = rawSec;
+    }
+    const seatNo = Number(r?.seatIndex);
+    if (gid && Number.isFinite(seatNo) && seatNo >= 1 && Boolean(r?.judgeUid)) {
+      if (!assignedSeatsByGradeId[gid]) {
+        assignedSeatsByGradeId[gid] = new Set();
+      }
+      assignedSeatsByGradeId[gid].add(seatNo);
+    }
+  });
+
+  const stageNumsByGradeId = {};
+  (Array.isArray(stages) ? stages : []).forEach((st) => {
+    const stNo = Number(st?.stageNumber);
+    const stSec = (st?.sectionName ?? "").toString().trim();
+    if (stSec && st?.categoryId && !sectionHintByCategoryId[st.categoryId]) {
+      sectionHintByCategoryId[st.categoryId] = stSec;
+    }
+    (Array.isArray(st?.grades) ? st.grades : []).forEach((sg) => {
+      const gid = sg?.gradeId || sg?.contestGradeId;
+      if (!gid) return;
+      if (stSec && !sectionHintByGradeId[gid]) {
+        sectionHintByGradeId[gid] = stSec;
+      }
+      if (Number.isFinite(stNo) && stNo > 0) {
+        if (!stageNumsByGradeId[gid]) stageNumsByGradeId[gid] = new Set();
+        stageNumsByGradeId[gid].add(stNo);
+      }
+    });
+  });
+
+  const targetGradeSpecs = [];
+  const hasCategoryGradePool =
+    Array.isArray(categories) &&
+    categories.length > 0 &&
+    Array.isArray(grades) &&
+    grades.length > 0;
+
+  if (hasCategoryGradePool) {
+    const sortedGrades = [...grades].sort((a, b) => {
+      const ca = Number(categoryById[a?.refCategoryId]?.contestCategoryIndex ?? 9999);
+      const cb = Number(categoryById[b?.refCategoryId]?.contestCategoryIndex ?? 9999);
+      if (ca !== cb) return ca - cb;
+      return Number(a?.contestGradeIndex ?? 9999) - Number(b?.contestGradeIndex ?? 9999);
+    });
+
+    sortedGrades.forEach((g) => {
+      if (!g?.contestGradeId) return;
+      const cat = categoryById[g.refCategoryId];
+      if (!cat) return;
+      const expectedSeats = Number(cat.contestCategoryJudgeCount || 0);
+      if (expectedSeats <= 0) return;
+
+      const stageNumbers = Array.from(stageNumsByGradeId[g.contestGradeId] || []).sort(
+        (a, b) => a - b
+      );
+      targetGradeSpecs.push({
+        gradeId: g.contestGradeId,
+        gradeTitle: g.contestGradeTitle || "체급",
+        categoryId: cat.contestCategoryId,
+        categoryTitle: cat.contestCategoryTitle || "종목",
+        sectionName: normalizeSectionName(
+          cat.contestCategorySection ||
+            sectionHintByGradeId[g.contestGradeId] ||
+            sectionHintByCategoryId[cat.contestCategoryId]
+        ),
+        expectedSeats,
+        stageNumbers,
+      });
+    });
+  } else if (Array.isArray(stages) && stages.length > 0) {
+    const seenGradeIds = new Set();
+    const sortedStages = [...stages].sort(
+      (a, b) => Number(a?.stageNumber || 0) - Number(b?.stageNumber || 0)
+    );
+
+    sortedStages.forEach((st) => {
+      const cat = st?.categoryId ? categoryById[st.categoryId] : null;
+      const expectedSeats = Number(
+        st?.categoryJudgeCount || cat?.contestCategoryJudgeCount || 0
+      );
+      if (expectedSeats <= 0) return;
+
+      (Array.isArray(st?.grades) ? st.grades : []).forEach((sg) => {
+        const gid = sg?.gradeId || sg?.contestGradeId;
+        if (!gid || seenGradeIds.has(gid)) return;
+        seenGradeIds.add(gid);
+
+        const stageNumbers = Array.from(stageNumsByGradeId[gid] || []).sort(
+          (a, b) => a - b
+        );
+        targetGradeSpecs.push({
+          gradeId: gid,
+          gradeTitle: sg?.gradeTitle || sg?.contestGradeTitle || "체급",
+          categoryId: st?.categoryId || cat?.contestCategoryId || "",
+          categoryTitle:
+            st?.categoryTitle || cat?.contestCategoryTitle || "종목",
+          sectionName: normalizeSectionName(
+            st?.sectionName ||
+              cat?.contestCategorySection ||
+              sectionHintByGradeId[gid] ||
+              sectionHintByCategoryId[st?.categoryId]
+          ),
+          expectedSeats,
+          stageNumbers,
+        });
+      });
+    });
+  }
+
+  let totalExpectedSeats = 0;
+  let totalAssignedSeats = 0;
+  const missingGradeItems = [];
+
+  targetGradeSpecs.forEach((spec) => {
+    totalExpectedSeats += spec.expectedSeats;
+    const assignedSet = assignedSeatsByGradeId[spec.gradeId] || new Set();
+    const missingSeats = [];
+
+    for (let s = 1; s <= spec.expectedSeats; s += 1) {
+      if (assignedSet.has(s)) {
+        totalAssignedSeats += 1;
+      } else {
+        missingSeats.push(s);
+      }
+    }
+
+    if (missingSeats.length > 0) {
+      missingGradeItems.push({
+        ...spec,
+        missingSeats,
+      });
+    }
+  });
+
+  const missingSeatsTotal = Math.max(0, totalExpectedSeats - totalAssignedSeats);
+
+  const sectionOrder = [];
+  const sectionMap = new Map();
+  missingGradeItems.forEach((item) => {
+    if (!sectionMap.has(item.sectionName)) {
+      sectionOrder.push(item.sectionName);
+      sectionMap.set(item.sectionName, {
+        sectionName: item.sectionName,
+        seatSet: new Set(),
+        categoryTitles: [],
+        categorySet: new Set(),
+        stageSet: new Set(),
+        missingGradesCount: 0,
+      });
+    }
+    const bucket = sectionMap.get(item.sectionName);
+    bucket.missingGradesCount += 1;
+    item.missingSeats.forEach((s) => bucket.seatSet.add(s));
+    if (item.categoryTitle && !bucket.categorySet.has(item.categoryTitle)) {
+      bucket.categorySet.add(item.categoryTitle);
+      bucket.categoryTitles.push(item.categoryTitle);
+    }
+    (item.stageNumbers || []).forEach((n) => bucket.stageSet.add(n));
+  });
+
+  const formatStageRange = (nums) => {
+    if (!nums.length) return "";
+    if (nums.length === 1) return `무대 #${nums[0]}`;
+    const min = nums[0];
+    const max = nums[nums.length - 1];
+    const isContiguous = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+    if (isContiguous || nums.length > 4) {
+      return `무대 #${min}~#${max}`;
+    }
+    return `무대 ${nums.map((n) => `#${n}`).join(", ")}`;
+  };
+
+  const sectionSummaries = sectionOrder.map((secName) => {
+    const b = sectionMap.get(secName);
+    const seatNumbers = Array.from(b.seatSet).sort((a, c) => a - c);
+    const stageNumbers = Array.from(b.stageSet).sort((a, c) => a - c);
+    const seatTextShort = `${seatNumbers.join("·")}번석`;
+    const shortLabel =
+      secName && secName !== "미지정"
+        ? `${secName} ${seatTextShort}`
+        : seatTextShort;
+
+    const catText =
+      b.categoryTitles.length <= 2
+        ? b.categoryTitles.join(", ")
+        : `${b.categoryTitles[0]} 외 ${b.categoryTitles.length - 1}개 종목`;
+    const stageText = formatStageRange(stageNumbers);
+    const scopePrefix = secName && secName !== "미지정" ? `[${secName}] ` : "";
+
+    const detailText = `${scopePrefix}${seatNumbers.join(
+      ", "
+    )}번 자리 심판 비어있음 (${catText} · ${b.missingGradesCount}개 체급${
+      stageText ? ` · ${stageText}` : ""
+    })`;
+
+    return {
+      sectionName: secName,
+      seatNumbers,
+      missingGradesCount: b.missingGradesCount,
+      categoryTitles: b.categoryTitles,
+      stageNumbers,
+      shortLabel,
+      detailText,
+    };
+  });
+
+  const hasGap = missingSeatsTotal > 0;
+  const shortJoined = sectionSummaries.map((s) => s.shortLabel).join(" · ");
+  const headlineText = hasGap
+    ? `${shortJoined} 미배정 (${totalAssignedSeats}/${totalExpectedSeats}석)`
+    : totalExpectedSeats > 0
+    ? `전 좌석 배정 완료 (${totalAssignedSeats}/${totalExpectedSeats}석)`
+    : "";
+
+  const preWarningText = hasGap
+    ? `사전 예고: ${sectionSummaries
+        .map((s) => s.detailText)
+        .join(" / ")}. 대회 진행 전 심판 좌석 배정을 완료해 주세요.`
+    : null;
+
+  return {
+    hasGap,
+    totalExpectedSeats,
+    totalAssignedSeats,
+    missingSeatsTotal,
+    missingGradesCount: missingGradeItems.length,
+    missingGradeItems,
+    sectionSummaries,
+    shortJoined,
+    headlineText,
+    preWarningText,
+  };
+};
