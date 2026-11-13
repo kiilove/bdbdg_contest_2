@@ -2324,21 +2324,43 @@ const ContestPlayerWeighInTable = () => {
         updatedFields.originalGradeTitle ||
         p.originalGradeTitle ||
         p.contestGradeTitle;
-      const isGradeChanged =
-        updatedFields.isGradeChanged !== undefined
-          ? !!updatedFields.isGradeChanged
-          : !!p.isGradeChanged;
+      const isGpEntry = isGrandPrixEntryLike(p);
+      const isGradeChanged = isGpEntry
+        ? false
+        : updatedFields.isGradeChanged !== undefined
+        ? !!updatedFields.isGradeChanged
+        : !!p.isGradeChanged;
+
+      const gpIndexPatch =
+        isGpEntry && updatedFields.playerIndex !== undefined
+          ? {
+              playerIndexOriginal:
+                p.playerIndexOriginal !== undefined &&
+                p.playerIndexOriginal !== null
+                  ? p.playerIndexOriginal
+                  : p.playerIndex ?? p.playerNumber ?? null,
+              grandPrixIndex:
+                updatedFields.grandPrixIndex ?? updatedFields.playerIndex,
+              isCustomGrandPrixIndex: true,
+              isGradeChange: false,
+            }
+          : {};
 
       return {
         ...p,
         ...updatedFields,
+        ...gpIndexPatch,
         originalGradeId: origGId,
         originalGradeTitle: origGTitle,
         isGradeChanged: isGradeChanged,
-        contestGradeId: isGradeChanged
+        contestGradeId: isGpEntry
+          ? updatedFields.contestGradeId || p.contestGradeId
+          : isGradeChanged
           ? updatedFields.contestGradeId || p.contestGradeId || origGId
           : origGId,
-        contestGradeTitle: isGradeChanged
+        contestGradeTitle: isGpEntry
+          ? updatedFields.contestGradeTitle || p.contestGradeTitle
+          : isGradeChanged
           ? updatedFields.contestGradeTitle || p.contestGradeTitle || origGTitle
           : origGTitle,
         playerHeight: safeH,
@@ -2663,7 +2685,13 @@ const ContestPlayerWeighInTable = () => {
     setEditValues({
       playerNumber: Number(player.playerNumber) || 0,
       playerIndex:
-        Number(player.playerIndex) || Number(player.playerNumber) || 0,
+        Number(
+          isGrandPrixEntryLike(player)
+            ? player.grandPrixIndex ?? player.playerIndex
+            : player.playerIndex
+        ) ||
+        Number(player.playerNumber) ||
+        0,
       playerName: player.playerName || "",
       height: height || "",
       weight: weight || "",

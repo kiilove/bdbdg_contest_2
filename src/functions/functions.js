@@ -284,3 +284,206 @@ export const getStagePlayerSortIndex = (player, contextMeta = null) => {
   }
   return Number(player?.playerIndex ?? 0);
 };
+
+/**
+ * 현재 진행 무대(targetStage)가 '그랑프리'인 경우,
+ * 해당 무대에 속한 체급(grades) 선수들의 이전 playerIndex를 playerIndexOriginal에 보존하고
+ * playerIndex를 grandPrixIndex로 덮어씌운 새로운 players 배열을 반환합니다.
+ * - 심판 태블릿(grandPrixIndex 미지원, playerIndex 정렬)과 완벽 호환을 보장합니다.
+ * - 일반 종목(1부, 2부 등) 무대일 경우 절대 수정하지 않고 즉시 { players, changed: false }를 반환합니다.
+ * - playerIndexOriginal이 이미 존재하는 엔트리는 기존 값을 덮어쓰지 않고 그대로 유지(멱등성 보장)합니다.
+ */
+export const syncGrandPrixPlayerIndexForStage = (
+  players = [],
+  targetStage = null,
+  categoriesArray = []
+) => {
+  if (!Array.isArray(players) || players.length === 0 || !targetStage) {
+    return {
+      players: Array.isArray(players) ? players : [],
+      changed: false,
+      syncedCount: 0,
+      isGrandPrixStage: false,
+    };
+  }
+
+  const matchedCat = Array.isArray(categoriesArray)
+    ? categoriesArray.find(
+        (c) =>
+          c?.contestCategoryId &&
+          c.contestCategoryId === targetStage?.categoryId
+      )
+    : null;
+
+  const isGrandPrixStage =
+    isGrandPrixPlayerEntry(null, targetStage) ||
+    (matchedCat ? isGrandPrixPlayerEntry(null, matchedCat) : false);
+
+  if (!isGrandPrixStage) {
+    return {
+      players,
+      changed: false,
+      syncedCount: 0,
+      isGrandPrixStage: false,
+    };
+  }
+
+  const stageGradeIds = new Set(
+    [
+      ...(Array.isArray(targetStage?.grades)
+        ? targetStage.grades.map((g) => g?.gradeId || g?.contestGradeId)
+        : []),
+      targetStage?.gradeId,
+    ].filter(Boolean)
+  );
+
+  if (stageGradeIds.size === 0) {
+    return {
+      players,
+      changed: false,
+      syncedCount: 0,
+      isGrandPrixStage: true,
+    };
+  }
+
+  // 원체급(일반 종목) 엔트리의 playerIndex 조회용 맵 (이전 저장본에 playerIndexOriginal이 없던 경우 복원용)
+  const regularIndexByGradeAndKey = new Map();
+  players.forEach((p) => {
+    if (!p || isGrandPrixPlayerEntry(p)) return;
+    if (p.contestGradeId && p.playerIndex !== undefined && p.playerIndex !== null) {
+      if (p.playerUid) {
+        regularIndexByGradeAndKey.set(
+          `${p.contestGradeId}__uid:${p.playerUid}`,
+          p.playerIndex
+        );
+      }
+      if (p.playerNumber !== undefined && p.playerNumber !== null) {
+        regularIndexByGradeAndKey.set(
+          `${p.contestGradeId}__num:${p.playerNumber}`,
+          p.playerIndex
+        );
+      }
+    }
+  });
+
+  const resolveOriginalPlayerIndex = (p) => {
+    if (p?.playerIndexOriginal !== undefined && p?.playerIndexOriginal !== null) {
+      return p.playerIndexOriginal;
+    }
+    if (
+      p?.originalGradeId &&
+      p.originalGradeId !== p.contestGradeId
+    ) {
+      const byUid = p.playerUid
+        ? regularIndexByGradeAndKey.get(
+            `${p.originalGradeId}__uid:${p.playerUid}`
+          )
+        : undefined;
+      if (byUid !== undefined) return byUid;
+      const byNum =
+        p.playerNumber !== undefined && p.playerNumber !== null
+          ? regularIndexByGradeAndKey.get(
+              `${p.originalGradeId}__num:${p.playerNumber}`
+            )
+          : undefined;
+      if (byNum !== undefined) return byNum;
+    }
+    if (p?.playerIndex !== undefined && p?.playerIndex !== null) {
+      return p.playerIndex;
+    }
+    return p?.playerNumber ?? null;
+  };
+
+  const patchesByArrIdx = new Map();
+
+  stageGradeIds.forEach((gId) => {
+    const entriesWithIdx = [];
+    players.forEach((p, arrIdx) => {
+      if (p && p.contestGradeId === gId) {
+        entriesWithIdx.push({ player: p, arrIdx });
+      }
+    });
+
+    if (entriesWithIdx.length === 0) return;
+
+    entriesWithIdx.sort((a, b) => {
+      const pa = a.player;
+      const pb = b.player;
+      const aHasGp =
+        pa?.grandPrixIndex !== undefined &&
+        pa?.grandPrixIndex !== null &&
+        Number.isFinite(Number(pa.grandPrixIndex)) &&
+        Number(pa.grandPrixIndex) > 0;
+      const bHasGp =
+        pb?.grandPrixIndex !== undefined &&
+        pb?.grandPrixIndex !== null &&
+        Number.isFinite(Number(pb.grandPrixIndex)) &&
+        Number(pb.grandPrixIndex) > 0;
+
+      if (aHasGp && bHasGp) {
+        const gpDiff = Number(pa.grandPrixIndex) - Number(pb.grandPrixIndex);
+        if (gpDiff !== 0) return gpDiff;
+      } else if (aHasGp !== bHasGp) {
+        return aHasGp ? -1 : 1;
+      }
+
+      const origGradeDiff =
+        Number(pa?.originalGradeIndex ?? 9999) -
+        Number(pb?.originalGradeIndex ?? 9999);
+      if (origGradeDiff !== 0) return origGradeDiff;
+
+      const origIdxDiff =
+        Number(resolveOriginalPlayerIndex(pa) ?? 9999) -
+        Number(resolveOriginalPlayerIndex(pb) ?? 9999);
+      if (origIdxDiff !== 0) return origIdxDiff;
+
+      return Number(pa?.playerNumber || 0) - Number(pb?.playerNumber || 0);
+    });
+
+    entriesWithIdx.forEach(({ player: p, arrIdx }, sortedIdx) => {
+      const gpIdx = sortedIdx + 1;
+      const preservedOriginal = resolveOriginalPlayerIndex(p);
+      patchesByArrIdx.set(arrIdx, {
+        ...p,
+        playerIndexOriginal: preservedOriginal,
+        grandPrixIndex: gpIdx,
+        playerIndex: gpIdx,
+        isGradeChange: false,
+        isGradeChanged: false,
+      });
+    });
+  });
+
+  if (patchesByArrIdx.size === 0) {
+    return {
+      players,
+      changed: false,
+      syncedCount: 0,
+      isGrandPrixStage: true,
+    };
+  }
+
+  let changed = false;
+  const nextPlayers = players.map((p, arrIdx) => {
+    const patched = patchesByArrIdx.get(arrIdx);
+    if (!patched) return p;
+    if (
+      p.playerIndex !== patched.playerIndex ||
+      p.grandPrixIndex !== patched.grandPrixIndex ||
+      p.playerIndexOriginal !== patched.playerIndexOriginal ||
+      Boolean(p.isGradeChange) !== false ||
+      Boolean(p.isGradeChanged) !== false
+    ) {
+      changed = true;
+      return patched;
+    }
+    return p;
+  });
+
+  return {
+    players: changed ? nextPlayers : players,
+    changed,
+    syncedCount: patchesByArrIdx.size,
+    isGrandPrixStage: true,
+  };
+};
