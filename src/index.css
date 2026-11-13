@@ -221,19 +221,4 @@
   .break-page {
     page-break-inside: avoid;
   }
-
-  .page-footer {
-    position: running(footer);
-  }
-
-  @page {
-    @bottom-center {
-      content: element(footer);
-    }
-  }
-
-  .page-footer::after {
-    content: "페이지 " counter(page) " / 총 " counter(pages);
-    font-size: 12px;
-  }
 }
