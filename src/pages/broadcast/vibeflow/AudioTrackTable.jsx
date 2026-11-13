@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import {
   CUSTOM_CATEGORIES,
@@ -32,6 +33,7 @@ export const AudioTrackTable = ({
   setSelectedDivision,
   currentTrack,
   isPlaying,
+  audioTransition = null,
   handlePlayTrack,
   handleDeleteCustomMusic,
   seed1Pool = [],
@@ -110,7 +112,7 @@ export const AudioTrackTable = ({
                 <th className="py-2.5 px-3 w-[88px] text-right font-medium">
                   재생시간
                 </th>
-                <th className="py-2.5 px-3 w-[132px] text-right font-medium">
+                <th className="py-2.5 px-3 w-[156px] text-right font-medium">
                   제어
                 </th>
               </tr>
@@ -159,6 +161,29 @@ export const AudioTrackTable = ({
                   const isSeed2 = key && seed2Set.has(key);
                   const isThisTrackActive = isTrackEqual(currentTrack, record);
                   const activePlaying = isThisTrackActive && isPlaying;
+
+                  const isTransitionTarget = Boolean(
+                    audioTransition?.targetTrack &&
+                      isTrackEqual(audioTransition.targetTrack, record)
+                  );
+                  const isTransitionOutgoing = Boolean(
+                    audioTransition?.phase === "crossfading" &&
+                      audioTransition?.fromTrack &&
+                      isTrackEqual(audioTransition.fromTrack, record) &&
+                      !isTransitionTarget
+                  );
+                  const transPhase = isTransitionTarget
+                    ? audioTransition.phase
+                    : null;
+                  const transProgress = isTransitionTarget
+                    ? Math.max(
+                        0,
+                        Math.min(100, Math.round(audioTransition.progress || 0))
+                      )
+                    : 0;
+                  const isRowButtonLocked =
+                    transPhase === "loading" || transPhase === "fading-out";
+
                   const categoryName =
                     record.contest_category_kr ||
                     record.category ||
@@ -178,7 +203,7 @@ export const AudioTrackTable = ({
                     <tr
                       key={key}
                       className={`h-12 transition-colors duration-150 focus-within:bg-[#232325]/90 ${
-                        isThisTrackActive
+                        isTransitionTarget || isThisTrackActive
                           ? "bg-[#232325] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                           : "bg-[#19191b] hover:bg-[#232325]/60"
                       }`}
@@ -187,10 +212,24 @@ export const AudioTrackTable = ({
                         <div className="flex items-center gap-2">
                           <BibTag
                             number={String(globalIdx + 1).padStart(2, "0")}
-                            variant={isThisTrackActive ? "active" : "dark"}
+                            variant={
+                              isTransitionTarget || isThisTrackActive
+                                ? "active"
+                                : "dark"
+                            }
                             size="sm"
                           />
-                          {isThisTrackActive ? (
+                          {isTransitionTarget ? (
+                            <Loader2
+                              size={12}
+                              strokeWidth={2}
+                              className={`animate-spin ${
+                                transPhase === "fading-out"
+                                  ? "text-[#fbbf24]"
+                                  : "text-[#60a5fa]"
+                              }`}
+                            />
+                          ) : isThisTrackActive ? (
                             <StatusDot status="live" live={isPlaying} />
                           ) : isSeed1 ? (
                             <span className="text-[11px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/15 text-[#60a5fa] border border-[#2563eb]/30">
@@ -206,20 +245,39 @@ export const AudioTrackTable = ({
 
                       <td className="py-2.5 px-3 min-w-[180px]">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[13px] leading-5 font-medium truncate max-w-[280px] ${
-                              isThisTrackActive
-                                ? "text-[#ededed]"
-                                : "text-[#ededed]"
-                            }`}
-                          >
+                          <span className="text-[13px] leading-5 font-medium truncate max-w-[260px] text-[#ededed]">
                             {record.title || record.name || "Untitled"}
                           </span>
-                          {activePlaying && (
+                          {transPhase === "loading" ? (
+                            <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/40 shrink-0 inline-flex items-center gap-1">
+                              <Loader2
+                                size={10}
+                                strokeWidth={2}
+                                className="animate-spin"
+                              />
+                              <span>음원 수신 중...</span>
+                            </span>
+                          ) : transPhase === "crossfading" ? (
+                            <span className="text-[11px] leading-4 font-mono tabular-nums px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/40 shrink-0">
+                              교차 진입 {transProgress}%
+                            </span>
+                          ) : transPhase === "fading-in" ? (
+                            <span className="text-[11px] leading-4 font-mono tabular-nums px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/40 shrink-0">
+                              페이드인 {transProgress}%
+                            </span>
+                          ) : transPhase === "fading-out" ? (
+                            <span className="text-[11px] leading-4 font-mono tabular-nums px-1.5 py-0.5 rounded-[4px] bg-[#d97706]/20 text-[#fbbf24] border border-[#d97706]/40 shrink-0">
+                              감쇄 정지 {transProgress}%
+                            </span>
+                          ) : isTransitionOutgoing ? (
+                            <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#d97706]/15 text-[#fbbf24] border border-[#d97706]/35 shrink-0">
+                              감쇄 종료 중
+                            </span>
+                          ) : activePlaying ? (
                             <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/35 shrink-0">
                               출력 중
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="text-xs text-[#85858b] truncate max-w-[280px]">
                           {record.artist || "Unknown Artist"}
@@ -286,14 +344,64 @@ export const AudioTrackTable = ({
                         <div className="inline-flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handlePlayTrack(record)}
-                            className={`h-8 px-3 rounded-[6px] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] ${
-                              activePlaying
+                            disabled={isRowButtonLocked}
+                            onClick={() => handlePlayTrack(record, "track")}
+                            className={`h-8 px-3 rounded-[6px] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,transform,opacity] duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed ${
+                              transPhase === "loading"
+                                ? "bg-[#2563eb] text-white border border-[#3b82f6] opacity-95"
+                                : transPhase === "fading-out"
+                                ? "bg-[#232325] text-[#fbbf24] border border-[#d97706]/55 opacity-95"
+                                : transPhase === "crossfading" ||
+                                  transPhase === "fading-in"
+                                ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-[#3b82f6]"
+                                : activePlaying
                                 ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-[#2563eb]"
                                 : "bg-[#232325] hover:bg-[#ededed] text-[#ededed] hover:text-[#141415] border border-[#ededed]/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                             }`}
                           >
-                            {activePlaying ? (
+                            {transPhase === "loading" ? (
+                              <>
+                                <Loader2
+                                  size={13}
+                                  strokeWidth={2}
+                                  className="animate-spin"
+                                />
+                                <span>로딩 중</span>
+                              </>
+                            ) : transPhase === "fading-out" ? (
+                              <>
+                                <Loader2
+                                  size={13}
+                                  strokeWidth={2}
+                                  className="animate-spin"
+                                />
+                                <span className="font-mono tabular-nums">
+                                  정지 {transProgress}%
+                                </span>
+                              </>
+                            ) : transPhase === "crossfading" ? (
+                              <>
+                                <Loader2
+                                  size={13}
+                                  strokeWidth={2}
+                                  className="animate-spin"
+                                />
+                                <span className="font-mono tabular-nums">
+                                  전환 {transProgress}%
+                                </span>
+                              </>
+                            ) : transPhase === "fading-in" ? (
+                              <>
+                                <Loader2
+                                  size={13}
+                                  strokeWidth={2}
+                                  className="animate-spin"
+                                />
+                                <span className="font-mono tabular-nums">
+                                  페이드인 {transProgress}%
+                                </span>
+                              </>
+                            ) : activePlaying ? (
                               <>
                                 <Pause size={14} strokeWidth={1.5} />
                                 <span>정지</span>

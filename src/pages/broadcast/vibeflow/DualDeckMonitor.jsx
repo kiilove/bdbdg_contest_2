@@ -1,4 +1,5 @@
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { BibTag, StatusDot } from "../../../components/ui/BibTag";
 
 export const DualDeckMonitor = ({
@@ -9,17 +10,40 @@ export const DualDeckMonitor = ({
   deckAVolume,
   deckBVolume,
   currentTabConfig,
+  audioTransition = null,
 }) => {
+  const phase = audioTransition?.phase || null;
+  const progress = Math.max(
+    0,
+    Math.min(100, Math.round(audioTransition?.progress || 0))
+  );
+
   const renderDeckChannel = (deckId, deckVolume) => {
     const isActive = activeDeck === deckId;
     const isPreCued = !isActive && Boolean(preCuedTrack);
     const clampedRatio = Math.max(0, Math.min(1, (deckVolume || 0) / 100));
 
+    const isLoadingTarget =
+      phase === "loading" && audioTransition?.targetDeck === deckId;
+    const isRampingIn =
+      (phase === "crossfading" || phase === "fading-in") &&
+      audioTransition?.targetDeck === deckId;
+    const isCrossfadeRampingOut =
+      phase === "crossfading" &&
+      audioTransition?.fromDeck === deckId &&
+      audioTransition?.targetDeck !== deckId;
+    const isPauseFadingOut =
+      phase === "fading-out" && audioTransition?.targetDeck === deckId;
+
     return (
       <div
         key={deckId}
         className={`p-3 rounded-[8px] border flex flex-col justify-between transition-[background-color,border-color] duration-150 ${
-          isActive
+          isLoadingTarget || isRampingIn
+            ? "bg-[#232325] border-[#2563eb]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+            : isCrossfadeRampingOut || isPauseFadingOut
+            ? "bg-[#232325] border-[#d97706]/50"
+            : isActive
             ? "bg-[#232325] border-[#2563eb]/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
             : isPreCued
             ? "bg-[#141415] border-[#2563eb]/35"
@@ -32,10 +56,24 @@ export const DualDeckMonitor = ({
               <BibTag
                 prefix="Deck "
                 number={deckId}
-                variant={isActive ? "active" : "dark"}
+                variant={isActive || isLoadingTarget ? "active" : "dark"}
                 size="sm"
               />
-              {isActive && isPlaying && <StatusDot status="live" live />}
+              {isLoadingTarget || isRampingIn ? (
+                <Loader2
+                  size={12}
+                  strokeWidth={2}
+                  className="animate-spin text-[#60a5fa]"
+                />
+              ) : isCrossfadeRampingOut || isPauseFadingOut ? (
+                <Loader2
+                  size={12}
+                  strokeWidth={2}
+                  className="animate-spin text-[#fbbf24]"
+                />
+              ) : (
+                isActive && isPlaying && <StatusDot status="live" live />
+              )}
             </div>
             <span className="text-xs font-mono tabular-nums text-[#a1a1a6]">
               {deckVolume}%
@@ -43,7 +81,77 @@ export const DualDeckMonitor = ({
           </div>
 
           <div className="mt-2.5 text-left min-h-[36px]">
-            {isActive ? (
+            {isLoadingTarget ? (
+              <div>
+                <span className="text-xs font-medium text-[#60a5fa] block">
+                  음원 다운로드·버퍼링 중
+                </span>
+                {audioTransition?.targetTrack && (
+                  <span
+                    className="text-xs text-[#ededed] block truncate mt-0.5"
+                    title={
+                      audioTransition.targetTrack.title ||
+                      audioTransition.targetTrack.name
+                    }
+                  >
+                    {audioTransition.targetTrack.title ||
+                      audioTransition.targetTrack.name}
+                  </span>
+                )}
+              </div>
+            ) : isRampingIn ? (
+              <div>
+                <span className="text-xs font-medium text-[#60a5fa] font-mono tabular-nums block">
+                  {phase === "crossfading"
+                    ? `크로스페이드 진입 ${progress}%`
+                    : `페이드인 상승 ${progress}%`}
+                </span>
+                {(audioTransition?.targetTrack || currentTrack) && (
+                  <span
+                    className="text-xs text-[#ededed] block truncate mt-0.5"
+                    title={
+                      (audioTransition?.targetTrack || currentTrack)?.title ||
+                      (audioTransition?.targetTrack || currentTrack)?.name
+                    }
+                  >
+                    {(audioTransition?.targetTrack || currentTrack)?.title ||
+                      (audioTransition?.targetTrack || currentTrack)?.name}
+                  </span>
+                )}
+              </div>
+            ) : isCrossfadeRampingOut ? (
+              <div>
+                <span className="text-xs font-medium text-[#fbbf24] font-mono tabular-nums block">
+                  이전 곡 감쇄 중 ({100 - progress}%)
+                </span>
+                {audioTransition?.fromTrack && (
+                  <span
+                    className="text-xs text-[#a1a1a6] block truncate mt-0.5"
+                    title={
+                      audioTransition.fromTrack.title ||
+                      audioTransition.fromTrack.name
+                    }
+                  >
+                    {audioTransition.fromTrack.title ||
+                      audioTransition.fromTrack.name}
+                  </span>
+                )}
+              </div>
+            ) : isPauseFadingOut ? (
+              <div>
+                <span className="text-xs font-medium text-[#fbbf24] font-mono tabular-nums block">
+                  페이드아웃 정지 중 {progress}%
+                </span>
+                {currentTrack && (
+                  <span
+                    className="text-xs text-[#a1a1a6] block truncate mt-0.5"
+                    title={currentTrack.title || currentTrack.name}
+                  >
+                    {currentTrack.title || currentTrack.name}
+                  </span>
+                )}
+              </div>
+            ) : isActive ? (
               <div>
                 <span className="text-xs font-medium text-[#ededed] block">
                   {isPlaying ? "출력 중" : "일시정지"}
@@ -84,16 +192,24 @@ export const DualDeckMonitor = ({
         </div>
 
         <div className="w-full bg-[#0f0f10] h-1.5 rounded-[4px] overflow-hidden mt-3 border border-[#ededed]/[0.06]">
-          <div
-            className={`w-full h-full origin-left transition-transform duration-150 ${
-              isActive && isPlaying
-                ? "bg-[#4cc38a]"
-                : isActive
-                ? "bg-[#2563eb]"
-                : "bg-[#85858b]"
-            }`}
-            style={{ transform: `scaleX(${clampedRatio})` }}
-          />
+          {isLoadingTarget ? (
+            <div className="w-2/5 h-full bg-[#3b82f6] animate-pulse rounded-[4px]" />
+          ) : (
+            <div
+              className={`w-full h-full origin-left transition-transform duration-150 ${
+                isCrossfadeRampingOut || isPauseFadingOut
+                  ? "bg-[#d97706]"
+                  : isRampingIn
+                  ? "bg-[#3b82f6]"
+                  : isActive && isPlaying
+                  ? "bg-[#4cc38a]"
+                  : isActive
+                  ? "bg-[#2563eb]"
+                  : "bg-[#85858b]"
+              }`}
+              style={{ transform: `scaleX(${clampedRatio})` }}
+            />
+          )}
         </div>
       </div>
     );
@@ -105,10 +221,31 @@ export const DualDeckMonitor = ({
         <span className="text-[13px] leading-5 font-medium text-[#ededed]">
           듀얼 데크 모니터
         </span>
-        <span className="text-xs font-mono tabular-nums text-[#a1a1a6] px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08]">
-          {currentTabConfig.fadeDuration.toFixed(1)}s{" "}
-          {currentTabConfig.fadeDuration === 0 ? "즉시 전환" : "크로스페이드"}
-        </span>
+        {phase ? (
+          <span
+            className={`text-xs font-mono tabular-nums px-2 py-0.5 rounded-[4px] border inline-flex items-center gap-1.5 ${
+              phase === "fading-out"
+                ? "bg-[#d97706]/15 border-[#d97706]/40 text-[#fbbf24]"
+                : "bg-[#2563eb]/15 border-[#2563eb]/40 text-[#60a5fa]"
+            }`}
+          >
+            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+            <span>
+              {phase === "loading"
+                ? "음원 버퍼링 중"
+                : phase === "crossfading"
+                ? `크로스페이드 ${progress}%`
+                : phase === "fading-in"
+                ? `페이드인 ${progress}%`
+                : `페이드아웃 ${progress}%`}
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs font-mono tabular-nums text-[#a1a1a6] px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08]">
+            {currentTabConfig.fadeDuration.toFixed(1)}s{" "}
+            {currentTabConfig.fadeDuration === 0 ? "즉시 전환" : "크로스페이드"}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">

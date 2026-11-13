@@ -1,6 +1,13 @@
 import React from "react";
 import { Switch, Tooltip } from "antd";
-import { Activity, Play, Pause, SkipForward, Info } from "lucide-react";
+import {
+  Activity,
+  Play,
+  Pause,
+  SkipForward,
+  Info,
+  Loader2,
+} from "lucide-react";
 import { extractGender } from "./constants";
 import { StatusDot } from "../../../components/ui/BibTag";
 
@@ -16,6 +23,7 @@ export const AutopilotCard = ({
   activeSeedLevel,
   currentTrack,
   isPlaying,
+  audioTransition = null,
   handlePlayTrack,
   playNextSeedTrack,
   onOpenGuideModal,
@@ -27,6 +35,14 @@ export const AutopilotCard = ({
       : genderType === "MALE"
       ? "남성 · "
       : "";
+
+  const phase = audioTransition?.phase || null;
+  const progress = Math.max(
+    0,
+    Math.min(100, Math.round(audioTransition?.progress || 0))
+  );
+  const isBusyLocked = phase === "loading" || phase === "fading-out";
+  const isPoolEmpty = seed1Pool.length === 0 && seed2Pool.length === 0;
 
   return (
     <div className="bg-[#19191b] border border-[#ededed]/[0.08] rounded-[12px] p-5 space-y-4">
@@ -119,14 +135,40 @@ export const AutopilotCard = ({
         {currentTrack ? (
           <button
             type="button"
-            onClick={() => handlePlayTrack(currentTrack)}
-            className={`flex-1 h-9 px-3 rounded-[8px] text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] ${
-              isPlaying
+            disabled={isBusyLocked}
+            onClick={() => handlePlayTrack(currentTrack, "autopilot")}
+            className={`flex-1 h-9 px-3 rounded-[8px] text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform,opacity] duration-150 active:scale-[0.98] disabled:cursor-not-allowed ${
+              phase === "loading"
+                ? "bg-[#2563eb] text-white border border-[#3b82f6] opacity-95"
+                : phase === "fading-out"
+                ? "bg-[#232325] text-[#fbbf24] border border-[#d97706]/50 opacity-95"
+                : phase === "crossfading" || phase === "fading-in"
+                ? "bg-[#2563eb]/20 hover:bg-[#2563eb]/30 text-[#93c5fd] border border-[#2563eb]/50"
+                : isPlaying
                 ? "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border border-[#ededed]/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                 : "bg-[#ededed] hover:bg-white text-[#141415] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
             }`}
           >
-            {isPlaying ? (
+            {phase === "loading" ? (
+              <>
+                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <span>음원 준비 중...</span>
+              </>
+            ) : phase === "fading-out" ? (
+              <>
+                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <span className="font-mono tabular-nums">
+                  정지 중 {progress}%
+                </span>
+              </>
+            ) : phase === "crossfading" || phase === "fading-in" ? (
+              <>
+                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <span className="font-mono tabular-nums">
+                  전환 중 {progress}%
+                </span>
+              </>
+            ) : isPlaying ? (
               <>
                 <Pause size={16} strokeWidth={1.5} />
                 <span>일시정지</span>
@@ -141,24 +183,60 @@ export const AutopilotCard = ({
         ) : (
           <button
             type="button"
-            onClick={() => playNextSeedTrack(true)}
-            disabled={seed1Pool.length === 0 && seed2Pool.length === 0}
-            className="flex-1 h-9 px-3 rounded-[8px] bg-[#ededed] hover:bg-white text-[#141415] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-[background-color,transform,opacity] duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() =>
+              playNextSeedTrack(true, false, undefined, "autopilot")
+            }
+            disabled={isPoolEmpty || isBusyLocked}
+            className={`flex-1 h-9 px-3 rounded-[8px] text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-[background-color,transform,opacity] duration-150 active:scale-[0.98] disabled:cursor-not-allowed ${
+              phase === "loading"
+                ? "bg-[#2563eb] text-white opacity-95"
+                : "bg-[#ededed] hover:bg-white text-[#141415] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] disabled:opacity-40"
+            }`}
           >
-            <Play size={16} strokeWidth={1.5} />
-            <span>무대 첫 곡 재생</span>
+            {phase === "loading" ? (
+              <>
+                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <span>음원 준비 중...</span>
+              </>
+            ) : (
+              <>
+                <Play size={16} strokeWidth={1.5} />
+                <span>무대 첫 곡 재생</span>
+              </>
+            )}
           </button>
         )}
 
-        <Tooltip title="다음 시드 음원으로 즉시 교차 재생">
+        <Tooltip
+          title={
+            isBusyLocked
+              ? "음원 전환 처리 중입니다 (중복 클릭 방지)"
+              : "다음 시드 음원으로 즉시 교차 재생"
+          }
+        >
           <button
             type="button"
-            onClick={() => playNextSeedTrack(false)}
-            disabled={seed1Pool.length === 0 && seed2Pool.length === 0}
-            className="h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] text-xs font-medium text-[#ededed] flex items-center gap-1.5 cursor-pointer transition-[background-color,transform,opacity] duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() =>
+              playNextSeedTrack(false, false, undefined, "autopilot")
+            }
+            disabled={isPoolEmpty || isBusyLocked}
+            className={`h-9 px-3 rounded-[8px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,transform,opacity] duration-150 active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed ${
+              phase === "loading" && audioTransition?.source === "autopilot"
+                ? "bg-[#2563eb]/20 border-[#2563eb]/60 text-[#60a5fa]"
+                : "bg-[#232325] hover:bg-[#2c2c2f] border-[#ededed]/[0.08] text-[#ededed]"
+            }`}
           >
-            <SkipForward size={16} strokeWidth={1.5} />
-            <span>다음 곡</span>
+            {phase === "loading" && audioTransition?.source === "autopilot" ? (
+              <>
+                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <span>로딩 중</span>
+              </>
+            ) : (
+              <>
+                <SkipForward size={16} strokeWidth={1.5} />
+                <span>다음 곡</span>
+              </>
+            )}
           </button>
         </Tooltip>
 

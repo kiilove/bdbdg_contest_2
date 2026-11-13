@@ -166,6 +166,9 @@ export const VibeFlowAudioCenter = () => {
   const deckBRef = useRef(null);
   const [activeDeck, setActiveDeck] = useState("A");
   const activeDeckRef = useRef("A");
+  const [audioTransition, setAudioTransition] = useState(null);
+  const audioTransitionRef = useRef(null);
+  const lastTransitionTickRef = useRef(0);
   const isCrossfadingRef = useRef(false);
   const isFadingRef = useRef(false);
   const fadeAnimationRef = useRef(null);
@@ -176,6 +179,28 @@ export const VibeFlowAudioCenter = () => {
   const masterVolumeRef = useRef(volume);
   const rafRef = useRef(null);
 
+  const updateAudioTransition = (nextVal) => {
+    audioTransitionRef.current = nextVal;
+    lastTransitionTickRef.current = performance.now();
+    setAudioTransition(nextVal);
+  };
+
+  const updateTransitionProgressThrottled = (progressPct, nowTs) => {
+    const cur = audioTransitionRef.current;
+    if (!cur) return;
+    const clamped = Math.max(0, Math.min(100, Math.round(progressPct)));
+    if (
+      clamped === cur.progress ||
+      (clamped < 100 && nowTs - lastTransitionTickRef.current < 75)
+    ) {
+      return;
+    }
+    const updated = { ...cur, progress: clamped };
+    audioTransitionRef.current = updated;
+    lastTransitionTickRef.current = nowTs;
+    setAudioTransition(updated);
+  };
+
   const registerFadeTimeout = (callback, delayMs) => {
     const timeoutId = setTimeout(() => {
       fadeTimeoutsRef.current = fadeTimeoutsRef.current.filter((id) => id !== timeoutId);
@@ -185,7 +210,7 @@ export const VibeFlowAudioCenter = () => {
     return timeoutId;
   };
 
-  const stopAllFades = () => {
+  const stopAllFades = (clearTransition = true) => {
     if (fadeAnimationRef.current) {
       cancelAnimationFrame(fadeAnimationRef.current);
       fadeAnimationRef.current = null;
@@ -196,6 +221,10 @@ export const VibeFlowAudioCenter = () => {
     }
     isFadingRef.current = false;
     isCrossfadingRef.current = false;
+    if (clearTransition && audioTransitionRef.current) {
+      audioTransitionRef.current = null;
+      setAudioTransition(null);
+    }
   };
 
   // 🎧 [사전 로드 & 재생 추적 Refs — 스테일 클로저 완벽 방지]
@@ -689,10 +718,13 @@ export const VibeFlowAudioCenter = () => {
   const handleDeleteCustomMusic = async (track) => {
     if (!track || !track.id) return;
     try {
-      if (isTrackEqual(currentTrackRef.current, track)) {
+      if (
+        isTrackEqual(currentTrackRef.current, track) ||
+        isTrackEqual(audioTransitionRef.current?.targetTrack, track)
+      ) {
         playRequestIdRef.current += 1;
         deckRequestIdRef.current = { A: 0, B: 0 };
-        stopAllFades();
+        stopAllFades(true);
         isPlayingRef.current = false;
         setIsPlaying(false);
         setCurrentTrack(null);
@@ -839,8 +871,8 @@ export const VibeFlowAudioCenter = () => {
     return Math.round((config.fadeDuration || 0) * 1000);
   };
 
-  // 🎛️ 듀얼 데크 지능형 크로스페이드 (탭별 설정된 페이드 시간 적용 + Promise 경쟁/타이머 누수 방지)
-  const crossfadeToTrack = (track, customDuration) => {
+  // 🎛️ 듀얼 데크 지능형 크로스페이드 (탭별 설정된 페이드 시간 적용 + Promise 경쟁/타이머 누수 방지 + 실시간 전환 상태 표시)
+  const crossfadeToTrack = (track, customDuration, triggerSource = "track") => {
     const playableUrl = getTrackAudioUrl(track);
     if (!track || !playableUrl) {
       message.error("재생 가능한 음원 URL이 없습니다.");
@@ -861,7 +893,7 @@ export const VibeFlowAudioCenter = () => {
     if (!deckBRef.current) deckBRef.current = new Audio();
 
     const requestId = ++playRequestIdRef.current;
-    stopAllFades();
+    stopAllFades(false);
 
     const targetVol = masterVolumeRef.current;
 
@@ -869,6 +901,18 @@ export const VibeFlowAudioCenter = () => {
     if (isModeSwitching) {
       deckRequestIdRef.current.A = requestId;
       deckRequestIdRef.current.B = 0;
+
+      updateAudioTransition({
+        phase: "loading",
+        source: triggerSource,
+        targetDeck: "A",
+        fromDeck: null,
+        targetTrack: track,
+        fromTrack: prevTrack,
+        progress: 0,
+        durationMs: crossfadeDuration,
+        startedAt: Date.now(),
+      });
 
       if (deckBRef.current) {
         try {
@@ -926,6 +970,7 @@ export const VibeFlowAudioCenter = () => {
             if (deckBRef.current) deckBRef.current.volume = 0;
             setDeckAVolume(Math.round(latestVol * 100));
             setDeckBVolume(0);
+            updateAudioTransition(null);
             return;
           }
 
@@ -934,9 +979,21 @@ export const VibeFlowAudioCenter = () => {
           isFadingRef.current = true;
           isCrossfadingRef.current = true;
 
+          updateAudioTransition({
+            phase: "fading-in",
+            source: triggerSource,
+            targetDeck: "A",
+            fromDeck: null,
+            targetTrack: track,
+            fromTrack: prevTrack,
+            progress: 0,
+            durationMs: fadeInDuration,
+            startedAt: audioTransitionRef.current?.startedAt || Date.now(),
+          });
+
           const finalizeFadeIn = () => {
             if (requestId !== playRequestIdRef.current) return;
-            stopAllFades();
+            stopAllFades(true);
             const latestVol = masterVolumeRef.current;
             if (deckA) deckA.volume = latestVol;
             if (deckBRef.current) deckBRef.current.volume = 0;
@@ -956,6 +1013,7 @@ export const VibeFlowAudioCenter = () => {
 
             setDeckAVolume(Math.round((deckA?.volume || 0) * 100));
             setDeckBVolume(0);
+            updateTransitionProgressThrottled(progress * 100, now);
 
             if (progress < 1) {
               fadeAnimationRef.current = requestAnimationFrame(step);
@@ -969,6 +1027,7 @@ export const VibeFlowAudioCenter = () => {
         })
         .catch((err) => {
           if (requestId !== playRequestIdRef.current) return;
+          updateAudioTransition(null);
           if (err.name === "AbortError") return;
           console.warn("[Mode Switch Play Error]:", err);
           message.warning("음원 재생 실패: " + err.message);
@@ -985,6 +1044,18 @@ export const VibeFlowAudioCenter = () => {
     const nextAudio = nextDeckName === "A" ? deckARef.current : deckBRef.current;
 
     const isCurrentlyActive = currentAudio && !currentAudio.paused && isPlayingRef.current;
+
+    updateAudioTransition({
+      phase: "loading",
+      source: triggerSource,
+      targetDeck: nextDeckName,
+      fromDeck: isCurrentlyActive ? currentDeckName : null,
+      targetTrack: track,
+      fromTrack: prevTrack,
+      progress: 0,
+      durationMs: crossfadeDuration,
+      startedAt: Date.now(),
+    });
 
     deckRequestIdRef.current[nextDeckName] = requestId;
     if (!isCurrentlyActive) {
@@ -1004,7 +1075,7 @@ export const VibeFlowAudioCenter = () => {
       nextAudio.load();
     }
     nextAudio.currentTime = 0;
-    nextAudio.volume = (!isCurrentlyActive || crossfadeDuration <= 0) ? targetVol : 0;
+    nextAudio.volume = crossfadeDuration <= 0 ? targetVol : 0;
 
     nextAudio
       .play()
@@ -1038,9 +1109,21 @@ export const VibeFlowAudioCenter = () => {
           isFadingRef.current = true;
           isCrossfadingRef.current = true;
 
+          updateAudioTransition({
+            phase: "crossfading",
+            source: triggerSource,
+            targetDeck: nextDeckName,
+            fromDeck: currentDeckName,
+            targetTrack: track,
+            fromTrack: prevTrack,
+            progress: 0,
+            durationMs: crossfadeDuration,
+            startedAt: audioTransitionRef.current?.startedAt || Date.now(),
+          });
+
           const finalizeCrossfade = () => {
             if (requestId !== playRequestIdRef.current) return;
-            stopAllFades();
+            stopAllFades(true);
             if (currentAudio && activeDeckRef.current !== currentDeckName) {
               try {
                 currentAudio.pause();
@@ -1071,6 +1154,7 @@ export const VibeFlowAudioCenter = () => {
 
             setDeckAVolume(Math.round((deckARef.current?.volume || 0) * 100));
             setDeckBVolume(Math.round((deckBRef.current?.volume || 0) * 100));
+            updateTransitionProgressThrottled(progress * 100, now);
 
             if (progress < 1) {
               fadeAnimationRef.current = requestAnimationFrame(step);
@@ -1081,6 +1165,59 @@ export const VibeFlowAudioCenter = () => {
 
           fadeAnimationRef.current = requestAnimationFrame(step);
           registerFadeTimeout(finalizeCrossfade, crossfadeDuration + 80);
+        } else if (!isCurrentlyActive && crossfadeDuration > 0) {
+          // 정지 상태에서 새 트랙 재생 시에도 탭 설정 페이드인 적용 및 진행률 표시
+          if (currentAudio) {
+            try {
+              currentAudio.pause();
+              currentAudio.currentTime = 0;
+              currentAudio.volume = 0;
+            } catch (e) {}
+          }
+          nextAudio.volume = 0;
+          const startTime = performance.now();
+          isFadingRef.current = true;
+          isCrossfadingRef.current = true;
+
+          updateAudioTransition({
+            phase: "fading-in",
+            source: triggerSource,
+            targetDeck: nextDeckName,
+            fromDeck: null,
+            targetTrack: track,
+            fromTrack: null,
+            progress: 0,
+            durationMs: crossfadeDuration,
+            startedAt: audioTransitionRef.current?.startedAt || Date.now(),
+          });
+
+          const finalizeFadeIn = () => {
+            if (requestId !== playRequestIdRef.current) return;
+            stopAllFades(true);
+            if (nextAudio) nextAudio.volume = masterVolumeRef.current;
+            setDeckAVolume(Math.round((deckARef.current?.volume || 0) * 100));
+            setDeckBVolume(Math.round((deckBRef.current?.volume || 0) * 100));
+          };
+
+          const step = (now) => {
+            if (requestId !== playRequestIdRef.current) return;
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / crossfadeDuration, 1);
+            const latestVol = masterVolumeRef.current;
+            const inVol = latestVol * (progress < 1 ? Math.sin((progress * Math.PI) / 2) : 1);
+            if (nextAudio) nextAudio.volume = Math.max(0, Math.min(latestVol, inVol));
+            setDeckAVolume(Math.round((deckARef.current?.volume || 0) * 100));
+            setDeckBVolume(Math.round((deckBRef.current?.volume || 0) * 100));
+            updateTransitionProgressThrottled(progress * 100, now);
+            if (progress < 1) {
+              fadeAnimationRef.current = requestAnimationFrame(step);
+            } else {
+              finalizeFadeIn();
+            }
+          };
+
+          fadeAnimationRef.current = requestAnimationFrame(step);
+          registerFadeTimeout(finalizeFadeIn, crossfadeDuration + 80);
         } else {
           if (currentAudio) {
             try {
@@ -1092,22 +1229,44 @@ export const VibeFlowAudioCenter = () => {
           if (nextAudio) nextAudio.volume = masterVolumeRef.current;
           setDeckAVolume(Math.round((deckARef.current?.volume || 0) * 100));
           setDeckBVolume(Math.round((deckBRef.current?.volume || 0) * 100));
+          updateAudioTransition(null);
         }
       })
       .catch((err) => {
         if (requestId !== playRequestIdRef.current) return;
+        updateAudioTransition(null);
         if (err.name === "AbortError") return;
         console.warn("[Dual-Deck Crossfade Error]:", err);
         message.warning("음원 재생 실패: " + err.message);
       });
   };
 
-  // 🎵 트랙 재생 / 일시정지 (일시정지/다시재생은 탭 설정 무관 무조건 2.0초 안전 고정)
-  const handlePlayTrack = (track) => {
+  // 🎵 트랙 재생 / 일시정지 (2중 클릭 방지 및 페이드인·아웃 진행 상태 표시)
+  const handlePlayTrack = (track, triggerSource = "track") => {
     const playableUrl = getTrackAudioUrl(track);
     if (!track || !playableUrl) {
       message.error("재생 가능한 음원 URL이 없습니다.");
       return;
+    }
+
+    const activeTrans = audioTransitionRef.current;
+    // 🔒 동일 트랙이 현재 다운로드(loading) 중이거나 페이드아웃 정지 중이면 2중 클릭 무시
+    if (activeTrans && isTrackEqual(activeTrans.targetTrack, track)) {
+      if (
+        activeTrans.phase === "loading" ||
+        activeTrans.phase === "fading-out"
+      ) {
+        return;
+      }
+      // 크로스페이드/페이드인 초기 무음 구간에서 반사적인 2중 클릭으로 일시정지되는 현상 차단 (1.5초 이후에는 수동 정지 허용)
+      const guardMs = triggerSource === "track" ? 1500 : 900;
+      if (
+        (activeTrans.phase === "crossfading" ||
+          activeTrans.phase === "fading-in") &&
+        Date.now() - activeTrans.startedAt < guardMs
+      ) {
+        return;
+      }
     }
 
     const isSameTrack = isTrackEqual(currentTrackRef.current, track);
@@ -1124,7 +1283,7 @@ export const VibeFlowAudioCenter = () => {
         // 🔒 [일시정지] 1단계: 즉시 상태 잠금 및 모든 백그라운드 프리로드/타이머 차단
         setIsPlaying(false);
         isPlayingRef.current = false;
-        stopAllFades();
+        stopAllFades(false);
         stopTracking();
 
         // 🛑 대기 데크 및 프리로드 즉시 완전 소거
@@ -1145,9 +1304,21 @@ export const VibeFlowAudioCenter = () => {
         const fadeOutDuration = 2000; // 2.0초 고정
         isFadingRef.current = true;
 
+        updateAudioTransition({
+          phase: "fading-out",
+          source: triggerSource,
+          targetDeck: curDeckName,
+          fromDeck: curDeckName,
+          targetTrack: track,
+          fromTrack: track,
+          progress: 0,
+          durationMs: fadeOutDuration,
+          startedAt: Date.now(),
+        });
+
         const finalizePause = () => {
           if (requestId !== playRequestIdRef.current) return;
-          stopAllFades();
+          stopAllFades(true);
           if (curAudio) {
             try {
               curAudio.pause();
@@ -1176,6 +1347,7 @@ export const VibeFlowAudioCenter = () => {
 
           setDeckAVolume(activeDeckRef.current === "A" ? Math.round((curAudio?.volume || 0) * 100) : 0);
           setDeckBVolume(activeDeckRef.current === "B" ? Math.round((curAudio?.volume || 0) * 100) : 0);
+          updateTransitionProgressThrottled(progress * 100, now);
 
           if (progress < 1) {
             fadeAnimationRef.current = requestAnimationFrame(fadeOutStep);
@@ -1193,7 +1365,7 @@ export const VibeFlowAudioCenter = () => {
         deckRequestIdRef.current[curDeckName === "A" ? "B" : "A"] = 0;
 
         // 🔊 [다시재생] 1단계: 모든 잔여 페이드 정리 & 대기 데크 정지
-        stopAllFades();
+        stopAllFades(false);
         if (otherAudio) {
           try {
             otherAudio.pause();
@@ -1201,6 +1373,18 @@ export const VibeFlowAudioCenter = () => {
             otherAudio.volume = 0;
           } catch (e) {}
         }
+
+        updateAudioTransition({
+          phase: "loading",
+          source: triggerSource,
+          targetDeck: curDeckName,
+          fromDeck: null,
+          targetTrack: track,
+          fromTrack: null,
+          progress: 0,
+          durationMs: 2000,
+          startedAt: Date.now(),
+        });
 
         // 🔊 [다시재생] 2단계: 0에서 시작하여 2.0초 동안 부드럽게 페이드인
         curAudio.volume = 0;
@@ -1226,9 +1410,21 @@ export const VibeFlowAudioCenter = () => {
             const fadeInDuration = 2000; // 2.0초 고정
             isFadingRef.current = true;
 
+            updateAudioTransition({
+              phase: "fading-in",
+              source: triggerSource,
+              targetDeck: curDeckName,
+              fromDeck: null,
+              targetTrack: track,
+              fromTrack: null,
+              progress: 0,
+              durationMs: fadeInDuration,
+              startedAt: audioTransitionRef.current?.startedAt || Date.now(),
+            });
+
             const finalizeResume = () => {
               if (requestId !== playRequestIdRef.current) return;
-              stopAllFades();
+              stopAllFades(true);
               const latestVol = masterVolumeRef.current;
               if (curAudio) curAudio.volume = latestVol;
               setDeckAVolume(activeDeckRef.current === "A" ? Math.round(latestVol * 100) : 0);
@@ -1248,6 +1444,7 @@ export const VibeFlowAudioCenter = () => {
 
               setDeckAVolume(activeDeckRef.current === "A" ? Math.round((curAudio?.volume || 0) * 100) : 0);
               setDeckBVolume(activeDeckRef.current === "B" ? Math.round((curAudio?.volume || 0) * 100) : 0);
+              updateTransitionProgressThrottled(progress * 100, now);
 
               if (progress < 1) {
                 fadeAnimationRef.current = requestAnimationFrame(fadeInStep);
@@ -1261,6 +1458,7 @@ export const VibeFlowAudioCenter = () => {
           })
           .catch((err) => {
             if (requestId !== playRequestIdRef.current) return;
+            updateAudioTransition(null);
             if (err.name === "AbortError") return;
             message.error("음원 재생 실패: " + err.message);
           });
@@ -1269,7 +1467,7 @@ export const VibeFlowAudioCenter = () => {
     }
 
     // 🔀 다른 곡 선택 시 듀얼 데크 크로스페이드 실행
-    crossfadeToTrack(track);
+    crossfadeToTrack(track, undefined, triggerSource);
   };
 
   const handleSliderChange = (value) => {
@@ -1497,8 +1695,18 @@ export const VibeFlowAudioCenter = () => {
   }, [categoryBaseTracks, selectedDivision, searchText, allAvailableTracks]);
   filteredTracksRef.current = filteredTracks;
 
-  // ⏪ 이전 곡 재생
+  // ⏪ 이전 곡 재생 (2중 클릭 방지 및 상태 피드백 연동)
   const handlePrevTrack = () => {
+    const activeTrans = audioTransitionRef.current;
+    if (
+      activeTrans &&
+      (activeTrans.phase === "loading" ||
+        activeTrans.phase === "fading-out" ||
+        Date.now() - activeTrans.startedAt < 900)
+    ) {
+      return;
+    }
+
     const list = filteredTracks.length > 0 ? filteredTracks : allAvailableTracks;
     if (!list || list.length === 0) {
       message.info("재생할 음원 목록이 없습니다.");
@@ -1506,7 +1714,7 @@ export const VibeFlowAudioCenter = () => {
     }
 
     if (!currentTrack) {
-      crossfadeToTrack(list[0], 2000);
+      crossfadeToTrack(list[0], 2000, "prev");
       return;
     }
 
@@ -1528,20 +1736,30 @@ export const VibeFlowAudioCenter = () => {
       if (curAudio) {
         curAudio.currentTime = 0;
         if (!isPlaying) {
-          handlePlayTrack(currentTrack);
+          handlePlayTrack(currentTrack, "prev");
         }
       }
       return;
     }
 
-    crossfadeToTrack(targetTrack, 2000);
+    crossfadeToTrack(targetTrack, 2000, "prev");
   };
 
-  // ⏩ 다음 곡 재생
+  // ⏩ 다음 곡 재생 (2중 클릭 방지 및 상태 피드백 연동)
   const handleNextTrack = () => {
+    const activeTrans = audioTransitionRef.current;
+    if (
+      activeTrans &&
+      (activeTrans.phase === "loading" ||
+        activeTrans.phase === "fading-out" ||
+        Date.now() - activeTrans.startedAt < 900)
+    ) {
+      return;
+    }
+
     // 1. 대기 데크에 이미 프리로드된 트랙이 있다면 즉시 전환
     if (preCuedTrackRef.current && preCuedTrackRef.current.track) {
-      playNextSeedTrack(false, false, 2000);
+      playNextSeedTrack(false, false, 2000, "next");
       return;
     }
 
@@ -1552,7 +1770,7 @@ export const VibeFlowAudioCenter = () => {
     }
 
     if (!currentTrack) {
-      crossfadeToTrack(list[0], 2000);
+      crossfadeToTrack(list[0], 2000, "next");
       return;
     }
 
@@ -1572,13 +1790,13 @@ export const VibeFlowAudioCenter = () => {
       if (curAudio) {
         curAudio.currentTime = 0;
         if (!isPlaying) {
-          handlePlayTrack(currentTrack);
+          handlePlayTrack(currentTrack, "next");
         }
       }
       return;
     }
 
-    crossfadeToTrack(targetTrack, 2000);
+    crossfadeToTrack(targetTrack, 2000, "next");
   };
 
   // 🌱 [시드 1] 1순위 정밀 매칭 풀
@@ -1796,7 +2014,24 @@ export const VibeFlowAudioCenter = () => {
   };
 
   // 🎵 다음 시드 음원 재생 트리거
-  const playNextSeedTrack = (isStageTransition = false, silent = false, customDuration) => {
+  const playNextSeedTrack = (
+    isStageTransition = false,
+    silent = false,
+    customDuration,
+    triggerSource = "autopilot"
+  ) => {
+    if (!isStageTransition && (triggerSource === "autopilot" || triggerSource === "next")) {
+      const activeTrans = audioTransitionRef.current;
+      if (
+        activeTrans &&
+        (activeTrans.phase === "loading" ||
+          activeTrans.phase === "fading-out" ||
+          Date.now() - activeTrans.startedAt < 900)
+      ) {
+        return;
+      }
+    }
+
     const latestPlayed = playedTrackIdsRef.current;
     let nextTrackInfo = null;
     if (!isStageTransition && preCuedTrackRef.current && preCuedTrackRef.current.track) {
@@ -1829,7 +2064,11 @@ export const VibeFlowAudioCenter = () => {
         ? customDuration
         : getFadeDuration(track, currentTrackRef.current);
 
-    crossfadeToTrack(track, effectiveDuration);
+    crossfadeToTrack(
+      track,
+      effectiveDuration,
+      isStageTransition ? "stage" : triggerSource
+    );
   };
 
   getNextSeedTrackRef.current = getNextSeedTrack;
@@ -1926,10 +2165,11 @@ export const VibeFlowAudioCenter = () => {
 
       const activeCfg = getEffectiveTabConfig(currentTrackRef.current);
       if (activeCfg.autoNext && playNextSeedTrackRef.current) {
-        playNextSeedTrackRef.current(false);
+        playNextSeedTrackRef.current(false, false, undefined, "auto-ended");
       } else {
         playRequestIdRef.current += 1;
         deckRequestIdRef.current = { A: 0, B: 0 };
+        stopAllFades(true);
         setIsPlaying(false);
         isPlayingRef.current = false;
         stopTracking();
@@ -1992,6 +2232,7 @@ export const VibeFlowAudioCenter = () => {
                 currentTime={currentTime}
                 trackDuration={trackDuration}
                 volume={volume}
+                audioTransition={audioTransition}
                 handleVolumeChange={handleVolumeChange}
                 handleSmoothVolumeChange={handleSmoothVolumeChange}
                 handleSliderChange={handleSliderChange}
@@ -2022,6 +2263,7 @@ export const VibeFlowAudioCenter = () => {
                 activeSeedLevel={activeSeedLevel}
                 currentTrack={currentTrack}
                 isPlaying={isPlaying}
+                audioTransition={audioTransition}
                 handlePlayTrack={handlePlayTrack}
                 playNextSeedTrack={playNextSeedTrack}
                 onOpenGuideModal={() => setIsGuideModalOpen(true)}
@@ -2063,6 +2305,7 @@ export const VibeFlowAudioCenter = () => {
                 setSelectedDivision={setSelectedDivision}
                 currentTrack={currentTrack}
                 isPlaying={isPlaying}
+                audioTransition={audioTransition}
                 handlePlayTrack={handlePlayTrack}
                 handleDeleteCustomMusic={handleDeleteCustomMusic}
                 seed1Pool={seed1Pool}
