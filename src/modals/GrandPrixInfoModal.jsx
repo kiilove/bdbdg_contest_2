@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useRef, useState } from "react";
-import { Trophy, RefreshCw, Save, X } from "lucide-react";
+import { Trophy, RefreshCw, X } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -11,31 +11,36 @@ import {
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { generateUUID } from "../functions/functions";
 
-const initCategoryInfo = {
-  contestCategoryId: "",
-  contestCategoryIndex: "",
-  contestCategoryTitle: "",
+const createInitCategoryInfo = (nextIndex = 1, defaultJudgeCount = 7) => ({
+  contestCategoryId: uuidv4(),
+  contestCategoryIndex: nextIndex,
+  contestCategoryTitle: "종목 그랑프리",
   contestCategorySection: "그랑프리",
-  contestCategroyGender: "남",
+  contestCategoryGender: "남",
   contestCategoryPriceType: "기본참가비",
-  contestCategroyIsOverall: "off",
+  contestCategoryIsOverall: true,
   contestCategoryType: "그랑프리",
   contestCategoryJudgeType: "ranking",
-};
+  contestCategoryJudgeCount: defaultJudgeCount,
+});
 
 const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setmessage] = useState({});
   const { currentContest } = useContext(CurrentContestContext);
-  const [categoryInfo, setCategoryInfo] = useState({
-    ...initCategoryInfo,
-    contestCategoryIndex: Number.parseInt(propState.count) + 1,
-  });
+
+  const nextIdx = Number.parseInt(propState?.count, 10)
+    ? Number.parseInt(propState.count, 10) + 1
+    : 1;
+
+  const [categoryInfo, setCategoryInfo] = useState(() =>
+    propState?.title === "그랑프리수정" && propState?.info
+      ? { ...propState.info }
+      : createInitCategoryInfo(nextIdx)
+  );
   const [categorysList, setCategorysList] = useState({});
   const [categorysArray, setCategorysArray] = useState([]);
   const [gradesList, setGradesList] = useState({});
-  const [gradesArray, setGradesArray] = useState([]);
-
   const [grandPrixArray, setGrandPrixArray] = useState([]);
 
   const categoryInfoRef = useRef({});
@@ -49,190 +54,230 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   );
   const contestGradeUpdate = useFirestoreUpdateData("contest_grades_list");
 
-  const getCategorys = async () => {
-    const returnCategorys = await contestCategoryDocument.getDocument(
-      currentContest.contests.contestCategorysListId
-    );
-    setCategorysList({ ...returnCategorys });
-    setCategorysArray([...returnCategorys.categorys]);
-  };
+  const loadInitialData = async () => {
+    const catListId = currentContest?.contests?.contestCategorysListId;
+    const gradeListId = currentContest?.contests?.contestGradesListId;
+    if (!catListId || !gradeListId) return;
 
-  const getGrades = async () => {
-    const returnGrades = await contestGradeDocument.getDocument(
-      currentContest.contests.contestGradesListId
-    );
-    setGradesList({ ...returnGrades });
-    setGradesArray([...returnGrades.grades]);
-    return returnGrades;
+    const [returnCategorys, returnGrades] = await Promise.all([
+      contestCategoryDocument.getDocument(catListId),
+      contestGradeDocument.getDocument(gradeListId),
+    ]);
+
+    const cats = returnCategorys?.categorys || [];
+    const grds = returnGrades?.grades || [];
+
+    setCategorysList({ ...(returnCategorys || {}) });
+    setCategorysArray([...cats]);
+    setGradesList({ ...(returnGrades || {}) });
+
+    const sampleJudgeCount =
+      Number(
+        cats.find((c) => Number(c?.contestCategoryJudgeCount) > 0)
+          ?.contestCategoryJudgeCount
+      ) || 7;
+
+    if (propState?.title === "그랑프리수정" && propState?.info) {
+      const targetCatId = propState.info.contestCategoryId;
+      setCategoryInfo({
+        ...propState.info,
+        contestCategoryJudgeCount:
+          Number(propState.info.contestCategoryJudgeCount) || sampleJudgeCount,
+      });
+
+      const existingLinkedGrades = grds
+        .filter((g) => g.refCategoryId === targetCatId)
+        .sort(
+          (a, b) =>
+            Number(a.contestGradeIndex ?? 0) - Number(b.contestGradeIndex ?? 0)
+        )
+        .map((g) => ({
+          contestGradeId: g.contestGradeId,
+          contestCategoryTitle: g.contestGradeTitle,
+          contestCategoryId: g.originalRefCategoryId || "",
+        }));
+
+      setGrandPrixArray(existingLinkedGrades);
+    } else {
+      setCategoryInfo((prev) => ({
+        ...prev,
+        contestCategoryJudgeCount:
+          Number(prev.contestCategoryJudgeCount) || sampleJudgeCount,
+      }));
+      // 신규 추가 시 그랑프리 대상(contestCategoryIsOverall === true) 하위 종목을 자동 프리뷰 로드
+      const overallSourceCategories = cats
+        .filter(
+          (f) =>
+            Boolean(f.contestCategoryIsOverall) === true &&
+            f.contestCategorySection !== "그랑프리"
+        )
+        .sort(
+          (a, b) =>
+            Number(a.contestCategoryIndex ?? 0) -
+            Number(b.contestCategoryIndex ?? 0)
+        )
+        .map((c) => ({
+          contestGradeId: "",
+          contestCategoryTitle: c.contestCategoryTitle,
+          contestCategoryId: c.contestCategoryId,
+        }));
+      setGrandPrixArray(overallSourceCategories);
+    }
   };
 
   const handleRemoveGrades = (gradeIndex, gradeArray) => {
     const dummy = [...gradeArray];
     dummy.splice(gradeIndex, 1);
-    setGrandPrixArray([...dummy]);
+    setGrandPrixArray(dummy);
   };
 
   const handleInitGrandPrixFromCategoriesToGrades = () => {
-    setGrandPrixArray([]);
-    const grandPrixGrades = categorysArray.filter(
-      (f) =>
-        f.contestCategoryIsOverall === true &&
-        f.contestCategorySection !== "그랑프리"
+    const existingByOrigId = new Map(
+      grandPrixArray
+        .filter((g) => g.contestCategoryId && g.contestGradeId)
+        .map((g) => [g.contestCategoryId, g.contestGradeId])
     );
-    setGrandPrixArray([...grandPrixGrades]);
-    console.log(grandPrixGrades);
+
+    const grandPrixGrades = categorysArray
+      .filter(
+        (f) =>
+          Boolean(f.contestCategoryIsOverall) === true &&
+          f.contestCategorySection !== "그랑프리"
+      )
+      .sort(
+        (a, b) =>
+          Number(a.contestCategoryIndex ?? 0) -
+          Number(b.contestCategoryIndex ?? 0)
+      )
+      .map((c) => ({
+        contestGradeId: existingByOrigId.get(c.contestCategoryId) || "",
+        contestCategoryTitle: c.contestCategoryTitle,
+        contestCategoryId: c.contestCategoryId,
+      }));
+
+    setGrandPrixArray(grandPrixGrades);
   };
 
-  const handleGradeAdd = async (objGrade, arrNewGrade) => {
-    console.log("Adding grades to Grand Prix:", objGrade, arrNewGrade);
+  const syncGrandPrixGradesToFirestore = async (targetCategoryId) => {
+    const gradeListId = currentContest?.contests?.contestGradesListId;
+    if (!gradeListId || !targetCategoryId) return;
 
-    if (objGrade && arrNewGrade?.length > 0) {
-      const newGrades = arrNewGrade.map((grandPrix, gIdx) => {
-        const {
-          contestCategoryTitle: contestGradeTitle,
-          contestCategoryId: originalRefCategoryId,
-        } = grandPrix;
+    const latestGradesDoc =
+      (await contestGradeDocument.getDocument(gradeListId)) || gradesList || {};
+    const allGrades = Array.isArray(latestGradesDoc.grades)
+      ? latestGradesDoc.grades
+      : [];
 
-        const refCategoryId = categoryInfo.contestCategoryId;
-        const contestGradeIndex = gIdx + 1;
-        const isCompared = false;
-        const contestGradeId = generateUUID();
-
-        const newGradeInfo = {
-          contestGradeId,
-          contestGradeIndex,
-          contestGradeTitle,
-          isCompared,
-          refCategoryId,
-          originalRefCategoryId,
-        };
-
-        console.log("New Grade Info:", newGradeInfo);
-
-        return newGradeInfo;
-      });
-
-      console.log("Mapped new grades:", newGrades);
-
-      if (newGrades?.length > 0) {
-        objGrade.grades = [...objGrade.grades, ...newGrades];
-
-        try {
-          console.log("Updated objGrade with new grades:", objGrade);
-
-          await contestGradeUpdate.updateData(
-            currentContest.contests.contestGradesListId,
-            {
-              ...objGrade,
-            }
-          );
-
-          setGradesList((prev) => ({ ...prev }));
-          console.log("Grade addition completed:", objGrade);
-        } catch (error) {
-          console.log("Error updating grades:", error);
+    // 기존 동일 그랑프리 종목 소속 체급의 ID 보존 맵 (무대/심판배정 ID 유지)
+    const prevByOrigId = new Map();
+    allGrades
+      .filter((g) => g.refCategoryId === targetCategoryId)
+      .forEach((g) => {
+        if (g.originalRefCategoryId) {
+          prevByOrigId.set(g.originalRefCategoryId, g);
         }
-      }
-    }
-  };
-
-  const handleUpdateGrandPrixGrades = async () => {
-    const gradesData = await getGrades();
-    await handleGradeAdd(gradesData, grandPrixArray);
-  };
-
-  const updateCategory = (updatedCategoryInfo, action) => {
-    const dummy = [...categorysArray];
-    if (action === "추가") {
-      dummy.push({
-        ...updatedCategoryInfo,
-        contestCategoryId: uuidv4(),
-        contestCategoryIsOverall: true,
       });
-    } else if (action === "수정") {
-      const index = dummy.findIndex(
-        (category) => category.contestCategoryId === propState.categoryId
-      );
-      if (index !== -1) {
-        dummy.splice(index, 1, {
-          ...dummy[index],
-          ...updatedCategoryInfo,
-          contestCategoryIsOverall: true,
-        });
-      }
-    }
-    return dummy;
+
+    const otherGrades = allGrades.filter(
+      (g) => g.refCategoryId !== targetCategoryId && g.refCategoryId !== ""
+    );
+
+    const syncedGpGrades = grandPrixArray.map((item, idx) => {
+      const prev = prevByOrigId.get(item.contestCategoryId);
+      return {
+        contestGradeId:
+          item.contestGradeId || prev?.contestGradeId || generateUUID(),
+        contestGradeIndex: idx + 1,
+        contestGradeTitle: item.contestCategoryTitle,
+        isCompared: Boolean(prev?.isCompared),
+        refCategoryId: targetCategoryId,
+        originalRefCategoryId: item.contestCategoryId,
+      };
+    });
+
+    await contestGradeUpdate.updateData(gradeListId, {
+      ...latestGradesDoc,
+      grades: [...otherGrades, ...syncedGpGrades],
+    });
   };
 
   const handleUpdateCategorys = async () => {
-    if (
-      categoryInfoRef.current.contestCategoryIndex.value === "" ||
-      categoryInfoRef.current.contestCategoryTitle.value === ""
-    ) {
+    const idxVal = Number.parseInt(categoryInfo.contestCategoryIndex, 10);
+    const titleVal = (categoryInfo.contestCategoryTitle || "").trim();
+    if (!Number.isFinite(idxVal) || !titleVal) {
+      setmessage({
+        variant: "warning",
+        title: "필수 항목 확인",
+        body: "개최 순서와 종목명(예: 종목 그랑프리)을 입력해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
-    const updatedCategoryInfo = Object.keys(categoryInfoRef.current).reduce(
-      (updatedInfo, key) => {
-        const currentElement = categoryInfoRef.current[key];
-        updatedInfo[key] =
-          currentElement.type === "checkbox"
-            ? currentElement.checked
-            : currentElement.value;
-        return updatedInfo;
-      },
-      {}
+    const targetCategoryId =
+      propState?.title === "그랑프리수정"
+        ? propState.categoryId || categoryInfo.contestCategoryId
+        : categoryInfo.contestCategoryId || uuidv4();
+
+    const normalizedCategory = {
+      ...categoryInfo,
+      contestCategoryId: targetCategoryId,
+      contestCategoryIndex: idxVal,
+      contestCategoryTitle: titleVal,
+      contestCategorySection:
+        (categoryInfo.contestCategorySection || "").trim() || "그랑프리",
+      contestCategoryType:
+        (categoryInfo.contestCategoryType || "").trim() || "그랑프리",
+      contestCategoryJudgeType:
+        categoryInfo.contestCategoryJudgeType || "ranking",
+      contestCategoryJudgeCount:
+        Number.parseInt(categoryInfo.contestCategoryJudgeCount, 10) || 7,
+      contestCategoryIsOverall: true,
+      contestCategoryGender: categoryInfo.contestCategoryGender || "남",
+      contestCategoryPriceType:
+        categoryInfo.contestCategoryPriceType || "기본참가비",
+    };
+
+    const nextCategories = [...categorysArray];
+    const existingIndex = nextCategories.findIndex(
+      (c) => c.contestCategoryId === targetCategoryId
     );
-
-    setCategoryInfo((prevInfo) => ({
-      ...prevInfo,
-      ...updatedCategoryInfo,
-    }));
-
-    const action = propState.title === "그랑프리추가" ? "추가" : "수정";
-    const dummy = updateCategory(updatedCategoryInfo, action);
-
-    await handleSaveCategorys(dummy);
-    setCategorysArray(dummy);
-    setState(dummy);
-
-    if (action === "추가") {
-      setCategoryInfo({
-        ...initCategoryInfo,
-        contestCategoryIsOverall: true,
-        contestCategoryIndex:
-          Number.parseInt(updatedCategoryInfo.contestCategoryIndex) + 1,
-        contestCategoryJudgeCount: Number.parseInt(
-          updatedCategoryInfo.contestCategoryJudgeCount
-        ),
-      });
-      categoryInfoRef.current.contestCategorySection?.focus?.();
+    if (existingIndex !== -1) {
+      nextCategories.splice(existingIndex, 1, normalizedCategory);
+    } else {
+      nextCategories.push(normalizedCategory);
     }
-  };
 
-  const handleSaveCategorys = async (data) => {
     try {
       await contestCategoryUpdate.updateData(
         currentContest.contests.contestCategorysListId,
         {
           ...categorysList,
-          categorys: [...data],
+          categorys: nextCategories,
         }
       );
+
+      await syncGrandPrixGradesToFirestore(targetCategoryId);
+
+      setCategorysArray(nextCategories);
+      setState(nextCategories);
+
       setmessage({
         variant: "success",
-        title: "그랑프리 종목 저장 완료",
-        body: "그랑프리 종목 설정이 정상적으로 저장되었습니다.",
+        title: "종목 그랑프리 저장 완료",
+        body: `종목 그랑프리 및 하위 우승자 연동 체급(${grandPrixArray.length}개)이 함께 저장되었습니다.`,
         isButton: true,
         confirmButtonText: "확인",
       });
       setMsgOpen(true);
     } catch (error) {
-      console.log(error);
+      console.error(error);
       setmessage({
         variant: "error",
         title: "그랑프리 저장 실패",
-        body: "그랑프리 종목을 저장하는 중 오류가 발생했습니다.",
+        body: "그랑프리 종목 및 연동 체급을 저장하는 중 오류가 발생했습니다.",
         body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
@@ -243,23 +288,23 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
 
   const handleInputValues = (e) => {
     const { name, value } = e.target;
-    setCategoryInfo({
-      ...categoryInfo,
+    setCategoryInfo((prev) => ({
+      ...prev,
       [name]:
         name === "contestCategoryIsOverall"
           ? e.target.checked
           : name === "contestCategoryIndex"
-          ? Number.parseInt(value)
+          ? value === ""
+            ? ""
+            : Number.parseInt(value, 10)
           : value,
-    });
+    }));
   };
 
   useEffect(() => {
-    getCategorys();
-    if (propState.title === "그랑프리수정") {
-      setCategoryInfo({ ...propState.info });
-    }
-    categoryInfoRef.current.contestCategorySection?.focus?.();
+    loadInitialData();
+    categoryInfoRef.current.contestCategoryTitle?.focus?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -269,14 +314,14 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         message={message}
         onCancel={() => {
           setMsgOpen(false);
-          if (message?.variant !== "error") {
+          if (message?.variant === "success") {
             setRefresh(true);
             setClose();
           }
         }}
         onConfirm={() => {
           setMsgOpen(false);
-          if (message?.variant !== "error") {
+          if (message?.variant === "success") {
             setRefresh(true);
             setClose();
           }
@@ -287,17 +332,22 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
       <div className="flex w-full items-center justify-between px-5 py-4 border-b border-[#171717]/[0.08] bg-[#fafafa] shrink-0 sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-[8px] bg-white border border-[#171717]/[0.08] flex items-center justify-center">
-            <Trophy size={15} strokeWidth={1.5} className="text-[#525252]" />
+            <Trophy size={15} strokeWidth={1.5} className="text-[#2563eb]" />
           </div>
-          <h1 className="text-base font-semibold text-[#171717] m-0">
-            {propState?.title || "그랑프리 설정"}
-          </h1>
+          <div>
+            <h1 className="text-base font-semibold text-[#171717] m-0">
+              {propState?.title || "종목 그랑프리 설정"}
+            </h1>
+            <p className="text-[11px] text-[#737373] m-0 mt-0.5">
+              그랑프리 대상(Overall)으로 체크된 하위 종목의 각 체급 1위 우승자를 자동으로 끌고 옵니다.
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => setClose()}
           aria-label="닫기"
-          className="h-8 w-8 rounded-[8px] inline-flex items-center justify-center text-[#737373] hover:bg-[#e4e4e7]/70 hover:text-[#171717] transition-colors duration-150 cursor-pointer"
+          className="h-8 w-8 rounded-[8px] inline-flex items-center justify-center text-[#737373] hover:bg-[#e4e4e7]/70 hover:text-[#171717] transition-colors duration-150 cursor-pointer border-0 bg-transparent"
         >
           <X size={16} strokeWidth={1.5} />
         </button>
@@ -311,27 +361,9 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
               개최 순서
             </label>
             <input
-              type="text"
+              type="number"
               value={categoryInfo.contestCategoryIndex ?? ""}
-              onChange={(e) => {
-                const value = e.target.value;
-                const parsedValue = Number.parseInt(value, 10);
-                if (!isNaN(parsedValue)) {
-                  handleInputValues({
-                    target: {
-                      name: "contestCategoryIndex",
-                      value: parsedValue,
-                    },
-                  });
-                } else {
-                  handleInputValues({
-                    target: {
-                      name: "contestCategoryIndex",
-                      value: "",
-                    },
-                  });
-                }
-              }}
+              onChange={handleInputValues}
               ref={(ref) => (categoryInfoRef.current.contestCategoryIndex = ref)}
               name="contestCategoryIndex"
               className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm font-mono tabular-nums text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
@@ -341,18 +373,18 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
             <label className="text-xs font-medium text-[#525252] sm:text-right">
-              구분
+              구분 (고정 권장)
             </label>
             <input
               type="text"
               name="contestCategorySection"
-              value={categoryInfo.contestCategorySection ?? ""}
-              onChange={(e) => handleInputValues(e)}
+              value={categoryInfo.contestCategorySection ?? "그랑프리"}
+              onChange={handleInputValues}
               ref={(ref) =>
                 (categoryInfoRef.current.contestCategorySection = ref)
               }
               className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
-              placeholder="예: 그랑프리"
+              placeholder="그랑프리 (하위 우승자 자동연동 필수값)"
             />
           </div>
 
@@ -363,9 +395,9 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
             <input
               type="text"
               name="contestCategoryType"
-              placeholder="예: 피지크, 보디빌딩"
+              placeholder="예: 그랑프리"
               value={categoryInfo.contestCategoryType ?? ""}
-              onChange={(e) => handleInputValues(e)}
+              onChange={handleInputValues}
               ref={(ref) => (categoryInfoRef.current.contestCategoryType = ref)}
               className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
             />
@@ -378,8 +410,9 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
             <input
               type="text"
               name="contestCategoryTitle"
+              placeholder="예: 종목 그랑프리"
               value={categoryInfo.contestCategoryTitle ?? ""}
-              onChange={(e) => handleInputValues(e)}
+              onChange={handleInputValues}
               ref={(ref) => (categoryInfoRef.current.contestCategoryTitle = ref)}
               className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
             />
@@ -391,8 +424,8 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
             </label>
             <select
               name="contestCategoryJudgeType"
-              onChange={(e) => handleInputValues(e)}
-              value={categoryInfo.contestCategoryJudgeType}
+              onChange={handleInputValues}
+              value={categoryInfo.contestCategoryJudgeType || "ranking"}
               ref={(ref) =>
                 (categoryInfoRef.current.contestCategoryJudgeType = ref)
               }
@@ -408,10 +441,10 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
               심판 수
             </label>
             <input
-              type="text"
+              type="number"
               name="contestCategoryJudgeCount"
-              value={categoryInfo.contestCategoryJudgeCount ?? ""}
-              onChange={(e) => handleInputValues(e)}
+              value={categoryInfo.contestCategoryJudgeCount ?? 7}
+              onChange={handleInputValues}
               ref={(ref) =>
                 (categoryInfoRef.current.contestCategoryJudgeCount = ref)
               }
@@ -419,63 +452,54 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2 pt-1">
-            <label className="text-xs font-medium text-[#525252] sm:text-right">
-              그랑프리 종목
+          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-start gap-2 pt-2 border-t border-[#171717]/[0.06]">
+            <label className="text-xs font-medium text-[#525252] sm:text-right pt-2">
+              연동 하위 종목
             </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleInitGrandPrixFromCategoriesToGrades()}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.14] transition-colors duration-150 cursor-pointer"
-              >
-                <RefreshCw
-                  size={14}
-                  strokeWidth={1.5}
-                  className="text-[#525252]"
-                />
-                <span>그랑프리 종목 불러오기</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleUpdateGrandPrixGrades()}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] text-xs font-medium border border-[#171717]/[0.08] transition-colors duration-150 cursor-pointer"
-              >
-                <Save size={14} strokeWidth={1.5} className="text-[#525252]" />
-                <span>그랑프리 체급으로 저장</span>
-              </button>
-            </div>
-          </div>
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleInitGrandPrixFromCategoriesToGrades}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.14] transition-colors duration-150 cursor-pointer"
+                >
+                  <RefreshCw
+                    size={13}
+                    strokeWidth={1.6}
+                    className="text-[#2563eb]"
+                  />
+                  <span>그랑프리 대상 종목 다시 불러오기</span>
+                </button>
+                <span className="text-[11px] text-[#737373]">
+                  하단 [저장] 클릭 시 아래 연동 체급이 함께 저장됩니다.
+                </span>
+              </div>
 
-          {grandPrixArray?.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-start gap-2">
-              <label className="text-xs font-medium text-[#525252] sm:text-right pt-1.5">
-                체급 목록
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {grandPrixArray.map((grand, gIdx) => {
-                  const { contestCategoryTitle: categoryTitle } = grand;
-                  return (
+              {grandPrixArray?.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {grandPrixArray.map((grand, gIdx) => (
                     <span
-                      key={gIdx}
-                      className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.12] text-xs font-medium text-[#171717]"
+                      key={grand.contestCategoryId || gIdx}
+                      className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-[6px] bg-[#ffffff] border border-[#2563eb]/25 text-xs font-medium text-[#171717]"
                     >
-                      <span>{categoryTitle}</span>
+                      <span>{grand.contestCategoryTitle}</span>
                       <button
                         type="button"
                         className="inline-flex items-center justify-center w-4 h-4 rounded-[4px] text-[#737373] hover:bg-[#dc2626]/[0.10] hover:text-[#dc2626] transition-colors duration-150 cursor-pointer border-0 bg-transparent"
-                        onClick={() => {
-                          handleRemoveGrades(gIdx, grandPrixArray);
-                        }}
+                        onClick={() => handleRemoveGrades(gIdx, grandPrixArray)}
                       >
                         <X size={12} strokeWidth={1.5} />
                       </button>
                     </span>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#b45309] m-0">
+                  연동된 하위 종목이 없습니다. 일반 종목에서 [그랑프리 대상]을 체크한 뒤 불러오기를 눌러주세요.
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -491,7 +515,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         <button
           type="button"
           className="inline-flex items-center justify-center h-9 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors duration-150 cursor-pointer border-0"
-          onClick={() => handleUpdateCategorys()}
+          onClick={handleUpdateCategorys}
         >
           저장
         </button>
