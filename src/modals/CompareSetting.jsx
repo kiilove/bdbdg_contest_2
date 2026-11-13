@@ -1,14 +1,6 @@
 "use client";
 
 import React, { useContext, useEffect, useRef, useState } from "react";
-import {
-  Users,
-  Info,
-  X,
-  RefreshCw,
-  CheckCircle2,
-  BarChart3,
-} from "lucide-react";
 import LoadingPage from "../pages/LoadingPage";
 import {
   useFirebaseRealtimeGetDocument,
@@ -20,8 +12,12 @@ import {
 } from "../hooks/useFirestores";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { InputNumber } from "antd";
-import { BibTag, StatusDot } from "../components/ui/BibTag";
+import { Card, Button, Space, Tag, InputNumber, Progress, Badge } from "antd";
+import {
+  TrophyOutlined,
+  InfoCircleOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 
 const CompareSetting = ({
   stageInfo,
@@ -48,18 +44,19 @@ const CompareSetting = ({
     voteRange: "all",
   });
 
-  const [, setCompareStatus] = useState({
+  const [compareStatus, setCompareStatus] = useState({
     compareStart: false,
     compareEnd: false,
     compareCancel: false,
     compareIng: false,
   });
+  void compareStatus;
 
   const [votedResult, setVotedResult] = useState([]);
   const [topResult, setTopResult] = useState([]);
   const [votedValidate, setVotedValidate] = useState(true);
 
-  // 롤백용: 모달 오픈 시점의 compares 스냅샷 + 세션내 시작 여부
+  // 롤백용: 오픈 시점의 compares 스냅샷 + 세션내 시작 여부
   const initialComparesRef = useRef(null);
   const snapshotTakenRef = useRef(false);
   const [startedInThisSession, setStartedInThisSession] = useState(false);
@@ -86,12 +83,12 @@ const CompareSetting = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // 모달 로드시 Firestore 비교 이력 로드
+  // 로드시 Firestore 비교 이력 로드 (main 원본 로직 유지)
   const fetchPool = async (gradeId, compareListId) => {
     if (gradeId === undefined || compareListId === undefined) {
       setMessage({
-        body: "데이터 로드에 문제가 발생했습니다",
-        body2: "다시 시도해 주세요",
+        body: "데이터 로드에 문제가 발생했습니다.",
+        body2: "다시 시도해주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -123,13 +120,14 @@ const CompareSetting = ({
         compareCancel: false,
         compareIng: false,
       });
+      // 이 세션에서 시작함 표시
       setStartedInThisSession(true);
     } catch (error) {
       console.error("Error starting compare mode:", error);
     }
   };
 
-  // 현재 스테이지/체급의 마지막 compare만 제거
+  // 현재 스테이지/체급의 마지막 compare만 제거 (main 원본 로직 유지)
   const handleCompareCancel = async (contestId) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
 
@@ -163,6 +161,7 @@ const CompareSetting = ({
     const newCompares = [...others, ...trimmedGroup];
 
     try {
+      // 1) 실시간 DB 상태 리셋
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
         status: {
           compareStart: false,
@@ -180,11 +179,13 @@ const CompareSetting = ({
         })),
       });
 
+      // 2) Firestore(compare 이력) 업데이트
       await updateCompare.updateData(compareList.id, {
         ...compareList,
         compares: newCompares,
       });
 
+      // 3) 로컬 상태 동기화
       setCompareArray(newCompares);
       setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
@@ -240,32 +241,13 @@ const CompareSetting = ({
     contestId,
     compareListId
   ) => {
-    const primaryGrade = stageInfo?.grades?.[0];
-    if (!primaryGrade?.gradeId) {
-      setMessage({
-        body: "체급 정보를 찾을 수 없어 비교심사 명단을 확정할 수 없습니다",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setMsgOpen(true);
-      return;
-    }
-
-    const combinedGradeTitle =
-      stageInfo?.grades?.length > 1
-        ? `${stageInfo.grades
-            .map((g) => g?.gradeTitle || "")
-            .filter(Boolean)
-            .join(" ")} 통합`
-        : primaryGrade?.gradeTitle || "";
-
     const compareInfo = {
       contestId,
-      stageId: stageInfo?.stageId || "",
-      categoryId: stageInfo?.categoryId || "",
-      gradeId: primaryGrade.gradeId,
-      categoryTitle: stageInfo?.categoryTitle || "",
-      gradeTitle: combinedGradeTitle,
+      stageId: stageInfo?.stageId,
+      categoryId: stageInfo?.categoryId,
+      gradeId: stageInfo?.grades?.[0]?.gradeId,
+      categoryTitle: stageInfo?.categoryTitle,
+      gradeTitle: stageInfo?.grades?.[0]?.gradeTitle,
       compareIndex: propCompareIndex,
       comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
       compareScoreMode: votedInfo.scoreMode,
@@ -293,7 +275,7 @@ const CompareSetting = ({
       await updateRealtimeCompare.updateData(collectionInfoCompares, {
         ...realtimeData?.compares,
         status: { ...newStatus },
-        players: [...playerTopResult],
+        players: [...(playerTopResult || [])],
         confirmed: {
           count: confirmedNumbers.length,
           numbers: confirmedNumbers,
@@ -308,6 +290,7 @@ const CompareSetting = ({
       setCompareArray(newCompares);
       setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
+      // 명단확정까지 완료했으므로 롤백 대상 아님
       setStartedInThisSession(false);
 
       setRefresh(true);
@@ -318,9 +301,8 @@ const CompareSetting = ({
   };
 
   const handleGetTopPlayers = (players, playerLength) => {
-    if (!Array.isArray(players) || !playerLength || playerLength <= 0) {
-      return [];
-    }
+    console.log(players, playerLength);
+    if (!Array.isArray(players)) return [];
     const validPlayers = players.filter((p) => p?.votedCount !== undefined);
     if (validPlayers.length === 0) return [];
 
@@ -372,12 +354,13 @@ const CompareSetting = ({
     if (!playerLength || votedResult.length === 0) {
       window.postMessage({
         type: "TOAST",
-        message: "재계산할 수 있는 데이터가 없습니다",
+        message: "재계산할 수 있는 데이터가 없습니다.",
       });
       return;
     }
 
     const newTop = handleGetTopPlayers(votedResult, playerLength);
+    console.log(newTop);
     setTopResult(newTop);
 
     const confirmedNumbers = newTop
@@ -385,6 +368,7 @@ const CompareSetting = ({
       .filter((n) => Number.isFinite(n))
       .sort((a, b) => a - b);
 
+    // Realtime DB에 TOP N까지 저장해서 UI가 최신 데이터로 렌더링되도록 (main 원본 유지)
     await updateRealtimeCompare.updateData(
       `currentStage/${currentContest.contests.id}/compares`,
       {
@@ -403,11 +387,11 @@ const CompareSetting = ({
 
     window.postMessage({
       type: "TOAST",
-      message: "TOP 선발 인원을 다시 계산했습니다",
+      message: "TOP 인원을 다시 계산했습니다",
     });
   };
 
-  // 모달 초기에 compares 스냅샷 1회 저장
+  // 초기에 compares 스냅샷 1회 저장
   useEffect(() => {
     if (!snapshotTakenRef.current && realtimeData?.compares) {
       snapshotTakenRef.current = true;
@@ -417,12 +401,16 @@ const CompareSetting = ({
     }
   }, [realtimeData?.compares]);
 
-  // Firestore 이력/필터
+  // Firestore 이력/필터 (main 원본 유지)
   useEffect(() => {
-    const firstGradeId = stageInfo?.grades?.[0]?.gradeId;
-    const compareListId = currentContest?.contests?.contestComparesListId;
-    if (firstGradeId && compareListId) {
-      fetchPool(firstGradeId, compareListId);
+    if (
+      stageInfo?.grades?.[0]?.gradeId &&
+      currentContest?.contests?.contestComparesListId
+    ) {
+      fetchPool(
+        stageInfo.grades[0].gradeId,
+        currentContest.contests.contestComparesListId
+      );
     } else if (stageInfo && currentContest?.contests) {
       setIsLoading(false);
     }
@@ -466,9 +454,9 @@ const CompareSetting = ({
   }, [realtimeData?.compares?.judges]);
 
   useEffect(() => {
-    if (votedResult?.length > 0 && realtimeData?.compares?.playerLength) {
+    if (votedResult?.length > 0) {
       setTopResult(
-        handleGetTopPlayers(votedResult, realtimeData.compares.playerLength)
+        handleGetTopPlayers(votedResult, realtimeData?.compares?.playerLength)
       );
     }
   }, [votedResult, realtimeData?.compares?.playerLength]);
@@ -478,42 +466,53 @@ const CompareSetting = ({
       ? Math.max(...votedResult.map((v) => v.votedCount))
       : 0;
 
-  // 닫기 시 롤백 처리
+  // 닫기 시 롤백 처리 (main 원본 유지)
   const handleCloseWithRollback = async () => {
     try {
-      const contestId = currentContest?.contests?.id;
-      const path = `currentStage/${contestId}/compares`;
+      const path = `currentStage/${currentContest?.contests?.id}/compares`;
       const compares = realtimeData?.compares ?? {};
       const { compareIndex = 0, status = {} } = compares;
 
       const shouldRollback =
-        Boolean(contestId) &&
         startedInThisSession &&
         status.compareStart === true &&
         status.compareIng !== true;
 
       if (shouldRollback) {
         if (compareIndex > 1 && initialComparesRef.current) {
+          // 2차 이상 → 스냅샷으로 롤백
           await updateRealtimeCompare.updateData(
             path,
             JSON.parse(JSON.stringify(initialComparesRef.current))
           );
         } else {
-          await updateRealtimeCompare.updateData(path, {
-            compareIndex: 0,
-            playerLength: 0,
-            scoreMode: null,
-            voteRange: null,
-            players: [],
-            confirmed: { count: 0, numbers: [] },
-            judges: [],
-            status: {
-              compareStart: false,
-              compareIng: false,
-              compareEnd: false,
-              compareCancel: false,
-            },
-          });
+          // compareIndex === 1 → 완전 초기화
+          if (typeof updateRealtimeCompare.setData === "function") {
+            await updateRealtimeCompare.setData(path, {
+              status: {
+                compareStart: false,
+                compareIng: false,
+                compareEnd: false,
+                compareCancel: false,
+              },
+            });
+          } else {
+            await updateRealtimeCompare.updateData(path, {
+              compareIndex: 0,
+              playerLength: 0,
+              scoreMode: null,
+              voteRange: null,
+              players: [],
+              confirmed: { count: 0, numbers: [] },
+              judges: [],
+              status: {
+                compareStart: false,
+                compareIng: false,
+                compareEnd: false,
+                compareCancel: false,
+              },
+            });
+          }
         }
       }
     } catch (e) {
@@ -524,359 +523,416 @@ const CompareSetting = ({
     }
   };
 
-  const isVotingStarted = Boolean(realtimeData?.compares?.status?.compareStart);
-
-  const optionButtonClass = (active) =>
-    `h-9 px-4 rounded-[8px] text-sm font-medium transition-colors cursor-pointer border ${
-      active
-        ? "bg-[#2563eb] text-white border-[#2563eb]"
-        : "bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#171717] border-[#171717]/[0.08]"
-    }`;
-
   return (
-    <div className="w-full h-full max-h-screen bg-[#fafafa] text-[#171717] overflow-y-auto p-4 sm:p-6">
-      {isLoading ? (
-        <LoadingPage />
-      ) : (
-        <div className="max-w-5xl mx-auto space-y-4">
-          <ConfirmationModal
-            isOpen={msgOpen}
-            message={message}
-            onCancel={() => setMsgOpen(false)}
-            onConfirm={() => {
-              setClose(false);
-              setMsgOpen(false);
-            }}
-          />
-          <ConfirmationModal
-            isOpen={compareMsgOpen}
-            message={message}
-            onCancel={() => setCompareMsgOpen(false)}
-            onConfirm={() => {
-              handleCompareCancel(currentContest?.contests?.id);
-            }}
-          />
-
-          {/* 상단 헤더 카드 */}
-          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
-                <Users size={18} strokeWidth={1.5} className="text-[#525252]" />
-              </div>
-              <div>
-                <div className="text-base font-semibold text-[#171717]">
-                  {stageInfo?.categoryTitle || ""}
-                  {stageInfo?.grades?.length > 0 &&
-                    ` (${
-                      stageInfo.grades.length > 1
-                        ? `${stageInfo.grades
-                            .map((g) => g?.gradeTitle || "")
-                            .filter(Boolean)
-                            .join(" ")} 통합`
-                        : stageInfo.grades[0]?.gradeTitle || ""
-                    })`}
-                </div>
-                <div className="text-xs text-[#525252] mt-0.5 font-mono tabular-nums">
-                  {propCompareIndex}차 비교심사 설정
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCloseWithRollback}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#dc2626]/[0.06] border border-[#dc2626]/30 text-[#dc2626] text-xs font-medium transition-colors cursor-pointer self-end sm:self-auto"
-            >
-              <X size={16} strokeWidth={1.5} />
-              <span>취소 및 닫기</span>
-            </button>
+    <div className="flex w-full h-full flex-col bg-[#f8fafc] overflow-y-auto">
+      {/* 드로어 상단 고정 헤더 */}
+      <div className="sticky top-0 z-20 bg-[#0f172a] text-white px-5 py-4 border-b-2 border-[#1e293b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-11 h-11 rounded-[10px] bg-[#2563eb] shrink-0">
+            <TrophyOutlined className="text-white text-xl" />
           </div>
+          <div className="flex flex-col">
+            <div className="text-lg sm:text-xl font-black text-white leading-tight">
+              {stageInfo?.categoryTitle}({stageInfo?.grades?.[0]?.gradeTitle})
+            </div>
+            <div className="text-sm font-bold text-[#93c5fd] mt-0.5">
+              {propCompareIndex}차 비교심사 설정
+            </div>
+          </div>
+        </div>
+        <Space>
+          <Button
+            danger
+            type="primary"
+            size="large"
+            icon={<CloseOutlined />}
+            onClick={handleCloseWithRollback}
+            className="font-bold"
+          >
+            취소(오류시 재비교심사설정)
+          </Button>
+        </Space>
+      </div>
 
-          {/* 옵션 설정 카드 */}
-          <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 space-y-5">
-            {propCompareIndex > 1 && (
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-[#525252]">
-                  투표 대상 설정
+      {/* 드로어 본문 */}
+      <div className="flex-1 p-4 sm:p-5 space-y-4">
+        {isLoading && <LoadingPage />}
+        {!isLoading && (
+          <>
+            <ConfirmationModal
+              isOpen={msgOpen}
+              message={message}
+              onCancel={() => setMsgOpen(false)}
+              onConfirm={() => {
+                setClose(false);
+                setMsgOpen(false);
+              }}
+            />
+            <ConfirmationModal
+              isOpen={compareMsgOpen}
+              message={message}
+              onCancel={() => setCompareMsgOpen(false)}
+              onConfirm={() => {
+                handleCompareCancel(currentContest?.contests?.id);
+              }}
+            />
+
+            <Card className="w-full border border-[#cbd5e1] shadow-xs">
+              <Space direction="vertical" size="large" className="w-full">
+                {/* 투표대상 설정 */}
+                {propCompareIndex > 1 && (
+                  <div className="flex flex-col gap-2">
+                    <div className="text-base font-bold text-[#0f172a]">
+                      투표대상 설정
+                    </div>
+                    <Space wrap>
+                      {realtimeData?.compares?.status?.compareStart ? (
+                        <Button
+                          size="large"
+                          disabled
+                          style={
+                            votedInfo?.voteRange === "all"
+                              ? {
+                                  backgroundColor: "#1890ff",
+                                  borderColor: "#1890ff",
+                                  color: "white",
+                                  opacity: 0.85,
+                                }
+                              : {}
+                          }
+                          className="min-w-[130px] font-bold"
+                        >
+                          {votedInfo?.voteRange === "all"
+                            ? "해당체급 전체"
+                            : `${propCompareIndex - 1}차 선발인원만`}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.voteRange === "all"
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                voteRange: "all",
+                              }));
+                            }}
+                            className="min-w-[130px] font-semibold"
+                          >
+                            해당체급 전체
+                          </Button>
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.voteRange === "voted"
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                voteRange: "voted",
+                              }));
+                            }}
+                            className="min-w-[130px] font-semibold"
+                          >
+                            {propCompareIndex - 1}차 선발인원만
+                          </Button>
+                        </>
+                      )}
+                    </Space>
+                  </div>
+                )}
+
+                {/* 심사대상 인원수 설정 */}
+                <div className="flex flex-col gap-2">
+                  <div className="text-base font-bold text-[#0f172a]">
+                    심사대상 인원수 설정
+                  </div>
+                  <Space wrap>
+                    {realtimeData?.compares?.status?.compareStart ? (
+                      <Button
+                        size="large"
+                        disabled
+                        style={{
+                          backgroundColor: "#1890ff",
+                          borderColor: "#1890ff",
+                          color: "white",
+                          opacity: 0.85,
+                        }}
+                        className="min-w-[120px] font-bold"
+                      >
+                        TOP {votedInfo.playerLength}
+                      </Button>
+                    ) : (
+                      <>
+                        {matchedOriginalPlayers?.length >= 3 && (
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.playerLength === 3
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                playerLength: 3,
+                              }));
+                              setIsVotedPlayerLengthInput(false);
+                            }}
+                            className="min-w-[120px] font-semibold"
+                          >
+                            TOP 3
+                          </Button>
+                        )}
+                        {matchedOriginalPlayers?.length >= 5 && (
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.playerLength === 5
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                playerLength: 5,
+                              }));
+                              setIsVotedPlayerLengthInput(false);
+                            }}
+                            className="min-w-[120px] font-semibold"
+                          >
+                            TOP 5
+                          </Button>
+                        )}
+                        {matchedOriginalPlayers?.length >= 7 && (
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.playerLength === 7
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                playerLength: 7,
+                              }));
+                              setIsVotedPlayerLengthInput(false);
+                            }}
+                            className="min-w-[120px] font-semibold"
+                          >
+                            TOP 7
+                          </Button>
+                        )}
+                        <Button
+                          size="large"
+                          type={
+                            isVotedPlayerLengthInput ? "primary" : "default"
+                          }
+                          onClick={() => {
+                            setIsVotedPlayerLengthInput((prev) => !prev);
+                            setVotedInfo((prev) => ({
+                              ...prev,
+                              playerLength: undefined,
+                            }));
+                          }}
+                          className="min-w-[120px] font-semibold"
+                        >
+                          직접입력
+                        </Button>
+                        {isVotedPlayerLengthInput && (
+                          <InputNumber
+                            size="large"
+                            min={1}
+                            max={matchedOriginalPlayers?.length}
+                            placeholder="인원수"
+                            onChange={(value) => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                playerLength: Number.parseInt(value),
+                              }));
+                            }}
+                            className="w-28"
+                          />
+                        )}
+                      </>
+                    )}
+                  </Space>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {isVotingStarted ? (
-                    <span className="inline-flex items-center h-9 px-4 rounded-[8px] bg-[#2563eb]/[0.08] border border-[#2563eb]/30 text-[#2563eb] text-sm font-medium">
-                      {votedInfo?.voteRange === "all"
-                        ? "해당 체급 전체"
-                        : `${propCompareIndex - 1}차 선발 인원만`}
-                    </span>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            voteRange: "all",
-                          }))
-                        }
-                        className={optionButtonClass(
-                          votedInfo.voteRange === "all"
-                        )}
+
+                {/* 채점모드 설정 */}
+                <div className="flex flex-col gap-2">
+                  <div className="text-base font-bold text-[#0f172a]">
+                    채점모드 설정
+                  </div>
+                  <Space wrap>
+                    {realtimeData?.compares?.status?.compareStart ? (
+                      <Button
+                        size="large"
+                        disabled
+                        style={{
+                          backgroundColor: "#1890ff",
+                          borderColor: "#1890ff",
+                          color: "white",
+                          opacity: 0.85,
+                        }}
+                        className="min-w-[120px] font-bold"
                       >
-                        해당 체급 전체
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            voteRange: "voted",
-                          }))
-                        }
-                        className={optionButtonClass(
-                          votedInfo.voteRange === "voted"
+                        {votedInfo.scoreMode === "all" && "전체"}
+                        {votedInfo.scoreMode === "topOnly" && "대상자"}
+                        {votedInfo.scoreMode === "topWithSub" &&
+                          `${propCompareIndex - 1}차 전체`}
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          size="large"
+                          type={
+                            votedInfo.scoreMode === "all"
+                              ? "primary"
+                              : "default"
+                          }
+                          onClick={() => {
+                            setVotedInfo((prev) => ({
+                              ...prev,
+                              scoreMode: "all",
+                            }));
+                          }}
+                          className="min-w-[120px] font-semibold"
+                        >
+                          전체
+                        </Button>
+                        {propCompareIndex > 1 && (
+                          <Button
+                            size="large"
+                            type={
+                              votedInfo.scoreMode === "topWithSub"
+                                ? "primary"
+                                : "default"
+                            }
+                            onClick={() => {
+                              setVotedInfo((prev) => ({
+                                ...prev,
+                                scoreMode: "topWithSub",
+                              }));
+                            }}
+                            className="min-w-[120px] font-semibold"
+                          >
+                            {propCompareIndex - 1}차 전체
+                          </Button>
                         )}
-                      >
-                        {propCompareIndex - 1}차 선발 인원만
-                      </button>
-                    </>
+                        <Button
+                          size="large"
+                          type={
+                            votedInfo.scoreMode === "topOnly"
+                              ? "primary"
+                              : "default"
+                          }
+                          onClick={() => {
+                            setVotedInfo((prev) => ({
+                              ...prev,
+                              scoreMode: "topOnly",
+                            }));
+                          }}
+                          className="min-w-[120px] font-semibold"
+                        >
+                          대상자
+                        </Button>
+                      </>
+                    )}
+                  </Space>
+                  {!realtimeData?.compares?.status?.compareStart && (
+                    <div className="flex items-center gap-2 mt-2 p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
+                      <InfoCircleOutlined className="text-[#2563eb]" />
+                      <span className="text-sm font-semibold text-[#1e3a8a]">
+                        {votedInfo.scoreMode === "all" &&
+                          "출전선수 전원 채점을 완료해야합니다."}
+                        {votedInfo.scoreMode === "topOnly" &&
+                          "비교심사 대상만 채점합니다. 나머지 선수는 순위외 처리됩니다."}
+                        {votedInfo.scoreMode === "topWithSub" &&
+                          "이전 차수 비교심사 대상 전체를 채점합니다."}
+                      </span>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
 
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-[#525252]">
-                심사 대상 인원수 설정
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {isVotingStarted ? (
-                  <span className="inline-flex items-center h-9 px-4 rounded-[8px] bg-[#2563eb]/[0.08] border border-[#2563eb]/30 text-[#2563eb] font-mono tabular-nums text-sm font-medium">
-                    TOP {votedInfo.playerLength}
-                  </span>
-                ) : (
-                  <>
-                    {matchedOriginalPlayers?.length >= 3 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            playerLength: 3,
-                          }));
-                          setIsVotedPlayerLengthInput(false);
-                        }}
-                        className={optionButtonClass(
-                          votedInfo.playerLength === 3 &&
-                            !isVotedPlayerLengthInput
-                        )}
-                      >
-                        TOP 3
-                      </button>
-                    )}
-                    {matchedOriginalPlayers?.length >= 5 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            playerLength: 5,
-                          }));
-                          setIsVotedPlayerLengthInput(false);
-                        }}
-                        className={optionButtonClass(
-                          votedInfo.playerLength === 5 &&
-                            !isVotedPlayerLengthInput
-                        )}
-                      >
-                        TOP 5
-                      </button>
-                    )}
-                    {matchedOriginalPlayers?.length >= 7 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            playerLength: 7,
-                          }));
-                          setIsVotedPlayerLengthInput(false);
-                        }}
-                        className={optionButtonClass(
-                          votedInfo.playerLength === 7 &&
-                            !isVotedPlayerLengthInput
-                        )}
-                      >
-                        TOP 7
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsVotedPlayerLengthInput((prev) => !prev);
-                        setVotedInfo((prev) => ({
-                          ...prev,
-                          playerLength: undefined,
-                        }));
-                      }}
-                      className={optionButtonClass(isVotedPlayerLengthInput)}
+                {/* 비교심사 투표개시 버튼 */}
+                <div className="flex justify-center pt-2">
+                  {realtimeData?.compares?.status?.compareStart ? (
+                    <Button
+                      size="large"
+                      disabled
+                      className="w-full md:w-auto min-w-[220px] h-12 font-bold text-base"
                     >
-                      직접 입력
-                    </button>
-                    {isVotedPlayerLengthInput && (
-                      <InputNumber
-                        min={1}
-                        max={matchedOriginalPlayers?.length}
-                        placeholder="인원수"
-                        onChange={(value) => {
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            playerLength: Number.parseInt(value, 10),
-                          }));
-                        }}
-                        className="w-24 font-mono tabular-nums"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-[#525252]">
-                채점 모드 설정
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {isVotingStarted ? (
-                  <span className="inline-flex items-center h-9 px-4 rounded-[8px] bg-[#2563eb]/[0.08] border border-[#2563eb]/30 text-[#2563eb] text-sm font-medium">
-                    {votedInfo.scoreMode === "all" && "전체 채점"}
-                    {votedInfo.scoreMode === "topOnly" && "선발 대상자만 채점"}
-                    {votedInfo.scoreMode === "topWithSub" &&
-                      `${propCompareIndex - 1}차 전체 채점`}
-                  </span>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setVotedInfo((prev) => ({
-                          ...prev,
-                          scoreMode: "all",
-                        }))
-                      }
-                      className={optionButtonClass(
-                        votedInfo.scoreMode === "all"
-                      )}
-                    >
-                      전체
-                    </button>
-                    {propCompareIndex > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVotedInfo((prev) => ({
-                            ...prev,
-                            scoreMode: "topWithSub",
-                          }))
-                        }
-                        className={optionButtonClass(
-                          votedInfo.scoreMode === "topWithSub"
-                        )}
+                      비교심사 투표중
+                    </Button>
+                  ) : (
+                    votedInfo.playerLength !== undefined &&
+                    votedInfo.scoreMode !== undefined && (
+                      <Button
+                        type="primary"
+                        size="large"
+                        onClick={() => handleAdd(currentContest.contests.id)}
+                        className="w-full md:w-auto min-w-[220px] h-12 font-bold text-base"
                       >
-                        {propCompareIndex - 1}차 전체
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setVotedInfo((prev) => ({
-                          ...prev,
-                          scoreMode: "topOnly",
-                        }))
-                      }
-                      className={optionButtonClass(
-                        votedInfo.scoreMode === "topOnly"
-                      )}
-                    >
-                      대상자
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {!isVotingStarted && votedInfo.scoreMode && (
-                <div className="flex items-center gap-2 mt-2 px-3.5 py-2.5 bg-[#f4f4f5] border border-[#171717]/[0.06] rounded-[8px] text-xs text-[#525252]">
-                  <Info size={16} strokeWidth={1.5} className="text-[#737373] shrink-0" />
-                  <span>
-                    {votedInfo.scoreMode === "all" &&
-                      "출전 선수 전원 채점을 완료해야 합니다"}
-                    {votedInfo.scoreMode === "topOnly" &&
-                      "비교심사 선발 대상만 채점하며 나머지 선수는 순위 외 처리됩니다"}
-                    {votedInfo.scoreMode === "topWithSub" &&
-                      "이전 차수 비교심사 대상 전체를 채점합니다"}
-                  </span>
+                        비교심사 투표개시
+                      </Button>
+                    )
+                  )}
                 </div>
-              )}
-            </div>
+              </Space>
+            </Card>
 
-            <div className="pt-2 flex justify-end border-t border-[#171717]/[0.06]">
-              {isVotingStarted ? (
-                <div className="inline-flex items-center gap-2 h-10 px-4 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-sm font-medium text-[#525252]">
-                  <StatusDot status="active" live />
-                  <span>비교심사 투표 진행 중</span>
-                </div>
-              ) : (
-                votedInfo.playerLength !== undefined &&
-                votedInfo.scoreMode !== undefined && (
-                  <button
-                    type="button"
-                    onClick={() => handleAdd(currentContest.contests.id)}
-                    className="h-10 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors active:scale-[0.98] cursor-pointer w-full sm:w-auto"
-                  >
-                    비교심사 투표 개시
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-
-          {/* 실시간 득표 및 심판 투표 현황 */}
-          {isVotingStarted && (
-            <div className="space-y-4">
-              {/* 득표 현황 카드 */}
-              <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-                <div className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3 flex items-center gap-2">
-                  <BarChart3
-                    size={16}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
-                  />
-                  <span className="text-sm font-semibold text-[#171717]">
-                    비교심사 득표 현황
-                  </span>
-                </div>
-
-                <div className="p-5 space-y-4">
+            {realtimeData?.compares?.status?.compareStart && (
+              <div className="flex w-full h-auto flex-col gap-y-4">
+                {/* 득표 현황 */}
+                <Card
+                  className="border border-[#cbd5e1] shadow-xs"
+                  title={
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0f172a]">
+                        <TrophyOutlined className="text-white" />
+                      </div>
+                      <span className="font-bold text-base text-[#0f172a]">
+                        비교심사 득표 및 투표현황
+                      </span>
+                    </div>
+                  }
+                >
                   {!isMobile ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-center">
+                      <table className="w-full border-collapse">
                         <thead>
-                          <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] text-xs font-medium text-[#525252]">
-                            <th className="py-2.5 px-3 text-left w-24">
+                          <tr className="bg-[#f1f5f9]">
+                            <th className="border border-gray-300 p-3 text-left font-bold">
                               선수번호
                             </th>
                             {(matchedOriginalPlayers || []).map(
                               (player, pIdx) => (
                                 <th
                                   key={pIdx}
-                                  className="py-2.5 px-2 min-w-[64px]"
+                                  className="border border-gray-300 p-3 text-center font-bold"
                                 >
-                                  <BibTag number={player.playerNumber} />
+                                  <Tag
+                                    color="blue"
+                                    className="text-base font-bold px-2.5 py-0.5 m-0"
+                                  >
+                                    {player.playerNumber}
+                                  </Tag>
                                 </th>
                               )
                             )}
                           </tr>
                         </thead>
                         <tbody>
-                          <tr className="border-b border-[#171717]/[0.06]">
-                            <td className="py-3 px-3 text-left text-xs font-medium text-[#525252] bg-[#fafafa]">
+                          <tr>
+                            <td className="border border-gray-300 p-3 font-bold bg-[#f8fafc]">
                               득표수
                             </td>
                             {(matchedOriginalPlayers || []).map(
@@ -889,17 +945,19 @@ const CompareSetting = ({
                                 const percentage =
                                   maxVotes > 0 ? (votes / maxVotes) * 100 : 0;
                                 return (
-                                  <td key={pIdx} className="py-3 px-2">
-                                    <div className="flex flex-col items-center gap-1.5">
-                                      <span className="font-mono tabular-nums text-sm font-semibold text-[#171717]">
+                                  <td
+                                    key={pIdx}
+                                    className="border border-gray-300 p-3 text-center"
+                                  >
+                                    <div className="flex flex-col gap-2">
+                                      <span className="text-lg font-extrabold text-[#0f172a]">
                                         {votes}표
                                       </span>
-                                      <div className="w-12 h-1.5 rounded-full bg-[#f4f4f5] overflow-hidden">
-                                        <div
-                                          className="h-full bg-[#2563eb] rounded-full"
-                                          style={{ width: `${percentage}%` }}
-                                        />
-                                      </div>
+                                      <Progress
+                                        percent={percentage}
+                                        showInfo={false}
+                                        strokeColor="#2563eb"
+                                      />
                                     </div>
                                   </td>
                                 );
@@ -910,7 +968,11 @@ const CompareSetting = ({
                       </table>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <Space
+                      direction="vertical"
+                      size="middle"
+                      className="w-full"
+                    >
                       {(matchedOriginalPlayers || []).map((player, pIdx) => {
                         const votes =
                           votedResult?.find(
@@ -919,193 +981,230 @@ const CompareSetting = ({
                         const percentage =
                           maxVotes > 0 ? (votes / maxVotes) * 100 : 0;
                         return (
-                          <div
-                            key={pIdx}
-                            className="p-3 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] space-y-2"
-                          >
-                            <div className="flex items-center justify-between">
-                              <BibTag number={player.playerNumber} />
-                              <span className="font-mono tabular-nums text-sm font-semibold text-[#171717]">
+                          <Card key={pIdx} size="small">
+                            <div className="flex justify-between items-center mb-2">
+                              <Tag color="blue" className="text-base font-bold">
+                                선수 {player.playerNumber}
+                              </Tag>
+                              <span className="text-lg font-bold">
                                 {votes}표
                               </span>
                             </div>
-                            <div className="w-full h-1.5 rounded-full bg-[#f4f4f5] overflow-hidden">
-                              <div
-                                className="h-full bg-[#2563eb] rounded-full"
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
-                          </div>
+                            <Progress
+                              percent={percentage}
+                              strokeColor="#2563eb"
+                            />
+                          </Card>
                         );
                       })}
-                    </div>
+                    </Space>
                   )}
 
                   {/* 이전 차수 TOP N */}
                   {currentCompareArray?.length > 0 && (
-                    <div className="p-4 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08] space-y-2.5">
-                      <div className="text-xs font-medium text-[#525252] font-mono tabular-nums">
-                        {currentCompareArray.length}차 선발 TOP{" "}
+                    <div className="mt-6 p-4 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
+                      <div className="text-base font-bold mb-3 text-[#1e3a8a]">
+                        {currentCompareArray?.length}차 TOP{" "}
                         {
-                          currentCompareArray[currentCompareArray.length - 1]
+                          currentCompareArray[currentCompareArray?.length - 1]
                             ?.comparePlayerLength
                         }
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <Space wrap>
                         {currentCompareArray[
-                          currentCompareArray.length - 1
+                          currentCompareArray?.length - 1
                         ]?.players?.map((top, tIdx) => (
-                          <BibTag
+                          <Badge
                             key={tIdx}
-                            number={top.playerNumber}
-                            size="lg"
+                            count={top.playerNumber}
+                            overflowCount={9999}
+                            style={{
+                              backgroundColor: "#2563eb",
+                              fontSize: "18px",
+                              fontWeight: 800,
+                              width: "auto",
+                              minWidth: "48px",
+                              height: "48px",
+                              padding: "0 12px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
                           />
                         ))}
-                      </div>
+                      </Space>
                     </div>
                   )}
 
                   {/* 현재 TOP N */}
-                  <div className="p-4 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-[#171717] font-mono tabular-nums">
-                        현재 선발 대상 TOP {realtimeData?.compares?.playerLength}
+                  <div className="mt-4 p-4 bg-[#f0fdf4] border border-[#bbf7d0] rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-base font-bold text-[#14532d]">
+                        현재 TOP {realtimeData?.compares?.playerLength}
                       </span>
-                      <button
-                        type="button"
-                        onClick={handleManualRecalculate}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] bg-white hover:bg-[#fafafa] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] transition-colors cursor-pointer"
-                      >
-                        <RefreshCw size={14} strokeWidth={1.5} className="text-[#525252]" />
-                        <span>재계산</span>
-                      </button>
+                      <Space>
+                        <Button
+                          type="default"
+                          onClick={handleManualRecalculate}
+                          className="font-semibold"
+                        >
+                          재계산
+                        </Button>
+                      </Space>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {topResult?.length > 0 ? (
-                        topResult.map((top, tIdx) => (
-                          <BibTag
+                    <Space wrap>
+                      {topResult?.length > 0 &&
+                        topResult?.map((top, tIdx) => (
+                          <Badge
                             key={tIdx}
-                            number={top.playerNumber}
-                            size="lg"
-                            variant="active"
+                            count={top.playerNumber}
+                            overflowCount={9999}
+                            style={{
+                              backgroundColor: "#16a34a",
+                              fontSize: "18px",
+                              fontWeight: 800,
+                              width: "auto",
+                              minWidth: "48px",
+                              height: "48px",
+                              padding: "0 12px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
                           />
-                        ))
-                      ) : (
-                        <span className="text-xs text-[#737373]">
-                          수신된 투표 결과가 없습니다
-                        </span>
-                      )}
-                    </div>
+                        ))}
+                    </Space>
                   </div>
-                </div>
-              </div>
+                </Card>
 
-              {/* 심판 투표 상황 카드 */}
-              <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-                <div className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-5 py-3 flex items-center gap-2">
-                  <CheckCircle2
-                    size={16}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
-                  />
-                  <span className="text-sm font-semibold text-[#171717]">
-                    심판석 투표 상태
-                  </span>
-                </div>
-
-                <div className="p-5 space-y-5">
+                {/* 심판 투표 상황 */}
+                <Card
+                  className="border border-[#cbd5e1] shadow-xs"
+                  title={
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#2563eb]">
+                        <InfoCircleOutlined className="text-white" />
+                      </div>
+                      <span className="font-bold text-base text-[#0f172a]">
+                        심판 투표 상황
+                      </span>
+                    </div>
+                  }
+                >
                   {!isMobile ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-center">
+                      <table className="w-full border-collapse">
                         <thead>
-                          <tr className="bg-[#f4f4f5] border-b border-[#171717]/[0.08] text-xs font-medium text-[#525252]">
-                            <th className="py-2.5 px-3 text-left w-24">
-                              심판석
+                          <tr className="bg-[#f1f5f9]">
+                            <th className="border border-gray-300 p-3 text-left font-bold">
+                              심판번호
                             </th>
                             {(realtimeData?.judges || []).map((judge, pIdx) => (
-                              <th key={pIdx} className="py-2.5 px-2">
-                                <BibTag number={judge.seatIndex} size="sm" />
+                              <th
+                                key={pIdx}
+                                className="border border-gray-300 p-3 text-center font-bold"
+                              >
+                                {judge.seatIndex}
                               </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          <tr className="border-b border-[#171717]/[0.06]">
-                            <td className="py-3 px-3 text-left text-xs font-medium text-[#525252] bg-[#fafafa]">
-                              상태
+                          <tr>
+                            <td className="border border-gray-300 p-3 font-bold bg-[#f8fafc]">
+                              투표상황
                             </td>
                             {(realtimeData?.compares?.judges || []).map(
-                              (judge, pIdx) => {
-                                const done =
-                                  judge.messageStatus === "투표완료";
-                                return (
-                                  <td key={pIdx} className="py-3 px-2">
-                                    <span
-                                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs font-medium ${
-                                        done
-                                          ? "bg-[#16a34a]/[0.08] text-[#16a34a]"
-                                          : "bg-[#f4f4f5] text-[#737373]"
-                                      }`}
-                                    >
-                                      <StatusDot
-                                        status={done ? "live" : "idle"}
-                                      />
-                                      <span>{judge.messageStatus}</span>
-                                    </span>
-                                  </td>
-                                );
-                              }
+                              (judge, pIdx) => (
+                                <td
+                                  key={pIdx}
+                                  className="border border-gray-300 p-3 text-center"
+                                >
+                                  <Tag
+                                    color={
+                                      judge.messageStatus === "투표완료"
+                                        ? "success"
+                                        : "default"
+                                    }
+                                    className="font-bold m-0"
+                                  >
+                                    {judge.messageStatus}
+                                  </Tag>
+                                </td>
+                              )
                             )}
                           </tr>
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <Space
+                      direction="vertical"
+                      size="middle"
+                      className="w-full"
+                    >
                       {(realtimeData?.compares?.judges || []).map(
-                        (judge, pIdx) => {
-                          const done = judge.messageStatus === "투표완료";
-                          return (
-                            <div
-                              key={pIdx}
-                              className="flex items-center justify-between px-3.5 py-2.5 rounded-[8px] bg-[#fafafa] border border-[#171717]/[0.08]"
-                            >
-                              <div className="flex items-center gap-2">
-                                <BibTag number={judge.seatIndex} size="sm" />
-                                <span className="text-xs font-medium text-[#171717]">
-                                  번 심판석
-                                </span>
-                              </div>
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs font-medium ${
-                                  done
-                                    ? "bg-[#16a34a]/[0.08] text-[#16a34a]"
-                                    : "bg-[#f4f4f5] text-[#737373]"
-                                }`}
-                              >
-                                <StatusDot status={done ? "live" : "idle"} />
-                                <span>{judge.messageStatus}</span>
+                        (judge, pIdx) => (
+                          <Card key={pIdx} size="small">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold">
+                                심판 {judge.seatIndex}
                               </span>
+                              <Tag
+                                color={
+                                  judge.messageStatus === "투표완료"
+                                    ? "success"
+                                    : "default"
+                                }
+                                className="font-bold m-0"
+                              >
+                                {judge.messageStatus}
+                              </Tag>
                             </div>
-                          );
-                        }
+                          </Card>
+                        )
                       )}
-                    </div>
+                    </Space>
                   )}
 
-                  <div className="flex flex-col items-center gap-2 pt-2 border-t border-[#171717]/[0.06]">
-                    {votedValidate ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="h-10 px-6 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#737373] text-sm font-medium cursor-not-allowed w-full sm:w-auto min-w-[200px]"
-                      >
-                        심판 투표 대기 중
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
+                  <div className="flex justify-center mt-6">
+                    <Space
+                      direction="vertical"
+                      size="small"
+                      className="w-full items-center"
+                    >
+                      {/* 메인 버튼: 투표중 또는 명단확정 */}
+                      {votedValidate ? (
+                        <Button
+                          size="large"
+                          disabled
+                          className="w-full md:w-auto min-w-[220px] h-12 font-bold text-base"
+                        >
+                          투표중
+                        </Button>
+                      ) : (
+                        <Button
+                          type="primary"
+                          size="large"
+                          onClick={() =>
+                            handleUpdateComparePlayers(
+                              topResult,
+                              votedResult,
+                              currentContest.contests.id,
+                              currentContest.contests.contestComparesListId
+                            )
+                          }
+                          className="w-full md:w-auto min-w-[220px] h-12 font-bold text-base"
+                        >
+                          명단확정
+                        </Button>
+                      )}
+
+                      {/* 서브 버튼: 직권확정 */}
+                      <Button
+                        type="link"
+                        size="small"
                         onClick={() =>
                           handleUpdateComparePlayers(
                             topResult,
@@ -1114,33 +1213,18 @@ const CompareSetting = ({
                             currentContest.contests.contestComparesListId
                           )
                         }
-                        className="h-10 px-6 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors active:scale-[0.98] cursor-pointer w-full sm:w-auto min-w-[200px]"
+                        className="text-gray-500 hover:text-gray-800 font-medium"
                       >
-                        명단 확정
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleUpdateComparePlayers(
-                          topResult,
-                          votedResult,
-                          currentContest.contests.id,
-                          currentContest.contests.contestComparesListId
-                        )
-                      }
-                      className="text-xs text-[#737373] hover:text-[#171717] py-1 px-2 transition-colors cursor-pointer"
-                    >
-                      직권 확정
-                    </button>
+                        직권확정
+                      </Button>
+                    </Space>
                   </div>
-                </div>
+                </Card>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

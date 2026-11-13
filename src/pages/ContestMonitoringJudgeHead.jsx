@@ -22,7 +22,7 @@ import {
 } from "../hooks/useFirebaseRealtime";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { Modal } from "@mui/material";
+import { Drawer, Modal } from "@mui/material";
 import CompareSetting from "../modals/CompareSetting";
 import ContestRankingSummary from "../modals/ContestRankingSummary";
 import ContestPointSummary from "../modals/ContestPointSummary";
@@ -422,19 +422,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   };
 
   const handleCompareCancel = async (contestId, compareIndex) => {
-    if (!contestId || compareIndex === undefined || compareIndex < 0) return;
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
     const newCompareArray = [...comparesArray];
     newCompareArray.splice(compareIndex, 1);
-
     let newRealtimeInfo = {
-      compareIndex: 0,
-      playerLength: 0,
-      scoreMode: null,
-      voteRange: null,
-      players: [],
-      confirmed: { count: 0, numbers: [] },
-      judges: [],
       status: {
         compareStart: false,
         compareEnd: false,
@@ -443,38 +434,20 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       },
     };
 
-    if (compareIndex > 0 && newCompareArray.length > 0) {
-      const prevCompare = newCompareArray[newCompareArray.length - 1];
-      const prevPlayers = Array.isArray(prevCompare?.players)
-        ? [...prevCompare.players]
-        : [];
-      const prevConfirmedNumbers = prevPlayers
-        .map((p) => Number(p.playerNumber))
-        .filter((n) => Number.isFinite(n))
-        .sort((a, b) => a - b);
-
+    if (compareIndex > 0) {
       newRealtimeInfo = {
-        compareIndex: prevCompare.compareIndex,
+        compareIndex: comparesArray[compareIndex - 1].compareIndex,
         status: {
           compareStart: false,
           compareEnd: false,
           compareCancel: false,
           compareIng: true,
         },
-        playerLength: prevCompare.comparePlayerLength,
-        scoreMode: prevCompare.compareScoreMode,
-        players: prevPlayers,
-        confirmed: {
-          count: prevConfirmedNumbers.length,
-          numbers: prevConfirmedNumbers,
-        },
+        playerLength: comparesArray[compareIndex - 1].comparePlayerLength,
+        scoreMode: comparesArray[compareIndex - 1].compareScoreMode,
+        players: [...comparesArray[compareIndex - 1].players],
       };
     }
-
-    const otherStageCompares = (comparesList?.compares || []).filter(
-      (c) => c.stageId !== realtimeData?.stageId
-    );
-    const mergedCompares = [...otherStageCompares, ...newCompareArray];
 
     try {
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
@@ -486,15 +459,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         compareCancel: true,
         compareIng: false,
       }));
-      if (comparesList?.id) {
-        await updateCompare.updateData(comparesList.id, {
-          ...comparesList,
-          compares: mergedCompares,
-        });
-      }
-      setComparesList((prev) => ({
-        ...(prev || {}),
-        compares: mergedCompares,
+      await updateCompare.updateData(comparesList.id, {
+        ...comparesList,
+        compares: [...newCompareArray],
+      });
+      setComparesList(() => ({
+        ...comparesList,
+        compares: [...newCompareArray],
       }));
       setComparesArray(() => [...newCompareArray]);
       setParentRefresh(true);
@@ -579,17 +550,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentStageInfo?.grades?.length > 0 &&
       playersArray?.length > 0
     ) {
-      const stageGradeIds = new Set(
-        currentStageInfo.grades.map((g) => g?.gradeId).filter(Boolean)
-      );
       const rawStagePlayers = playersArray
-        .filter((f) => stageGradeIds.has(f.contestGradeId))
-        .sort(
-          (a, b) =>
-            (a.playerIndex ?? Number(a.playerNumber) ?? 0) -
-              (b.playerIndex ?? Number(b.playerNumber) ?? 0) ||
-            (Number(a.playerNumber) || 0) - (Number(b.playerNumber) || 0)
-        );
+        .filter(
+          (f) => f.contestGradeId === currentStageInfo.grades[0].gradeId
+        )
+        .sort((a, b) => a.playerIndex - b.playerIndex);
 
       const seenStagePlayerKeys = new Set();
       const dedupedStagePlayers = [];
@@ -602,8 +567,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       });
 
       setMatchedOriginalPlayers(dedupedStagePlayers);
-    } else {
-      setMatchedOriginalPlayers([]);
     }
   }, [realtimeData, currentStageInfo, playersArray]);
 
@@ -1045,21 +1008,43 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               )
             }
           />
-          <Modal open={compareOpen} onClose={() => setCompareOpen(false)}>
-            <CompareSetting
-              stageInfo={currentStageInfo}
-              setClose={setCompareOpen}
-              matchedOriginalPlayers={matchedOriginalPlayers}
-              setRefresh={setParentRefresh}
-              propCompareIndex={comparesArray?.length + 1}
-              handleCompareCancel={() =>
-                handleCompareCancel(
-                  currentContest.contests.id,
-                  comparesArray?.length - 1
-                )
+          <Drawer
+            anchor="right"
+            open={compareOpen}
+            onClose={(_, reason) => {
+              if (
+                (reason === "backdropClick" || reason === "escapeKeyDown") &&
+                realtimeData?.compares?.status?.compareStart &&
+                !realtimeData?.compares?.status?.compareIng
+              ) {
+                return;
               }
-            />
-          </Modal>
+              setCompareOpen(false);
+            }}
+            PaperProps={{
+              sx: {
+                width: { xs: "100vw", sm: "680px", lg: "820px" },
+                maxWidth: "100vw",
+                backgroundColor: "#f8fafc",
+              },
+            }}
+          >
+            {compareOpen && (
+              <CompareSetting
+                stageInfo={currentStageInfo}
+                setClose={setCompareOpen}
+                matchedOriginalPlayers={matchedOriginalPlayers}
+                setRefresh={setParentRefresh}
+                propCompareIndex={comparesArray?.length + 1}
+                handleCompareCancel={() =>
+                  handleCompareCancel(
+                    currentContest.contests.id,
+                    comparesArray?.length - 1
+                  )
+                }
+              />
+            )}
+          </Drawer>
           <Modal open={rankingSummaryOpen}>
             <ContestRankingSummary
               categoryId={rankingSummaryProp?.categoryId}
@@ -1218,18 +1203,15 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   >
                     <button
                       type="button"
-                      disabled={!currentStageInfo?.grades?.length}
                       onClick={() =>
                         setCompareMode((prev) => ({
                           ...prev,
                           compareStart: true,
                         }))
                       }
-                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-black transition-colors ${
-                        !currentStageInfo?.grades?.length
-                          ? "bg-[#475569] text-[#94a3b8] cursor-not-allowed"
-                          : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-sm cursor-pointer"
-                      } ${isMobile ? "w-full" : ""}`}
+                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-black transition-colors bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-sm cursor-pointer ${
+                        isMobile ? "w-full" : ""
+                      }`}
                     >
                       <Play size={18} strokeWidth={2.2} />
                       <span className="tabular-nums">
@@ -1239,16 +1221,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
                     <button
                       type="button"
-                      disabled={!currentStageInfo?.grades?.length}
                       onClick={() => setCompareOpen(true)}
-                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-extrabold border-2 border-white/25 bg-[#334155] hover:bg-[#475569] text-white transition-colors ${
-                        !currentStageInfo?.grades?.length
-                          ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer"
-                      } ${isMobile ? "w-full" : ""}`}
+                      className={`inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[10px] text-base font-extrabold border-2 border-white/25 bg-[#334155] hover:bg-[#475569] text-white transition-colors cursor-pointer ${
+                        isMobile ? "w-full" : ""
+                      }`}
                     >
                       <Settings size={18} strokeWidth={2.2} />
-                      <span>비교심사 현황·설정</span>
+                      <span>비교심사 설정 보기</span>
                     </button>
                   </div>
                 )}
