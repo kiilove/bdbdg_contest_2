@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "bdbdgmain2",
+    "site": "bdbdgmain3",
     "public": "build",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
