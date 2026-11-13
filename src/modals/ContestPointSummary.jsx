@@ -568,46 +568,38 @@ const ContestPointSummary = ({
   return (
     <div
       ref={modalContentRef}
-      className="flex flex-col w-full h-full max-h-screen bg-[#f1f5f9] text-[#0f172a] overflow-y-auto select-none"
+      className="flex flex-col w-full h-full max-h-screen bg-[#fafafa] text-[#171717] overflow-y-auto select-none"
     >
       {/* 저장 성공 / 오류 대형 알림 모달 */}
       <Modal open={msgOpen} onClose={() => setMsgOpen(false)}>
         <div
-          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/65"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-[#171717]/45 backdrop-blur-[2px]"
           style={{ transform: "none" }}
         >
-          <div
-            className={`w-full max-w-lg bg-white rounded-[18px] border-[3px] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.28)] space-y-5 ${
-              isSaveSuccess ? "border-[#16a34a]" : "border-[#dc2626]"
-            }`}
-          >
+          <div className="w-full max-w-lg bg-white rounded-[18px] border border-[#171717]/[0.10] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.18)] space-y-5">
             <div className="flex items-start gap-4">
               <div
-                className={`w-14 h-14 rounded-[12px] flex items-center justify-center shrink-0 ${
+                className={`w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 border ${
                   isSaveSuccess
-                    ? "bg-[#dcfce7] text-[#15803d]"
-                    : "bg-[#fee2e2] text-[#dc2626]"
+                    ? "bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]"
+                    : "bg-[#fef2f2] border-[#fecaca] text-[#dc2626]"
                 }`}
               >
                 {isSaveSuccess ? (
-                  <CheckCircle2 size={32} strokeWidth={2.2} />
+                  <CheckCircle2 size={26} strokeWidth={2.1} />
                 ) : (
-                  <AlertTriangle size={32} strokeWidth={2.2} />
+                  <AlertTriangle size={26} strokeWidth={2.1} />
                 )}
               </div>
               <div className="space-y-1.5">
-                <h2
-                  className={`text-2xl font-black tracking-tight m-0 ${
-                    isSaveSuccess ? "text-[#15803d]" : "text-[#dc2626]"
-                  }`}
-                >
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#171717] m-0">
                   {message.title || "알림"}
                 </h2>
-                <p className="text-lg font-bold text-[#0f172a] m-0">
+                <p className="text-base sm:text-lg font-semibold text-[#262626] m-0">
                   {message.body}
                 </p>
                 {message.body2 && (
-                  <p className="text-base font-medium text-[#475569] m-0 leading-relaxed">
+                  <p className="text-sm sm:text-base font-medium text-[#525252] m-0 leading-relaxed">
                     {message.body2}
                   </p>
                 )}
@@ -622,9 +614,9 @@ const ContestPointSummary = ({
                   setClose(false);
                 }
               }}
-              className={`w-full h-14 px-6 rounded-[12px] text-white font-extrabold text-lg transition-colors cursor-pointer ${
+              className={`w-full py-3.5 px-6 rounded-[12px] text-white font-bold text-lg transition-colors cursor-pointer ${
                 isSaveSuccess
-                  ? "bg-[#16a34a] hover:bg-[#15803d]"
+                  ? "bg-[#2563eb] hover:bg-[#1d4ed8]"
                   : "bg-[#dc2626] hover:bg-[#b91c1c]"
               }`}
             >
@@ -640,34 +632,34 @@ const ContestPointSummary = ({
         onClose={() => setDuplicateWarningOpen(false)}
       >
         <div
-          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/65"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-[#171717]/45 backdrop-blur-[2px]"
           style={{ transform: "none" }}
         >
-          <div className="w-full max-w-xl bg-white rounded-[18px] border-[3px] border-[#dc2626] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.3)] space-y-5">
+          <div className="w-full max-w-xl bg-white rounded-[18px] border border-[#171717]/[0.10] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.18)] space-y-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-[12px] bg-[#dc2626] text-white flex items-center justify-center shrink-0">
-                <AlertTriangle size={30} strokeWidth={2.2} />
+              <div className="w-12 h-12 rounded-[12px] bg-[#fef2f2] border border-[#fecaca] text-[#dc2626] flex items-center justify-center shrink-0">
+                <AlertTriangle size={26} strokeWidth={2.2} />
               </div>
               <div className="space-y-1">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[6px] bg-[#fee2e2] text-[#b91c1c] text-sm font-extrabold">
-                  <Volume2 size={15} strokeWidth={2.2} />
-                  동점자 발생 긴급 확인
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] bg-[#fef2f2] border border-[#fecaca] text-[#dc2626] text-xs sm:text-sm font-bold">
+                  <Volume2 size={14} strokeWidth={2.2} />
+                  동점자 확인 필요
                 </span>
-                <h2 className="text-2xl font-black text-[#0f172a] m-0 pt-1">
-                  동점 선수가 있습니다! 순위를 직접 조정해 주세요
+                <h2 className="text-xl sm:text-2xl font-bold text-[#171717] m-0 pt-1">
+                  동점 선수가 있습니다 — 최종순위를 조정해 주세요
                 </h2>
               </div>
             </div>
 
             {allTiedPlayersSummary.length > 0 && (
-              <div className="bg-[#fef2f2] border-2 border-[#fca5a5] rounded-[12px] p-4 space-y-1.5">
-                <div className="text-sm font-extrabold text-[#991b1b]">
-                  현재 감지된 동점 선수
+              <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[12px] p-4 space-y-1">
+                <div className="text-xs sm:text-sm font-semibold text-[#991b1b]">
+                  감지된 동점 선수
                 </div>
                 {allTiedPlayersSummary.map((line, idx) => (
                   <div
                     key={idx}
-                    className="text-xl font-black text-[#dc2626] tabular-nums"
+                    className="text-lg sm:text-xl font-bold text-[#dc2626] tabular-nums"
                   >
                     · {line}
                   </div>
@@ -675,29 +667,21 @@ const ContestPointSummary = ({
               </div>
             )}
 
-            <div className="bg-[#f8fafc] border-2 border-[#cbd5e1] rounded-[12px] p-4 text-base font-bold text-[#1e293b] space-y-2 leading-relaxed">
+            <div className="bg-[#fafafa] border border-[#e4e4e7] rounded-[12px] p-4 text-base font-medium text-[#404040] space-y-1.5 leading-relaxed">
               <p className="m-0">
-                1. 표에서{" "}
-                <span className="text-[#dc2626] underline">
-                  빨간 테두리로 강조된 줄
-                </span>
-                이 유효 합산 점수가 같은 동점 선수입니다.
+                1. 표에서 <strong className="text-[#dc2626]">붉게 표시된 행</strong>이 유효 합산 점수가 같은 동점 선수입니다.
               </p>
               <p className="m-0">
-                2. 심판위원장 판정 기준에 따라{" "}
-                <span className="text-[#1d4ed8]">
-                  [최종순위] 숫자를 서로 다르게 수정
-                </span>
-                하신 뒤 하단의 [순위표 최종 확정] 버튼을 눌러주세요.
+                2. 심판위원장 판정 기준에 따라 <strong className="text-[#1d4ed8]">[최종순위] 숫자를 서로 다르게 입력</strong>하신 뒤 확정해 주세요.
               </p>
             </div>
 
             <button
               type="button"
-              className="w-full h-14 px-6 rounded-[12px] bg-[#dc2626] hover:bg-[#b91c1c] text-white font-extrabold text-lg transition-colors cursor-pointer"
+              className="w-full py-3.5 px-6 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-lg transition-colors cursor-pointer"
               onClick={() => setDuplicateWarningOpen(false)}
             >
-              확인 — 동점자 순위 수정하러 가기
+              확인하고 동점 순위 조정하기
             </button>
           </div>
         </div>
@@ -709,32 +693,32 @@ const ContestPointSummary = ({
         onClose={() => setForceConfirmOpen(false)}
       >
         <div
-          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-black/65"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-[#171717]/45 backdrop-blur-[2px]"
           style={{ transform: "none" }}
         >
-          <div className="w-full max-w-xl bg-white rounded-[18px] border-[3px] border-[#dc2626] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.3)] space-y-5">
+          <div className="w-full max-w-xl bg-white rounded-[18px] border border-[#171717]/[0.10] p-7 shadow-[0_24px_60px_rgba(0,0,0,0.18)] space-y-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-[12px] bg-[#fee2e2] text-[#dc2626] border-2 border-[#fca5a5] flex items-center justify-center shrink-0">
-                <AlertTriangle size={30} strokeWidth={2.2} />
+              <div className="w-12 h-12 rounded-[12px] bg-[#fef2f2] text-[#dc2626] border border-[#fecaca] flex items-center justify-center shrink-0">
+                <AlertTriangle size={26} strokeWidth={2.2} />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-[#dc2626] m-0">
-                  잠깐! 동점자가 그대로 남아 있습니다
+                <h2 className="text-xl sm:text-2xl font-bold text-[#171717] m-0">
+                  동점자가 남아 있습니다
                 </h2>
-                <p className="text-base font-bold text-[#475569] mt-1.5 mb-0">
-                  공동 순위(동점) 상태로 정말 강제 등록하시겠습니까?
+                <p className="text-base font-medium text-[#525252] mt-1 mb-0">
+                  공동 순위(동점) 상태 그대로 확정하시겠습니까?
                 </p>
               </div>
             </div>
 
-            <div className="bg-[#fef2f2] border-2 border-[#dc2626]/40 rounded-[12px] p-4 text-base font-bold text-[#7f1d1d] leading-relaxed">
-              동점자가 남아 있는 상태로 저장하면 전광판 순위 발표, 시상식 호명, 상장 출력에서 공동 순위로 처리되거나 순위 충돌이 발생할 수 있습니다.
+            <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[12px] p-4 text-sm sm:text-base font-medium text-[#991b1b] leading-relaxed">
+              동점자가 남아 있는 상태로 저장하면 전광판 순위 발표, 시상식 호명, 상장 출력에서 공동 순위로 처리됩니다.
             </div>
 
-            <div className="flex flex-col gap-3 pt-1">
+            <div className="flex flex-col gap-2.5 pt-1">
               <button
                 type="button"
-                className="w-full h-14 px-5 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold text-lg transition-colors cursor-pointer"
+                className="w-full py-3.5 px-5 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-lg transition-colors cursor-pointer"
                 onClick={() => setForceConfirmOpen(false)}
               >
                 돌아가서 동점 순위 수정하기 (권장)
@@ -742,7 +726,7 @@ const ContestPointSummary = ({
 
               <button
                 type="button"
-                className="w-full h-12 px-5 rounded-[12px] bg-white hover:bg-[#fef2f2] border-2 border-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-extrabold text-base transition-colors cursor-pointer"
+                className="w-full py-3 px-5 rounded-[12px] bg-white hover:bg-[#fef2f2] border border-[#fca5a5] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-semibold text-base transition-colors cursor-pointer"
                 disabled={isSaving}
                 onClick={() => {
                   if (isSaving) return;
@@ -757,17 +741,17 @@ const ContestPointSummary = ({
         </div>
       </Modal>
 
-      {/* 상단 고정 헤더 바 (고대비 · 대형 타이틀) */}
-      <div className="sticky top-0 z-20 bg-[#0f172a] text-white border-b-2 border-[#1e293b] px-6 py-4 flex items-center justify-between shrink-0 shadow-md">
+      {/* 상단 고정 헤더 바 */}
+      <div className="sticky top-0 z-20 bg-white text-[#171717] border-b border-[#e4e4e7] px-6 py-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3.5 flex-wrap">
-          <div className="w-11 h-11 rounded-[10px] bg-[#2563eb] flex items-center justify-center shrink-0">
-            <ClipboardCheck size={24} strokeWidth={2.2} className="text-white" />
+          <div className="w-10 h-10 rounded-[10px] bg-[#eff6ff] border border-[#bfdbfe] flex items-center justify-center shrink-0">
+            <ClipboardCheck size={21} strokeWidth={2} className="text-[#2563eb]" />
           </div>
           <div>
-            <div className="text-xs font-bold text-[#93c5fd] tracking-wide">
-              심판위원장 전용 검수 화면 · 높은 합산이 상위 등수
+            <div className="text-xs font-semibold text-[#2563eb]">
+              심판위원장 검수 화면 · 높은 합산이 상위 등수
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white m-0 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#171717] m-0 tracking-tight">
               점수형 순위 집계표
             </h1>
           </div>
@@ -775,28 +759,28 @@ const ContestPointSummary = ({
 
         <button
           type="button"
-          className="inline-flex items-center gap-2 h-12 px-5 rounded-[10px] bg-[#1e293b] hover:bg-[#334155] border border-white/20 text-white font-extrabold text-base transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 h-11 px-4 rounded-[10px] bg-white hover:bg-[#f4f4f5] border border-[#d4d4d8] text-[#171717] font-semibold text-base transition-colors cursor-pointer"
           onClick={() => setClose()}
         >
-          <X size={20} strokeWidth={2.2} />
-          <span>창 닫기</span>
+          <X size={18} strokeWidth={2} className="text-[#525252]" />
+          <span>닫기</span>
         </button>
       </div>
 
       {/* 본문 영역 */}
       <div className="flex-1 p-4 sm:p-6 space-y-5 w-full max-w-[1600px] mx-auto">
         {!isLoadingScores && summaryTable?.length === 0 && (
-          <div className="bg-white rounded-[16px] border-[3px] border-[#dc2626] p-8 text-center space-y-3 shadow-sm">
+          <div className="bg-white rounded-[14px] border border-[#fca5a5] p-8 text-center space-y-2.5">
             <AlertTriangle
-              size={44}
-              strokeWidth={2}
+              size={38}
+              strokeWidth={1.9}
               className="text-[#dc2626] mx-auto"
             />
-            <h2 className="text-2xl font-black text-[#dc2626] m-0">
-              수신된 채점 데이터가 아직 없습니다!
+            <h2 className="text-xl sm:text-2xl font-bold text-[#dc2626] m-0">
+              수신된 채점 데이터가 아직 없습니다
             </h2>
-            <p className="text-lg font-bold text-[#334155] m-0">
-              심판석에서 채점표를 제출했는지 확인하신 뒤 창을 닫고 다시 열어주세요.
+            <p className="text-base sm:text-lg font-medium text-[#525252] m-0">
+              심판석에서 채점표를 제출했는지 확인한 뒤 창을 닫고 다시 열어주세요.
             </p>
           </div>
         )}
@@ -857,110 +841,104 @@ const ContestPointSummary = ({
             );
 
             return (
-              <div key={tIdx} className="space-y-5">
-                {/* 1. 종목 · 체급 & 범례 대형 안내 카드 */}
-                <div className="bg-white rounded-[14px] border-2 border-[#cbd5e1] shadow-sm px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="px-3.5 py-1.5 bg-[#0f172a] text-white font-extrabold text-base sm:text-lg rounded-[8px]">
+              <div key={tIdx} className="space-y-4">
+                {/* 1. 종목 · 체급 & 범례 카드 */}
+                <div className="bg-white rounded-[14px] border border-[#e4e4e7] px-5 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="px-3 py-1 bg-[#f4f4f5] border border-[#d4d4d8] text-[#171717] font-bold text-base sm:text-lg rounded-[8px]">
                       {categoryTitle}
                     </span>
-                    <span className="text-xl sm:text-2xl font-black text-[#0f172a]">
+                    <span className="text-xl sm:text-2xl font-bold text-[#171717]">
                       {gradeTitle}
                     </span>
-                    <span className="px-3 py-1 rounded-[8px] bg-[#eff6ff] border border-[#93c5fd] text-[#1d4ed8] text-sm sm:text-base font-extrabold">
+                    <span className="px-2.5 py-1 rounded-[7px] bg-[#eff6ff] border border-[#bfdbfe] text-[#1d4ed8] text-xs sm:text-sm font-semibold">
                       {headerSeats.length}심제 ·{" "}
                       {trimPerSide > 0
-                        ? `최고 ${trimPerSide}개 · 최저 ${trimPerSide}개 제외 후 유효 ${
+                        ? `최고 ${trimPerSide} · 최저 ${trimPerSide} 제외 후 유효 ${
                             headerSeats.length - trimPerSide * 2
                           }심 합산`
                         : "전원 합산"}
                     </span>
                   </div>
 
-                  {/* 시각 범례 (연세 있는 심판위원장님용 직관 표기) */}
-                  <div className="flex flex-wrap items-center gap-3 text-sm sm:text-base font-extrabold">
-                    <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[8px] bg-white border-2 border-[#0f172a] text-[#0f172a]">
-                      <span className="text-xl font-black">85</span>
-                      <span>유효 합산 점수</span>
+                  {/* 시각 범례 */}
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-semibold text-[#525252]">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[7px] bg-[#fafafa] border border-[#e4e4e7] text-[#171717]">
+                      <span className="text-base font-extrabold">85</span>
+                      <span>유효 점수</span>
                     </span>
-                    <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[8px] bg-[#e2e8f0] border-2 border-dashed border-[#64748b] text-[#334155]">
-                      <span className="line-through decoration-[3px] decoration-[#dc2626] text-[#64748b] text-lg font-black">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[7px] bg-[#fafafa] border border-[#e4e4e7] text-[#737373]">
+                      <span className="line-through text-[#a1a1aa] font-bold">
                         90
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-[#b91c1c] text-white text-xs font-black">
-                        최고제외
+                      <span className="px-1.5 py-0.5 rounded bg-[#f4f4f5] border border-[#d4d4d8] text-[#737373] text-[11px] font-semibold">
+                        최고·최저 제외
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-[#334155] text-white text-xs font-black">
-                        최저제외
-                      </span>
-                      <span>합산 제외</span>
                     </span>
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-[8px] bg-[#fef2f2] border-2 border-[#dc2626] text-[#dc2626]">
-                      <span className="font-black">점수 누락</span>
-                      <span>= 미채점 좌석</span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[7px] bg-[#fef2f2] border border-[#fecaca] text-[#dc2626]">
+                      <span className="font-bold">미채점</span>
+                      <span>점수 누락 좌석</span>
                     </span>
                   </div>
                 </div>
 
-                {/* 2. 최상단 대형 상태 메시지 배너 (점수 누락 / 동점 발생 / 정상 완료) */}
+                {/* 2. 상태 메시지 배너 */}
                 {hasMissingScores ? (
-                  <div className="bg-[#fef2f2] border-[3px] border-[#dc2626] rounded-[14px] px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-[10px] bg-[#dc2626] text-white flex items-center justify-center shrink-0">
-                        <AlertTriangle size={28} strokeWidth={2.2} />
+                  <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-[12px] px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-[10px] bg-white border border-[#fecaca] text-[#dc2626] flex items-center justify-center shrink-0">
+                        <AlertTriangle size={22} strokeWidth={2.2} />
                       </div>
-                      <div className="space-y-1">
-                        <div className="text-xl sm:text-2xl font-black text-[#dc2626]">
-                          심판 채점 누락 발생! —{" "}
+                      <div className="space-y-0.5">
+                        <div className="text-lg sm:text-xl font-bold text-[#dc2626]">
+                          심판 채점 누락 —{" "}
                           {missingSeats.map((s) => `${s}번`).join(", ")} 심판의 점수가 빠져 있습니다
                         </div>
-                        <div className="text-base sm:text-lg font-bold text-[#7f1d1d]">
-                          표에서 빨간 [점수누락] 칸을 확인해 주세요. 모든 심판의 점수가 들어와야 정확한 최고·최저 제외 및 순위 확정이 가능합니다.
+                        <div className="text-sm sm:text-base font-medium text-[#991b1b]">
+                          표의 붉은색 [점수누락] 칸을 확인해 주세요. 전 좌석 점수가 들어와야 순위 확정이 가능합니다.
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : hasDuplicates ? (
-                  <div className="bg-[#fef2f2] border-[3px] border-[#dc2626] rounded-[14px] px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-[10px] bg-[#dc2626] text-white flex items-center justify-center shrink-0">
-                        <AlertTriangle size={28} strokeWidth={2.2} />
+                  <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-[12px] px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-[10px] bg-white border border-[#fecaca] text-[#dc2626] flex items-center justify-center shrink-0">
+                        <AlertTriangle size={22} strokeWidth={2.2} />
                       </div>
-                      <div className="space-y-1">
-                        <div className="text-xl sm:text-2xl font-black text-[#dc2626]">
-                          동점자 발생! ({duplicateRanks.map((r) => `${r}위`).join(", ")} 동점) — 대상 선수: {tiedPlayerNumbers.join(", ")}
+                      <div className="space-y-0.5">
+                        <div className="text-lg sm:text-xl font-bold text-[#dc2626]">
+                          동점자 발생 ({duplicateRanks.map((r) => `${r}위`).join(", ")} 동점) — 대상: {tiedPlayerNumbers.join(", ")}
                         </div>
-                        <div className="text-base sm:text-lg font-bold text-[#7f1d1d]">
-                          빨간색 줄의 [최종순위] 입력칸 숫자를 서로 다르게 수정하시면 즉시 [순위표 최종 확정] 버튼이 활성화됩니다.
+                        <div className="text-sm sm:text-base font-medium text-[#991b1b]">
+                          강조된 행의 [최종순위] 숫자를 서로 다르게 조정하면 [순위표 최종 확정] 버튼이 활성화됩니다.
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : hasInvalid ? (
-                  <div className="bg-[#fef2f2] border-[3px] border-[#dc2626] rounded-[14px] px-6 py-5 flex items-center gap-4 shadow-sm">
-                    <div className="w-12 h-12 rounded-[10px] bg-[#dc2626] text-white flex items-center justify-center shrink-0">
-                      <AlertTriangle size={28} strokeWidth={2.2} />
+                  <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-[12px] px-5 py-4 flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-[10px] bg-white border border-[#fecaca] text-[#dc2626] flex items-center justify-center shrink-0">
+                      <AlertTriangle size={22} strokeWidth={2.2} />
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-xl sm:text-2xl font-black text-[#dc2626]">
-                        최종순위 미입력 선수가 있습니다!
+                    <div className="space-y-0.5">
+                      <div className="text-lg sm:text-xl font-bold text-[#dc2626]">
+                        최종순위 미입력 선수가 있습니다
                       </div>
-                      <div className="text-base sm:text-lg font-bold text-[#7f1d1d]">
+                      <div className="text-sm sm:text-base font-medium text-[#991b1b]">
                         비어 있거나 잘못된 [최종순위] 칸에 1 이상의 순위 숫자를 입력해 주세요.
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-[#f0fdf4] border-2 border-[#16a34a] rounded-[14px] px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-11 h-11 rounded-[10px] bg-[#16a34a] text-white flex items-center justify-center shrink-0">
-                        <CheckCircle2 size={26} strokeWidth={2.2} />
-                      </div>
+                  <div className="bg-[#f0fdf4] border border-[#86efac] rounded-[12px] px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 size={22} strokeWidth={2.2} className="text-[#16a34a] shrink-0" />
                       <div>
-                        <div className="text-lg sm:text-xl font-black text-[#15803d]">
+                        <div className="text-base sm:text-lg font-bold text-[#15803d]">
                           전 심판 채점 완료 · 동점자 없음 (확정 가능)
                         </div>
-                        <div className="text-sm sm:text-base font-bold text-[#166534]">
+                        <div className="text-sm font-medium text-[#166534]">
                           점수 및 최종순위를 확인하신 후 우측 하단의 [순위표 최종 확정] 버튼을 눌러주세요.
                         </div>
                       </div>
@@ -968,16 +946,16 @@ const ContestPointSummary = ({
                   </div>
                 )}
 
-                {/* 3. 대형 고대비 채점 매트릭스 테이블 */}
-                <div className="bg-white rounded-[14px] border-2 border-[#94a3b8] shadow-sm overflow-hidden w-full">
+                {/* 3. 채점 매트릭스 테이블 */}
+                <div className="bg-white rounded-[14px] border border-[#e4e4e7] overflow-hidden w-full">
                   <div className="overflow-x-auto w-full">
                     <table className="w-full text-center border-collapse">
                       <thead>
-                        <tr className="bg-[#1e293b] text-white border-b-2 border-[#0f172a]">
-                          <th className="py-4 px-4 w-32 text-base sm:text-lg font-extrabold border-r border-white/15 whitespace-nowrap">
+                        <tr className="bg-[#f4f4f5] text-[#171717] border-b border-[#d4d4d8]">
+                          <th className="py-3.5 px-4 w-32 text-base sm:text-lg font-bold border-r border-[#e4e4e7] whitespace-nowrap">
                             선수번호
                           </th>
-                          <th className="py-4 px-4 w-44 text-base sm:text-lg font-extrabold border-r border-white/15 whitespace-nowrap bg-[#0f172a]">
+                          <th className="py-3.5 px-4 w-44 text-base sm:text-lg font-bold border-r border-[#d4d4d8] whitespace-nowrap bg-[#fafafa]">
                             최종순위
                           </th>
                           {headerSeats.map((seatNo) => {
@@ -985,28 +963,30 @@ const ContestPointSummary = ({
                             return (
                               <th
                                 key={seatNo}
-                                className={`py-4 px-2.5 min-w-[92px] text-base sm:text-lg font-extrabold border-r border-white/15 whitespace-nowrap ${
-                                  seatMissing ? "bg-[#b91c1c] text-white" : ""
+                                className={`py-3.5 px-2.5 min-w-[92px] text-base sm:text-lg font-bold border-r border-[#e4e4e7] whitespace-nowrap ${
+                                  seatMissing
+                                    ? "bg-[#fef2f2] text-[#dc2626]"
+                                    : "text-[#3f3f46]"
                                 }`}
                               >
                                 <div className="flex flex-col items-center gap-1">
                                   <span>{seatNo}번 심판</span>
                                   {seatMissing && (
-                                    <span className="px-2 py-0.5 rounded bg-[#fef08a] text-[#991b1b] text-xs font-black">
-                                      미채점!
+                                    <span className="px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-xs font-bold">
+                                      미채점
                                     </span>
                                   )}
                                 </div>
                               </th>
                             );
                           })}
-                          <th className="py-4 px-4 w-36 text-base sm:text-lg font-black bg-[#1d4ed8] text-white whitespace-nowrap">
+                          <th className="py-3.5 px-4 w-36 text-base sm:text-lg font-bold bg-[#eff6ff] text-[#1d4ed8] border-l border-[#bfdbfe] whitespace-nowrap">
                             유효 점수합산
                           </th>
                         </tr>
                       </thead>
 
-                      <tbody className="divide-y-2 divide-[#cbd5e1]">
+                      <tbody className="divide-y divide-[#e4e4e7]">
                         {result?.length > 0 &&
                           result.map((player) => {
                             const {
@@ -1023,32 +1003,32 @@ const ContestPointSummary = ({
                               return (
                                 <tr
                                   key={playerNumber}
-                                  className="bg-[#f1f5f9] text-[#64748b]"
+                                  className="bg-[#fafafa] text-[#737373]"
                                 >
-                                  <td className="py-4 px-4 border-r border-[#cbd5e1]">
-                                    <span className="inline-flex items-center justify-center min-w-[72px] h-12 px-3.5 rounded-[10px] font-mono tabular-nums text-2xl font-black bg-[#64748b] text-white">
+                                  <td className="py-3.5 px-4 border-r border-[#e4e4e7]">
+                                    <span className="inline-flex items-center justify-center min-w-[68px] h-11 px-3 rounded-[9px] font-mono tabular-nums text-xl font-bold bg-[#f4f4f5] border border-[#d4d4d8] text-[#737373]">
                                       {playerNumber}
                                     </span>
                                   </td>
-                                  <td className="py-4 px-4 border-r-2 border-[#94a3b8]">
-                                    <span className="inline-flex items-center px-3 py-1.5 rounded-[8px] bg-[#e2e8f0] border-2 border-[#94a3b8] text-base font-black text-[#475569]">
+                                  <td className="py-3.5 px-4 border-r border-[#d4d4d8]">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-[7px] bg-[#f4f4f5] border border-[#d4d4d8] text-sm font-semibold text-[#737373]">
                                       순위제외
                                     </span>
                                   </td>
                                   {score.map((s) => (
                                     <td
                                       key={s.seatIndex}
-                                      className="py-3.5 px-2 border-r border-[#cbd5e1]"
+                                      className="py-3.5 px-2 border-r border-[#e4e4e7]"
                                     >
-                                      <span className="text-base font-extrabold text-[#64748b]">
+                                      <span className="text-sm font-semibold text-[#a1a1aa]">
                                         {s.playerScore >= 1000
                                           ? "순위제외"
                                           : s.playerScore ?? "-"}
                                       </span>
                                     </td>
                                   ))}
-                                  <td className="py-4 px-4 bg-[#e2e8f0] border-l-2 border-[#94a3b8]">
-                                    <span className="text-lg font-black text-[#475569]">
+                                  <td className="py-3.5 px-4 bg-[#f4f4f5] border-l border-[#d4d4d8]">
+                                    <span className="text-base font-semibold text-[#737373]">
                                       제외
                                     </span>
                                   </td>
@@ -1071,32 +1051,32 @@ const ContestPointSummary = ({
                                 key={playerNumber}
                                 className={
                                   needsTieBreak
-                                    ? "bg-[#fef2f2] hover:bg-[#fee2e2]/70 transition-colors"
+                                    ? "bg-[#fef2f2]/70 hover:bg-[#fef2f2] transition-colors"
                                     : rowHasMissing
-                                    ? "bg-[#fffbeb] hover:bg-[#fef3c7]/60 transition-colors"
-                                    : "bg-white hover:bg-[#f8fafc] transition-colors"
+                                    ? "bg-[#fffbeb]/60 hover:bg-[#fffbeb] transition-colors"
+                                    : "bg-white hover:bg-[#fafafa] transition-colors"
                                 }
                               >
                                 {/* 선수 번호 */}
                                 <td
-                                  className={`py-4 px-4 border-r border-[#cbd5e1] ${
+                                  className={`py-4 px-4 border-r border-[#e4e4e7] ${
                                     needsTieBreak
-                                      ? "border-l-[8px] border-l-[#dc2626]"
+                                      ? "border-l-4 border-l-[#dc2626]"
                                       : ""
                                   }`}
                                 >
                                   <div className="flex flex-col items-center gap-1">
                                     <span
-                                      className={`inline-flex items-center justify-center min-w-[76px] h-12 px-3.5 rounded-[10px] font-mono tabular-nums text-2xl sm:text-[26px] font-black tracking-tight ${
+                                      className={`inline-flex items-center justify-center min-w-[70px] h-11 px-3 rounded-[9px] font-mono tabular-nums text-2xl font-extrabold tracking-tight border ${
                                         needsTieBreak
-                                          ? "bg-[#dc2626] text-white ring-4 ring-[#fca5a5]"
-                                          : "bg-[#0f172a] text-white"
+                                          ? "bg-[#dc2626] border-[#dc2626] text-white"
+                                          : "bg-[#fafafa] border-[#d4d4d8] text-[#171717]"
                                       }`}
                                     >
                                       {playerNumber}
                                     </span>
                                     {playerName && (
-                                      <span className="text-sm font-extrabold text-[#334155] truncate max-w-[104px]">
+                                      <span className="text-xs sm:text-sm font-semibold text-[#525252] truncate max-w-[104px]">
                                         {playerName}
                                       </span>
                                     )}
@@ -1105,10 +1085,10 @@ const ContestPointSummary = ({
 
                                 {/* 최종 순위 입력칸 */}
                                 <td
-                                  className={`py-4 px-4 border-r-2 border-[#94a3b8] ${
+                                  className={`py-4 px-4 border-r border-[#d4d4d8] ${
                                     needsTieBreak
-                                      ? "bg-[#fee2e2]/85"
-                                      : "bg-[#f8fafc]"
+                                      ? "bg-[#fef2f2]"
+                                      : "bg-[#fafafa]/70"
                                   }`}
                                 >
                                   <div className="flex flex-col items-center justify-center gap-1.5">
@@ -1128,10 +1108,10 @@ const ContestPointSummary = ({
                                         }
                                         className={
                                           needsTieBreak
-                                            ? "w-24 h-14 bg-[#fffbeb] border-[3px] border-[#dc2626] rounded-[10px] text-center font-mono tabular-nums font-black text-[#dc2626] text-3xl outline-none shadow-sm"
+                                            ? "w-[88px] h-[52px] bg-white border-2 border-[#dc2626] rounded-[10px] text-center font-mono tabular-nums font-extrabold text-[#dc2626] text-2xl sm:text-3xl outline-none"
                                             : playerRank === 1
-                                            ? "w-24 h-14 bg-[#eff6ff] hover:bg-white focus:bg-white border-[3px] border-[#2563eb] rounded-[10px] text-center font-mono tabular-nums font-black text-[#1d4ed8] text-3xl outline-none"
-                                            : "w-24 h-14 bg-white hover:bg-[#f8fafc] focus:bg-white border-2 border-[#475569] focus:border-[#2563eb] rounded-[10px] text-center font-mono tabular-nums font-black text-[#0f172a] text-3xl outline-none"
+                                            ? "w-[88px] h-[52px] bg-[#eff6ff] hover:bg-white focus:bg-white border-2 border-[#2563eb] rounded-[10px] text-center font-mono tabular-nums font-extrabold text-[#1d4ed8] text-2xl sm:text-3xl outline-none"
+                                            : "w-[88px] h-[52px] bg-white hover:bg-[#fafafa] focus:bg-white border border-[#cbd5e1] focus:border-[#2563eb] rounded-[10px] text-center font-mono tabular-nums font-extrabold text-[#171717] text-2xl sm:text-3xl outline-none"
                                         }
                                         value={
                                           playerRank === null ||
@@ -1142,10 +1122,10 @@ const ContestPointSummary = ({
                                         }
                                       />
                                       <span
-                                        className={`text-xl font-black ${
+                                        className={`text-lg font-bold ${
                                           needsTieBreak
                                             ? "text-[#dc2626]"
-                                            : "text-[#334155]"
+                                            : "text-[#525252]"
                                         }`}
                                       >
                                         위
@@ -1153,22 +1133,22 @@ const ContestPointSummary = ({
                                     </div>
 
                                     {isRankDuplicated && (
-                                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-[6px] bg-[#dc2626] text-white text-sm font-black shadow-sm">
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] bg-[#dc2626] text-white text-xs sm:text-sm font-bold">
                                         <AlertTriangle
-                                          size={15}
-                                          strokeWidth={2.5}
+                                          size={14}
+                                          strokeWidth={2.3}
                                         />
-                                        동점! 순위 수정
+                                        동점 · 순위 수정
                                       </span>
                                     )}
                                     {isRankInvalid && !rowHasMissing && (
-                                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-[6px] bg-[#dc2626] text-white text-sm font-black">
-                                        순위 미입력!
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] bg-[#dc2626] text-white text-xs sm:text-sm font-bold">
+                                        순위 미입력
                                       </span>
                                     )}
                                     {!needsTieBreak && isAlert && (
-                                      <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#dbeafe] text-[#1e40af] border-2 border-[#60a5fa] text-xs sm:text-sm font-black">
-                                        동점 조정 완료
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe] text-xs font-semibold">
+                                        동점 조정됨
                                       </span>
                                     )}
                                   </div>
@@ -1188,17 +1168,15 @@ const ContestPointSummary = ({
                                     return (
                                       <td
                                         key={seatIndex}
-                                        className="py-3.5 px-2 border-r border-[#cbd5e1] bg-[#fef2f2]"
+                                        className="py-3.5 px-2 border-r border-[#e4e4e7] bg-[#fef2f2]"
                                       >
-                                        <div className="inline-flex flex-col items-center justify-center min-w-[78px] px-2.5 py-2 rounded-[10px] bg-[#fee2e2] border-[3px] border-[#dc2626] text-[#dc2626] shadow-xs">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[7px] bg-white border border-[#fca5a5] text-[#dc2626] text-xs sm:text-sm font-bold">
                                           <AlertTriangle
-                                            size={20}
-                                            strokeWidth={2.5}
+                                            size={14}
+                                            strokeWidth={2.3}
                                           />
-                                          <span className="text-sm font-black mt-0.5">
-                                            점수누락
-                                          </span>
-                                        </div>
+                                          점수누락
+                                        </span>
                                       </td>
                                     );
                                   }
@@ -1207,21 +1185,15 @@ const ContestPointSummary = ({
                                     return (
                                       <td
                                         key={seatIndex}
-                                        className="py-3.5 px-2 border-r border-[#cbd5e1] bg-[#e2e8f0]/65"
+                                        className="py-3 px-2 border-r border-[#e4e4e7] bg-[#fafafa]"
                                       >
-                                        <div className="inline-flex flex-col items-center justify-center min-w-[80px] px-2.5 py-1.5 rounded-[10px] bg-[#e2e8f0] border-2 border-dashed border-[#64748b]">
-                                          <span className="font-mono tabular-nums text-xl font-black line-through decoration-[3px] decoration-[#dc2626] text-[#64748b]">
+                                        <div className="inline-flex flex-col items-center justify-center min-w-[70px] px-2 py-1 rounded-[8px] bg-[#f4f4f5]/80 border border-[#e4e4e7]">
+                                          <span className="font-mono tabular-nums text-lg font-bold line-through text-[#a1a1aa]">
                                             {playerScore >= 1000
                                               ? "제외"
                                               : playerScore}
                                           </span>
-                                          <span
-                                            className={`mt-1 px-2 py-0.5 rounded-[5px] text-xs font-black ${
-                                              isMax
-                                                ? "bg-[#b91c1c] text-white"
-                                                : "bg-[#334155] text-white"
-                                            }`}
-                                          >
+                                          <span className="mt-0.5 px-1.5 py-0.5 rounded-[4px] bg-white border border-[#e4e4e7] text-[11px] font-semibold text-[#737373]">
                                             {isMax ? "최고제외" : "최저제외"}
                                           </span>
                                         </div>
@@ -1232,9 +1204,9 @@ const ContestPointSummary = ({
                                   return (
                                     <td
                                       key={seatIndex}
-                                      className="py-3.5 px-2 border-r border-[#cbd5e1]"
+                                      className="py-3.5 px-2 border-r border-[#e4e4e7]"
                                     >
-                                      <span className="inline-flex items-center justify-center min-w-[60px] h-12 px-2.5 rounded-[10px] bg-white border-2 border-[#cbd5e1] font-mono tabular-nums font-black text-[#0f172a] text-3xl shadow-2xs">
+                                      <span className="font-mono tabular-nums font-extrabold text-[#171717] text-2xl sm:text-[28px]">
                                         {playerScore >= 1000
                                           ? "순위제외"
                                           : playerScore}
@@ -1247,23 +1219,23 @@ const ContestPointSummary = ({
                                 <td
                                   className={
                                     needsTieBreak
-                                      ? "py-4 px-4 bg-[#fee2e2] border-l-2 border-[#dc2626]"
-                                      : "py-4 px-4 bg-[#eff6ff] border-l-2 border-[#60a5fa]"
+                                      ? "py-4 px-4 bg-[#fef2f2] border-l border-[#fca5a5]"
+                                      : "py-4 px-4 bg-[#eff6ff]/50 border-l border-[#bfdbfe]"
                                   }
                                 >
                                   <div className="flex flex-col items-center justify-center">
                                     <span
                                       className={
                                         needsTieBreak
-                                          ? "font-mono tabular-nums font-black text-[#dc2626] text-3xl sm:text-4xl"
-                                          : "font-mono tabular-nums font-black text-[#1d4ed8] text-3xl sm:text-4xl"
+                                          ? "font-mono tabular-nums font-extrabold text-[#dc2626] text-2xl sm:text-3xl"
+                                          : "font-mono tabular-nums font-extrabold text-[#1d4ed8] text-2xl sm:text-3xl"
                                       }
                                     >
                                       {rowHasMissing ? "미완료" : totalScore}
                                     </span>
                                     {needsTieBreak && !rowHasMissing && (
-                                      <span className="mt-1 px-2 py-0.5 rounded bg-[#dc2626] text-white text-xs font-black">
-                                        동점 합산!
+                                      <span className="mt-1 px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-xs font-bold">
+                                        동점 합산
                                       </span>
                                     )}
                                   </div>
@@ -1276,63 +1248,63 @@ const ContestPointSummary = ({
                   </div>
                 </div>
 
-                {/* 4. 하단 대형 확정 액션 바 */}
+                {/* 4. 하단 확정 액션 바 */}
                 <div
-                  className={`flex flex-col lg:flex-row items-center justify-between gap-4 px-6 py-5 rounded-[14px] border-2 shadow-sm ${
+                  className={`flex flex-col lg:flex-row items-center justify-between gap-4 px-6 py-4 rounded-[14px] border ${
                     cannotConfirm
-                      ? "bg-[#fef2f2] border-[#dc2626]"
-                      : "bg-white border-[#16a34a]"
+                      ? "bg-[#fef2f2] border-[#fca5a5]"
+                      : "bg-white border-[#e4e4e7]"
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {hasMissingScores || hasAnyMissing ? (
                       <>
                         <AlertTriangle
-                          size={26}
+                          size={22}
                           strokeWidth={2.2}
                           className="text-[#dc2626] shrink-0"
                         />
-                        <span className="text-lg sm:text-xl font-black text-[#dc2626]">
-                          미채점 심판석({missingSeats.map((s) => `${s}번`).join(", ")})이 남아 있어 아직 확정할 수 없습니다!
+                        <span className="text-base sm:text-lg font-bold text-[#dc2626]">
+                          미채점 심판석({missingSeats.map((s) => `${s}번`).join(", ")})이 남아 있어 아직 확정할 수 없습니다
                         </span>
                       </>
                     ) : hasInvalid || hasAnyInvalid ? (
                       <>
                         <AlertTriangle
-                          size={26}
+                          size={22}
                           strokeWidth={2.2}
                           className="text-[#dc2626] shrink-0"
                         />
-                        <span className="text-lg sm:text-xl font-black text-[#dc2626]">
-                          최종순위가 비어 있는 선수가 있습니다. 1 이상의 순위를 입력해 주세요!
+                        <span className="text-base sm:text-lg font-bold text-[#dc2626]">
+                          최종순위가 비어 있는 선수가 있습니다. 1 이상의 순위를 입력해 주세요
                         </span>
                       </>
                     ) : hasDuplicates || hasAnyDuplicates ? (
                       <>
                         <AlertTriangle
-                          size={26}
+                          size={22}
                           strokeWidth={2.2}
                           className="text-[#dc2626] shrink-0"
                         />
-                        <span className="text-lg sm:text-xl font-black text-[#dc2626]">
-                          동점자({tiedPlayerNumbers.join(", ")})의 최종순위를 서로 다르게 수정해야 확정됩니다!
+                        <span className="text-base sm:text-lg font-bold text-[#dc2626]">
+                          동점자({tiedPlayerNumbers.join(", ")})의 최종순위를 서로 다르게 수정해야 확정됩니다
                         </span>
                       </>
                     ) : (
                       <>
                         <CheckCircle2
-                          size={26}
+                          size={22}
                           strokeWidth={2.2}
                           className="text-[#16a34a] shrink-0"
                         />
-                        <span className="text-base sm:text-lg font-extrabold text-[#0f172a]">
-                          모든 점수 검수가 완료되었습니다. [순위표 최종 확정] 시 전광판 및 공식 기록에 즉시 저장됩니다.
+                        <span className="text-base sm:text-lg font-semibold text-[#171717]">
+                          점수 검수가 완료되었습니다. [순위표 최종 확정] 시 전광판 및 공식 기록에 즉시 반영됩니다.
                         </span>
                       </>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+                  <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-end">
                     {hasDuplicates &&
                       !hasInvalid &&
                       !hasAnyInvalid &&
@@ -1340,7 +1312,7 @@ const ContestPointSummary = ({
                       !hasAnyMissing && (
                         <button
                           type="button"
-                          className="h-14 px-5 rounded-[12px] bg-white hover:bg-[#fee2e2] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-extrabold text-base border-2 border-[#dc2626] transition-colors cursor-pointer"
+                          className="h-12 px-4 rounded-[10px] bg-white hover:bg-[#fef2f2] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-semibold text-base border border-[#fca5a5] transition-colors cursor-pointer"
                           disabled={isSaving}
                           onClick={() => !isSaving && setForceConfirmOpen(true)}
                         >
@@ -1352,8 +1324,8 @@ const ContestPointSummary = ({
                       type="button"
                       className={
                         cannotConfirm
-                          ? "h-14 px-8 rounded-[12px] bg-[#cbd5e1] text-[#475569] font-extrabold text-lg cursor-not-allowed border-2 border-[#94a3b8]"
-                          : "h-14 px-8 rounded-[12px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-xl shadow-md transition-colors active:scale-[0.99] cursor-pointer"
+                          ? "h-12 px-7 rounded-[10px] bg-[#e4e4e7] text-[#737373] font-bold text-base cursor-not-allowed"
+                          : "h-12 px-7 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-lg shadow-xs transition-colors active:scale-[0.99] cursor-pointer"
                       }
                       onClick={() =>
                         !cannotConfirm && handleSaveResult(summaryTable)

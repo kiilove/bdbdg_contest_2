@@ -524,18 +524,18 @@ const CompareSetting = ({
   };
 
   return (
-    <div className="flex w-full h-full flex-col bg-[#f8fafc] overflow-y-auto">
+    <div className="flex w-full h-full flex-col bg-[#fafafa] overflow-y-auto">
       {/* 드로어 상단 고정 헤더 */}
-      <div className="sticky top-0 z-20 bg-[#0f172a] text-white px-5 py-4 border-b-2 border-[#1e293b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-sm">
+      <div className="sticky top-0 z-20 bg-white text-[#171717] px-5 py-4 border-b border-[#e4e4e7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-11 h-11 rounded-[10px] bg-[#2563eb] shrink-0">
-            <TrophyOutlined className="text-white text-xl" />
+          <div className="flex items-center justify-center w-10 h-10 rounded-[10px] bg-[#eff6ff] border border-[#bfdbfe] shrink-0">
+            <TrophyOutlined className="text-[#2563eb] text-lg" />
           </div>
           <div className="flex flex-col">
-            <div className="text-lg sm:text-xl font-black text-white leading-tight">
+            <div className="text-lg sm:text-xl font-bold text-[#171717] leading-tight">
               {stageInfo?.categoryTitle}({stageInfo?.grades?.[0]?.gradeTitle})
             </div>
-            <div className="text-sm font-bold text-[#93c5fd] mt-0.5">
+            <div className="text-sm font-semibold text-[#2563eb] mt-0.5">
               {propCompareIndex}차 비교심사 설정
             </div>
           </div>
@@ -543,11 +543,10 @@ const CompareSetting = ({
         <Space>
           <Button
             danger
-            type="primary"
             size="large"
             icon={<CloseOutlined />}
             onClick={handleCloseWithRollback}
-            className="font-bold"
+            className="font-semibold"
           >
             취소(오류시 재비교심사설정)
           </Button>
@@ -847,19 +846,20 @@ const CompareSetting = ({
                       </>
                     )}
                   </Space>
-                  {!realtimeData?.compares?.status?.compareStart && (
-                    <div className="flex items-center gap-2 mt-2 p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
-                      <InfoCircleOutlined className="text-[#2563eb]" />
-                      <span className="text-sm font-semibold text-[#1e3a8a]">
-                        {votedInfo.scoreMode === "all" &&
-                          "출전선수 전원 채점을 완료해야합니다."}
-                        {votedInfo.scoreMode === "topOnly" &&
-                          "비교심사 대상만 채점합니다. 나머지 선수는 순위외 처리됩니다."}
-                        {votedInfo.scoreMode === "topWithSub" &&
-                          "이전 차수 비교심사 대상 전체를 채점합니다."}
-                      </span>
-                    </div>
-                  )}
+                  {!realtimeData?.compares?.status?.compareStart &&
+                    Boolean(votedInfo.scoreMode) && (
+                      <div className="flex items-center gap-2 mt-2 p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
+                        <InfoCircleOutlined className="text-[#2563eb]" />
+                        <span className="text-sm font-semibold text-[#1e3a8a]">
+                          {votedInfo.scoreMode === "all" &&
+                            "출전선수 전원 채점을 완료해야합니다."}
+                          {votedInfo.scoreMode === "topOnly" &&
+                            "비교심사 대상만 채점합니다. 나머지 선수는 순위외 처리됩니다."}
+                          {votedInfo.scoreMode === "topWithSub" &&
+                            "이전 차수 비교심사 대상 전체를 채점합니다."}
+                        </span>
+                      </div>
+                    )}
                 </div>
 
                 {/* 비교심사 투표개시 버튼 */}
@@ -896,10 +896,10 @@ const CompareSetting = ({
                   className="border border-[#cbd5e1] shadow-xs"
                   title={
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0f172a]">
-                        <TrophyOutlined className="text-white" />
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#eff6ff] border border-[#bfdbfe]">
+                        <TrophyOutlined className="text-[#2563eb]" />
                       </div>
-                      <span className="font-bold text-base text-[#0f172a]">
+                      <span className="font-bold text-base text-[#171717]">
                         비교심사 득표 및 투표현황
                       </span>
                     </div>
@@ -1083,10 +1083,10 @@ const CompareSetting = ({
                   className="border border-[#cbd5e1] shadow-xs"
                   title={
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#2563eb]">
-                        <InfoCircleOutlined className="text-white" />
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#eff6ff] border border-[#bfdbfe]">
+                        <InfoCircleOutlined className="text-[#2563eb]" />
                       </div>
-                      <span className="font-bold text-base text-[#0f172a]">
+                      <span className="font-bold text-base text-[#171717]">
                         심판 투표 상황
                       </span>
                     </div>
