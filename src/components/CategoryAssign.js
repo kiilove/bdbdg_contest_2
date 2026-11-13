@@ -99,9 +99,12 @@ const CategoryAssign = ({
 
     if (!categoryGrades.length) {
       setMessage?.({
+        variant: "warning",
+        title: "하위 체급 등록 필요",
         body: `'${
           category?.contestCategoryTitle || "해당 종목"
-        }'에 등록된 하위 체급이 없어 좌석을 배정할 수 없습니다. 먼저 체급을 등록해 주세요.`,
+        }'에 등록된 하위 체급이 없어 좌석을 배정할 수 없습니다.`,
+        body2: "종목/체급 설정 탭에서 먼저 세부 체급을 등록해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });

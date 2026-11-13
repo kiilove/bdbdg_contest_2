@@ -189,7 +189,14 @@ const PrintPlayerStanding = () => {
   const handleExportExcel = async () => {
     const flatResults = resultArray.flatMap((cat) => cat.matchedGrades || []);
     if (flatResults.length === 0) {
-      alert("다운로드할 집계 데이터가 없습니다.");
+      setMessage({
+        variant: "warning",
+        title: "다운로드할 결과 없음",
+        body: "집계된 순위 결과 데이터가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
     try {
@@ -217,7 +224,15 @@ const PrintPlayerStanding = () => {
       );
     } catch (e) {
       console.error(e);
-      alert("엑셀 다운로드 중 오류 발생: " + e.message);
+      setMessage({
+        variant: "error",
+        title: "엑셀 다운로드 실패",
+        body: "엑셀 파일을 생성하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsExporting(false);
     }
@@ -263,16 +278,16 @@ const PrintPlayerStanding = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={message}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
         {isLoading && <LoadingPage />}
         {!isLoading && resultArray.length === 0 && (
           <>
-            <ConfirmationModal
-              isOpen={msgOpen}
-              message={message}
-              onCancel={() => setMsgOpen(false)}
-              onConfirm={() => setMsgOpen(false)}
-            />
             <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">
@@ -295,12 +310,6 @@ const PrintPlayerStanding = () => {
         )}
         {!isLoading && resultArray.length > 0 && (
           <>
-            <ConfirmationModal
-              isOpen={msgOpen}
-              message={message}
-              onCancel={() => setMsgOpen(false)}
-              onConfirm={() => setMsgOpen(false)}
-            />
             <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] flex items-center justify-center shrink-0">

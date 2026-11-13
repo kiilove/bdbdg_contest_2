@@ -24,7 +24,6 @@ import {
   deleteObject,
 } from "firebase/storage";
 import {
-  message,
   Modal,
   Input,
   Select,
@@ -32,6 +31,7 @@ import {
   Checkbox,
   Progress,
 } from "antd";
+import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import {
   Monitor,
   ExternalLink,
@@ -94,6 +94,48 @@ const StageBroadcastController = ({
   rankingResults = [],
 }) => {
   void rankingResults;
+
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
+
+  const message = {
+    error: (text) => {
+      setNoticeMessage({
+        variant: "error",
+        title: "전광판 제어 오류",
+        body: String(text || "작업 처리 중 오류가 발생했습니다."),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    warning: (text) => {
+      const body = String(text || "");
+      if (body.startsWith("특별영상:")) return;
+      setNoticeMessage({
+        variant: "warning",
+        title: "확인 필요",
+        body,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    success: (text) => {
+      const body = String(text || "");
+      if (body.includes("등록 완료") || body.includes("삭제되었습니다")) {
+        setNoticeMessage({
+          variant: "success",
+          title: "특별영상 관리 완료",
+          body,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setNoticeOpen(true);
+      }
+    },
+    info: () => {},
+  };
 
   const { currentContest } = useContext(CurrentContestContext);
   const contestId =
@@ -1179,6 +1221,12 @@ const StageBroadcastController = ({
 
   return (
     <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden mb-4">
+      <ConfirmationModal
+        isOpen={noticeOpen}
+        message={noticeMessage}
+        onCancel={() => setNoticeOpen(false)}
+        onConfirm={() => setNoticeOpen(false)}
+      />
       {/* 상단 컨트롤러 헤더 바 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-5 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
         <div className="flex items-center gap-2.5">

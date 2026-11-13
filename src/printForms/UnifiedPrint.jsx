@@ -28,12 +28,15 @@ import { exportContestResultsToExcel } from "../functions/functions";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const UnifiedPrint = () => {
   const { isTabletOrMobile } = useDevice();
   const { printType = "measurement" } = useParams();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
   const [currentSection, setCurrentSection] = useState("all");
   const [currentCategoryId, setCurrentCategoryId] = useState("all");
   const [currentGradeId, setCurrentGradeId] = useState("all");
@@ -150,7 +153,14 @@ const UnifiedPrint = () => {
   const handleExportExcel = async () => {
     const contestId = currentContest?.contests?.id;
     if (!contestId) {
-      alert("대회 정보가 없습니다.");
+      setModalMessage({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "현재 선택된 대회 정보가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
     try {
@@ -163,7 +173,14 @@ const UnifiedPrint = () => {
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       if (rows.length === 0) {
-        alert("집계된 최종 결과 데이터가 없습니다.");
+        setModalMessage({
+          variant: "warning",
+          title: "다운로드할 결과 없음",
+          body: "집계된 최종 순위 결과 데이터가 없습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
 
@@ -191,7 +208,15 @@ const UnifiedPrint = () => {
       );
     } catch (e) {
       console.error(e);
-      alert("엑셀 다운로드 중 오류 발생: " + e.message);
+      setModalMessage({
+        variant: "error",
+        title: "엑셀 다운로드 실패",
+        body: "엑셀 파일을 생성하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsExporting(false);
     }
@@ -461,6 +486,12 @@ const UnifiedPrint = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
         {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
         <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">

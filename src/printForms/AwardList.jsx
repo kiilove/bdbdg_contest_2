@@ -41,11 +41,15 @@ const AwardList = () => {
     const condition = [where("contestId", "==", contestId)];
     if (categoriesListId === undefined || gradesListId === undefined) {
       setMessage({
-        body: "데이터를 불러오는데 문제가 발생했습니다.",
-        body2: "시스템 관리자에게 연락하세요.",
+        variant: "error",
+        title: "상장 데이터 확인 필요",
+        body: "종목 및 체급 설정 문서를 불러올 수 없습니다.",
+        body2: "대회 종목·체급 구성을 먼저 확인해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
+      setMsgOpen(true);
+      return;
     }
 
     try {

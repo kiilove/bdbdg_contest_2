@@ -54,7 +54,9 @@ const ContestMonitoringStage = () => {
       }
     } catch (error) {
       setMessage({
-        body: "데이터를 로드하지 못했습니다",
+        variant: "error",
+        title: "무대 데이터 로드 실패",
+        body: "무대 모니터링 데이터를 불러오지 못했습니다.",
         body4: error.message,
         isButton: true,
         confirmButtonText: "확인",

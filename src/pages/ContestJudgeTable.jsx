@@ -11,6 +11,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import LoadingPage from "./LoadingPage";
 import { Modal } from "@mui/material";
 import CanvasWithImageData from "../components/CanvasWithImageData";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { UserCheck, Search, Crown, KeyRound } from "lucide-react";
 
 const ContestJudgeTable = () => {
@@ -22,6 +23,8 @@ const ContestJudgeTable = () => {
   const [judgesAssignPool, setJudgesAssignPool] = useState([]);
   const [searchInfo, setSearchInfo] = useState();
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
 
   const [isOpen, setIsOpen] = useState({
     category: false,
@@ -268,7 +271,14 @@ const ContestJudgeTable = () => {
     const { checked } = e.target;
 
     if (!judgeAssignId) {
-      alert("먼저 대회 심판으로 배정한 후 위원장으로 지정해주세요.");
+      setModalMessage({
+        variant: "warning",
+        title: "심판 선발 필요",
+        body: "먼저 대회 심판으로 배정한 후 위원장으로 지정해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -330,9 +340,15 @@ const ContestJudgeTable = () => {
       );
 
       if (!availablePassword || !availablePassword.value) {
-        alert(
-          "사용 가능한 심판 일회용 비밀번호가 부족합니다. 비밀번호 풀 설정을 확인해주세요."
-        );
+        setModalMessage({
+          variant: "warning",
+          title: "일회용 비밀번호 부족",
+          body: "사용 가능한 심판 일회용 비밀번호가 부족합니다.",
+          body2: "비밀번호 풀 설정을 확인하거나 사용하지 않는 심판 배정을 해제해 주세요.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
 
@@ -648,6 +664,12 @@ const ContestJudgeTable = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       {isLoading ? (
         <div className="flex w-full h-screen justify-center items-center">
           <LoadingPage />

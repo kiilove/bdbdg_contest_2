@@ -237,7 +237,12 @@ const ContestJudgeAssignTable = () => {
   // 저장
   const handleUpdateJudgesAssign = async () => {
     try {
-      setMessage({ body: "저장 중입니다...", isButton: false });
+      setMessage({
+        variant: "loading",
+        title: "심판 배정 저장 중",
+        body: "배정 내역과 좌석 무결성을 검증하여 저장하고 있습니다.",
+        isButton: false,
+      });
       setMsgOpen(true);
 
       const targetId =
@@ -274,18 +279,31 @@ const ContestJudgeAssignTable = () => {
         );
       }
 
-      setMessage({
-        body:
-          warnings.length > 0
-            ? `저장되었습니다. 확인 필요: ${warnings.join(" · ")}`
-            : `심판 배정이 정확하게 검증·저장되었습니다 (${healthReport.totalAssignedSeats}/${healthReport.totalExpectedSeats}석 완료)`,
-        isButton: true,
-        confirmButtonText: "확인",
-      });
+      if (warnings.length > 0) {
+        setMessage({
+          variant: "warning",
+          title: "심판 배정 저장 완료 (점검 필요)",
+          body: "현재 배정 상태가 저장되었습니다.",
+          body2: `확인 항목: ${warnings.join(" · ")}`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+      } else {
+        setMessage({
+          variant: "success",
+          title: "심판 배정 저장 완료",
+          body: `모든 심판 좌석이 검증되어 저장되었습니다 (${healthReport.totalAssignedSeats}/${healthReport.totalExpectedSeats}석 완료).`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+      }
     } catch (error) {
       console.error(error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다.",
+        variant: "error",
+        title: "심판 배정 저장 실패",
+        body: "심판 배정 데이터를 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });

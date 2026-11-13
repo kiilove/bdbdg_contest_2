@@ -16,7 +16,6 @@ import {
   Form,
   Input,
   Popconfirm,
-  message,
   Upload,
   Select,
   InputNumber,
@@ -26,6 +25,7 @@ import {
   Slider,
   Tooltip,
 } from "antd";
+import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import {
   Plus,
   Pencil,
@@ -186,12 +186,23 @@ const ContestSponsorManager = () => {
   }, [contestId]);
 
   const [, setStatsTick] = useState(0);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
   const impressionStats = calculateAdImpressionStats(sponsors, "STAGE_LIVE");
+
+  const openNotice = (config) => {
+    setNoticeMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setNoticeOpen(true);
+  };
 
   const handleResetStats = () => {
     resetAdImpressionCounts("STAGE_LIVE");
     setStatsTick((t) => t + 1);
-    message.success("오늘의 광고 누적 노출 통계가 초기화되었습니다");
+    openNotice({
+      variant: "success",
+      title: "노출 통계 초기화 완료",
+      body: "오늘의 광고 누적 노출 통계가 초기화되었습니다.",
+    });
   };
 
   const openModal = (index = null) => {
@@ -229,7 +240,11 @@ const ContestSponsorManager = () => {
 
   const handleVideoFileUpload = (file, targetField = "adVideo") => {
     if (!contestId) {
-      message.error("대회 정보를 확인할 수 없습니다");
+      openNotice({
+        variant: "error",
+        title: "대회 정보 없음",
+        body: "대회 정보를 확인할 수 없습니다.",
+      });
       return false;
     }
 
@@ -253,7 +268,11 @@ const ContestSponsorManager = () => {
       },
       (error) => {
         console.error("업로드 에러:", error);
-        message.error("동영상 업로드에 실패했습니다");
+        openNotice({
+          variant: "error",
+          title: "동영상 업로드 실패",
+          body: "동영상 파일을 업로드하는 중 오류가 발생했습니다.",
+        });
         setIsUploading(false);
         setUploadingTarget("");
       },
@@ -269,7 +288,11 @@ const ContestSponsorManager = () => {
           handleSaveVideosToFirestore(newVideos);
         }
 
-        message.success("동영상이 업로드되었습니다");
+        openNotice({
+          variant: "success",
+          title: "동영상 업로드 완료",
+          body: "동영상 파일이 업로드되어 설정에 반영되었습니다.",
+        });
         setIsUploading(false);
         setUploadingTarget("");
       }
@@ -280,7 +303,11 @@ const ContestSponsorManager = () => {
 
   const handleImageFileUpload = (file) => {
     if (!contestId) {
-      message.error("대회 정보를 확인할 수 없습니다");
+      openNotice({
+        variant: "error",
+        title: "대회 정보 없음",
+        body: "대회 정보를 확인할 수 없습니다.",
+      });
       return false;
     }
 
@@ -304,7 +331,11 @@ const ContestSponsorManager = () => {
       },
       (error) => {
         console.error("업로드 에러:", error);
-        message.error("이미지 업로드에 실패했습니다");
+        openNotice({
+          variant: "error",
+          title: "이미지 업로드 실패",
+          body: "이미지 파일을 업로드하는 중 오류가 발생했습니다.",
+        });
         setIsUploading(false);
         setUploadingTarget("");
       },
@@ -312,7 +343,11 @@ const ContestSponsorManager = () => {
         const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
         form.setFieldsValue({ imageUrl: downloadUrl, mediaUrl: downloadUrl });
         setMediaPreview(downloadUrl);
-        message.success("이미지가 업로드되었습니다");
+        openNotice({
+          variant: "success",
+          title: "이미지 업로드 완료",
+          body: "스폰서 이미지가 업로드되었습니다.",
+        });
         setIsUploading(false);
         setUploadingTarget("");
       }
@@ -342,7 +377,10 @@ const ContestSponsorManager = () => {
     }
   };
 
-  const handleSaveSponsorsToFirestore = async (newSponsors) => {
+  const handleSaveSponsorsToFirestore = async (
+    newSponsors,
+    { silent = false } = {}
+  ) => {
     if (!contestId) return;
     try {
       if (docId) {
@@ -357,11 +395,21 @@ const ContestSponsorManager = () => {
           ...videoSettings,
         });
       }
-      message.success("광고 설정이 저장되었습니다");
+      if (!silent) {
+        openNotice({
+          variant: "success",
+          title: "광고 설정 저장 완료",
+          body: "스폰서 광고 목록 및 노출 설정이 저장되었습니다.",
+        });
+      }
       fetchSettings();
     } catch (error) {
       console.error("스폰서 저장 실패:", error);
-      message.error("저장에 실패했습니다");
+      openNotice({
+        variant: "error",
+        title: "광고 설정 저장 실패",
+        body: "스폰서 광고 설정을 저장하는 중 오류가 발생했습니다.",
+      });
     }
   };
 
@@ -397,7 +445,7 @@ const ContestSponsorManager = () => {
       ...newSponsors[index],
       isActive: checked,
     };
-    handleSaveSponsorsToFirestore(newSponsors);
+    handleSaveSponsorsToFirestore(newSponsors, { silent: true });
   };
 
   const columns = [
@@ -625,6 +673,12 @@ const ContestSponsorManager = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#171717] p-6">
+      <ConfirmationModal
+        isOpen={noticeOpen}
+        message={noticeMessage}
+        onCancel={() => setNoticeOpen(false)}
+        onConfirm={() => setNoticeOpen(false)}
+      />
       <div className="max-w-[1600px] mx-auto space-y-5">
         <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

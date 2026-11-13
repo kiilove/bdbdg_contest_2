@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Save } from "lucide-react";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const DelaySettings = () => {
   const [rankingDelay, setRankingDelay] = useState(5);
@@ -9,6 +10,8 @@ const DelaySettings = () => {
   const [scorePageDelay, setScorePageDelay] = useState(5);
   const [scoreFinalDelay, setScoreFinalDelay] = useState(5);
   const [playersToShow, setPlayersToShow] = useState(5);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
 
   useEffect(() => {
     const savedRankingDelay = localStorage.getItem("rankingDelay") || 5;
@@ -37,7 +40,14 @@ const DelaySettings = () => {
     localStorage.setItem("scorePageDelay", scorePageDelay);
     localStorage.setItem("scoreFinalDelay", scoreFinalDelay);
     localStorage.setItem("playersToShow", playersToShow);
-    alert("설정이 저장되었습니다.");
+    setModalMessage({
+      variant: "success",
+      title: "화면 전환 딜레이 저장 완료",
+      body: "전광판 순위 공개 및 점수표 전환 시간 설정이 저장되었습니다.",
+      isButton: true,
+      confirmButtonText: "확인",
+    });
+    setMsgOpen(true);
   };
 
   const groups = [
@@ -112,6 +122,12 @@ const DelaySettings = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

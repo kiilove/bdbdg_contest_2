@@ -422,10 +422,14 @@ const ContestCategoryOrderTable = () => {
                                   onClick={() =>
                                     confirmDeletion(
                                       {
-                                        body: "종목을 삭제하시겠습니까?",
+                                        variant: "danger",
+                                        title: "종목 삭제 확인",
+                                        body: `'${categoryTitle}' 종목을 삭제하시겠습니까?`,
+                                        body2:
+                                          "삭제 후에는 복구할 수 없으며 연결된 체급 구성에 영향을 줄 수 있습니다.",
                                         isButton: true,
-                                        confirmButtonText: "네",
-                                        cancelButtonText: "아니오",
+                                        confirmButtonText: "삭제",
+                                        cancelButtonText: "취소",
                                       },
                                       () => handleDeleteCategory(categoryId)
                                     )
@@ -489,11 +493,14 @@ const ContestCategoryOrderTable = () => {
                                                   onClick={() =>
                                                     confirmDeletion(
                                                       {
-                                                        body: "체급을 삭제하시겠습니까?",
+                                                        variant: "danger",
+                                                        title: "체급 삭제 확인",
+                                                        body: `'${categoryTitle} - ${gradeTitle}' 체급을 삭제하시겠습니까?`,
                                                         isButton: true,
-                                                        confirmButtonText: "예",
+                                                        confirmButtonText:
+                                                          "삭제",
                                                         cancelButtonText:
-                                                          "아니오",
+                                                          "취소",
                                                       },
                                                       () =>
                                                         handleDeleteGrade(

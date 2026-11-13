@@ -4,7 +4,8 @@ import React, { useEffect, useState, useContext, useRef, useMemo } from "react";
 import { useFirebaseRealtimeGetDocument } from "../../hooks/useFirebaseRealtime";
 import { useFirestoreGetDocument } from "../../hooks/useFirestores";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
-import { ConfigProvider, theme, message } from "antd";
+import { ConfigProvider, theme } from "antd";
+import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import { db, database, storage } from "../../firebase";
 import { collection, getDocs, where, query } from "firebase/firestore";
 import { ref as dbRef, set, remove, onValue } from "firebase/database";
@@ -66,6 +67,51 @@ export const VibeFlowAudioCenter = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
+
+  const message = {
+    success: (text) => {
+      setNoticeMessage({
+        variant: "success",
+        title: "오디오 센터 알림",
+        body: String(text || ""),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    error: (text) => {
+      setNoticeMessage({
+        variant: "error",
+        title: "오디오 처리 오류",
+        body: String(text || ""),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    warning: (text) => {
+      setNoticeMessage({
+        variant: "warning",
+        title: "오디오 재생 확인",
+        body: String(text || ""),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    info: (text) => {
+      setNoticeMessage({
+        variant: "info",
+        title: "안내",
+        body: String(text || ""),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [rememberLogin, setRememberLogin] = useState(true);
@@ -2332,6 +2378,12 @@ export const VibeFlowAudioCenter = () => {
           rawApiResponse={rawApiResponse}
           isGuideModalOpen={isGuideModalOpen}
           setIsGuideModalOpen={setIsGuideModalOpen}
+        />
+        <ConfirmationModal
+          isOpen={noticeOpen}
+          message={noticeMessage}
+          onCancel={() => setNoticeOpen(false)}
+          onConfirm={() => setNoticeOpen(false)}
         />
       </div>
     </ConfigProvider>

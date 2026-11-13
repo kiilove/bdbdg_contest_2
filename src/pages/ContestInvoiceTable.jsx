@@ -19,6 +19,7 @@ import {
 } from "../hooks/useFirestores";
 import { Modal } from "@mui/material";
 import { writePriceCheckLog } from "../utils/priceCheckLogger";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const ContestInvoiceTable = () => {
   const [currentTab, setCurrentTab] = useState(1);
@@ -29,6 +30,12 @@ const ContestInvoiceTable = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
+
+  const openNotice = (config) => {
+    setNoticeMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setModalOpen(true);
+  };
   const [isOpen, setIsOpen] = useState({
     category: false,
     grade: false,
@@ -49,9 +56,6 @@ const ContestInvoiceTable = () => {
   const updateInvoice = useFirestoreUpdateData("invoices_pool");
   const deleteEntry = useFirestoreDeleteData("contest_entrys_list");
   const addEntry = useFirestoreAddData("contest_entrys_list");
-
-  void modalOpen;
-  void setModalOpen;
 
   const tabArray = [
     { id: 0, title: "전체 목록", subTitle: "접수된 전체 참가신청서 목록" },
@@ -300,9 +304,12 @@ const ContestInvoiceTable = () => {
                 createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
               );
             }
-            alert(
-              "출전 명단 등록 중 오류가 발생하여 입금확인이 취소되었습니다. 다시 시도해주세요."
-            );
+            openNotice({
+              variant: "error",
+              title: "출전 명단 등록 오류",
+              body: "출전 명단 등록 중 오류가 발생하여 입금확인이 취소되었습니다.",
+              body2: "네트워크 상태를 확인한 후 다시 시도해 주세요.",
+            });
             return;
           }
         }
@@ -316,7 +323,12 @@ const ContestInvoiceTable = () => {
               createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
             );
           }
-          alert("입금확인 상태 저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+          openNotice({
+            variant: "error",
+            title: "입금확인 저장 실패",
+            body: "입금확인 상태 저장 중 오류가 발생했습니다.",
+            body2: "잠시 후 다시 시도해 주세요.",
+          });
           return;
         }
 
@@ -329,9 +341,12 @@ const ContestInvoiceTable = () => {
       } else {
         const deletedOk = await initInvoice(targetInvoice, playerUid);
         if (!deletedOk) {
-          alert(
-            "출전 명단 삭제 중 오류가 발생하여 입금확인 해제가 취소되었습니다. 다시 시도해주세요."
-          );
+          openNotice({
+            variant: "error",
+            title: "출전 명단 해제 오류",
+            body: "출전 명단 삭제 중 오류가 발생하여 입금확인 해제가 취소되었습니다.",
+            body2: "다시 시도해 주세요.",
+          });
           return;
         }
 
@@ -339,9 +354,12 @@ const ContestInvoiceTable = () => {
           ...newInvoice,
         });
         if (!updatedInvoice) {
-          alert(
-            "신청서 상태 업데이트 중 오류가 발생했습니다. 페이지를 새로고침 후 확인해주세요."
-          );
+          openNotice({
+            variant: "error",
+            title: "신청서 상태 갱신 실패",
+            body: "신청서 상태 업데이트 중 오류가 발생했습니다.",
+            body2: "페이지를 새로고침한 후 확인해 주세요.",
+          });
           return;
         }
 
@@ -356,7 +374,11 @@ const ContestInvoiceTable = () => {
       setInvoiceList([...newInvoiceList]);
     } catch (error) {
       console.error(error);
-      alert("입금확인 처리 중 오류가 발생했습니다.");
+      openNotice({
+        variant: "error",
+        title: "입금확인 처리 오류",
+        body: "입금확인 처리 중 예기치 못한 오류가 발생했습니다.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -441,6 +463,12 @@ const ContestInvoiceTable = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={modalOpen}
+        message={noticeMessage}
+        onCancel={() => setModalOpen(false)}
+        onConfirm={() => setModalOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         {isLoading ? (
           <LoadingPage />

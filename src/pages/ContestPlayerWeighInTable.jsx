@@ -27,7 +27,6 @@ import {
   Input,
   Tooltip,
   Popconfirm,
-  message as antMessage,
 } from "antd";
 import {
   Save,
@@ -1029,7 +1028,12 @@ const ContestPlayerWeighInTable = () => {
     playersFinalId,
     currentLocalPlayers
   ) => {
-    setMessage({ body: "신장/체중 및 계측 데이터를 DB에 안전하게 병합 저장 중입니다...", isButton: false });
+    setMessage({
+      variant: "loading",
+      title: "계측 명단 병합 저장 중",
+      body: "신장·체중 및 계측 데이터를 데이터베이스에 병합 저장하고 있습니다.",
+      isButton: false,
+    });
     setMsgOpen(true);
 
     try {
@@ -1413,16 +1417,21 @@ const ContestPlayerWeighInTable = () => {
       dirtyPlayerKeysRef.current.clear();
       setPlayersArray([...committedPlayersForState]);
       setMessage({
-        body: "계측 최종명단이 안전하게 저장되었습니다! (모든 출전 체급 완벽 보존)",
+        variant: "success",
+        title: "계측 최종명단 저장 완료",
+        body: "계측 데이터와 최종 출전 명단이 안전하게 저장되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
     } catch (error) {
       console.error("계측 데이터 저장 오류:", error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다. 네트워크를 확인하고 다시 시도해 주세요.",
+        variant: "error",
+        title: "계측 데이터 저장 실패",
+        body: "저장 중 오류가 발생했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.",
+        body4: error?.message,
         isButton: true,
-        confirmButtonText: "닫기",
+        confirmButtonText: "확인",
       });
     }
   };
@@ -1601,11 +1610,19 @@ const ContestPlayerWeighInTable = () => {
       console.log("무대 사진 슬롯 전체 DB 영구 저장 완료:", { stage1, stage2 });
     } catch (e) {
       console.error("무대 사진 슬롯 DB 저장 실패:", e);
-      antMessage.error("DB 저장 중 오류가 발생했습니다.");
+      setMessage({
+        variant: "error",
+        title: "무대 사진 저장 실패",
+        body: "무대 송출 사진 저장 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 
-  /** 🎯 특정 슬롯(1번 또는 2번)에 사진 직접 지정 및 DB 즉시 저장 */
+  /** 특정 슬롯(1번 또는 2번)에 사진 직접 지정 및 DB 즉시 저장 */
   const handleSetStageSlot = async (slotNumber, imgUrl) => {
     if (!photoModalPlayer || !imgUrl) return;
 
@@ -1632,10 +1649,9 @@ const ContestPlayerWeighInTable = () => {
     }
 
     await persistPlayerStageSlots(photoModalPlayer, nextStage1, nextStage2);
-    antMessage.success(`[무대용 사진 ${slotNumber}번]으로 지정 및 저장되었습니다! ✓`);
   };
 
-  /** 🔄 1번 사진과 2번 사진 순서 맞바꾸기(Swap) */
+  /** 1번 사진과 2번 사진 순서 맞바꾸기(Swap) */
   const handleSwapStageSlots = async () => {
     if (!photoModalPlayer) return;
 
@@ -1649,15 +1665,21 @@ const ContestPlayerWeighInTable = () => {
       "";
 
     if (!currentStage1 && !currentStage2) {
-      antMessage.info("교체할 무대 사진이 없습니다.");
+      setMessage({
+        variant: "warning",
+        title: "교체할 사진 없음",
+        body: "먼저 무대 송출용 사진을 1장 이상 지정해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
     await persistPlayerStageSlots(photoModalPlayer, currentStage2, currentStage1);
-    antMessage.success("1번 사진과 2번 사진의 순서가 변경 및 저장되었습니다! ⇄");
   };
 
-  /** 📺 갤러리 사진 클릭 시 빈 슬롯에 자동 순차 배치 */
+  /** 갤러리 사진 클릭 시 빈 슬롯에 자동 순차 배치 */
   const handleAssignStageSlot = async (imgUrl) => {
     if (!photoModalPlayer || !imgUrl) return;
 
@@ -1680,7 +1702,7 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 🗑️ 무대 사진 슬롯 비우기 핸들러 */
+  /** 무대 사진 슬롯 비우기 핸들러 */
   const handleClearStageSlot = async (slotNumber) => {
     if (!photoModalPlayer) return;
 
@@ -1695,34 +1717,39 @@ const ContestPlayerWeighInTable = () => {
 
     if (slotNumber === 1) {
       await persistPlayerStageSlots(photoModalPlayer, "", currentStage2);
-      antMessage.info("[무대용 사진 1] 슬롯이 비워졌습니다.");
     } else if (slotNumber === 2) {
       await persistPlayerStageSlots(photoModalPlayer, currentStage1, "");
-      antMessage.info("[무대용 사진 2] 슬롯이 비워졌습니다.");
     }
   };
 
-  /** 💾 모달 내 [무대 송출 사진 확정 저장] 버튼 클릭 핸들러 (전체 DB 문서에 100% 확실히 확정 저장!) */
+  /** 모달 내 [무대 송출 사진 확정 저장] 버튼 클릭 핸들러 */
   const handleConfirmSavePhotoModal = async () => {
     if (!photoModalPlayer) return;
+    const savedPlayer = photoModalPlayer;
     const stage1 =
-      (!isNonPlayerUrl(photoModalPlayer.stagePhoto1) && photoModalPlayer.stagePhoto1) ||
-      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl1) && photoModalPlayer.stagePhotoUrl1) ||
+      (!isNonPlayerUrl(savedPlayer.stagePhoto1) && savedPlayer.stagePhoto1) ||
+      (!isNonPlayerUrl(savedPlayer.stagePhotoUrl1) && savedPlayer.stagePhotoUrl1) ||
       "";
     const stage2 =
-      (!isNonPlayerUrl(photoModalPlayer.stagePhoto2) && photoModalPlayer.stagePhoto2) ||
-      (!isNonPlayerUrl(photoModalPlayer.stagePhotoUrl2) && photoModalPlayer.stagePhotoUrl2) ||
+      (!isNonPlayerUrl(savedPlayer.stagePhoto2) && savedPlayer.stagePhoto2) ||
+      (!isNonPlayerUrl(savedPlayer.stagePhotoUrl2) && savedPlayer.stagePhotoUrl2) ||
       "";
 
-    await persistPlayerStageSlots(photoModalPlayer, stage1, stage2);
-    antMessage.success(
-      `[#${photoModalPlayer.playerNumber || ""} ${photoModalPlayer.playerName}] 선수의 무대 사진(1번: ${stage1 ? "등록됨" : "미등록"}, 2번: ${stage2 ? "등록됨" : "미등록"})이 안전하게 최종 저장되었습니다! ✓`
-    );
+    await persistPlayerStageSlots(savedPlayer, stage1, stage2);
     setPhotoModalOpen(false);
     setPhotoModalPlayer(null);
+    setMessage({
+      variant: "success",
+      title: "무대 송출 사진 저장 완료",
+      body: `#${savedPlayer.playerNumber || ""} ${savedPlayer.playerName} 선수의 무대 송출 사진이 저장되었습니다.`,
+      body2: `1번 슬롯: ${stage1 ? "등록됨" : "미등록"} · 2번 슬롯: ${stage2 ? "등록됨" : "미등록"}`,
+      isButton: true,
+      confirmButtonText: "확인",
+    });
+    setMsgOpen(true);
   };
 
-  /** 📸 신청서 원본 및 엔트리에서 순수 선수 사진만 재추출하여 포스터/오류 사진을 정리하고 DB에 갱신 */
+  /** 신청서 원본 및 엔트리에서 순수 선수 사진만 재추출하여 포스터/오류 사진을 정리하고 DB에 갱신 */
   const handleSyncCleanPhotoData = async () => {
     const contestId =
       currentContest?.contests?.id ||
@@ -1734,7 +1761,14 @@ const ContestPlayerWeighInTable = () => {
     const finalId = currentContest?.contests?.contestPlayersFinalId;
 
     if (!contestId) {
-      antMessage.error("대회 정보를 확인할 수 없습니다.");
+      setMessage({
+        variant: "error",
+        title: "대회 정보 확인 필요",
+        body: "현재 선택된 대회 정보를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -1997,34 +2031,60 @@ const ContestPlayerWeighInTable = () => {
       // 화면 다시 그리기
       await fetchPool();
 
-      antMessage.success(
-        `선수 사진 데이터 갱신 완료! (총 ${cleanedPlayers.length}명의 출전 명단 중 ${photoAthleteCount}명의 사진 ${totalPhotoCount}장이 정리되어 DB에 안전하게 동기화되었습니다.)`
-      );
+      setMessage({
+        variant: "success",
+        title: "선수 사진 데이터 동기화 완료",
+        body: `총 ${cleanedPlayers.length}명의 출전 명단 중 ${photoAthleteCount}명의 사진 ${totalPhotoCount}장이 동기화되었습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } catch (error) {
       console.error("사진 데이터 갱신 실패 상세 원인:", error);
-      antMessage.error(
-        `사진 데이터 갱신 중 오류가 발생했습니다: ${error?.message || "네트워크를 확인해 주세요"}`
-      );
+      setMessage({
+        variant: "error",
+        title: "사진 데이터 동기화 실패",
+        body: "사진 데이터를 갱신하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsSyncingPhotos(false);
     }
   };
 
-  /** 🔄 1단계 선수 번호 배정(assign) 기준으로 계측 명단 새로 갱신 */
+  /** 1단계 선수 번호 배정(assign) 기준으로 계측 명단 새로 갱신 */
   const handleRefreshAndSyncAssign = async () => {
     try {
       setIsLoading(true);
       await fetchPool();
-      antMessage.success("1단계 선수 번호 배정 기준으로 명단이 최신 갱신되었습니다!");
+      setMessage({
+        variant: "success",
+        title: "계측 명단 최신화 완료",
+        body: "선수 번호 배정 기준으로 계측 명단을 새로 불러왔습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } catch (error) {
       console.error("명단 갱신 실패:", error);
-      antMessage.error("명단 갱신 중 오류가 발생했습니다.");
+      setMessage({
+        variant: "error",
+        title: "명단 갱신 실패",
+        body: "계측 명단을 갱신하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /** 🚨 [비상 원상복구] 기존 계측/월체 데이터 완전 무시하고 1단계 선수 번호 배정 원본으로 완전 초기화(덮어쓰기) */
+  /** 기존 계측/월체 데이터 무시하고 1단계 선수 번호 배정 원본으로 초기화(덮어쓰기) */
   const handleForceResetToAssign = async () => {
     const contestId =
       currentContest?.contests?.id ||
@@ -2035,7 +2095,14 @@ const ContestPlayerWeighInTable = () => {
     const finalId = currentContest?.contests?.contestPlayersFinalId;
 
     if (!assignId) {
-      antMessage.error("관련 문서를 확인할 수 없습니다. 다시 로그인하시면 해결될 수 있습니다.");
+      setMessage({
+        variant: "error",
+        title: "배정 문서 확인 필요",
+        body: "선수 배정 문서를 확인할 수 없습니다. 대회를 다시 선택하거나 재로그인해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -2046,7 +2113,14 @@ const ContestPlayerWeighInTable = () => {
       const rawAssignPlayers = returnPlayersAssign?.players || [];
 
       if (rawAssignPlayers.length === 0) {
-        antMessage.warning("1단계 배정된 선수 명단이 없습니다. 번호 배정을 먼저 진행해 주세요.");
+        setMessage({
+          variant: "warning",
+          title: "배정된 선수 명단 없음",
+          body: "1단계에 배정된 선수 명단이 없습니다. 먼저 선수 번호 배정을 진행해 주세요.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
 
@@ -2162,12 +2236,25 @@ const ContestPlayerWeighInTable = () => {
       // 4. 화면 로컬 상태 즉시 갱신
       await fetchPool();
 
-      antMessage.success(
-        `계측 데이터가 1단계 선수 번호 배정 원본으로 완전히 초기화(덮어쓰기)되었습니다! (총 ${cleanResetPlayers.length}명 완벽 복구)`
-      );
+      setMessage({
+        variant: "success",
+        title: "계측 명단 원상복구 완료",
+        body: `1단계 선수 번호 배정 원본으로 초기화되었습니다 (총 ${cleanResetPlayers.length}명 복구).`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } catch (error) {
       console.error("완전 초기화 덮어쓰기 실패:", error);
-      antMessage.error("초기화 덮어쓰기 중 오류가 발생했습니다.");
+      setMessage({
+        variant: "error",
+        title: "초기화 덮어쓰기 실패",
+        body: "배정 원본으로 초기화하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsLoading(false);
     }
@@ -2358,30 +2445,21 @@ const ContestPlayerWeighInTable = () => {
       if (focusedPlayerKeyRef.current !== targetEntryKey) {
         dirtyPlayerKeysRef.current.delete(targetEntryKey);
       }
-
-      if (updatedFields.isWeighedIn === true) {
-        antMessage.success(
-          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인 완료! (DB 즉시 저장됨 ✓)`
-        );
-      } else if (updatedFields.isWeighedIn === false) {
-        antMessage.info(
-          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 계측 확인이 해제되었습니다.`
-        );
-      } else if (
-        updatedFields.playerNumber !== undefined ||
-        updatedFields.playerIndex !== undefined
-      ) {
-        antMessage.success(
-          `[#${updatedTargetPlayer.playerNumber} ${updatedTargetPlayer.playerName}] 선수 번호/표시순서가 저장되었습니다! (DB 즉시 저장됨 ✓)`
-        );
-      }
     } catch (error) {
       console.error("핀셋 계측 저장 실패:", error);
-      antMessage.error("계측 데이터 즉시 저장 중 오류가 발생했습니다.");
+      setMessage({
+        variant: "error",
+        title: "계측 데이터 즉시 저장 실패",
+        body: "변경사항을 저장하는 중 오류가 발생했습니다. 네트워크를 확인해 주세요.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 
-  /** 💾 신장/체중 입력란 옆 [계측완료] 버튼 클릭 시 DB 즉시 저장 */
+  /** 신장/체중 입력란 옆 [계측완료] 버튼 클릭 시 DB 즉시 저장 */
   const handleSavePlayerWeighIn = async (player) => {
     const entryKey = getPlayerEntryKey(player);
     const { height, weight } = parseHeightWeight(player.heightWeight);
@@ -2399,7 +2477,7 @@ const ContestPlayerWeighInTable = () => {
     });
   };
 
-  /** 🚫 불참 처리 토글 (체크/해제 즉시 DB에 핀셋 영구 저장!) */
+  /** 불참 처리 토글 (체크/해제 즉시 DB에 핀셋 영구 저장) */
   const handleNoShow = async (playerNumber, playerEntryKey, e) => {
     const isChecked = e.target.checked;
     const targetPlayer = playersArray.find((p) => getPlayerEntryKey(p) === playerEntryKey);
@@ -2409,14 +2487,8 @@ const ContestPlayerWeighInTable = () => {
       isWeighedIn: isChecked ? false : targetPlayer?.isWeighedIn,
     };
 
-    // 🌟 불참 변경은 즉시 DB에 핀셋 반영
+    void playerNumber;
     await persistSinglePlayerWeighIn(playerEntryKey, updateObj);
-
-    if (isChecked) {
-      antMessage.warning(`[#${targetPlayer?.playerNumber || playerNumber} ${targetPlayer?.playerName || ""}] 선수가 불참(No-Show) 처리되었습니다.`);
-    } else {
-      antMessage.info(`[#${targetPlayer?.playerNumber || playerNumber} ${targetPlayer?.playerName || ""}] 선수의 불참이 취소되어 정상 출전으로 복귀했습니다.`);
-    }
   };
 
   /** ⚖️ 월체 처리 (동일 종목 내 바로 다음 체급으로 승급 / 체크 해제 시 원래 배정 체급으로 100% 완벽 원복) */
@@ -2485,11 +2557,23 @@ const ContestPlayerWeighInTable = () => {
               ? currentPlayerInfo.playerIndex
               : currentPlayerInfo.playerIndex + 1000,
         };
-        antMessage.warning(
-          `[${currentPlayerInfo.playerName}] 선수가 ${nextGrade.contestGradeTitle} 체급으로 월체되었습니다.`
-        );
+        setMessage({
+          variant: "info",
+          title: "체급 월체 이동 완료",
+          body: `#${currentPlayerInfo.playerNumber} ${currentPlayerInfo.playerName} 선수가 '${nextGrade.contestGradeTitle}' 체급으로 이동되었습니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
       } else {
-        alert("해당 종목의 최고 체급입니다. 더 이상 상위 체급이 없어 월체가 불가능합니다.");
+        setMessage({
+          variant: "warning",
+          title: "월체 이동 불가",
+          body: "해당 종목의 최고 체급이므로 상위 체급으로 월체할 수 없습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
     } else {
@@ -2510,9 +2594,14 @@ const ContestPlayerWeighInTable = () => {
             ? currentPlayerInfo.playerIndex - 1000
             : currentPlayerInfo.playerIndex,
       };
-      antMessage.info(
-        `[${currentPlayerInfo.playerName}] 선수의 월체가 취소되어 원래 체급(${gradeUpdate.contestGradeTitle})으로 복귀했습니다.`
-      );
+      setMessage({
+        variant: "info",
+        title: "월체 해제 및 원복 완료",
+        body: `#${currentPlayerInfo.playerNumber} ${currentPlayerInfo.playerName} 선수가 원래 체급('${gradeUpdate.contestGradeTitle}')으로 복귀했습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
 
     // 🌟 월체 변경/취소는 체급 이동이므로 즉시 DB에 핀셋 영구 저장하여 상태를 동기화!

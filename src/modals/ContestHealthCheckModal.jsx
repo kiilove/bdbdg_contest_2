@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from "react";
-import { Modal, Spin, message as antMessage } from "antd";
+import { Modal, Spin } from "antd";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 import {
   ShieldCheck,
   CheckCircle2,
@@ -164,6 +165,13 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
   const [healthResults, setHealthResults] = useState([]);
   const [entryCount, setEntryCount] = useState(0);
   const [collectionNameVal, setCollectionNameVal] = useState("");
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+
+  const openNotice = (nextMsg) => {
+    setModalMessage(nextMsg);
+    setMsgOpen(true);
+  };
 
   const contestId = currentContest?.contests?.id;
   const contestInfo = currentContest?.contestInfo;
@@ -258,16 +266,29 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
       setHealthResults(results);
     } catch (error) {
       console.error("진단 중 오류:", error);
-      antMessage.error("대회 구조 진단 중 오류가 발생했습니다.");
+      openNotice({
+        variant: "error",
+        title: "구조 진단 실패",
+        body: "대회 데이터 구조를 진단하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setChecking(false);
     }
   };
 
-  // 🛠️ 누락 문서 자동 생성 및 원클릭 복구 실행
+  // 누락 문서 자동 생성 및 원클릭 복구 실행
   const handleAutoHeal = async () => {
     if (!contestId) {
-      antMessage.error("선택된 대회 정보가 없습니다.");
+      openNotice({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "선택된 대회 정보가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       return;
     }
 
@@ -353,15 +374,26 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
         contests: updatedContestData,
       });
 
-      antMessage.success(
-        `대회 구조 복구 완료! (신규 생성: ${createdCount}건, 재연결: ${linkedCount}건)`
-      );
+      openNotice({
+        variant: "success",
+        title: "대회 구조 복구 완료",
+        body: `누락 문서 복구가 완료되었습니다 (신규 생성 ${createdCount}건 · 재연결 ${linkedCount}건).`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
 
       // 진단 재실행
       await runHealthCheck();
     } catch (error) {
       console.error("자동 복구 실패:", error);
-      antMessage.error("복구 중 오류가 발생했습니다: " + error.message);
+      openNotice({
+        variant: "error",
+        title: "구조 복구 실패",
+        body: "자동 복구 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setHealing(false);
     }
@@ -379,10 +411,17 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
   const percent = Math.round((okCount / totalCount) * 100);
 
   return (
-    <Modal
-      open={isOpen}
-      onCancel={onClose}
-      width={760}
+    <>
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
+      <Modal
+        open={isOpen}
+        onCancel={onClose}
+        width={760}
       footer={
         <div className="flex items-center justify-end gap-2 pt-2">
           <button
@@ -610,7 +649,8 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
           </>
         )}
       </div>
-    </Modal>
+      </Modal>
+    </>
   );
 };
 

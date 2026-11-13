@@ -1,9 +1,9 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
-import { message } from "antd";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Upload, Save, Plus, ShieldCheck } from "lucide-react";
 import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 import "react-datepicker/dist/react-datepicker.css";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -46,6 +46,15 @@ const ContestInfo = () => {
   const [changed, setChanged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [healthModalOpen, setHealthModalOpen] = useState(false);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+  const confirmActionRef = useRef(null);
+
+  const openModalMessage = (nextMsg, onConfirmAction = null) => {
+    confirmActionRef.current = onConfirmAction;
+    setModalMessage(nextMsg);
+    setMsgOpen(true);
+  };
   const [judgePasswords] = useState(generatePasswords());
   const updateContestInfo = useFirestoreUpdateData("contest_notice");
   const [files, setFiles] = useState([]);
@@ -161,48 +170,36 @@ const ContestInfo = () => {
         });
         setOriginalContestInfo({ ...updatedData });
         setChanged(false);
-        message.success("대회 정보가 저장되었습니다");
+        openModalMessage({
+          variant: "success",
+          title: "대회 정보 저장 완료",
+          body: "대회 기본 요강 및 운영 정보가 저장되었습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
       }
     } catch (error) {
       console.error(error);
-      message.error("저장 중 오류가 발생했습니다");
+      openModalMessage({
+        variant: "error",
+        title: "대회 정보 저장 실패",
+        body: "저장 중 오류가 발생했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCollectionAdd = async () => {
-    if (!currentContest?.contests?.id) {
-      message.error("현재 선택된 대회 정보가 없습니다.");
-      return;
-    }
-
-    const trimmedCollectionName = (
-      currentContestInfo?.contestCollectionName || ""
-    ).trim();
-    if (!trimmedCollectionName) {
-      message.warning("컬렉션 이름을 입력해주세요.");
-      return;
-    }
-
-    const existingCompanionKeys = [
-      "contestStagesAssignId",
-      "contestPasswordId",
-      "contestPlayersAssignId",
-      "contestPlayersFinalId",
-      "contestJudgesAssignId",
-      "contestComparesListId",
-    ];
-    const hasExistingCompanions = existingCompanionKeys.some((key) =>
-      Boolean(currentContest?.contests?.[key])
-    );
-
-    if (hasExistingCompanions) {
-      const confirmed = window.confirm(
-        "이미 생성된 대회 보조 컬렉션(배정/비밀번호/비교심사 등)이 존재합니다. 새로 생성하면 기존 컬렉션 연결이 덮어씌워집니다. 계속하시겠습니까?"
-      );
-      if (!confirmed) return;
-    }
+  const executeCollectionCreation = async (trimmedCollectionName) => {
+    openModalMessage({
+      variant: "loading",
+      title: "대회 운영 컬렉션 생성 중",
+      body: "배정·계측·비밀번호·비교심사 보조 문서를 생성하고 있습니다.",
+      isButton: false,
+    });
 
     try {
       const contestId = currentContest.contests.id;
@@ -244,7 +241,13 @@ const ContestInfo = () => {
         !addedPassword?.id ||
         !addedCompare?.id
       ) {
-        message.error("일부 컬렉션 생성에 실패했습니다. 다시 시도해주세요.");
+        openModalMessage({
+          variant: "error",
+          title: "컬렉션 생성 불완전",
+          body: "일부 보조 문서 생성에 실패했습니다. 구조 무결성 점검에서 복구해 주세요.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
         return;
       }
 
@@ -265,12 +268,82 @@ const ContestInfo = () => {
           ...currentContest,
           contests: nextContestsDoc,
         });
-        message.success("대회 컬렉션이 생성되었습니다");
+        openModalMessage({
+          variant: "success",
+          title: "대회 컬렉션 생성 완료",
+          body: `'${trimmedCollectionName}' 채점 DB 및 보조 운영 문서가 생성되었습니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
       }
     } catch (error) {
       console.error(error);
-      message.error("컬렉션 생성 중 오류가 발생했습니다");
+      openModalMessage({
+        variant: "error",
+        title: "컬렉션 생성 실패",
+        body: "컬렉션 생성 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
+  };
+
+  const handleCollectionAdd = async () => {
+    if (!currentContest?.contests?.id) {
+      openModalMessage({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "현재 선택된 대회 정보가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      return;
+    }
+
+    const trimmedCollectionName = (
+      currentContestInfo?.contestCollectionName || ""
+    ).trim();
+    if (!trimmedCollectionName) {
+      openModalMessage({
+        variant: "warning",
+        title: "컬렉션 이름 입력 필요",
+        body: "생성할 채점 DB 컬렉션 이름을 먼저 입력해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      return;
+    }
+
+    const existingCompanionKeys = [
+      "contestStagesAssignId",
+      "contestPasswordId",
+      "contestPlayersAssignId",
+      "contestPlayersFinalId",
+      "contestJudgesAssignId",
+      "contestComparesListId",
+    ];
+    const hasExistingCompanions = existingCompanionKeys.some((key) =>
+      Boolean(currentContest?.contests?.[key])
+    );
+
+    if (hasExistingCompanions) {
+      openModalMessage(
+        {
+          variant: "danger",
+          title: "기존 보조 컬렉션 덮어쓰기 확인",
+          body: "이미 생성된 대회 보조 컬렉션(배정·비밀번호·비교심사 등)이 존재합니다.",
+          body2: "새로 생성하면 기존 문서 연결이 새 문서로 교체됩니다. 계속하시겠습니까?",
+          isButton: true,
+          cancelButtonText: "취소",
+          confirmButtonText: "새로 생성",
+        },
+        () => executeCollectionCreation(trimmedCollectionName)
+      );
+      return;
+    }
+
+    await executeCollectionCreation(trimmedCollectionName);
   };
 
   useEffect(() => {
@@ -310,6 +383,20 @@ const ContestInfo = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => {
+          confirmActionRef.current = null;
+          setMsgOpen(false);
+        }}
+        onConfirm={() => {
+          const action = confirmActionRef.current;
+          confirmActionRef.current = null;
+          setMsgOpen(false);
+          if (action) action();
+        }}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

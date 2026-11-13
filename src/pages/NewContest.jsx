@@ -6,10 +6,13 @@ import {
   useFirestoreAddData,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const NewContest = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [newContestId, setNewContestId] = useState();
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
   const contestHook = useFirestoreAddData("contests");
   const updateContest = useFirestoreUpdateData("contests");
   const contestNoticeHook = useFirestoreAddData("contest_notice");
@@ -119,11 +122,25 @@ const NewContest = () => {
         console.error(
           "One or more errors occurred while adding data to collections."
         );
-        alert("대회 기본 컬렉션 생성 중 오류가 발생했습니다.");
+        setModalMessage({
+          variant: "error",
+          title: "대회 컬렉션 생성 오류",
+          body: "대회 기본 컬렉션 생성 중 오류가 발생했습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
       }
     } catch (error) {
       console.error("Error during the handleStart process:", error);
-      alert("새로운 대회를 개설하는 중 오류가 발생했습니다.");
+      setModalMessage({
+        variant: "error",
+        title: "대회 개설 실패",
+        body: "새로운 대회를 개설하는 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsLoading(false);
       if (createdSuccess) {
@@ -134,6 +151,12 @@ const NewContest = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

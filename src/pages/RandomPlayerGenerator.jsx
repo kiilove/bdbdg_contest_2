@@ -22,6 +22,7 @@ import {
 } from "../functions/distributionUtils";
 import CategoryChart from "../components/CategoryChart";
 import GradeStackBarChart from "../components/GradeStackBarChart";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const RandomPlayerGenerator = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -34,6 +35,8 @@ const RandomPlayerGenerator = () => {
   const [isButtonEnabled, setIsButtonEnabled] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [playerCount, setPlayerCount] = useState(0);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
 
   const addInvoice = useFirestoreAddData("invoices_pool");
 
@@ -333,11 +336,24 @@ const RandomPlayerGenerator = () => {
         const newValue = { ...player, contestPriceSum };
         await addInvoice.addData(newValue);
       }
-      alert(
-        "Selected players have been successfully submitted to the invoice pool."
-      );
+      setModalMessage({
+        variant: "success",
+        title: "가상 신청서 등록 완료",
+        body: `선택한 테스트 선수 ${selectedPlayersData.length}명의 참가신청서가 등록되었습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } catch (error) {
       console.error("Error submitting selected players:", error);
+      setModalMessage({
+        variant: "error",
+        title: "가상 신청서 등록 오류",
+        body: "테스트 선수 등록 중 오류가 발생했습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 
@@ -385,6 +401,12 @@ const RandomPlayerGenerator = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

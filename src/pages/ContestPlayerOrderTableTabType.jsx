@@ -379,7 +379,14 @@ const ContestPlayerOrderTable = () => {
     const finalId = currentContest?.contests?.contestPlayersFinalId;
 
     if (!contestId || !assignId) {
-      alert("대회 정보 또는 배정 문서 ID를 확인할 수 없습니다.");
+      setMessage({
+        variant: "error",
+        title: "문서 정보 확인 필요",
+        body: "대회 정보 또는 선수 배정 문서 ID를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -406,7 +413,9 @@ const ContestPlayerOrderTable = () => {
       setSelectedEntries(new Set());
 
       setMessage({
-        body: "현재 대회의 배정 명단(Assign) 및 최종 명단(Final)이 깨끗하게 초기화(클리어)되었습니다.",
+        variant: "success",
+        title: "배정 및 최종 명단 초기화 완료",
+        body: "현재 대회의 배정 명단과 최종 명단이 모두 초기화되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -414,7 +423,10 @@ const ContestPlayerOrderTable = () => {
     } catch (error) {
       console.error("초기화 실패:", error);
       setMessage({
-        body: "초기화 중 오류가 발생했습니다.",
+        variant: "error",
+        title: "명단 초기화 실패",
+        body: "명단을 초기화하는 중 오류가 발생했습니다.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -433,7 +445,9 @@ const ContestPlayerOrderTable = () => {
 
     if (!targetAssignId) {
       setMessage({
-        body: "관련 문서를 확인할 수 없습니다. 다시 로그인하시면 해결될 수 있습니다.",
+        variant: "error",
+        title: "배정 문서 확인 필요",
+        body: "선수 배정 문서를 확인할 수 없습니다. 대회를 다시 선택하거나 재로그인해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -689,9 +703,11 @@ const ContestPlayerOrderTable = () => {
 
       const hasDup = Object.keys(duplicatesMap).length > 0;
       setMessage({
+        variant: hasDup ? "warning" : "success",
+        title: hasDup ? "선수 배정 저장 완료 (중복 번호 확인)" : "선수 번호 배정 저장 완료",
         body: hasDup
-          ? "저장되었습니다. (중복 플레이어가 남아있습니다)"
-          : "계측명단(선수 배정)이 성공적으로 저장되었습니다.",
+          ? "선수 배정 명단이 저장되었으나 중복된 선수번호가 남아 있습니다."
+          : "계측 명단 및 선수 번호 배정이 정상적으로 저장되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -699,7 +715,10 @@ const ContestPlayerOrderTable = () => {
     } catch (error) {
       console.error("선수 배정 저장 에러:", error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다: " + (error?.message || ""),
+        variant: "error",
+        title: "선수 배정 저장 실패",
+        body: "선수 배정 데이터를 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });

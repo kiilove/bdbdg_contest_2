@@ -38,10 +38,16 @@ const JudgeInfoModal = ({ setClose, propState, setState }) => {
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
 
-  const [delMsgOpen, setDelMsgOpen] = useState(false);
-  const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
-  const [message, setMessage] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [message, setMessage] = useState({});
+  const modalConfirmRef = useRef(null);
   const invoiceInfoRef = useRef({});
+
+  const openModal = (nextMessage, onConfirmAction = null) => {
+    modalConfirmRef.current = onConfirmAction;
+    setMessage(nextMessage);
+    setModalOpen(true);
+  };
 
   const contestInvoiceDocument = useFirestoreGetDocument("invoices_pool");
   const fetchCategoryDocument = useFirestoreGetDocument(
@@ -127,23 +133,31 @@ const JudgeInfoModal = ({ setClose, propState, setState }) => {
   };
 
   const handleOpenDelMsgBox = () => {
-    setMessage({
-      body: "참가신청을 삭제하시겠습니까?",
-      isButton: true,
-      cancelButtonText: "닫기",
-      confirmButtonText: "삭제",
-    });
-    setDelMsgOpen(true);
+    openModal(
+      {
+        variant: "danger",
+        title: "참가신청 취소(삭제) 확인",
+        body: `${invoiceInfo?.playerName || "신청자"}의 참가신청을 취소 처리하시겠습니까?`,
+        isButton: true,
+        cancelButtonText: "닫기",
+        confirmButtonText: "취소 처리",
+      },
+      handleCancelDo
+    );
   };
 
   const handleOpenUnDelMsgBox = () => {
-    setMessage({
-      body: "참가신청를 복원하시겠습니까?",
-      isButton: true,
-      cancelButtonText: "닫기",
-      confirmButtonText: "복원",
-    });
-    setUnDelMsgOpen(true);
+    openModal(
+      {
+        variant: "info",
+        title: "참가신청 복원 확인",
+        body: `${invoiceInfo?.playerName || "신청자"}의 참가신청을 복원하시겠습니까?`,
+        isButton: true,
+        cancelButtonText: "닫기",
+        confirmButtonText: "복원",
+      },
+      handleCancelUndo
+    );
   };
 
   const deleteInvocieJoins = async (contestId, playerUid) => {
@@ -190,7 +204,7 @@ const JudgeInfoModal = ({ setClose, propState, setState }) => {
           ))
       )
       .then(() => setState([...dummy]))
-      .then(() => setUnDelMsgOpen(false))
+      .then(() => setModalOpen(false))
       .catch((error) => console.log(error));
   };
   const handleCancelDo = async () => {
@@ -216,7 +230,7 @@ const JudgeInfoModal = ({ setClose, propState, setState }) => {
           ))
       )
       .then(() => setState([...dummy]))
-      .then(() => setDelMsgOpen(false))
+      .then(() => setModalOpen(false))
       .catch((error) => console.log(error));
   };
 
@@ -234,15 +248,20 @@ const JudgeInfoModal = ({ setClose, propState, setState }) => {
   return (
     <div className="flex w-full flex-col gap-4 h-auto bg-[#ffffff] text-[#171717] p-2 overflow-y-auto">
       <ConfirmationModal
-        isOpen={delMsgOpen}
-        onCancel={() => setDelMsgOpen(false)}
-        onConfirm={handleCancelDo}
-        message={message}
-      />
-      <ConfirmationModal
-        isOpen={unDelMsgOpen}
-        onCancel={() => setUnDelMsgOpen(false)}
-        onConfirm={handleCancelUndo}
+        isOpen={modalOpen}
+        onCancel={() => {
+          modalConfirmRef.current = null;
+          setModalOpen(false);
+        }}
+        onConfirm={() => {
+          const action = modalConfirmRef.current;
+          modalConfirmRef.current = null;
+          if (action) {
+            action();
+          } else {
+            setModalOpen(false);
+          }
+        }}
         message={message}
       />
 

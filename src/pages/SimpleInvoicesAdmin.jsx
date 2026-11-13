@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useRef } from "react";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import {
   RefreshCw,
@@ -9,14 +9,24 @@ import {
 } from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const SimpleInvoicesAdmin = () => {
   const { currentContest } = useContext(CurrentContestContext);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+  const confirmActionRef = useRef(null);
 
   const [sortKey, setSortKey] = useState("invoiceCreateAt");
   const [sortOrder, setSortOrder] = useState("desc");
+
+  const openNotice = (config, onConfirm = null) => {
+    confirmActionRef.current = onConfirm;
+    setModalMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setModalOpen(true);
+  };
 
   const fetchInvoices = async () => {
     if (!currentContest?.contests?.id) return;
@@ -36,16 +46,40 @@ const SimpleInvoicesAdmin = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("정말 삭제하시겠습니까?")) return;
-    try {
-      await deleteDoc(doc(db, "invoices_pool", id));
-      setInvoices((prev) => prev.filter((i) => i.id !== id));
-      alert("삭제되었습니다.");
-    } catch (err) {
-      console.error(err);
-      alert("삭제 중 오류가 발생했습니다.");
-    }
+  const handleDelete = (id) => {
+    const target = invoices.find((inv) => inv.id === id);
+    openNotice(
+      {
+        variant: "danger",
+        title: "참가신청서 영구 삭제",
+        body: target?.playerName
+          ? `'${target.playerName}' 선수의 참가신청서를 영구 삭제하시겠습니까?`
+          : "선택한 참가신청서를 영구 삭제하시겠습니까?",
+        body2: "원본 신청서(invoices_pool)에서 즉시 제거되며 복구할 수 없습니다.",
+        isCancelButton: true,
+        confirmButtonText: "삭제",
+        cancelButtonText: "취소",
+      },
+      async () => {
+        setModalOpen(false);
+        try {
+          await deleteDoc(doc(db, "invoices_pool", id));
+          setInvoices((prev) => prev.filter((i) => i.id !== id));
+          openNotice({
+            variant: "success",
+            title: "삭제 완료",
+            body: "참가신청서가 삭제되었습니다.",
+          });
+        } catch (err) {
+          console.error(err);
+          openNotice({
+            variant: "error",
+            title: "삭제 오류",
+            body: "참가신청서 삭제 중 오류가 발생했습니다.",
+          });
+        }
+      }
+    );
   };
 
   const handleSort = (key) => {
@@ -92,6 +126,23 @@ const SimpleInvoicesAdmin = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={modalOpen}
+        message={modalMessage}
+        onCancel={() => {
+          confirmActionRef.current = null;
+          setModalOpen(false);
+        }}
+        onConfirm={() => {
+          const fn = confirmActionRef.current;
+          confirmActionRef.current = null;
+          if (fn) {
+            fn();
+          } else {
+            setModalOpen(false);
+          }
+        }}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

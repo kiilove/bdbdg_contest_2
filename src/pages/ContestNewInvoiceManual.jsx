@@ -27,7 +27,7 @@ const ContestNewInvoiceManual = () => {
 
   const [addMsgOpen, setAddMsgOpen] = useState(false);
   const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState({});
   const invoiceInfoRef = useRef({});
 
   void playerList;
@@ -174,7 +174,24 @@ const ContestNewInvoiceManual = () => {
   };
 
   const handleAddInvoice = async (propData) => {
-    setMessage({ body: "저장중", isButton: false });
+    if (!propData?.joins?.length) {
+      setMessage({
+        variant: "warning",
+        title: "출전 종목 선택 필요",
+        body: "참가 신청할 종목과 체급을 1개 이상 선택해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setAddMsgOpen(true);
+      return;
+    }
+
+    setMessage({
+      variant: "loading",
+      title: "수동 접수 등록 중",
+      body: "참가신청 정보를 저장하고 있습니다.",
+      isButton: false,
+    });
     setAddMsgOpen(true);
 
     const rawPriceSum = String(propData?.contestPriceSum ?? 0).replace(
@@ -192,14 +209,19 @@ const ContestNewInvoiceManual = () => {
     });
     if (added) {
       setMessage({
-        body: "저장되었습니다.",
+        variant: "success",
+        title: "수동 접수 등록 완료",
+        body: `${propData.playerName || "선수"}의 참가신청서가 정상적으로 등록되었습니다.`,
+        body2: "참가신청서 목록에서 입금 확인 및 확정을 진행할 수 있습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
       setInvoiceInfo(initInvoiceInfo());
     } else {
       setMessage({
-        body: "저장 중 오류가 발생했습니다. 다시 시도해주세요.",
+        variant: "error",
+        title: "수동 접수 저장 실패",
+        body: "저장 중 오류가 발생했습니다. 네트워크를 확인하고 다시 시도해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -223,10 +245,7 @@ const ContestNewInvoiceManual = () => {
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <ConfirmationModal
           isOpen={addMsgOpen}
-          onConfirm={() => {
-            setInvoiceInfo(initInvoiceInfo());
-            setAddMsgOpen(false);
-          }}
+          onConfirm={() => setAddMsgOpen(false)}
           onCancel={() => setAddMsgOpen(false)}
           message={message}
         />

@@ -5,7 +5,6 @@ import {
   Form,
   Input,
   Select,
-  message,
   Popconfirm,
 } from "antd";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -16,6 +15,7 @@ import {
   useFirestoreDeleteData,
 } from "../hooks/useFirestores";
 import bcrypt from "bcryptjs";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const { Option } = Select;
 
@@ -35,7 +35,14 @@ const AssociationManagerPage = () => {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
   const [form] = Form.useForm();
+
+  const openNotice = (config) => {
+    setNoticeMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setNoticeOpen(true);
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -44,7 +51,11 @@ const AssociationManagerPage = () => {
       setData(users || []);
     } catch (err) {
       console.error(err);
-      message.error("사용자 데이터를 불러오지 못했습니다.");
+      openNotice({
+        variant: "error",
+        title: "계정 목록 조회 실패",
+        body: "사용자 데이터를 불러오지 못했습니다.",
+      });
     }
     setLoading(false);
   };
@@ -75,17 +86,29 @@ const AssociationManagerPage = () => {
 
       if (editingUser) {
         await updateUser.updateData(editingUser.id, payload);
-        message.success("사용자 정보를 수정했습니다.");
+        openNotice({
+          variant: "success",
+          title: "계정 정보 수정 완료",
+          body: `'${userID}' 관리자 계정 정보가 수정되었습니다.`,
+        });
       } else {
         await addUser.addData(payload);
-        message.success("새 사용자를 추가했습니다.");
+        openNotice({
+          variant: "success",
+          title: "새 계정 추가 완료",
+          body: `'${userID}' 관리자 계정이 등록되었습니다.`,
+        });
       }
 
       setIsModalOpen(false);
       fetchUsers();
     } catch (err) {
       console.error(err);
-      message.error("저장 중 오류가 발생했습니다.");
+      openNotice({
+        variant: "error",
+        title: "계정 저장 오류",
+        body: "계정 정보를 저장하는 중 오류가 발생했습니다.",
+      });
     } finally {
       setLoading(false);
     }
@@ -94,11 +117,19 @@ const AssociationManagerPage = () => {
   const handleDelete = async (id) => {
     try {
       await deleteUser.deleteData(id);
-      message.success("사용자를 삭제했습니다.");
+      openNotice({
+        variant: "success",
+        title: "계정 삭제 완료",
+        body: "선택한 관리자 계정이 삭제되었습니다.",
+      });
       fetchUsers();
     } catch (err) {
       console.error(err);
-      message.error("삭제 중 오류가 발생했습니다.");
+      openNotice({
+        variant: "error",
+        title: "계정 삭제 오류",
+        body: "계정 삭제 중 오류가 발생했습니다.",
+      });
     }
   };
 
@@ -185,6 +216,12 @@ const AssociationManagerPage = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={noticeOpen}
+        message={noticeMessage}
+        onCancel={() => setNoticeOpen(false)}
+        onConfirm={() => setNoticeOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

@@ -220,13 +220,24 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         }
       );
       setmessage({
-        body: "저장되었습니다.",
+        variant: "success",
+        title: "그랑프리 종목 저장 완료",
+        body: "그랑프리 종목 설정이 정상적으로 저장되었습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
       setMsgOpen(true);
     } catch (error) {
       console.log(error);
+      setmessage({
+        variant: "error",
+        title: "그랑프리 저장 실패",
+        body: "그랑프리 종목을 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 
@@ -257,12 +268,18 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         isOpen={msgOpen}
         message={message}
         onCancel={() => {
-          setRefresh(true);
-          setClose();
+          setMsgOpen(false);
+          if (message?.variant !== "error") {
+            setRefresh(true);
+            setClose();
+          }
         }}
         onConfirm={() => {
-          setRefresh(true);
-          setClose();
+          setMsgOpen(false);
+          if (message?.variant !== "error") {
+            setRefresh(true);
+            setClose();
+          }
         }}
       />
 

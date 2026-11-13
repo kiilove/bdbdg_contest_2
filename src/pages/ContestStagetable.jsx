@@ -182,17 +182,28 @@ const ContestStagetable = () => {
   const handleUpdateStages = async (id, propData) => {
     if (!id) {
       setMessage({
-        body: "무대 배정 문서를 확인할 수 없습니다.",
+        variant: "error",
+        title: "무대 배정 문서 확인 필요",
+        body: "무대 순서 문서를 확인할 수 없습니다. 대회 데이터 설정을 먼저 확인해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
       setMsgOpen(true);
       return;
     }
+    setMessage({
+      variant: "loading",
+      title: "무대 진행 순서 저장 중",
+      body: "설정하신 무대 진행 순서를 저장하고 있습니다.",
+      isButton: false,
+    });
+    setMsgOpen(true);
     try {
       await updateStages.updateData(id, { ...propData });
       setMessage({
-        body: "저장되었습니다.",
+        variant: "success",
+        title: "무대 진행 순서 저장 완료",
+        body: `총 ${(propData?.stages || []).length}개 무대 진행 순서가 저장되었습니다.`,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -200,7 +211,10 @@ const ContestStagetable = () => {
     } catch (error) {
       console.error("무대 설정 저장 오류:", error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다.",
+        variant: "error",
+        title: "무대 순서 저장 실패",
+        body: "무대 설정을 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });

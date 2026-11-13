@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
-import { message as antMessage } from "antd";
+import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -420,6 +420,13 @@ export const MonitoringDiagnosticsBar = ({
   };
 
   const isDark = variant === "dark";
+  const [diagModalOpen, setDiagModalOpen] = useState(false);
+  const [diagMessage, setDiagMessage] = useState({});
+
+  const showDiagModal = (nextMsg) => {
+    setDiagMessage(nextMsg);
+    setDiagModalOpen(true);
+  };
 
   // 인라인 원클릭 자동 보강 액션 실행기
   const handleAutoFix = async (fixType) => {
@@ -436,7 +443,13 @@ export const MonitoringDiagnosticsBar = ({
     }
 
     if (!cId) {
-      antMessage.warning("먼저 대회를 선택해 주세요.");
+      showDiagModal({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "먼저 운영할 대회를 선택해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       navigate("/selectdatabase");
       return;
     }
@@ -465,9 +478,13 @@ export const MonitoringDiagnosticsBar = ({
         } catch (e) {
           // 스토리지 예외 무시
         }
-        antMessage.success(
-          "비교심사 데이터 문서(contest_compares_list)가 생성·연결되었습니다."
-        );
+        showDiagModal({
+          variant: "success",
+          title: "비교심사 문서 자동 생성 완료",
+          body: "비교심사 데이터 문서(contest_compares_list)가 생성되어 현재 대회에 연결되었습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
         if (typeof onRefreshData === "function") onRefreshData();
       } else if (fixType === "syncCollectionName") {
         const noticeId =
@@ -495,15 +512,26 @@ export const MonitoringDiagnosticsBar = ({
           } catch (e) {
             // 스토리지 예외 무시
           }
-          antMessage.success(
-            `공지 문서에 채점 DB명(${colName})이 동기화되었습니다.`
-          );
+          showDiagModal({
+            variant: "success",
+            title: "채점 DB 컬렉션명 동기화 완료",
+            body: `공지 문서에 채점 데이터베이스명('${colName}')이 동기화되었습니다.`,
+            isButton: true,
+            confirmButtonText: "확인",
+          });
           if (typeof onRefreshData === "function") onRefreshData();
         }
       }
     } catch (error) {
       console.error("[MonitoringDiagnosticsBar] 자동 보강 오류:", error);
-      antMessage.error(`자동 보강 실패: ${error.message}`);
+      showDiagModal({
+        variant: "error",
+        title: "자동 보강 실패",
+        body: "데이터 자동 보강 처리 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setBusyAction("");
     }
@@ -595,6 +623,12 @@ export const MonitoringDiagnosticsBar = ({
           : "bg-white border-[#171717]/[0.08] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       }`}
     >
+      <ConfirmationModal
+        isOpen={diagModalOpen}
+        message={diagMessage}
+        onCancel={() => setDiagModalOpen(false)}
+        onConfirm={() => setDiagModalOpen(false)}
+      />
       {/* 상단 1줄 요약 & 울트라퀵 토글 바 */}
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -971,7 +1005,14 @@ export const MonitoringBlockingState = ({
     CurrentContestContext
   );
   const [busyFix, setBusyFix] = useState("");
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockMessage, setBlockMessage] = useState({});
   const isDark = variant === "dark";
+
+  const showBlockModal = (nextMsg) => {
+    setBlockMessage(nextMsg);
+    setBlockModalOpen(true);
+  };
 
   const handleBlockingAutoFix = async (fixType) => {
     const contestsDoc = currentContest?.contests || {};
@@ -1004,9 +1045,13 @@ export const MonitoringBlockingState = ({
         } catch (e) {
           // 스토리지 예외 무시
         }
-        antMessage.success(
-          "비교심사 데이터 문서(contest_compares_list)가 생성·연결되었습니다."
-        );
+        showBlockModal({
+          variant: "success",
+          title: "비교심사 문서 자동 생성 완료",
+          body: "비교심사 데이터 문서(contest_compares_list)가 생성되어 현재 대회에 연결되었습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
         if (typeof onRefreshData === "function") onRefreshData();
       } else if (fixType === "syncCollectionName") {
         const noticeId =
@@ -1020,14 +1065,25 @@ export const MonitoringBlockingState = ({
           await updateDoc(doc(db, "contest_notice", noticeId), {
             contestCollectionName: colName,
           });
-          antMessage.success(
-            `공지 문서에 채점 DB명(${colName})이 동기화되었습니다.`
-          );
+          showBlockModal({
+            variant: "success",
+            title: "채점 DB 컬렉션명 동기화 완료",
+            body: `공지 문서에 채점 데이터베이스명('${colName}')이 동기화되었습니다.`,
+            isButton: true,
+            confirmButtonText: "확인",
+          });
           if (typeof onRefreshData === "function") onRefreshData();
         }
       }
     } catch (err) {
-      antMessage.error(`자동 보강 실패: ${err.message}`);
+      showBlockModal({
+        variant: "error",
+        title: "자동 보강 실패",
+        body: "데이터 자동 보강 처리 중 오류가 발생했습니다.",
+        body4: err?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setBusyFix("");
     }
@@ -1122,6 +1178,12 @@ export const MonitoringBlockingState = ({
           : "bg-white border-[#171717]/[0.08] text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       }`}
     >
+      <ConfirmationModal
+        isOpen={blockModalOpen}
+        message={blockMessage}
+        onCancel={() => setBlockModalOpen(false)}
+        onConfirm={() => setBlockModalOpen(false)}
+      />
       {/* 헤더 영역 */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex items-start gap-3.5">

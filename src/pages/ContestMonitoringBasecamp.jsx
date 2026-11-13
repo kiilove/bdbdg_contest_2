@@ -18,7 +18,6 @@ import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintA
 import ContestAwardCreator from "./ContestAwardCreator";
 import StageBroadcastController from "../components/broadcast/StageBroadcastController";
 import { useDevice } from "../contexts/DeviceContext";
-import { message as antMessage } from "antd";
 import { collection, query, where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import {
@@ -182,7 +181,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     } catch (error) {
       console.error("[ContestMonitoringBasecamp] fetchPool 예외 발생:", error);
       setMessage({
-        body: "데이터를 로드하지 못했습니다.",
+        variant: "error",
+        title: "모니터링 데이터 로드 실패",
+        body: "본부석 운영 데이터를 불러오지 못했습니다.",
         body4: error.message,
         isButton: true,
         confirmButtonText: "확인",
@@ -299,7 +300,15 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       );
 
       if (data?.length === 0) {
-        window.alert("데이터가 없습니다.");
+        setMessage({
+          variant: "warning",
+          title: "확정된 순위 데이터 없음",
+          body: `'${gradeTitle || "해당 체급"}'의 확정된 순위 결과가 아직 등록되지 않았습니다.`,
+          body2: "심판위원장 화면에서 순위표 확정을 먼저 완료해 주세요.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
 
@@ -432,17 +441,28 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const handleUpdateCurrentStage = async (currentStageId) => {
     if (!stagesArray || stagesArray.length === 0) {
-      antMessage.warning(
-        "무대 설정(타임테이블) 데이터가 없습니다. 무대설정 메뉴에서 먼저 무대를 저장해 주세요."
-      );
+      setMessage({
+        variant: "warning",
+        title: "무대 진행 순서 미설정",
+        body: "무대 설정(타임테이블) 데이터가 없습니다.",
+        body2: "무대설정 메뉴에서 먼저 무대 진행 순서를 생성하고 저장해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
     const targetStage = stagesArray[currentStageId];
     if (!targetStage) {
-      antMessage.error(
-        `해당 순번(${currentStageId + 1}번)의 무대 정보를 찾을 수 없습니다.`
-      );
+      setMessage({
+        variant: "error",
+        title: "무대 정보 확인 불가",
+        body: `해당 순번(${currentStageId + 1}번)의 무대 정보를 찾을 수 없습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -493,12 +513,16 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     const emptySeatNumbers = judgeInitState
       .filter((j) => !j.judgeUid)
       .map((j) => j.seatIndex);
+    let stageNoticeModal = null;
     if (emptySeatNumbers.length > 0) {
-      antMessage.warning(
-        `주의: 현재 무대에 심판 미배정 좌석(${emptySeatNumbers.join(
-          ", "
-        )}번)이 있습니다. 심판 좌석 배정을 확인해 주세요.`
-      );
+      stageNoticeModal = {
+        variant: "warning",
+        title: "심판 미배정 좌석 확인",
+        body: `무대는 개시되었으나 현재 무대에 심판 미배정 좌석(${emptySeatNumbers.join(", ")}번)이 있습니다.`,
+        body2: "심판 배정 관리에서 누락된 좌석을 확인해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      };
     } else if (Array.isArray(grades) && grades.length > 1) {
       const hasCombinedMismatch = grades.slice(1).some((subGrade) =>
         judgeInitState.some((seatObj) => {
@@ -514,17 +538,26 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         })
       );
       if (hasCombinedMismatch) {
-        antMessage.warning(
-          `통합 무대 안내: 합쳐진 체급 간 배정된 심판이 서로 달라 대표 체급(${grades[0]?.gradeTitle}) 기준 심판진으로 진행됩니다.`
-        );
+        stageNoticeModal = {
+          variant: "info",
+          title: "통합 무대 심판진 안내",
+          body: `합쳐진 체급 간 배정 심판이 달라 대표 체급('${grades[0]?.gradeTitle}') 기준 심판진으로 진행됩니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        };
       }
     }
 
     const contestId = currentContest?.contests?.id || currentContest?.id;
     if (!contestId) {
-      antMessage.error(
-        "대회 정보(contestId)를 찾을 수 없습니다. 대회를 다시 선택해 주세요."
-      );
+      setMessage({
+        variant: "error",
+        title: "대회 선택 확인 필요",
+        body: "대회 정보(contestId)를 찾을 수 없습니다. 대회를 다시 선택해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
 
@@ -588,17 +621,32 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
       if (res) {
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
-        antMessage.success(
-          `무대가 시작되었습니다 (${newCurrentStateInfo.stageNumber}번: ${categoryTitle} - ${gradeTitle})`
-        );
+        if (stageNoticeModal) {
+          setMessage(stageNoticeModal);
+          setMsgOpen(true);
+        }
       } else {
-        antMessage.error(
-          "실시간 데이터 업데이트에 실패했습니다. Firebase 권한 또는 연결 상태를 확인해 주세요."
-        );
+        setMessage({
+          variant: "error",
+          title: "무대 전환 업데이트 실패",
+          body: "실시간 무대 데이터 업데이트에 실패했습니다.",
+          body2: "Firebase 권한 또는 네트워크 연결 상태를 확인해 주세요.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
       }
     } catch (error) {
       console.error("handleUpdateCurrentStage error:", error);
-      antMessage.error("대회 시작 중 오류가 발생했습니다: " + error.message);
+      setMessage({
+        variant: "error",
+        title: "무대 시작 오류",
+        body: "무대를 개시하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     }
   };
 

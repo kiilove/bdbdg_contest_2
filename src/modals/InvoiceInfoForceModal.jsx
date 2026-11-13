@@ -41,12 +41,17 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
 
-  const [delMsgOpen, setDelMsgOpen] = useState(false);
-  const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [saveMsgOpen, setSaveMsgOpen] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState({});
+  const modalConfirmRef = useRef(null);
   const invoiceInfoRef = useRef({});
+
+  const openModal = (nextMessage, onConfirmAction = null) => {
+    modalConfirmRef.current = onConfirmAction;
+    setMessage(nextMessage);
+    setModalOpen(true);
+  };
 
   void setCurrentContest;
   void playerList;
@@ -141,23 +146,33 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
   };
 
   const handleOpenDelMsgBox = () => {
-    setMessage({
-      body: "참가신청을 삭제하시겠습니까?",
-      isButton: true,
-      cancelButtonText: "닫기",
-      confirmButtonText: "삭제",
-    });
-    setDelMsgOpen(true);
+    openModal(
+      {
+        variant: "danger",
+        title: "참가신청 취소(삭제) 확인",
+        body: `${invoiceInfo?.playerName || "선수"}의 참가신청을 취소 처리하시겠습니까?`,
+        body2: "취소된 신청서는 취소 목록으로 이동하며 확정 명단에서도 제외됩니다.",
+        isButton: true,
+        cancelButtonText: "닫기",
+        confirmButtonText: "취소 처리",
+      },
+      handleCancelDo
+    );
   };
 
   const handleOpenUnDelMsgBox = () => {
-    setMessage({
-      body: "참가신청을 복원하시겠습니까?",
-      isButton: true,
-      cancelButtonText: "닫기",
-      confirmButtonText: "복원",
-    });
-    setUnDelMsgOpen(true);
+    openModal(
+      {
+        variant: "info",
+        title: "참가신청 복원 확인",
+        body: `${invoiceInfo?.playerName || "선수"}의 참가신청을 복원하시겠습니까?`,
+        body2: "복원 후 미확정 목록에서 입금 확인을 다시 진행할 수 있습니다.",
+        isButton: true,
+        cancelButtonText: "닫기",
+        confirmButtonText: "복원",
+      },
+      handleCancelUndo
+    );
   };
 
   const deleteInvocieJoins = async (contestId, playerUid) => {
@@ -209,19 +224,27 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
         .then(() => {
           deleteInvocieJoins(newInvoice.contestId, newInvoice.playerUid);
           setIsLoading(false);
-          setMessage(() => ({
-            body: "수정이 완료되었습니다.",
-            body2: "확정자도 미확정자로 이동되었습니다.",
-            body3: "미확정자 목록에서 다시 한번 확인하세요.",
+          updateInvoiceInList(newInvoice);
+          openModal({
+            variant: "success",
+            title: "참가신청서 수정 완료",
+            body: "참가신청 정보가 수정되었습니다.",
+            body2: "기존 확정자도 미확정자 목록으로 이동되었으니 다시 확인해 주세요.",
             isButton: true,
             confirmButtonText: "확인",
-          }));
-          updateInvoiceInList(newInvoice);
-          setSaveMsgOpen(true);
+          });
         });
     } catch (error) {
       console.log(error);
       setIsLoading(false);
+      openModal({
+        variant: "error",
+        title: "수정 저장 실패",
+        body: "참가신청서 수정 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -250,7 +273,7 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
           ))
       )
       .then(() => setState([...dummy]))
-      .then(() => setUnDelMsgOpen(false))
+      .then(() => setModalOpen(false))
       .catch((error) => console.log(error));
   };
 
@@ -279,7 +302,7 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
           ))
       )
       .then(() => setState([...dummy]))
-      .then(() => setDelMsgOpen(false))
+      .then(() => setModalOpen(false))
       .catch((error) => console.log(error));
   };
 
@@ -299,21 +322,20 @@ const InvoiceInfoForceModal = ({ setClose, propState, setState }) => {
   return (
     <div className="flex flex-col w-full max-h-[90vh] bg-white text-[#171717]">
       <ConfirmationModal
-        isOpen={delMsgOpen}
-        onCancel={() => setDelMsgOpen(false)}
-        onConfirm={handleCancelDo}
-        message={message}
-      />
-      <ConfirmationModal
-        isOpen={unDelMsgOpen}
-        onCancel={() => setUnDelMsgOpen(false)}
-        onConfirm={handleCancelUndo}
-        message={message}
-      />
-      <ConfirmationModal
-        isOpen={saveMsgOpen}
-        onCancel={() => setSaveMsgOpen(false)}
-        onConfirm={() => setSaveMsgOpen(false)}
+        isOpen={modalOpen}
+        onCancel={() => {
+          modalConfirmRef.current = null;
+          setModalOpen(false);
+        }}
+        onConfirm={() => {
+          const action = modalConfirmRef.current;
+          modalConfirmRef.current = null;
+          if (action) {
+            action();
+          } else {
+            setModalOpen(false);
+          }
+        }}
         message={message}
       />
 

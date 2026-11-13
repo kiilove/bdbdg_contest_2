@@ -47,8 +47,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
       playersFinalId === undefined
     ) {
       setMessage({
-        body: "데이터를 불러오는데 문제가 발생했습니다.",
-        body2: "시스템 관리자에게 연락하세요.",
+        variant: "error",
+        title: "대회 데이터 확인 필요",
+        body: "그랑프리 명단 구성을 위한 문서 ID를 확인할 수 없습니다.",
+        body2: "대회 종목·체급 및 계측 최종명단 설정을 먼저 확인해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -225,13 +227,20 @@ const ContestPlayerOrderTableGrandPrix = () => {
   };
 
   const handleUpdatePlayersFinal = async (contestId, playersFinalId, data) => {
-    setMessage({ body: "저장중...", isButton: false });
+    setMessage({
+      variant: "loading",
+      title: "그랑프리 명단 저장 중",
+      body: "그랑프리 진출 선수 명단을 최종 출전 명단에 병합하고 있습니다.",
+      isButton: false,
+    });
     setMsgOpen(true);
 
     try {
       if (!playersFinalId) {
         setMessage({
-          body: "최종 명단 문서 정보를 확인할 수 없습니다.",
+          variant: "error",
+          title: "최종명단 문서 확인 필요",
+          body: "최종 출전 명단 문서를 확인할 수 없습니다.",
           isButton: true,
           confirmButtonText: "확인",
         });
@@ -253,7 +262,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
 
       if (dedupedGrandPrixData.length === 0) {
         setMessage({
-          body: "추가할 그랑프리 명단이 없습니다.",
+          variant: "warning",
+          title: "저장할 그랑프리 선수 없음",
+          body: "추가할 그랑프리 진출 선수가 없습니다. 각 체급 우승자를 먼저 불러와 주세요.",
           isButton: true,
           confirmButtonText: "확인",
         });
@@ -315,7 +326,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
       });
       setPlayersFinalArray(finalPlayers);
       setMessage({
-        body: "그랑프리 명단이 중복 없이 성공적으로 저장되었습니다.",
+        variant: "success",
+        title: "그랑프리 명단 저장 완료",
+        body: `그랑프리 진출 선수 ${dedupedGrandPrixData.length}명의 명단이 중복 없이 저장되었습니다.`,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -323,7 +336,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
     } catch (error) {
       console.error("그랑프리 명단 저장 실패:", error);
       setMessage({
-        body: "저장 중 오류가 발생했습니다.",
+        variant: "error",
+        title: "그랑프리 명단 저장 실패",
+        body: "그랑프리 명단을 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });

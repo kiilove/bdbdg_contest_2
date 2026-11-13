@@ -1,14 +1,24 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useRef } from "react";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import BibTag from "../components/ui/BibTag";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const ScoreResultManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
   const [scores, setScores] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+  const confirmActionRef = useRef(null);
+
+  const openNotice = (config, onConfirm = null) => {
+    confirmActionRef.current = onConfirm;
+    setModalMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setModalOpen(true);
+  };
 
   const fetchScores = async () => {
     if (!currentContest?.contests?.collectionName) return;
@@ -25,16 +35,40 @@ const ScoreResultManager = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("정말로 이 채점 결과를 삭제하시겠습니까?")) return;
-    try {
-      await deleteDoc(doc(db, currentContest.contests.collectionName, id));
-      setScores((prev) => prev.filter((item) => item.id !== id));
-      alert("삭제되었습니다.");
-    } catch (err) {
-      console.error("삭제 중 오류:", err);
-      alert("삭제 중 오류가 발생했습니다.");
-    }
+  const handleDelete = (id) => {
+    const target = scores.find((s) => s.id === id);
+    openNotice(
+      {
+        variant: "danger",
+        title: "심판 채점 원표 삭제",
+        body: "선택한 심판 채점 결과를 삭제하시겠습니까?",
+        body2: target
+          ? `#${target.playerNumber || "-"} ${target.playerName || ""} · ${target.seatIndex || "-"}번 심판 (${target.playerScore ?? "-"}점)`
+          : "삭제된 채점 데이터는 복구할 수 없습니다.",
+        isCancelButton: true,
+        confirmButtonText: "삭제",
+        cancelButtonText: "취소",
+      },
+      async () => {
+        setModalOpen(false);
+        try {
+          await deleteDoc(doc(db, currentContest.contests.collectionName, id));
+          setScores((prev) => prev.filter((item) => item.id !== id));
+          openNotice({
+            variant: "success",
+            title: "삭제 완료",
+            body: "선택한 채점 원표가 삭제되었습니다.",
+          });
+        } catch (err) {
+          console.error("삭제 중 오류:", err);
+          openNotice({
+            variant: "error",
+            title: "삭제 오류",
+            body: "채점 결과 삭제 중 오류가 발생했습니다.",
+          });
+        }
+      }
+    );
   };
 
   const buildHierarchy = (data) => {
@@ -82,6 +116,23 @@ const ScoreResultManager = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={modalOpen}
+        message={modalMessage}
+        onCancel={() => {
+          confirmActionRef.current = null;
+          setModalOpen(false);
+        }}
+        onConfirm={() => {
+          const fn = confirmActionRef.current;
+          confirmActionRef.current = null;
+          if (fn) {
+            fn();
+          } else {
+            setModalOpen(false);
+          }
+        }}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

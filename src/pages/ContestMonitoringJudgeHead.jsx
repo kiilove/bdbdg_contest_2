@@ -288,7 +288,9 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       }
     } catch (error) {
       setMessage({
-        body: "데이터를 로드하지 못했습니다.",
+        variant: "error",
+        title: "모니터링 데이터 로드 실패",
+        body: "심판위원장 모니터링 데이터를 불러오지 못했습니다.",
         body4: error.message,
         isButton: true,
         confirmButtonText: "확인",
@@ -1286,10 +1288,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                 type="button"
                                 onClick={() => {
                                   setMessage({
+                                    variant: "danger",
+                                    title: "비교심사 취소 확인",
                                     body: `${compareIndex}차 비교심사를 취소하시겠습니까?`,
+                                    body2: "취소 시 진행 중인 비교심사 상태가 해제됩니다.",
                                     isButton: true,
-                                    cancelButtonText: "아니오",
-                                    confirmButtonText: "예 (취소)",
+                                    cancelButtonText: "닫기",
+                                    confirmButtonText: "비교심사 취소",
                                   });
                                   setCompareCancelMsgOpen(true);
                                 }}

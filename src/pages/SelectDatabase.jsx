@@ -12,6 +12,7 @@ import {
 import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import LoadingPage from "./LoadingPage";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const { Option } = Select;
 
@@ -21,7 +22,14 @@ const SelectDatabase = () => {
   const [contestList, setContestList] = useState([]);
   const [contestNoticeId, setContestNoticeId] = useState(null);
   const [message, setMessage] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
   const navigate = useNavigate();
+
+  const openNotice = (config) => {
+    setModalMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setModalOpen(true);
+  };
 
   const { setCurrentContest } = useContext(CurrentContestContext);
   const fetchQuery = useFirestoreQuery();
@@ -66,7 +74,11 @@ const SelectDatabase = () => {
     } catch (error) {
       console.error("대회 목록을 가져오는 중 오류 발생:", error);
       setMessage("대회 목록을 가져오는 중 오류가 발생했습니다");
-      alert("대회 목록을 가져오는 중 오류가 발생했습니다.");
+      openNotice({
+        variant: "error",
+        title: "대회 목록 조회 실패",
+        body: "대회 목록을 가져오는 중 오류가 발생했습니다.",
+      });
     }
   };
 
@@ -106,7 +118,11 @@ const SelectDatabase = () => {
       } catch (error) {
         console.error("선택된 대회 정보를 가져오는 중 오류 발생:", error);
         setMessage("선택된 대회 정보를 가져오는 중 오류가 발생했습니다");
-        alert("선택된 대회 정보를 가져오는 중 오류가 발생했습니다.");
+        openNotice({
+          variant: "error",
+          title: "대회 정보 로드 실패",
+          body: "선택된 대회 정보를 가져오는 중 오류가 발생했습니다.",
+        });
       }
     }
   };
@@ -154,14 +170,22 @@ const SelectDatabase = () => {
         clearTimeout(timeoutId);
         setIsLoading(false);
         setMessage("대회 목록을 가져오는 중 오류가 발생했습니다");
-        alert("대회 목록을 가져오는 중 오류가 발생했습니다.");
+        openNotice({
+          variant: "error",
+          title: "대회 목록 조회 실패",
+          body: "대회 목록을 가져오는 중 오류가 발생했습니다.",
+        });
       }
     };
 
     setIsLoading(true);
     timeoutId = setTimeout(() => {
       setIsLoading(false);
-      alert("데이터 로딩 시간이 초과되었습니다.");
+      openNotice({
+        variant: "warning",
+        title: "데이터 응답 지연",
+        body: "데이터 로딩 시간이 초과되었습니다. 네트워크 연결을 확인해 주세요.",
+      });
     }, 3000);
 
     loadData();
@@ -185,7 +209,11 @@ const SelectDatabase = () => {
 
   const handleNavigate = () => {
     if (!contestNoticeId) {
-      alert("먼저 대회를 선택해주세요.");
+      openNotice({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "먼저 운영할 대회를 선택해 주세요.",
+      });
       return;
     }
     navigate("/", { state: { showTopBar: true } });
@@ -203,6 +231,12 @@ const SelectDatabase = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#171717] flex items-center justify-center p-6">
+      <ConfirmationModal
+        isOpen={modalOpen}
+        message={modalMessage}
+        onCancel={() => setModalOpen(false)}
+        onConfirm={() => setModalOpen(false)}
+      />
       <div className="w-full max-w-[440px]">
         {isLoading ? (
           <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center gap-3">

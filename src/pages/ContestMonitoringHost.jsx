@@ -28,7 +28,8 @@ import {
 import { where } from "firebase/firestore";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { matchedGradewWithPlayers } from "../functions/functions";
-import { Spin, message } from "antd";
+import { Spin } from "antd";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
 import {
   MonitoringBlockingState,
@@ -67,6 +68,13 @@ const ContestMonitoringHost = ({ contestId }) => {
   // 사회자 비교심사 전용 상태
   const [isCompareView, setIsCompareView] = useState(false);
   const [compareNumbers, setCompareNumbers] = useState([]);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+
+  const openNotice = (nextMsg) => {
+    setModalMessage(nextMsg);
+    setMsgOpen(true);
+  };
 
   const {
     data: realtimeData,
@@ -167,7 +175,14 @@ const ContestMonitoringHost = ({ contestId }) => {
 
         if (!data || data.length === 0) {
           setRankingData([]);
-          message.error("순위 결과가 아직 등록되지 않았습니다");
+          openNotice({
+            variant: "warning",
+            title: "순위 결과 미등록",
+            body: "해당 체급의 확정된 순위 결과가 아직 등록되지 않았습니다.",
+            body2: "심판위원장 화면에서 순위표 확정을 먼저 완료해 주세요.",
+            isButton: true,
+            confirmButtonText: "확인",
+          });
           return;
         }
 
@@ -186,9 +201,22 @@ const ContestMonitoringHost = ({ contestId }) => {
   const handleSendToScreen = async (gradeId, gradeTitle) => {
     try {
       await fetchResultAndScoreBoard(gradeId, gradeTitle);
-      message.success("전광판에 순위가 송출되었습니다");
+      openNotice({
+        variant: "success",
+        title: "전광판 순위 송출 완료",
+        body: `'${gradeTitle || "현재 체급"}' 순위 발표 데이터가 전광판에 송출되었습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (error) {
-      message.error("스크린 송출 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "전광판 송출 실패",
+        body: "스크린으로 순위를 송출하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       console.log("스크린 송출 중 에러:", error);
     }
   };
@@ -410,7 +438,13 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   const handleSwitchBroadcastMode = async (mode, extraData = {}) => {
     if (!effectiveContestId) {
-      message.error("대회 정보를 불러올 수 없습니다");
+      openNotice({
+        variant: "warning",
+        title: "대회 선택 확인 필요",
+        body: "대회 정보를 불러올 수 없습니다. 대회를 먼저 선택해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       return;
     }
     try {
@@ -419,21 +453,16 @@ const ContestMonitoringHost = ({ contestId }) => {
         updatedAt: Date.now(),
         ...extraData,
       });
-
-      const modeNames = {
-        STANDBY: "대기 및 종목 안내",
-        ATHLETE_INTRO: "선수 단독 소개",
-        COMPARISON_CALLOUT: "비교심사 호명",
-        POSEDOWN: "60초 포즈다운",
-        COMMERCIAL: "점수 집계 중",
-        RANKING: "순위 발표",
-        CHAMPION_SHOWCASE: "1위 챔피언 세레모니",
-      };
-
-      message.success(`전광판 송출 전환: ${modeNames[mode] || mode}`);
     } catch (error) {
       console.error("방송 모드 전환 실패:", error);
-      message.error("전광판 송출 전환 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "전광판 전환 실패",
+        body: "전광판 송출 모드를 전환하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -578,6 +607,12 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   return (
     <div className="w-full min-h-screen bg-[#141415] text-[#ededed] flex flex-col select-none">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       {/* 사회자 상단 헤더 바 (#0f0f10 deepest) */}
       <header className="sticky top-0 z-30 bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-4 h-14 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">

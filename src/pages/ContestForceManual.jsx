@@ -47,12 +47,16 @@ const ContestForceManual = () => {
   const [gradesArray, setGradesArray] = useState([]);
   const [entrysArray, setEntrysArray] = useState([]);
 
-  const [addMsgOpen, setAddMsgOpen] = useState(false);
-  const [errorMsgOpen, setErrorMsgOpen] = useState(false);
-
-  const [unDelMsgOpen, setUnDelMsgOpen] = useState(false);
-  const [message, setMessage] = useState("");
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [message, setMessage] = useState({});
+  const msgConfirmActionRef = useRef(null);
   const invoiceInfoRef = useRef({});
+
+  const openModalMessage = (nextMessage, onConfirmAction = null) => {
+    msgConfirmActionRef.current = onConfirmAction;
+    setMessage(nextMessage);
+    setMsgOpen(true);
+  };
 
   void playerFinalArray;
   void setPlayerFinalArray;
@@ -63,8 +67,6 @@ const ContestForceManual = () => {
   void categorysList;
   void entrysArray;
   void setEntrysArray;
-  void unDelMsgOpen;
-  void setUnDelMsgOpen;
 
   const fetchCategoryDocument = useFirestoreGetDocument(
     "contest_categorys_list"
@@ -116,21 +118,31 @@ const ContestForceManual = () => {
           );
           const nextNum = maxNum + 1;
 
-          setMessage({
-            body: "선수번호를 갱신합니다.",
-            isButton: true,
-            confirmButtonText: "확인",
-          });
           setPlayerNumber(nextNum);
           setInvoiceInfo((prev) => ({
             ...prev,
             playerNumber: nextNum,
           }));
-          setErrorMsgOpen(true);
+          openModalMessage({
+            variant: "info",
+            title: "다음 선수번호 자동 설정",
+            body: `최종명단 기준 다음 부여 선수번호가 #${nextNum}번으로 갱신되었습니다.`,
+            body2: "필요한 경우 선수번호 입력란에서 직접 변경할 수 있습니다.",
+            isButton: true,
+            confirmButtonText: "확인",
+          });
         }
       }
     } catch (error) {
       console.error("강제등록 초기 데이터 로드 실패:", error);
+      openModalMessage({
+        variant: "error",
+        title: "데이터 로드 실패",
+        body: "강제 등록에 필요한 대회 데이터를 불러오지 못했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -223,12 +235,13 @@ const ContestForceManual = () => {
     if (!currentContest?.contests?.id) return;
 
     if (!propData?.joins?.length) {
-      setMessage({
-        body: "참가신청종목을 선택해주세요.",
+      openModalMessage({
+        variant: "warning",
+        title: "출전 종목 선택 필요",
+        body: "참가 신청할 종목과 체급을 1개 이상 선택해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
-      setErrorMsgOpen(true);
       return;
     }
 
@@ -237,14 +250,22 @@ const ContestForceManual = () => {
     const contestId = currentContest.contests.id;
 
     if (!finalId) {
-      setMessage({
-        body: "최종명단 문서를 확인할 수 없습니다.",
+      openModalMessage({
+        variant: "error",
+        title: "최종명단 문서 확인 필요",
+        body: "최종명단 문서를 확인할 수 없습니다. 대회 데이터 설정을 먼저 확인해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
-      setErrorMsgOpen(true);
       return;
     }
+
+    openModalMessage({
+      variant: "loading",
+      title: "최종명단 강제 등록 중",
+      body: "최종 출전 명단과 배정 목록에 선수를 등록하고 있습니다.",
+      isButton: false,
+    });
 
     try {
       const newData = { ...propData };
@@ -321,20 +342,29 @@ const ContestForceManual = () => {
         setPlayerFinalInfo(updatedFinalDocState);
       }
       setPlayerNumber(nextNumber);
-      setMessage({
-        body: "최종명단에 강제추가했습니다.",
-        isButton: true,
-        confirmButtonText: "확인",
-      });
-      setAddMsgOpen(true);
+      openModalMessage(
+        {
+          variant: "success",
+          title: "최종명단 강제 등록 완료",
+          body: `${propData.playerName || "선수"}의 출전 명단(${entriesToAdd.length}종목)이 추가되었습니다.`,
+          body2: `다음 등록 대기 번호는 #${nextNumber}번으로 설정됩니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        },
+        () => {
+          setInvoiceInfo(initInvoiceInfo(nextNumber));
+        }
+      );
     } catch (error) {
       console.error("강제등록 저장 오류:", error);
-      setMessage({
-        body: "강제추가 저장 중 오류가 발생했습니다.",
+      openModalMessage({
+        variant: "error",
+        title: "강제 등록 실패",
+        body: "저장 중 오류가 발생했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+        body4: error?.message,
         isButton: true,
         confirmButtonText: "확인",
       });
-      setErrorMsgOpen(true);
     }
   };
 
@@ -351,20 +381,17 @@ const ContestForceManual = () => {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <ConfirmationModal
-          isOpen={addMsgOpen}
+          isOpen={msgOpen}
           onConfirm={() => {
-            setInvoiceInfo(initInvoiceInfo());
-            setAddMsgOpen(false);
+            const action = msgConfirmActionRef.current;
+            msgConfirmActionRef.current = null;
+            setMsgOpen(false);
+            if (action) action();
           }}
-          onCancel={() => setAddMsgOpen(false)}
-          message={message}
-        />
-        <ConfirmationModal
-          isOpen={errorMsgOpen}
-          onConfirm={() => {
-            setErrorMsgOpen(false);
+          onCancel={() => {
+            msgConfirmActionRef.current = null;
+            setMsgOpen(false);
           }}
-          onCancel={() => setErrorMsgOpen(false)}
           message={message}
         />
 

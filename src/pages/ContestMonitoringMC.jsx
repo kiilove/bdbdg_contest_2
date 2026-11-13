@@ -24,8 +24,8 @@ import {
   useFirestoreQuery,
 } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
-import { message } from "antd";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 import {
   MonitoringBlockingState,
   MonitoringDiagnosticsBar,
@@ -58,6 +58,13 @@ const ContestMonitoringMC = () => {
   const [, setStageInfo] = useState({});
   const [playersArray, setPlayersArray] = useState([]);
   const [selectedCalloutPlayers, setSelectedCalloutPlayers] = useState([]);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+
+  const openNotice = (config) => {
+    setModalMessage({ isButton: true, confirmButtonText: "확인", ...config });
+    setMsgOpen(true);
+  };
 
   const fetchStagesQuery = useFirestoreQuery();
   const fetchPlayers = useFirestoreQuery();
@@ -263,7 +270,11 @@ const ContestMonitoringMC = () => {
   // 전광판 방송 모드 즉시 스위칭 핸들러
   const handleSwitchMode = async (mode, extraData = {}) => {
     if (!contestId) {
-      message.error("대회 정보를 불러올 수 없습니다");
+      openNotice({
+        variant: "error",
+        title: "대회 정보 없음",
+        body: "대회 정보를 불러올 수 없습니다.",
+      });
       return;
     }
 
@@ -278,22 +289,13 @@ const ContestMonitoringMC = () => {
         `currentBroadcast/${contestId}`,
         payload
       );
-
-      const modeNames = {
-        STANDBY: "대기 및 종목 안내",
-        ATHLETE_INTRO: "선수 단독 소개",
-        COMPARISON_CALLOUT: "비교심사 호명",
-        POSEDOWN: "60초 포즈다운",
-        COMMERCIAL: "점수 집계 중",
-        RANKING: "순위 발표",
-        AWARD_CEREMONY: "공식 시상식",
-        CHAMPION_SHOWCASE: "1위 챔피언 세레모니",
-      };
-
-      message.success(`전광판 송출 전환: ${modeNames[mode] || mode}`);
     } catch (error) {
       console.error("방송 모드 전환 실패:", error);
-      message.error("전광판 송출 전환 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "전광판 송출 오류",
+        body: "전광판 송출 전환 중 오류가 발생했습니다.",
+      });
     }
   };
 
@@ -355,7 +357,11 @@ const ContestMonitoringMC = () => {
   // 비교심사 호명 송출
   const handleSendCallout = () => {
     if (selectedCalloutPlayers.length === 0) {
-      message.warning("비교심사할 선수를 1명 이상 선택해 주세요");
+      openNotice({
+        variant: "warning",
+        title: "호명 선수 선택 필요",
+        body: "비교심사할 선수를 1명 이상 선택해 주세요.",
+      });
       return;
     }
     const calloutList = playersArray.filter((p) =>
@@ -470,6 +476,12 @@ const ContestMonitoringMC = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#141415] text-[#ededed] select-none flex flex-col">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       {/* 1. 상단 글로벌 헤더 (#0f0f10 deepest) */}
       <header className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">

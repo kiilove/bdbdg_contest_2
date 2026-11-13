@@ -23,6 +23,7 @@ import {
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
 import { writePriceCheckLog } from "../utils/priceCheckLogger";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 import LiveStageStatusCard from "../components/dashboard/LiveStageStatusCard";
 import RegistrationMetricCards from "../components/dashboard/RegistrationMetricCards";
@@ -60,6 +61,8 @@ const Dashboard = () => {
   const [judgesPool, setJudgesPool] = useState([]);
   const [activeTabKey, setActiveTabKey] = useState("analytics");
   const [isUpdatingInvoiceId, setIsUpdatingInvoiceId] = useState(null);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
 
   const contestId = currentContest?.contests?.id;
 
@@ -279,9 +282,15 @@ const Dashboard = () => {
                 createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
               );
             }
-            alert(
-              "출전 명단 등록 중 오류가 발생하여 입금확인이 취소되었습니다. 다시 시도해주세요."
-            );
+            setModalMessage({
+              variant: "error",
+              title: "출전 명단 등록 오류",
+              body: "출전 명단 등록 중 오류가 발생하여 입금확인이 취소되었습니다.",
+              body2: "다시 시도해 주세요.",
+              isButton: true,
+              confirmButtonText: "확인",
+            });
+            setMsgOpen(true);
             return;
           }
         }
@@ -295,7 +304,14 @@ const Dashboard = () => {
               createdEntries.map((entry) => deleteEntry.deleteData(entry.id))
             );
           }
-          alert("입금확인 저장 중 오류가 발생했습니다.");
+          setModalMessage({
+            variant: "error",
+            title: "입금확인 저장 실패",
+            body: "입금확인 상태 저장 중 오류가 발생했습니다.",
+            isButton: true,
+            confirmButtonText: "확인",
+          });
+          setMsgOpen(true);
           return;
         }
 
@@ -473,6 +489,12 @@ const Dashboard = () => {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-5">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       {/* Page Header & Pre-Contest Management Shortcuts */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="space-y-1">

@@ -131,7 +131,9 @@ const PrintSummary = () => {
   const handleSearch = () => {
     if (!currentContest?.contests?.id) {
       setMessage({
-        body: "대회 정보가 없습니다.",
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "현재 선택된 대회 정보가 없습니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -141,7 +143,9 @@ const PrintSummary = () => {
 
     if (currentCategoryId === "all" || currentGradeId === "all") {
       setMessage({
-        body: "종목과 체급을 선택해주세요.",
+        variant: "warning",
+        title: "조회 대상 선택 필요",
+        body: "조회할 종목과 세부 체급을 모두 선택해 주세요.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -173,7 +177,14 @@ const PrintSummary = () => {
   const handleExportExcel = async () => {
     const contestId = currentContest?.contests?.id;
     if (!contestId) {
-      alert("대회 정보가 없습니다.");
+      setMessage({
+        variant: "warning",
+        title: "대회 선택 필요",
+        body: "현재 선택된 대회 정보가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
       return;
     }
     try {
@@ -186,7 +197,14 @@ const PrintSummary = () => {
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       if (rows.length === 0) {
-        alert("집계된 최종 결과 데이터가 없습니다.");
+        setMessage({
+          variant: "warning",
+          title: "다운로드할 결과 없음",
+          body: "집계된 최종 순위 결과 데이터가 없습니다.",
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
         return;
       }
 
@@ -213,7 +231,15 @@ const PrintSummary = () => {
       );
     } catch (e) {
       console.error(e);
-      alert("엑셀 다운로드 중 오류가 발생했습니다: " + e.message);
+      setMessage({
+        variant: "error",
+        title: "엑셀 다운로드 실패",
+        body: "엑셀 파일을 생성하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
     } finally {
       setIsExporting(false);
     }

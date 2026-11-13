@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useContext } from "react";
-import { Modal, Button, Progress, message, Tag } from "antd";
+import { Modal, Button, Progress, Tag } from "antd";
+import ConfirmationModal from "../../messageBox/ConfirmationModal";
 import {
   CloudDownloadOutlined,
   CheckCircleFilled,
@@ -58,6 +59,55 @@ export const PreDownloadModal = ({
   const [dbSpecialVideos, setDbSpecialVideos] = useState([]);
   const [dbSponsors, setDbSponsors] = useState([]);
   const [dbVideoSettings, setDbVideoSettings] = useState({});
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
+
+  const extractContent = (arg) =>
+    typeof arg === "string" ? arg : arg?.content || "";
+
+  const message = {
+    success: (arg) => {
+      setNoticeMessage({
+        variant: "success",
+        title: "미디어 캐시 작업 완료",
+        body: extractContent(arg).replace(/^🎉\s*/, ""),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    error: (arg) => {
+      setNoticeMessage({
+        variant: "error",
+        title: "다운로드 오류",
+        body: extractContent(arg),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    warning: (arg) => {
+      setNoticeMessage({
+        variant: "warning",
+        title: "미디어 확인 필요",
+        body: extractContent(arg),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    info: (arg) => {
+      setNoticeMessage({
+        variant: "info",
+        title: "사전 다운로드 안내",
+        body: extractContent(arg),
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    },
+    loading: () => {},
+  };
 
   // 로컬 캐시 상태 새로고침
   const refreshCacheInfo = async () => {
@@ -308,9 +358,16 @@ export const PreDownloadModal = ({
   const totalDownloadedCount = downloadedStageCount + downloadedSponsorCount + downloadedSpecialCount;
 
   return (
-    <Modal
-      open={open}
-      onCancel={onClose}
+    <>
+      <ConfirmationModal
+        isOpen={noticeOpen}
+        message={noticeMessage}
+        onCancel={() => setNoticeOpen(false)}
+        onConfirm={() => setNoticeOpen(false)}
+      />
+      <Modal
+        open={open}
+        onCancel={onClose}
       footer={null}
       width={840}
       centered
@@ -647,7 +704,8 @@ export const PreDownloadModal = ({
         </div>
 
       </div>
-    </Modal>
+      </Modal>
+    </>
   );
 };
 

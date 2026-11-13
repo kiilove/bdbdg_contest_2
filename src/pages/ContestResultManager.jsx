@@ -12,9 +12,10 @@ import {
 import { FileSpreadsheet, RefreshCw, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { Popconfirm, message } from "antd";
+import { Popconfirm } from "antd";
 import { exportContestResultsToExcel } from "../functions/functions";
 import BibTag from "../components/ui/BibTag";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
 
 const ContestResultManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -22,6 +23,13 @@ const ContestResultManager = () => {
 
   const [loading, setLoading] = useState(false);
   const [docs, setDocs] = useState([]);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState({});
+
+  const openNotice = (nextMsg) => {
+    setModalMessage(nextMsg);
+    setMsgOpen(true);
+  };
 
   const fetchDocs = async () => {
     if (!contestId) return;
@@ -41,7 +49,14 @@ const ContestResultManager = () => {
       setDocs(rows);
     } catch (e) {
       console.error(e);
-      message.error("결과 불러오기 실패");
+      openNotice({
+        variant: "error",
+        title: "결과 데이터 조회 실패",
+        body: "최종 집계 결과를 불러오는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setLoading(false);
     }
@@ -51,10 +66,23 @@ const ContestResultManager = () => {
     try {
       await deleteDoc(doc(db, "contest_results_list", docId));
       setDocs((prev) => prev.filter((d) => d.id !== docId));
-      message.success("삭제되었습니다");
+      openNotice({
+        variant: "success",
+        title: "집계 문서 삭제 완료",
+        body: "선택한 결과 문서가 삭제되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (e) {
       console.error(e);
-      message.error("삭제 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "문서 삭제 실패",
+        body: "결과 문서를 삭제하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -67,10 +95,23 @@ const ContestResultManager = () => {
       setDocs((prev) =>
         prev.filter((d) => !(d.categoryTitle === cat && d.gradeTitle === grd))
       );
-      message.success(`"${cat} / ${grd}" 결과가 삭제되었습니다`);
+      openNotice({
+        variant: "success",
+        title: "체급 결과 삭제 완료",
+        body: `'${cat} / ${grd}' 체급의 집계 결과가 삭제되었습니다.`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (e) {
       console.error(e);
-      message.error("체급 삭제 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "체급 결과 삭제 실패",
+        body: "체급 결과를 삭제하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -80,10 +121,23 @@ const ContestResultManager = () => {
         docs.map((d) => deleteDoc(doc(db, "contest_results_list", d.id)))
       );
       setDocs([]);
-      message.success("이 대회의 모든 결과가 삭제되었습니다");
+      openNotice({
+        variant: "success",
+        title: "전체 결과 삭제 완료",
+        body: "현재 대회의 모든 집계 결과 문서가 삭제되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (e) {
       console.error(e);
-      message.error("전체 삭제 중 오류가 발생했습니다");
+      openNotice({
+        variant: "error",
+        title: "전체 삭제 실패",
+        body: "전체 결과를 삭제하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     }
   };
 
@@ -108,7 +162,13 @@ const ContestResultManager = () => {
 
   const handleExportExcel = async () => {
     if (docs.length === 0) {
-      message.warning("다운로드할 최종 결과 데이터가 없습니다.");
+      openNotice({
+        variant: "warning",
+        title: "다운로드할 결과 없음",
+        body: "확정된 최종 집계 결과 데이터가 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
       return;
     }
     try {
@@ -119,10 +179,23 @@ const ContestResultManager = () => {
         "제2회 DMZ한반도평화통일기원보디빌딩대회";
 
       await exportContestResultsToExcel(contestTitle, docs);
-      message.success("엑셀 파일이 다운로드되었습니다.");
+      openNotice({
+        variant: "success",
+        title: "엑셀 다운로드 완료",
+        body: "최종 순위표 엑셀 파일 다운로드가 완료되었습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (e) {
       console.error(e);
-      message.error("엑셀 다운로드 중 오류 발생: " + e.message);
+      openNotice({
+        variant: "error",
+        title: "엑셀 다운로드 실패",
+        body: "엑셀 파일을 생성하는 중 오류가 발생했습니다.",
+        body4: e?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } finally {
       setIsExporting(false);
     }
@@ -130,6 +203,12 @@ const ContestResultManager = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <ConfirmationModal
+        isOpen={msgOpen}
+        message={modalMessage}
+        onCancel={() => setMsgOpen(false)}
+        onConfirm={() => setMsgOpen(false)}
+      />
       <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

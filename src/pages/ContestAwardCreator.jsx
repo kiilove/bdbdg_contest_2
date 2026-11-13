@@ -106,20 +106,28 @@ const ContestAwardCreator = ({ props, setClose }) => {
 
   const handleSaveAwardList = async (addArr = []) => {
     if (addArr.length > 0) {
-      addArr.map(async (add) => {
-        try {
-          await addDataAward.addData({ ...add }).then(() => {
-            setMessage({
-              body: "상장 목록이 저장되었습니다",
-              isButton: true,
-              confirmButtonText: "확인",
-            });
-            setMsgOpen(true);
-          });
-        } catch (error) {
-          console.log(error);
-        }
-      });
+      try {
+        await Promise.all(addArr.map((add) => addDataAward.addData({ ...add })));
+        setMessage({
+          variant: "success",
+          title: "상장 목록 저장 완료",
+          body: `${addArr.length}건의 상장 발급 데이터가 저장되었습니다.`,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
+      } catch (error) {
+        console.log(error);
+        setMessage({
+          variant: "error",
+          title: "상장 목록 저장 실패",
+          body: "상장 목록을 저장하는 중 오류가 발생했습니다.",
+          body4: error?.message,
+          isButton: true,
+          confirmButtonText: "확인",
+        });
+        setMsgOpen(true);
+      }
     }
   };
 

@@ -116,7 +116,10 @@ const SectionAssign = ({
 
     if (seatCheck.status === "multi") {
       setMessage?.({
-        body: `'${section.sectionName}' ${seatIndex}번 좌석의 하위 종목별 개별 배정 내역이 '${selectedJudge.judgeName}' 심판으로 일괄 통일되었습니다.`,
+        variant: "info",
+        title: "부별 좌석 일괄 통일",
+        body: `'${section.sectionName}' ${seatIndex}번 좌석의 하위 체급 배정이 '${selectedJudge.judgeName}' 심판으로 통일되었습니다.`,
+        body2: "상단 저장 버튼을 눌러야 데이터베이스에 최종 반영됩니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
