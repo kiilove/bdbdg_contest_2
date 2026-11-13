@@ -6,6 +6,13 @@ import dayjs from "dayjs";
 import { generateToday } from "../functions/functions";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { BibTag } from "../components/ui/BibTag";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
+
+const getAwardAthleteKey = (player) =>
+  String(
+    player?.playerUid ||
+      `num:${player?.playerNumber ?? ""}_${(player?.playerName || "").trim()}`
+  );
 
 const ContestAwardCreator = ({ props, setClose }) => {
   const [resultArray, setResultArray] = useState([]);
@@ -33,13 +40,17 @@ const ContestAwardCreator = ({ props, setClose }) => {
       condition
     );
 
-    setResultArray(() => [...(fetchedData || [])]);
+    const dedupedResults = dedupeContestResultsByGrade(
+      fetchedData || [],
+      contestId
+    );
+    setResultArray(() => [...dedupedResults]);
     setAwardArray(() => [...(fetchAwardData || [])]);
   };
 
   const findCurrentResultAndFlatten = (arr) => {
     const finded = arr.find(
-      (f) => f.contestId === contestId && f.gradeId === gradeId
+      (f) => (!f.contestId || f.contestId === contestId) && f.gradeId === gradeId
     );
 
     if (finded) {
@@ -85,29 +96,53 @@ const ContestAwardCreator = ({ props, setClose }) => {
     return [];
   };
 
-  const handleAwardCheck = (e, listIndex, awardNumber) => {
+  const computeBaseAwardNumber = (existingAwards = []) => {
+    if (!Array.isArray(existingAwards) || existingAwards.length === 0) return 0;
+    const maxNum = existingAwards.reduce((max, item) => {
+      const n = Number(item?.awardNumber);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    return Math.max(existingAwards.length, maxNum);
+  };
+
+  const handleAwardCheck = (e, targetAthlete) => {
+    if (!targetAthlete) return;
     const { checked } = e.target;
+    const targetKey = getAwardAthleteKey(targetAthlete);
+    const baseNo = computeBaseAwardNumber(awardArray);
 
-    const newAdded = [...awardAddArray];
-
+    let nextSelected;
     if (checked) {
-      newAdded.push({
-        ...currentResult[listIndex],
-        isAward: checked,
-        awardNumber,
-      });
-      setAwardUniqueNumber(() => awardArray.length);
+      const exists = awardAddArray.some(
+        (item) => getAwardAthleteKey(item) === targetKey
+      );
+      nextSelected = exists
+        ? [...awardAddArray]
+        : [...awardAddArray, { ...targetAthlete, isAward: true }];
     } else {
-      newAdded.splice(listIndex, 1);
+      nextSelected = awardAddArray.filter(
+        (item) => getAwardAthleteKey(item) !== targetKey
+      );
     }
 
-    setAwardAddArray(() => [...newAdded]);
+    const renumbered = [...nextSelected]
+      .sort((a, b) => (a.playerRank || 0) - (b.playerRank || 0))
+      .map((item, idx) => ({
+        ...item,
+        isAward: true,
+        awardNumber: baseNo + idx + 1,
+      }));
+
+    setAwardUniqueNumber(baseNo);
+    setAwardAddArray(renumbered);
   };
 
   const handleSaveAwardList = async (addArr = []) => {
     if (addArr.length > 0) {
       try {
         await Promise.all(addArr.map((add) => addDataAward.addData({ ...add })));
+        setAwardAddArray([]);
+        await fetchPool();
         setMessage({
           variant: "success",
           title: "상장 목록 저장 완료",
@@ -132,7 +167,7 @@ const ContestAwardCreator = ({ props, setClose }) => {
   };
 
   useEffect(() => {
-    setAwardUniqueNumber(() => awardArray.length);
+    setAwardUniqueNumber(() => computeBaseAwardNumber(awardArray));
   }, [awardArray]);
 
   useEffect(() => {
@@ -204,9 +239,17 @@ const ContestAwardCreator = ({ props, setClose }) => {
                   playerGym,
                   playerNumber,
                 } = curr;
+                const athleteKey = getAwardAthleteKey(curr);
+                const selectedEntry = awardAddArray.find(
+                  (item) => getAwardAthleteKey(item) === athleteKey
+                );
+                const isChecked = Boolean(selectedEntry);
+                const displayAwardNo = selectedEntry
+                  ? selectedEntry.awardNumber
+                  : awardUniqeNumber + awardAddArray.length + 1;
                 return (
                   <tr
-                    key={playerUid || cIdx}
+                    key={athleteKey || cIdx}
                     className="hover:bg-[#fafafa] transition-colors"
                   >
                     <td className="py-2.5 px-3 text-center">
@@ -214,18 +257,13 @@ const ContestAwardCreator = ({ props, setClose }) => {
                         type="checkbox"
                         name="playerAward"
                         className="w-4 h-4 accent-[#2563eb] cursor-pointer"
-                        value={playerUid}
-                        onChange={(e) =>
-                          handleAwardCheck(
-                            e,
-                            cIdx,
-                            awardUniqeNumber + cIdx + 1
-                          )
-                        }
+                        value={playerUid || playerNumber || ""}
+                        checked={isChecked}
+                        onChange={(e) => handleAwardCheck(e, curr)}
                       />
                     </td>
                     <td className="py-2.5 px-3 text-center font-mono tabular-nums text-xs text-[#737373]">
-                      {awardUniqeNumber + cIdx + 1}
+                      {isChecked ? displayAwardNo : "-"}
                     </td>
                     <td className="py-2.5 px-3 text-center font-mono tabular-nums font-medium text-[#171717]">
                       {playerRank}위

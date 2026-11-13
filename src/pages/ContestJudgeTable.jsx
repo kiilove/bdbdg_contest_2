@@ -6,7 +6,9 @@ import {
   useFirestoreDeleteData,
   useFirestoreGetDocument,
 } from "../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { doc, runTransaction, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import LoadingPage from "./LoadingPage";
 import { Drawer } from "@mui/material";
@@ -57,7 +59,6 @@ const ContestJudgeTable = () => {
   const fetchPasswordQuery = useFirestoreQuery();
 
   const getPassword = useFirestoreGetDocument("contest_passwords");
-  const updatePassword = useFirestoreUpdateData("contest_passwords");
   const addPassword = useFirestoreAddData("contest_passwords");
   const updateContest = useFirestoreUpdateData("contests");
 
@@ -321,8 +322,7 @@ const ContestJudgeTable = () => {
     e,
     judges,
     contestId,
-    judgeAssignId,
-    passwordIndex
+    judgeAssignId
   ) => {
     const { checked } = e.target;
 
@@ -361,7 +361,7 @@ const ContestJudgeTable = () => {
         return;
       }
 
-      const onedayPassword = availablePassword.value;
+      let onedayPassword = availablePassword.value;
       inFlightJudgesRef.current.add(judgeKey);
       inFlightPasswordsRef.current.add(onedayPassword);
 
@@ -372,19 +372,134 @@ const ContestJudgeTable = () => {
       judgePasswordsRef.current = reservedPasswords;
       setJudgePasswords(reservedPasswords);
 
+      const passTargetId =
+        passwordDocId || currentContest?.contests?.contestPasswordId;
+      let passwordClaimedInDb = false;
+
+      const releaseClaimedPasswordInDb = async (pwValue) => {
+        if (!passTargetId || !pwValue) return;
+        try {
+          const passRef = doc(db, "contest_passwords", passTargetId);
+          const rolledBack = await runTransaction(db, async (transaction) => {
+            const passSnap = await transaction.get(passRef);
+            if (!passSnap.exists()) return null;
+            const remotePasswords = Array.isArray(passSnap.data()?.passwords)
+              ? passSnap.data().passwords
+              : [];
+            const updatedPasswords = remotePasswords.map((pw) =>
+              pw?.value === pwValue ? { ...pw, used: false } : pw
+            );
+            transaction.update(
+              passRef,
+              sanitizeForFirestore({
+                contestId,
+                passwords: updatedPasswords,
+              })
+            );
+            return updatedPasswords;
+          });
+          if (rolledBack) {
+            judgePasswordsRef.current = rolledBack;
+            setJudgePasswords(rolledBack);
+          }
+        } catch (rollbackErr) {
+          console.error("비밀번호 예약 롤백 실패:", rollbackErr);
+        }
+      };
+
       try {
+        if (passTargetId) {
+          const passRef = doc(db, "contest_passwords", passTargetId);
+          const txResult = await runTransaction(db, async (transaction) => {
+            const passSnap = await transaction.get(passRef);
+            const remotePasswords = passSnap.exists()
+              ? Array.isArray(passSnap.data()?.passwords)
+                ? passSnap.data().passwords
+                : []
+              : currentPasswords;
+
+            let chosen = remotePasswords.find(
+              (pw) =>
+                pw?.value === onedayPassword &&
+                (pw.used === false || pw.used === undefined) &&
+                !assignedPasswordValues.has(pw.value)
+            );
+            if (!chosen) {
+              chosen = remotePasswords.find(
+                (pw) =>
+                  (pw?.used === false || pw?.used === undefined) &&
+                  pw?.value &&
+                  !assignedPasswordValues.has(pw.value) &&
+                  (!inFlightPasswordsRef.current.has(pw.value) ||
+                    pw.value === onedayPassword)
+              );
+            }
+            if (!chosen || !chosen.value) {
+              return { claimedValue: null, passwords: remotePasswords };
+            }
+
+            const updatedPasswords = remotePasswords.map((pw) =>
+              pw?.value === chosen.value ? { ...pw, used: true } : pw
+            );
+
+            if (passSnap.exists()) {
+              transaction.update(
+                passRef,
+                sanitizeForFirestore({
+                  contestId,
+                  passwords: updatedPasswords,
+                })
+              );
+            } else {
+              transaction.set(
+                passRef,
+                sanitizeForFirestore({
+                  contestId,
+                  passwords: updatedPasswords,
+                })
+              );
+            }
+
+            return { claimedValue: chosen.value, passwords: updatedPasswords };
+          });
+
+          if (!txResult?.claimedValue) {
+            const synced = txResult?.passwords || currentPasswords;
+            judgePasswordsRef.current = synced;
+            setJudgePasswords(synced);
+            setModalMessage({
+              variant: "warning",
+              title: "일회용 비밀번호 부족",
+              body: "사용 가능한 심판 일회용 비밀번호가 부족합니다.",
+              body2:
+                "비밀번호 풀 설정을 확인하거나 사용하지 않는 심판 배정을 해제해 주세요.",
+              isButton: true,
+              confirmButtonText: "확인",
+            });
+            setMsgOpen(true);
+            return;
+          }
+
+          if (txResult.claimedValue !== onedayPassword) {
+            inFlightPasswordsRef.current.delete(onedayPassword);
+            onedayPassword = txResult.claimedValue;
+            inFlightPasswordsRef.current.add(onedayPassword);
+          }
+          passwordClaimedInDb = true;
+          judgePasswordsRef.current = txResult.passwords;
+          setJudgePasswords(txResult.passwords);
+        }
+
         const newJudgeInfo = {
           judgeName: judges.judgeName,
           judgePromoter: judges.judgePromoter,
           judgeSignature: judges.judgeSignature,
           judgeTel: judges.judgeTel,
           judgeUid: judges.judgeUid,
+          isActive: true,
           isAcitve: true,
           isConfirmed: true,
         };
-
-        const passTargetId =
-          passwordDocId || currentContest?.contests?.contestPasswordId;
 
         const addedJudge = await addJudgesAssignPool.addData({
           ...newJudgeInfo,
@@ -395,30 +510,30 @@ const ContestJudgeTable = () => {
         });
 
         if (!addedJudge?.id) {
-          // 실패 시 예약 롤백
+          if (passwordClaimedInDb) {
+            await releaseClaimedPasswordInDb(onedayPassword);
+          } else {
+            const rollbackPasswords = judgePasswordsRef.current.map((pw) =>
+              pw.value === onedayPassword ? { ...pw, used: false } : pw
+            );
+            judgePasswordsRef.current = rollbackPasswords;
+            setJudgePasswords(rollbackPasswords);
+          }
+          return;
+        }
+
+        setJudgesAssignPool((prev) => [...prev, { ...addedJudge }]);
+      } catch (error) {
+        console.error("심판 배정 중 에러:", error);
+        if (passwordClaimedInDb) {
+          await releaseClaimedPasswordInDb(onedayPassword);
+        } else {
           const rollbackPasswords = judgePasswordsRef.current.map((pw) =>
             pw.value === onedayPassword ? { ...pw, used: false } : pw
           );
           judgePasswordsRef.current = rollbackPasswords;
           setJudgePasswords(rollbackPasswords);
-          return;
         }
-
-        setJudgesAssignPool((prev) => [...prev, { ...addedJudge }]);
-
-        if (passTargetId) {
-          await updatePassword.updateData(passTargetId, {
-            contestId,
-            passwords: [...judgePasswordsRef.current],
-          });
-        }
-      } catch (error) {
-        console.error("심판 배정 중 에러:", error);
-        const rollbackPasswords = judgePasswordsRef.current.map((pw) =>
-          pw.value === onedayPassword ? { ...pw, used: false } : pw
-        );
-        judgePasswordsRef.current = rollbackPasswords;
-        setJudgePasswords(rollbackPasswords);
       } finally {
         inFlightJudgesRef.current.delete(judgeKey);
         inFlightPasswordsRef.current.delete(onedayPassword);
@@ -446,25 +561,47 @@ const ContestJudgeTable = () => {
             prev.filter((judge) => judge.id !== judgeAssignId)
           );
 
-          const basePasswords =
-            judgePasswordsRef.current.length > 0
-              ? [...judgePasswordsRef.current]
-              : [...judgePasswords];
+          if (passTargetId && onedayPassword) {
+            const passRef = doc(db, "contest_passwords", passTargetId);
+            const updatedPasswords = await runTransaction(
+              db,
+              async (transaction) => {
+                const passSnap = await transaction.get(passRef);
+                if (!passSnap.exists()) return null;
+                const remotePasswords = Array.isArray(passSnap.data()?.passwords)
+                  ? passSnap.data().passwords
+                  : [];
+                const next = remotePasswords.map((pw) =>
+                  pw?.value === onedayPassword ? { ...pw, used: false } : pw
+                );
+                transaction.update(
+                  passRef,
+                  sanitizeForFirestore({
+                    contestId,
+                    passwords: next,
+                  })
+                );
+                return next;
+              }
+            );
+            if (updatedPasswords) {
+              judgePasswordsRef.current = updatedPasswords;
+              setJudgePasswords(updatedPasswords);
+            }
+          } else {
+            const basePasswords =
+              judgePasswordsRef.current.length > 0
+                ? [...judgePasswordsRef.current]
+                : [...judgePasswords];
 
-          const nextPasswords = onedayPassword
-            ? basePasswords.map((pw) =>
-                pw.value === onedayPassword ? { ...pw, used: false } : pw
-              )
-            : basePasswords;
+            const nextPasswords = onedayPassword
+              ? basePasswords.map((pw) =>
+                  pw.value === onedayPassword ? { ...pw, used: false } : pw
+                )
+              : basePasswords;
 
-          judgePasswordsRef.current = nextPasswords;
-          setJudgePasswords(nextPasswords);
-
-          if (passTargetId) {
-            await updatePassword.updateData(passTargetId, {
-              contestId,
-              passwords: [...nextPasswords],
-            });
+            judgePasswordsRef.current = nextPasswords;
+            setJudgePasswords(nextPasswords);
           }
         } catch (error) {
           console.error("심판 배정 취소 중 에러:", error);

@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { v4 as uuidv4 } from "uuid";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils.js";
 
 export const generateUUID = () => {
   const uuid = uuidv4();
@@ -12,15 +13,15 @@ export const generateToday = () => {
 };
 
 export const matchingCategoriesWithGrades = (categories, grades) => {
-  let dummy = [];
+  const dummy = [];
 
-  (categories || [])
+  [...(categories || [])]
     .sort(
       (a, b) =>
         (a.contestCategoryIndex ?? 0) - (b.contestCategoryIndex ?? 0)
     )
-    .map((category, cIdx) => {
-      const matchedGrades = (grades || [])
+    .forEach((category) => {
+      const matchedGrades = [...(grades || [])]
         .filter((grade) => grade.refCategoryId === category.contestCategoryId)
         .sort(
           (a, b) =>
@@ -39,16 +40,18 @@ export const matchedGradewWithPlayers = (
   gradeId = "",
   players = []
 ) => {
-  let filteredPlayers;
-  if (contestId === "" || gradeId === "" || players.length === 0) {
-    filteredPlayers = [];
+  if (!gradeId || !Array.isArray(players) || players.length === 0) {
+    return [];
   }
 
-  filteredPlayers = players
-    .filter((f) => f.contestId === contestId && f.contestGradeId === gradeId)
-    .sort((a, b) => a.playerIndex - b.playerIndex);
-
-  return filteredPlayers;
+  return players
+    .filter(
+      (f) =>
+        f?.playerNoShow !== true &&
+        (!contestId || !f?.contestId || f.contestId === contestId) &&
+        f?.contestGradeId === gradeId
+    )
+    .sort((a, b) => getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b));
 };
 
 export function getRandomNumber(min, max) {
@@ -72,8 +75,12 @@ export const exportContestResultsToExcel = async (
     return;
   }
 
+  const dedupedResults = dedupeContestResultsByGrade(resultsList);
+  const effectiveResults =
+    dedupedResults.length > 0 ? dedupedResults : [...resultsList];
+
   // 1. 종목/체급 인덱스 기준 정렬
-  const sortedResults = [...resultsList].sort((a, b) => {
+  const sortedResults = [...effectiveResults].sort((a, b) => {
     const catA =
       categoriesMap[a.categoryId]?.contestCategoryIndex ??
       (a.contestCategoryIndex ?? 999);
@@ -95,7 +102,7 @@ export const exportContestResultsToExcel = async (
     return grdA - grdB;
   });
 
-  // 최대 심판 좌석 수(maxSeat) 동적 계산 (기본 7심, 9심 이상도 자동 지원)
+  // 최대 심판 좌석 수(maxSeat) 동적 계산 (5심/7심/9심 등 정확히 대응)
   let detectedMaxSeat = 0;
   sortedResults.forEach((res) => {
     (res.result || []).forEach((p) => {
@@ -111,7 +118,8 @@ export const exportContestResultsToExcel = async (
       });
     });
   });
-  const maxSeat = Math.max(7, detectedMaxSeat > 7 ? Math.max(9, detectedMaxSeat) : 7);
+  const maxSeat =
+    detectedMaxSeat <= 5 ? 5 : detectedMaxSeat <= 7 ? 7 : detectedMaxSeat;
 
   const formatPlayerRank = (rank) => {
     if (rank === undefined || rank === null || rank === "") return "";

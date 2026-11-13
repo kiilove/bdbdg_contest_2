@@ -99,7 +99,9 @@ const SelectDatabase = () => {
           };
 
           setCurrentContest(contestData);
-          sessionStorage.setItem("currentContest", JSON.stringify(contestData));
+          const serializedContest = JSON.stringify(contestData);
+          sessionStorage.setItem("currentContest", serializedContest);
+          localStorage.setItem("currentContest", serializedContest);
 
           try {
             await updateGlobalSetting.updateData(

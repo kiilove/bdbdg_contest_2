@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import koKR from "antd/locale/ko_KR";
@@ -6,39 +6,52 @@ import "./App.css";
 
 import Login from "./pages/Login";
 import ManagementHome from "./homes/ManagementHome";
+import LoadingPage from "./pages/LoadingPage";
 import { CurrentContestProvider } from "./contexts/CurrentContestContext";
 import { DeviceProvider } from "./contexts/DeviceContext";
-
-import Dashboard from "./pages/Dashboard";
-import ContestRankSummary from "./pages/ContestRankSummary";
-import PrintBase from "./printForms/PrintBase";
-import MeasurePrint from "./printForms/MeasurePrint";
-import StandingTableType1 from "./pages/StandingTableType1";
-import RankingAnnouncement from "./pages/RankingAnnouncement";
-import ScreenLobby from "./pages/ScreenLobby";
-import Idle from "./pages/Idle";
 import SelectDatabase from "./pages/SelectDatabase";
 import Logout from "./pages/Logout";
-import VibeFlowAudioCenter from "./pages/broadcast/VibeFlowAudioCenter";
-import StageLiveDisplay from "./pages/broadcast/StageLiveDisplay";
-import StageLiveDisplaySquare from "./pages/broadcast/StageLiveDisplaySquare";
-import ContestMonitoringMC from "./pages/ContestMonitoringMC";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ContestRankSummary = lazy(() => import("./pages/ContestRankSummary"));
+const PrintBase = lazy(() => import("./printForms/PrintBase"));
+const MeasurePrint = lazy(() => import("./printForms/MeasurePrint"));
+const StandingTableType1 = lazy(() => import("./pages/StandingTableType1"));
+const RankingAnnouncement = lazy(() => import("./pages/RankingAnnouncement"));
+const ScreenLobby = lazy(() => import("./pages/ScreenLobby"));
+const Idle = lazy(() => import("./pages/Idle"));
+const VibeFlowAudioCenter = lazy(() =>
+  import("./pages/broadcast/VibeFlowAudioCenter")
+);
+const StageLiveDisplay = lazy(() =>
+  import("./pages/broadcast/StageLiveDisplay")
+);
+const StageLiveDisplaySquare = lazy(() =>
+  import("./pages/broadcast/StageLiveDisplaySquare")
+);
+const ContestMonitoringMC = lazy(() => import("./pages/ContestMonitoringMC"));
 
 // BDBDg v3 Workflow Hubs (5-Layer Raw-Data Preserving Pipeline)
-import ContestSetupHub from "./pages/hubs/ContestSetupHub";
-import ContestCategoriesHub from "./pages/hubs/ContestCategoriesHub";
-import ContestEntriesHub from "./pages/hubs/ContestEntriesHub";
-import Stage1NumberingHub from "./pages/hubs/Stage1NumberingHub";
-import Stage2WeighInHub from "./pages/hubs/Stage2WeighInHub";
-import Stage3FinalPlayersHub from "./pages/hubs/Stage3FinalPlayersHub";
-import Stage4StagesHub from "./pages/hubs/Stage4StagesHub";
-import JudgesHub from "./pages/hubs/JudgesHub";
-import LiveMonitoringHub from "./pages/hubs/LiveMonitoringHub";
-import AudioCenterHub from "./pages/hubs/AudioCenterHub";
-import BroadcastHub from "./pages/hubs/BroadcastHub";
-import PrintCenterHub from "./pages/hubs/PrintCenterHub";
-import RecoveryScoresHub from "./pages/hubs/RecoveryScoresHub";
-import SystemToolsHub from "./pages/hubs/SystemToolsHub";
+const ContestSetupHub = lazy(() => import("./pages/hubs/ContestSetupHub"));
+const ContestCategoriesHub = lazy(() =>
+  import("./pages/hubs/ContestCategoriesHub")
+);
+const ContestEntriesHub = lazy(() => import("./pages/hubs/ContestEntriesHub"));
+const Stage1NumberingHub = lazy(() =>
+  import("./pages/hubs/Stage1NumberingHub")
+);
+const Stage2WeighInHub = lazy(() => import("./pages/hubs/Stage2WeighInHub"));
+const Stage3FinalPlayersHub = lazy(() =>
+  import("./pages/hubs/Stage3FinalPlayersHub")
+);
+const Stage4StagesHub = lazy(() => import("./pages/hubs/Stage4StagesHub"));
+const JudgesHub = lazy(() => import("./pages/hubs/JudgesHub"));
+const LiveMonitoringHub = lazy(() => import("./pages/hubs/LiveMonitoringHub"));
+const AudioCenterHub = lazy(() => import("./pages/hubs/AudioCenterHub"));
+const BroadcastHub = lazy(() => import("./pages/hubs/BroadcastHub"));
+const PrintCenterHub = lazy(() => import("./pages/hubs/PrintCenterHub"));
+const RecoveryScoresHub = lazy(() => import("./pages/hubs/RecoveryScoresHub"));
+const SystemToolsHub = lazy(() => import("./pages/hubs/SystemToolsHub"));
 
 /**
  * Legacy /contesttimetable 호환 라우터:
@@ -151,7 +164,8 @@ function App() {
         <DeviceProvider>
           <BrowserRouter>
             <UiScaleController />
-            <Routes>
+            <Suspense fallback={<LoadingPage />}>
+              <Routes>
               {/* 대시보드 & 인증 */}
               <Route
                 path="/"
@@ -506,7 +520,8 @@ function App() {
               <Route path="/mc" element={<ContestMonitoringMC />} />
               <Route path="/stage-mc" element={<ContestMonitoringMC />} />
               <Route path="/mc-stage" element={<ContestMonitoringMC />} />
-            </Routes>
+              </Routes>
+            </Suspense>
           </BrowserRouter>
         </DeviceProvider>
       </CurrentContestProvider>

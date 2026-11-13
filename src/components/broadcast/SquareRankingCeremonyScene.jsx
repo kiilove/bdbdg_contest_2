@@ -22,6 +22,7 @@ import defaultBody2 from "../../assets/img/body2.png";
 import defaultDemoBodybuilder from "../../assets/img/demo_bodybuilder.jpg";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import { LaurelBranch } from "./LaurelWreathWings";
+import { dedupeContestResultsByGrade } from "../../utils/contestResultsUtils";
 import "./AthleteIntroScene.css";
 
 const SquareRankingCeremonyScene = ({
@@ -81,13 +82,26 @@ const SquareRankingCeremonyScene = ({
     } else if (gradeId) {
       const fetchDbRankings = async () => {
         try {
-          const condition = [where("gradeId", "==", gradeId)];
+          const contestId =
+            currentContest?.contests?.id ||
+            currentContest?.contestInfo?.id ||
+            currentContest?.id ||
+            "";
+          const condition = contestId
+            ? [
+                where("contestId", "==", contestId),
+                where("gradeId", "==", gradeId),
+              ]
+            : [where("gradeId", "==", gradeId)];
           const data = await fetchResultQuery.getDocuments(
             "contest_results_list",
             condition
           );
-          if (data && data.length > 0 && data[0]?.result) {
-            setRanks(processRankingData(data[0].result));
+          const deduped = dedupeContestResultsByGrade(data, contestId || null);
+          const targetDoc =
+            deduped.find((d) => d.gradeId === gradeId) || deduped[0] || null;
+          if (targetDoc?.result) {
+            setRanks(processRankingData(targetDoc.result));
           }
         } catch (error) {
           console.error("순위 데이터 DB 조회 실패:", error);
@@ -95,7 +109,8 @@ const SquareRankingCeremonyScene = ({
       };
       fetchDbRankings();
     }
-  }, [rankingData, gradeId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankingData, gradeId, currentContest?.contests?.id, currentContest?.id]);
 
   // 1, 2, 3위 및 4~10위 슬롯 동적 추출 (실제 참가 선수 인원 수 동적 반영)
   const top1 = ranks.find((item) => (item.playerRank || 0) === 1) || (ranks.length > 0 ? ranks[0] : null);
@@ -199,14 +214,18 @@ const SquareRankingCeremonyScene = ({
   const heightValue = rawH ? (rawH.includes("cm") ? rawH : `${rawH}cm`) : "-";
   const weightValue = rawW ? (rawW.includes("kg") ? rawW : `${rawW}kg`) : "-";
   
-  // 🏷️ 순위표 체급 표기: 통합 단어 및 다중 체급 나열(-172cm -178cm 등) 제거 ➜ 단일 출전 체급명만 정확하게 표출
+  // 🏷️ 순위표 체급 표기: 통합 무대(끝이 '통합')일 때만 분리·정규화하고 단일 체급명('주니어 -75kg' 등)은 그대로 보존
   const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
     if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
     if (athlete?.gradeTitle) return athlete.gradeTitle;
     if (matched?.contestGradeTitle) return matched.contestGradeTitle;
     if (matched?.gradeTitle) return matched.gradeTitle;
     if (!rawGradeTitle) return "";
-    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    const trimmed = String(rawGradeTitle).trim();
+    if (!/통합\s*$/.test(trimmed)) {
+      return trimmed;
+    }
+    const cleaned = trimmed.replace(/\s*통합\s*$/, "").trim();
     const parts = cleaned.split(/\s+/).filter(Boolean);
     if (parts.length > 1) {
       return parts[0];

@@ -10,6 +10,7 @@ import {
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
 import { useDevice } from "../contexts/DeviceContext";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 
 const UNAFFILIATED_PATTERNS = new Set([
   "",
@@ -54,24 +55,6 @@ const normalizeGymInfo = (rawGymValue) => {
     gymKey: compactKey,
     displayGym: displayTrimmed,
   };
-};
-
-/** 결과 문서 타임스탬프 추출 (동일 체급 중복 문서 발생 시 최신본 우선 채택용) */
-const extractDocTimestamp = (docItem) => {
-  const candidates = [
-    docItem?.updatedAt,
-    docItem?.savedAt,
-    docItem?.createdAt,
-  ];
-  for (const val of candidates) {
-    if (!val) continue;
-    if (typeof val === "number") return val;
-    if (typeof val?.toMillis === "function") return val.toMillis();
-    if (typeof val?.seconds === "number") return val.seconds * 1000;
-    const parsed = Date.parse(String(val));
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return 0;
 };
 
 const GymGroupPrint = () => {
@@ -154,29 +137,23 @@ const GymGroupPrint = () => {
         }
       });
 
-      // 3. 동일 체급(gradeId) 중복 결과 문서 제거 (최신 문서 1개만 채택하여 이중 집계 원천 방지)
-      const latestDocByGradeKey = new Map();
-      let skippedDuplicates = 0;
-
-      (resultArray || []).forEach((item) => {
-        if (!item) return;
-        const gradeKey =
-          item.gradeId ||
-          `${item.categoryId || item.categoryTitle || ""}__${
-            item.gradeTitle || item.id || ""
-          }`;
-        const existing = latestDocByGradeKey.get(gradeKey);
-        if (!existing) {
-          latestDocByGradeKey.set(gradeKey, item);
-        } else {
-          skippedDuplicates += 1;
-          if (extractDocTimestamp(item) >= extractDocTimestamp(existing)) {
-            latestDocByGradeKey.set(gradeKey, item);
-          }
-        }
-      });
-
-      const uniqueResultDocs = Array.from(latestDocByGradeKey.values());
+      // 3. 동일 체급(gradeId) 중복 결과 문서 제거 (단일 공유 유틸리티 기준으로 정규화)
+      const contestId = currentContest?.contests?.id;
+      const rawResultDocs = Array.isArray(resultArray) ? resultArray : [];
+      const uniqueResultDocs = dedupeContestResultsByGrade(
+        rawResultDocs,
+        contestId
+      );
+      const validGradeDocCount = rawResultDocs.filter(
+        (d) =>
+          d &&
+          d.gradeId &&
+          (!contestId || !d.contestId || d.contestId === contestId)
+      ).length;
+      const skippedDuplicates = Math.max(
+        0,
+        validGradeDocCount - uniqueResultDocs.length
+      );
 
       // 4. 유효 입상 선수 평탄화 + 체급 내 동일 선수 중복 제거
       const playersFlat = [];
@@ -209,19 +186,6 @@ const GymGroupPrint = () => {
             return;
           }
 
-          const playerKey = String(
-            player?.playerUid ||
-              (player?.playerNumber != null
-                ? `num:${player.playerNumber}`
-                : "") ||
-              player?.playerName ||
-              ""
-          ).trim();
-          if (playerKey && seenInGrade.has(playerKey)) {
-            return;
-          }
-          if (playerKey) seenInGrade.add(playerKey);
-
           const rawResultGym = String(player?.playerGym ?? "").trim();
           const fallbackGym =
             (!rawResultGym &&
@@ -238,6 +202,22 @@ const GymGroupPrint = () => {
           const { isUnaffiliated, gymKey, displayGym } = normalizeGymInfo(
             rawResultGym || fallbackGym
           );
+
+          const playerKey = String(
+            player?.playerUid ||
+              (player?.playerNumber != null && player?.playerNumber !== ""
+                ? `num:${player.playerNumber}`
+                : "") ||
+              (player?.playerName
+                ? `name:${String(player.playerName).trim()}__gym:${
+                    rawResultGym || fallbackGym || gymKey
+                  }`
+                : "")
+          ).trim();
+          if (playerKey && seenInGrade.has(playerKey)) {
+            return;
+          }
+          if (playerKey) seenInGrade.add(playerKey);
 
           if (!includeUnaffiliated && isUnaffiliated) {
             return;
@@ -379,6 +359,7 @@ const GymGroupPrint = () => {
       includeUnaffiliated,
       includeGrandPrix,
       rankingLimit,
+      currentContest?.contests?.id,
     ]);
 
   const maxRankForCols = useMemo(() => {

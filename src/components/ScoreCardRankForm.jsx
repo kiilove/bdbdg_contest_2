@@ -1,7 +1,4 @@
 import React from "react";
-import ybbf from "../assets/img/ybbf_logo.png";
-import sbbf from "../assets/img/sbbf_logo.png";
-
 import CanvasWithImageData from "./CanvasWithImageData";
 import { getStagePlayerSortIndex } from "../functions/functions";
 
@@ -161,7 +158,7 @@ const ScoreCardRankForm = ({
                 </div>
               </div>
               {players?.length > 0 &&
-                players
+                [...players]
                   .sort(
                     (a, b) =>
                       getStagePlayerSortIndex(a, { categoryTitle }) -
@@ -173,7 +170,10 @@ const ScoreCardRankForm = ({
                       return null;
                     }
                     return (
-                      <div className="flex w-auto border-t-2 border-black">
+                      <div
+                        key={player.playerUid || playerNumber || pIdx}
+                        className="flex w-auto border-t-2 border-black"
+                      >
                         <div
                           className="flex border-r-2 border-black justify-center items-center h-14 flex-col bg-white"
                           style={{ width: "100px" }}

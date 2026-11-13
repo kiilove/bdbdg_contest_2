@@ -175,25 +175,35 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
     );
   };
 
-  const deleteInvocieJoins = async (contestId, playerUid) => {
+  const deleteInvocieJoins = async (
+    contestId,
+    playerUid,
+    targetInvoiceId = invoiceInfo?.id
+  ) => {
+    if (!contestId) return;
     const invoiceCondition = [where("contestId", "==", contestId)];
 
     const returnEntry = await getQuery.getDocuments(
       "contest_entrys_list",
       invoiceCondition
     );
-    const filteredEntryByPlayerUid = (returnEntry || []).filter(
-      (entry) => entry.playerUid === playerUid
-    );
+    const trimmedUid = String(playerUid ?? "").trim();
+    const filteredEntryByPlayerUid = (returnEntry || []).filter((entry) => {
+      if (targetInvoiceId && entry.invoiceId) {
+        return entry.invoiceId === targetInvoiceId;
+      }
+      return trimmedUid !== "" && entry.playerUid === trimmedUid;
+    });
 
     if (filteredEntryByPlayerUid.length <= 0) {
       console.log("일치하는 선수명단이 없습니다.");
+      return;
     }
-    if (filteredEntryByPlayerUid.length > 0) {
-      filteredEntryByPlayerUid.map(async (filter) => {
-        await deleteEntry.deleteData(filter.id);
-      });
-    }
+    await Promise.all(
+      filteredEntryByPlayerUid.map((filter) =>
+        deleteEntry.deleteData(filter.id)
+      )
+    );
   };
 
   const updateInvoiceInList = (newInvoiceInfo) => {
@@ -210,7 +220,6 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
   const handleUpdateInvoice = async () => {
     setIsLoading(true);
     const newInvoice = { ...invoiceInfo };
-    deleteInvocieJoins(newInvoice.contestId, newInvoice.playerUid);
     const cleanedPrice = String(invoiceInfo.contestPriceSum ?? 0).replace(
       /,/g,
       ""
@@ -219,21 +228,22 @@ const InvoiceInfoModal = ({ setClose, propState, setState }) => {
     newInvoice.isPriceCheck = false;
     newInvoice.invoiceEdited = true;
     try {
-      await updateInvoice
-        .updateData(newInvoice.id, { ...newInvoice })
-        .then(() => {
-          deleteInvocieJoins(newInvoice.contestId, newInvoice.playerUid);
-          setIsLoading(false);
-          updateInvoiceInList(newInvoice);
-          openModal({
-            variant: "success",
-            title: "참가신청서 수정 완료",
-            body: "참가신청 정보가 수정되었습니다.",
-            body2: "기존 확정자도 미확정자 목록으로 이동되었으니 다시 확인해 주세요.",
-            isButton: true,
-            confirmButtonText: "확인",
-          });
-        });
+      await updateInvoice.updateData(newInvoice.id, { ...newInvoice });
+      await deleteInvocieJoins(
+        newInvoice.contestId,
+        newInvoice.playerUid,
+        newInvoice.id
+      );
+      setIsLoading(false);
+      updateInvoiceInList(newInvoice);
+      openModal({
+        variant: "success",
+        title: "참가신청서 수정 완료",
+        body: "참가신청 정보가 수정되었습니다.",
+        body2: "기존 확정자도 미확정자 목록으로 이동되었으니 다시 확인해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
     } catch (error) {
       console.log(error);
       setIsLoading(false);

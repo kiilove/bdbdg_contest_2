@@ -29,10 +29,14 @@ import {
   getStagePlayerSortIndex,
   isGrandPrixPlayerEntry,
 } from "../functions/functions";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Empty } from "antd";
-import { useDevice } from "../contexts/DeviceContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import {
+  isActiveStagePlayer,
+  resolveOriginalGradeTitle,
+} from "../utils/playerEntryUtils";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 
 const UNIFIED_PRINT_PAGE_STYLE = `
   @page {
@@ -56,10 +60,8 @@ const UNIFIED_PRINT_PAGE_STYLE = `
 `;
 
 const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
-  const { isTabletOrMobile } = useDevice();
   const params = useParams();
   const printType = forcedPrintType || params.printType || "measurement";
-  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [msgOpen, setMsgOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState({});
@@ -127,8 +129,12 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
           "contest_results_list",
           conditions
         );
+        const dedupedResults = dedupeContestResultsByGrade(
+          resultsData || [],
+          contestId
+        );
 
-        let enhancedResults = (resultsData || []).map((result) => {
+        let enhancedResults = dedupedResults.map((result) => {
           const category = categoriesArray.find(
             (cat) => cat.contestCategoryId === result.categoryId
           );
@@ -196,7 +202,8 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
         where("contestId", "==", contestId)
       );
       const snap = await getDocs(q);
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rawRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rows = dedupeContestResultsByGrade(rawRows, contestId);
 
       if (rows.length === 0) {
         setModalMessage({
@@ -255,8 +262,16 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
         fetchCategories.getDocument(categoryId),
         fetchGrades.getDocument(gradeId),
       ]);
-      const loadedCats = categories?.categorys || [];
-      const loadedGrades = grades?.grades || [];
+      const loadedCats = [...(categories?.categorys || [])].sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      );
+      const loadedGrades = [...(grades?.grades || [])].sort(
+        (a, b) =>
+          (Number(a?.contestGradeIndex ?? a?.gradeIndex) || 0) -
+          (Number(b?.contestGradeIndex ?? b?.gradeIndex) || 0)
+      );
       setCategoriesArray(loadedCats);
       setGradesArray(loadedGrades);
 
@@ -319,7 +334,12 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
 
   const processCategoriesGradesPlayers = useCallback(
     (filteredCategories, gradesArray, playersArray) => {
-      return filteredCategories
+      return [...filteredCategories]
+        .sort(
+          (a, b) =>
+            (Number(a?.contestCategoryIndex) || 0) -
+            (Number(b?.contestCategoryIndex) || 0)
+        )
         .map((category) => {
           const grades = gradesArray
             .filter(
@@ -327,31 +347,38 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
             )
             .sort(
               (a, b) =>
-                (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
-                (b.contestGradeIndex ?? b.gradeIndex ?? 0)
+                (Number(a?.contestGradeIndex ?? a?.gradeIndex) || 0) -
+                (Number(b?.contestGradeIndex ?? b?.gradeIndex) || 0)
             )
             .map((grade) => {
               const players = playersArray
                 .filter((player) => {
                   if (printType === "measurement") {
-                    return player.originalGradeId === grade.contestGradeId;
-                  } else {
-                    return player.contestGradeId === grade.contestGradeId;
+                    return (
+                      (player.originalGradeId || player.contestGradeId) ===
+                      grade.contestGradeId
+                    );
                   }
+                  return (
+                    player.contestGradeId === grade.contestGradeId &&
+                    isActiveStagePlayer(player)
+                  );
                 })
                 .map((player, index) => {
                   let note = player.note || "";
-                  let playerName = player.playerName;
-
+                  const playerName = player.playerName;
                   const isGpRow = isGrandPrixPlayerEntry(player, category);
+                  const origGradeTitle = resolveOriginalGradeTitle(player);
 
                   if (printType === "final") {
-                    if (player.playerNoShow) {
-                      note = "불참";
-                    } else if (isGpRow && player.originalgradeTitle) {
-                      note = `${player.originalgradeTitle} 1위`;
+                    if (isGpRow && origGradeTitle) {
+                      note = `${origGradeTitle} 1위`;
                     } else if (!isGpRow && player.isGradeChanged) {
                       note = "월체 반영됨";
+                    }
+                  } else if (printType === "measurement") {
+                    if (player.playerNoShow) {
+                      note = "불참";
                     }
                   }
 
@@ -437,11 +464,17 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
   }, [printType]);
 
   const availableCategories = useMemo(() => {
-    return categoriesArray.filter(
-      (cat) =>
-        currentSection === "all" ||
-        cat.contestCategorySection === currentSection
-    );
+    return [...categoriesArray]
+      .sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      )
+      .filter(
+        (cat) =>
+          currentSection === "all" ||
+          cat.contestCategorySection === currentSection
+      );
   }, [categoriesArray, currentSection]);
 
   const availableGrades = useMemo(() => {
@@ -454,8 +487,12 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
 
       if (printType === "ranking") return true;
 
-      const hasPlayers = playersArray.some(
-        (player) => player.contestGradeId === grade.contestGradeId
+      const hasPlayers = playersArray.some((player) =>
+        printType === "measurement"
+          ? (player.originalGradeId || player.contestGradeId) ===
+            grade.contestGradeId
+          : player.contestGradeId === grade.contestGradeId &&
+            isActiveStagePlayer(player)
       );
 
       return hasPlayers;
@@ -588,14 +625,22 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
 
               {/* 액션 버튼 그룹 (엑셀 다운로드 + 인쇄) */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleExportExcel}
-                  disabled={isExporting}
-                  className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] font-medium text-[13px] inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer disabled:opacity-50"
-                >
-                  <FileSpreadsheet size={15} strokeWidth={1.5} className="text-[#525252]" />
-                  <span>{isExporting ? "엑셀 생성 중..." : "엑셀 다운로드"}</span>
-                </button>
+                {printType === "ranking" && (
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={isExporting}
+                    className="h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] font-medium text-[13px] inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                  >
+                    <FileSpreadsheet
+                      size={15}
+                      strokeWidth={1.5}
+                      className="text-[#525252]"
+                    />
+                    <span>
+                      {isExporting ? "엑셀 생성 중..." : "엑셀 다운로드"}
+                    </span>
+                  </button>
+                )}
 
                 {/* 인쇄 버튼 */}
                 <ReactToPrint

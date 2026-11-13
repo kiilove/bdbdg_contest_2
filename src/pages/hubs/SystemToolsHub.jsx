@@ -1,14 +1,20 @@
 import React from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { UserCog, Shuffle, RotateCcw } from "lucide-react";
 import PipelineStageBanner from "../../components/ui/PipelineStageBanner";
 import AssociationManagers from "../AssociationManagers";
 import RandomPlayerGenerator from "../RandomPlayerGenerator";
 import ContestSearchAndDelete from "../ContestSearchAndDelete";
+import { useIsAdmin } from "./useHubAuth";
 
 const SystemToolsHub = ({ defaultTab }) => {
+  const isAdmin = useIsAdmin();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
 
   const inferredDefault =
     defaultTab ||

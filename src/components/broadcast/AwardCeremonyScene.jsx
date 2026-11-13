@@ -15,6 +15,7 @@ import {
   FireFilled,
 } from "@ant-design/icons";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
+import { dedupeContestResultsByGrade } from "../../utils/contestResultsUtils";
 import "./AthleteIntroScene.css";
 
 const AwardCeremonyScene = ({
@@ -114,13 +115,26 @@ const AwardCeremonyScene = ({
     } else if (gradeId) {
       const fetchDbRankings = async () => {
         try {
-          const condition = [where("gradeId", "==", gradeId)];
+          const contestId =
+            currentContest?.contests?.id ||
+            currentContest?.contestInfo?.id ||
+            currentContest?.id ||
+            "";
+          const condition = contestId
+            ? [
+                where("contestId", "==", contestId),
+                where("gradeId", "==", gradeId),
+              ]
+            : [where("gradeId", "==", gradeId)];
           const data = await fetchResultQuery.getDocuments(
             "contest_results_list",
             condition
           );
-          if (data && data.length > 0 && data[0]?.result) {
-            setRanks(processRankingData(data[0].result));
+          const deduped = dedupeContestResultsByGrade(data, contestId || null);
+          const targetDoc =
+            deduped.find((d) => d.gradeId === gradeId) || deduped[0] || null;
+          if (targetDoc?.result) {
+            setRanks(processRankingData(targetDoc.result));
           }
         } catch (err) {
           console.error("시상식 순위 데이터 로드 실패:", err);
@@ -128,7 +142,8 @@ const AwardCeremonyScene = ({
       };
       fetchDbRankings();
     }
-  }, [rankingData, gradeId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankingData, gradeId, currentContest?.contests?.id, currentContest?.id]);
 
   // 포디움 3인방 및 하위 순위 분리 (실제 참가 인원만 분리)
   const firstPlayer =
@@ -162,7 +177,7 @@ const AwardCeremonyScene = ({
         )
       : [];
 
-  // 🏷️ 시상식 체급 표기: 통합 단어 및 다중 체급 나열 제거 ➜ 1위 선수 고유 체급명 우선 반영
+  // 🏷️ 시상식 체급 표기: 통합 무대(끝이 '통합')일 때만 분리·정규화하고 단일 체급명('주니어 -75kg' 등)은 그대로 보존
   const matchedFirst = realPlayersMap[String(firstPlayer.playerNumber).trim()] || realPlayersMap[String(firstPlayer.playerName).trim()];
   const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
     if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
@@ -170,7 +185,11 @@ const AwardCeremonyScene = ({
     if (matched?.contestGradeTitle) return matched.contestGradeTitle;
     if (matched?.gradeTitle) return matched.gradeTitle;
     if (!rawGradeTitle) return "";
-    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    const trimmed = String(rawGradeTitle).trim();
+    if (!/통합\s*$/.test(trimmed)) {
+      return trimmed;
+    }
+    const cleaned = trimmed.replace(/\s*통합\s*$/, "").trim();
     const parts = cleaned.split(/\s+/).filter(Boolean);
     if (parts.length > 1) {
       return parts[0];

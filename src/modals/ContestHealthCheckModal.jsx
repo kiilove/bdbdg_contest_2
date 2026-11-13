@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 
 const COMPANION_SPECS = [
   {
@@ -137,6 +138,7 @@ const COMPANION_SPECS = [
     required: true,
     generateData: (contestId) => ({
       contestId,
+      refContestId: contestId,
       categorys: [],
     }),
     getInfo: (data) =>
@@ -151,6 +153,7 @@ const COMPANION_SPECS = [
     required: true,
     generateData: (contestId) => ({
       contestId,
+      refContestId: contestId,
       grades: [],
     }),
     getInfo: (data) =>
@@ -317,7 +320,7 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
               validDocId = existingId;
             } else if (spec.key === "contestPasswordId" && (!data.passwords || data.passwords.length === 0)) {
               // 비밀번호만 비어있는 경우 채워넣기
-              const newPass = spec.generateData(contestId);
+              const newPass = sanitizeForFirestore(spec.generateData(contestId));
               await updateDoc(doc(db, spec.collectionName, existingId), newPass);
               validDocId = existingId;
               linkedCount++;
@@ -341,7 +344,9 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
             linkedCount++;
           } else {
             // 새로 생성
-            const initialData = spec.generateData(contestId, contestInfo);
+            const initialData = sanitizeForFirestore(
+              spec.generateData(contestId, contestInfo)
+            );
             const addedRef = await addDoc(collection(db, spec.collectionName), initialData);
             validDocId = addedRef.id;
             createdCount++;
@@ -363,7 +368,7 @@ const ContestHealthCheckModal = ({ isOpen, onClose }) => {
 
       // contests 문서 업데이트
       if (Object.keys(updatesToContest).length > 0) {
-        await updateDoc(contestRef, updatesToContest);
+        await updateDoc(contestRef, sanitizeForFirestore(updatesToContest));
       }
 
       // 최신 contest 데이터 조회 후 Context + sessionStorage 실시간 갱신!

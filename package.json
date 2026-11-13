@@ -50,6 +50,7 @@
     "dev": "vite",
     "build:vite": "vite build",
     "preview": "vite preview",
+    "test:domain": "node --test tests/commercializationIntegrity.test.mjs",
     "deploy": "firebase deploy --only hosting",
     "start": "react-scripts start",
     "build": "react-scripts build",

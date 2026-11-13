@@ -21,6 +21,7 @@ const PrintBase = () => {
   const fetchPlayersAssign = useFirestoreGetDocument("contest_players_assign");
 
   const fetchPool = async (categoryId, gradeId, playerAssignId) => {
+    setIsLoading(true);
     try {
       const [categories, grades, players] = await Promise.all([
         fetchCategories.getDocument(categoryId),
@@ -32,38 +33,48 @@ const PrintBase = () => {
       setPlayerAssignArray(players?.players || []);
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const filteredPlayerList = useMemo(() => {
-    const filteredCategories = categoriesArray.filter((category) => {
-      return (
-        currentSection === "전체" ||
-        category.contestCategorySection === currentSection
-      );
-    });
+    const filteredCategories = [...categoriesArray]
+      .sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      )
+      .filter((category) => {
+        return (
+          currentSection === "전체" ||
+          category.contestCategorySection === currentSection
+        );
+      });
 
     return filteredCategories
       .map((category) => {
         const grades = gradesArray
           .filter((grade) => grade.refCategoryId === category.contestCategoryId)
+          .sort(
+            (a, b) =>
+              (Number(a?.contestGradeIndex ?? a?.gradeIndex) || 0) -
+              (Number(b?.contestGradeIndex ?? b?.gradeIndex) || 0)
+          )
           .map((grade) => ({
             ...grade,
             players: playerAssignArray
               .filter(
-                (player) => player.contestGradeId === grade.contestGradeId
+                (player) =>
+                  (player.originalGradeId || player.contestGradeId) ===
+                  grade.contestGradeId
               )
               .map((player, index) => {
                 let note = player.note || "";
-                let playerName = player.playerName;
+                const playerName = String(player.playerName ?? "");
 
                 if (player.playerNoShow) {
                   note = "불참";
-                  playerName = (
-                    <span style={{ color: "gray" }}>
-                      <s>{player.playerName}</s>
-                    </span>
-                  );
                 } else if (player.isGradeChanged) {
                   note = "월체";
                 }
@@ -76,8 +87,7 @@ const PrintBase = () => {
                   playerGym: player.playerGym || "",
                   note,
                 };
-              })
-              .filter((player) => player.players.length > 0),
+              }),
           }))
           .filter((grade) => grade.players.length > 0);
 
@@ -207,7 +217,13 @@ const PrintBase = () => {
                                 {player.playerNumber}
                               </td>
                               <td className="p-2 border">
-                                {player.playerName}
+                                {player.note === "불참" ? (
+                                  <span className="text-gray-500 line-through">
+                                    {player.playerName}
+                                  </span>
+                                ) : (
+                                  player.playerName
+                                )}
                               </td>
                               <td className="p-2 border">
                                 {player.heightWeight}

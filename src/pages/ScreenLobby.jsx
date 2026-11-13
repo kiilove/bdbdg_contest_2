@@ -1,25 +1,19 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useFirebaseRealtimeGetDocument } from "../hooks/useFirebaseRealtime";
 import { useNavigate } from "react-router-dom";
-import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { BsTrophyFill } from "react-icons/bs";
 
 const ScreenLobby = () => {
-  const [stageArray, setStageArray] = useState([]);
+  const [, setStageArray] = useState([]);
   const [contestList, setContestList] = useState([]);
   const [contestNoticeId, setContestNoticeId] = useState();
   const [contestId, setContestId] = useState("");
   const navigate = useNavigate();
-  const { currentContest } = useContext(CurrentContestContext);
   const fetchStages = useFirestoreQuery();
   const fetchQuery = useFirestoreQuery();
-  const {
-    data: realtimeData,
-    loading: realtimeLoading,
-    error: realtimeError,
-  } = useFirebaseRealtimeGetDocument(
+  const { data: realtimeData } = useFirebaseRealtimeGetDocument(
     contestId ? `currentStage/${contestId}` : null
   );
 
@@ -33,44 +27,40 @@ const ScreenLobby = () => {
       condition
     );
 
-    setContestList([
-      ...returnData.sort((a, b) =>
-        a.contestTitle.localeCompare(b.contestTitle)
-      ),
-    ]);
+    const sortedList = [...(returnData || [])].sort((a, b) =>
+      (a?.contestTitle || "").localeCompare(b?.contestTitle || "")
+    );
+    setContestList(sortedList);
 
-    if (returnData?.length >= 1) {
-      setContestNoticeId(returnData[0].id);
+    if (sortedList.length >= 1) {
+      setContestNoticeId(sortedList[0].id);
     }
   };
 
-  const handleStageInfo = async (contestId, realtimeStageId) => {
-    const condition = [where("contestId", "==", contestId)];
+  const handleStageInfo = async (targetContestId, realtimeStageId) => {
+    const condition = [where("contestId", "==", targetContestId)];
     try {
-      await fetchStages
-        .getDocuments("contest_stages_assign", condition)
-        .then((data, error) => {
-          console.log({ data, error });
-          if (data?.length > 0 && data?.stages?.length > 0 && realtimeStageId) {
-            const findStage = data.stages.filter(
-              (f) => f.stageId === realtimeStageId
-            );
-            console.log(findStage);
-          }
-        });
+      const data = await fetchStages.getDocuments(
+        "contest_stages_assign",
+        condition
+      );
+      const stageDoc = Array.isArray(data) ? data[0] : data;
+      if (stageDoc?.stages?.length > 0) {
+        setStageArray(stageDoc.stages || []);
+        if (realtimeStageId) {
+          stageDoc.stages.filter((f) => f.stageId === realtimeStageId);
+        }
+      }
     } catch (error) {
       console.log(error);
     }
   };
 
   const handleNavigate = () => {
-    console.log(realtimeData); // realtimeData가 올바른 값인지 확인
     if (realtimeData) {
       if (realtimeData?.screen?.status?.playStart === false) {
-        console.log("Navigating to /idle with contestId:", contestId); // contestId 출력
         navigate("/idle", { state: { contestId } });
       } else {
-        console.log("Navigating to /ranking");
         navigate("/ranking", { state: { contestId } });
       }
     }
@@ -80,7 +70,8 @@ const ScreenLobby = () => {
     if (contestId && realtimeData?.stageId) {
       handleStageInfo(contestId, realtimeData?.stageId);
     }
-  }, [contestId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contestId, realtimeData?.stageId]);
 
   useEffect(() => {
     const findContestId = contestList.find((f) => f.id === contestNoticeId);
@@ -88,10 +79,11 @@ const ScreenLobby = () => {
     if (findContestId) {
       setContestId(findContestId.refContestId);
     }
-  }, [contestNoticeId]);
+  }, [contestNoticeId, contestList]);
 
   useEffect(() => {
     fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

@@ -122,6 +122,14 @@ export const saveVideoBlobToDB = async (url, blob, originalSize = 0) => {
       const request = store.put(record);
 
       request.onsuccess = () => {
+        const prevBlobUrl = memoryBlobUrlMap.get(url);
+        if (prevBlobUrl) {
+          try {
+            URL.revokeObjectURL(prevBlobUrl);
+          } catch {
+            // ignore revoke error
+          }
+        }
         const blobUrl = URL.createObjectURL(blob);
         memoryBlobUrlMap.set(url, blobUrl);
         resolve(blobUrl);
@@ -238,9 +246,26 @@ export const clearStoredVideos = async (targetUrl = null) => {
       const store = tx.objectStore(STORE_NAME);
 
       if (targetUrl) {
+        const cachedBlobUrl = memoryBlobUrlMap.get(targetUrl);
+        if (cachedBlobUrl) {
+          try {
+            URL.revokeObjectURL(cachedBlobUrl);
+          } catch {
+            // ignore revoke error
+          }
+        }
         store.delete(targetUrl);
         memoryBlobUrlMap.delete(targetUrl);
       } else {
+        memoryBlobUrlMap.forEach((cachedBlobUrl) => {
+          if (cachedBlobUrl) {
+            try {
+              URL.revokeObjectURL(cachedBlobUrl);
+            } catch {
+              // ignore revoke error
+            }
+          }
+        });
         store.clear();
         memoryBlobUrlMap.clear();
       }

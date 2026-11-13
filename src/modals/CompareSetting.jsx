@@ -12,6 +12,10 @@ import {
 } from "../hooks/useFirestores";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
+import {
+  removeStageCompareByLocalIndex,
+  buildRealtimeCompareAfterCancel,
+} from "../utils/compareVoteUtils";
 import { Card, Button, Space, Tag, InputNumber, Progress, Badge } from "antd";
 import {
   TrophyOutlined,
@@ -127,52 +131,68 @@ const CompareSetting = ({
     }
   };
 
-  // 현재 스테이지/체급의 마지막 compare만 제거 (main 원본 로직 유지)
+  // 현재 스테이지/체급의 마지막 compare만 제거 (다른 무대 이력 100% 보존)
   const handleCompareCancel = async (contestId) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
 
-    const currentStageId = stageInfo?.stageId;
+    const currentStageId = stageInfo?.stageId || realtimeData?.stageId;
     const currentCategoryId = stageInfo?.categoryId;
     const currentGradeId = stageInfo?.grades?.[0]?.gradeId;
 
-    const all = Array.isArray(compareArray) ? compareArray : [];
+    const all = Array.isArray(compareList?.compares)
+      ? compareList.compares
+      : Array.isArray(compareArray)
+      ? compareArray
+      : [];
 
-    const isCurrentGroup = (c) =>
-      c?.stageId === currentStageId &&
-      c?.categoryId === currentCategoryId &&
-      c?.gradeId === currentGradeId;
+    let newCompares = [];
+    let remainingStageCompares = [];
 
-    const currentGroup = all.filter(isCurrentGroup);
-    const others = all.filter((c) => !isCurrentGroup(c));
+    if (currentStageId && all.some((c) => c?.stageId === currentStageId)) {
+      const stageItems = all.filter((c) => c?.stageId === currentStageId);
+      if (stageItems.length === 0) {
+        setRefresh(true);
+        setClose(false);
+        return;
+      }
+      const removed = removeStageCompareByLocalIndex(
+        all,
+        currentStageId,
+        stageItems.length - 1
+      );
+      newCompares = removed.nextAllCompares;
+      remainingStageCompares = removed.nextStageCompares;
+    } else {
+      const isCurrentGroup = (c) =>
+        c?.stageId === currentStageId ||
+        (c?.categoryId === currentCategoryId && c?.gradeId === currentGradeId);
 
-    if (currentGroup.length === 0) {
-      setRefresh(true);
-      setClose(false);
-      return;
+      const currentGroup = all.filter(isCurrentGroup);
+      const others = all.filter((c) => !isCurrentGroup(c));
+
+      if (currentGroup.length === 0) {
+        setRefresh(true);
+        setClose(false);
+        return;
+      }
+
+      const maxIdx = Math.max(
+        ...currentGroup.map((c) => Number(c.compareIndex || 0))
+      );
+      remainingStageCompares = currentGroup.filter(
+        (c) => Number(c.compareIndex) !== maxIdx
+      );
+      newCompares = [...others, ...remainingStageCompares];
     }
 
-    const maxIdx = Math.max(
-      ...currentGroup.map((c) => Number(c.compareIndex || 0))
+    const nextRealtimePayload = buildRealtimeCompareAfterCancel(
+      remainingStageCompares
     );
-    const trimmedGroup = currentGroup.filter(
-      (c) => Number(c.compareIndex) !== maxIdx
-    );
-
-    const newCompares = [...others, ...trimmedGroup];
 
     try {
-      // 1) 실시간 DB 상태 리셋
+      // 1) 실시간 DB 상태 리셋 / 직전 차수 복원
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
-        status: {
-          compareStart: false,
-          compareEnd: false,
-          compareCancel: true,
-          compareIng: false,
-        },
-        confirmed: { count: 0, numbers: [] },
-        players: [],
-        playerLength: 0,
-        scoreMode: null,
+        ...nextRealtimePayload,
         judges: (realtimeData?.compares?.judges || []).map((j) => ({
           ...j,
           messageStatus: "확인전",
@@ -180,20 +200,20 @@ const CompareSetting = ({
       });
 
       // 2) Firestore(compare 이력) 업데이트
-      await updateCompare.updateData(compareList.id, {
-        ...compareList,
-        compares: newCompares,
-      });
+      if (compareList?.id) {
+        await updateCompare.updateData(compareList.id, {
+          ...compareList,
+          compares: newCompares,
+        });
+      }
 
       // 3) 로컬 상태 동기화
       setCompareArray(newCompares);
       setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
       setCompareStatus({
-        compareStart: false,
-        compareEnd: false,
+        ...nextRealtimePayload.status,
         compareCancel: true,
-        compareIng: false,
       });
 
       setStartedInThisSession(false);
@@ -235,6 +255,14 @@ const CompareSetting = ({
     }
   };
 
+  const stageGradeLabel =
+    Array.isArray(stageInfo?.grades) && stageInfo.grades.length > 1
+      ? `${stageInfo.grades
+          .map((g) => g?.gradeTitle)
+          .filter(Boolean)
+          .join(" ")} 통합`
+      : stageInfo?.grades?.[0]?.gradeTitle || "";
+
   const handleUpdateComparePlayers = async (
     playerTopResult,
     playerVoteResult,
@@ -247,7 +275,7 @@ const CompareSetting = ({
       categoryId: stageInfo?.categoryId,
       gradeId: stageInfo?.grades?.[0]?.gradeId,
       categoryTitle: stageInfo?.categoryTitle,
-      gradeTitle: stageInfo?.grades?.[0]?.gradeTitle,
+      gradeTitle: stageGradeLabel,
       compareIndex: propCompareIndex,
       comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
       compareScoreMode: votedInfo.scoreMode,
@@ -265,7 +293,10 @@ const CompareSetting = ({
         compareIng: true,
       };
 
-      const newCompares = [...compareArray, compareInfo];
+      const baseAllCompares = Array.isArray(compareList?.compares)
+        ? compareList.compares
+        : compareArray;
+      const newCompares = [...baseAllCompares, compareInfo];
 
       const confirmedNumbers = (playerTopResult || [])
         .map((p) => Number(p.playerNumber))
@@ -428,16 +459,25 @@ const CompareSetting = ({
   }, [realtimeData?.compares]);
 
   useEffect(() => {
-    if (compareArray?.length > 0) {
-      const filterCompares = compareArray.filter(
-        (f) =>
-          f.categoryId === realtimeData?.categoryId &&
-          f.gradeId === realtimeData?.gradeId
+    const all = Array.isArray(compareList?.compares)
+      ? compareList.compares
+      : compareArray;
+    if (all?.length > 0) {
+      const targetStageId = stageInfo?.stageId || realtimeData?.stageId;
+      const filterCompares = all.filter((f) =>
+        targetStageId
+          ? f.stageId === targetStageId
+          : f.categoryId === realtimeData?.categoryId &&
+            f.gradeId === realtimeData?.gradeId
       );
       setCurrentCompareArray(filterCompares);
+    } else {
+      setCurrentCompareArray([]);
     }
   }, [
+    stageInfo?.stageId,
     realtimeData?.stageId,
+    compareList,
     compareArray,
     realtimeData?.categoryId,
     realtimeData?.gradeId,
@@ -533,7 +573,7 @@ const CompareSetting = ({
           </div>
           <div className="flex flex-col">
             <div className="text-lg sm:text-xl font-bold text-[#171717] leading-tight">
-              {stageInfo?.categoryTitle}({stageInfo?.grades?.[0]?.gradeTitle})
+              {stageInfo?.categoryTitle}({stageGradeLabel})
             </div>
             <div className="text-sm font-semibold text-[#2563eb] mt-0.5">
               {propCompareIndex}차 비교심사 설정
@@ -916,7 +956,10 @@ const CompareSetting = ({
                             {(matchedOriginalPlayers || []).map(
                               (player, pIdx) => (
                                 <th
-                                  key={pIdx}
+                                  key={
+                                    player.playerUid ||
+                                    `${player.contestGradeId || ""}-${player.playerNumber}-${pIdx}`
+                                  }
                                   className="border border-gray-300 p-3 text-center font-bold"
                                 >
                                   <Tag
@@ -938,15 +981,28 @@ const CompareSetting = ({
                             {(matchedOriginalPlayers || []).map(
                               (player, pIdx) => {
                                 const votes =
-                                  votedResult?.find(
-                                    (f) =>
-                                      f.playerNumber === player.playerNumber
-                                  )?.votedCount || 0;
+                                  votedResult
+                                    ?.filter((f) =>
+                                      player.playerUid && f.playerUid
+                                        ? f.playerUid === player.playerUid &&
+                                          String(f.playerNumber) ===
+                                            String(player.playerNumber)
+                                        : String(f.playerNumber) ===
+                                          String(player.playerNumber)
+                                    )
+                                    .reduce(
+                                      (sum, item) =>
+                                        sum + (item.votedCount || 0),
+                                      0
+                                    ) || 0;
                                 const percentage =
                                   maxVotes > 0 ? (votes / maxVotes) * 100 : 0;
                                 return (
                                   <td
-                                    key={pIdx}
+                                    key={
+                                      player.playerUid ||
+                                      `${player.contestGradeId || ""}-${player.playerNumber}-${pIdx}`
+                                    }
                                     className="border border-gray-300 p-3 text-center"
                                   >
                                     <div className="flex flex-col gap-2">
@@ -975,13 +1031,29 @@ const CompareSetting = ({
                     >
                       {(matchedOriginalPlayers || []).map((player, pIdx) => {
                         const votes =
-                          votedResult?.find(
-                            (f) => f.playerNumber === player.playerNumber
-                          )?.votedCount || 0;
+                          votedResult
+                            ?.filter((f) =>
+                              player.playerUid && f.playerUid
+                                ? f.playerUid === player.playerUid &&
+                                  String(f.playerNumber) ===
+                                    String(player.playerNumber)
+                                : String(f.playerNumber) ===
+                                  String(player.playerNumber)
+                            )
+                            .reduce(
+                              (sum, item) => sum + (item.votedCount || 0),
+                              0
+                            ) || 0;
                         const percentage =
                           maxVotes > 0 ? (votes / maxVotes) * 100 : 0;
                         return (
-                          <Card key={pIdx} size="small">
+                          <Card
+                            key={
+                              player.playerUid ||
+                              `${player.contestGradeId || ""}-${player.playerNumber}-${pIdx}`
+                            }
+                            size="small"
+                          >
                             <div className="flex justify-between items-center mb-2">
                               <Tag color="blue" className="text-base font-bold">
                                 선수 {player.playerNumber}

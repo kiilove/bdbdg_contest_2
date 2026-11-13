@@ -21,14 +21,19 @@ import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
-import { getStagePlayerSortIndex } from "../functions/functions";
+import {
+  getStagePlayerSortIndex,
+  matchedGradewWithPlayers,
+} from "../functions/functions";
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
 } from "../hooks/useFirebaseRealtime";
-import { where } from "firebase/firestore";
+import { doc, onSnapshot, where } from "firebase/firestore";
+import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { matchedGradewWithPlayers } from "../functions/functions";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
+import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 import { Spin } from "antd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
@@ -149,11 +154,11 @@ const ContestMonitoringHost = ({ contestId }) => {
 
       if (returnPlayersFinal?.players) {
         const players = [...(returnPlayersFinal.players || [])]
+          .filter((f) => isActiveStagePlayer(f))
           .sort(
             (a, b) =>
               getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
-          )
-          .filter((f) => f.playerNoShow === false);
+          );
         setAllFinalPlayers(players);
       } else {
         setAllFinalPlayers([]);
@@ -165,19 +170,39 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
+  const fetchDedupedGradeStanding = async (targetGradeId) => {
+    if (!targetGradeId) return [];
+    const condition = [
+      ...(effectiveContestId
+        ? [where("contestId", "==", effectiveContestId)]
+        : []),
+      where("gradeId", "==", targetGradeId),
+    ];
+    const data = await fetchResultQuery.getDocuments(
+      "contest_results_list",
+      condition
+    );
+    const deduped = dedupeContestResultsByGrade(
+      data || [],
+      effectiveContestId || null
+    );
+    const targetDoc =
+      deduped.find((d) => d.gradeId === targetGradeId) || deduped[0];
+    if (!targetDoc) return [];
+    return [...(targetDoc.result || [])].sort(
+      (a, b) => Number(a.playerRank) - Number(b.playerRank)
+    );
+  };
+
   const handleViewRanking = async (gradeId) => {
     if (isRankingView) {
       setIsRankingView(false);
       setRankingData(null);
     } else {
-      const condition = [where("gradeId", "==", gradeId)];
       try {
-        const data = await fetchResultQuery.getDocuments(
-          "contest_results_list",
-          condition
-        );
+        const standingData = await fetchDedupedGradeStanding(gradeId);
 
-        if (!data || data.length === 0) {
+        if (!standingData || standingData.length === 0) {
           setRankingData([]);
           openNotice({
             variant: "warning",
@@ -190,9 +215,6 @@ const ContestMonitoringHost = ({ contestId }) => {
           return;
         }
 
-        const standingData = [...(data[0]?.result || [])].sort(
-          (a, b) => a.playerRank - b.playerRank
-        );
         setRankingData(standingData);
         setIsRankingView(true);
         setIsCompareView(false);
@@ -227,20 +249,12 @@ const ContestMonitoringHost = ({ contestId }) => {
 
   const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
     if (!effectiveContestId) return;
-    const condition = [where("gradeId", "==", gradeId)];
     try {
-      const data = await fetchResultQuery.getDocuments(
-        "contest_results_list",
-        condition
-      );
+      const standingData = await fetchDedupedGradeStanding(gradeId);
 
-      if (!data || data.length === 0) {
+      if (!standingData || standingData.length === 0) {
         return;
       }
-
-      const standingData = [...(data[0]?.result || [])].sort(
-        (a, b) => a.playerRank - b.playerRank
-      );
 
       const collectionInfo = `currentStage/${effectiveContestId}/screen`;
       const newState = {
@@ -248,7 +262,31 @@ const ContestMonitoringHost = ({ contestId }) => {
         gradeTitle: gradeTitle,
         status: { playStart: true },
       };
-      await updateCurrentStage.updateData(collectionInfo, { ...newState });
+      const broadcastPayload = {
+        mode: "RANKING",
+        rankingData: [...standingData],
+        stageInfo: {
+          stageId: realtimeData?.stageId || "",
+          stageNumber: realtimeData?.stageNumber || "",
+          categoryId: realtimeData?.categoryId || "",
+          categoryTitle: realtimeData?.categoryTitle || "",
+          gradeId: gradeId || realtimeData?.gradeId || "",
+          gradeTitle: gradeTitle || realtimeData?.gradeTitle || "",
+        },
+        updatedAt: Date.now(),
+      };
+      await Promise.all([
+        updateCurrentStage.updateData(collectionInfo, { ...newState }),
+        updateBroadcast.updateData(
+          `currentBroadcast/${effectiveContestId}`,
+          broadcastPayload
+        ),
+        updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", {
+          ...broadcastPayload,
+          contestId: effectiveContestId,
+          targetContestId: effectiveContestId,
+        }),
+      ]);
     } catch (error) {
       console.log(error);
     }
@@ -310,6 +348,34 @@ const ContestMonitoringHost = ({ contestId }) => {
     reloadHostData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContest]);
+
+  // contest_players_final 실시간 동기화 (그랑프리 자동 진출, 불참 변경 등 즉시 반영)
+  useEffect(() => {
+    const finalDocId = currentContest?.contests?.contestPlayersFinalId || "";
+    if (!finalDocId) return undefined;
+
+    const unsub = onSnapshot(
+      doc(db, "contest_players_final", finalDocId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (Array.isArray(data?.players)) {
+          const players = [...data.players]
+            .filter((f) => isActiveStagePlayer(f))
+            .sort(
+              (a, b) =>
+                getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
+            );
+          setAllFinalPlayers(players);
+        }
+      },
+      (err) => {
+        console.error("사회자 최종선수 실시간 구독 오류:", err);
+      }
+    );
+
+    return () => unsub();
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   // 현재 진행 무대(stageId) 변경 시 출전 선수 매칭 동기화
   useEffect(() => {
@@ -452,11 +518,47 @@ const ContestMonitoringHost = ({ contestId }) => {
       return;
     }
     try {
-      await updateBroadcast.updateData(`currentBroadcast/${effectiveContestId}`, {
+      let resolvedExtra = { ...extraData };
+      if (mode === "RANKING" && !resolvedExtra.rankingData) {
+        const activeGradeId =
+          realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+        const activeGradeTitle =
+          realtimeData?.gradeTitle || currentPlayersArray[0]?.gradeTitle || "";
+        if (activeGradeId) {
+          const standing = await fetchDedupedGradeStanding(activeGradeId);
+          if (standing.length > 0) {
+            resolvedExtra = {
+              ...resolvedExtra,
+              rankingData: standing,
+              stageInfo: {
+                stageId: realtimeData?.stageId || "",
+                stageNumber: realtimeData?.stageNumber || "",
+                categoryId: realtimeData?.categoryId || "",
+                categoryTitle: realtimeData?.categoryTitle || "",
+                gradeId: activeGradeId,
+                gradeTitle: activeGradeTitle,
+              },
+            };
+          }
+        }
+      }
+
+      const payload = {
         mode,
         updatedAt: Date.now(),
-        ...extraData,
-      });
+        ...resolvedExtra,
+      };
+      await Promise.all([
+        updateBroadcast.updateData(
+          `currentBroadcast/${effectiveContestId}`,
+          payload
+        ),
+        updateBroadcast.updateData("currentBroadcast/ACTIVE_STAGE", {
+          ...payload,
+          contestId: effectiveContestId,
+          targetContestId: effectiveContestId,
+        }),
+      ]);
     } catch (error) {
       console.error("방송 모드 전환 실패:", error);
       openNotice({
@@ -536,35 +638,69 @@ const ContestMonitoringHost = ({ contestId }) => {
   const broadcastLabel =
     modeLabelMap[currentBroadcastMode] || currentBroadcastMode;
 
-  const triggerChampionShowcase = () => {
-    const ranked1st =
-      rankingData && rankingData.length > 0
-        ? rankingData.find((p) => (p.playerRank || p.rank) === 1) ||
-          rankingData[0]
-        : currentPlayersArray[0]?.players?.[0];
+  const triggerChampionShowcase = async (explicitPlayer = null) => {
+    const validExplicit =
+      explicitPlayer &&
+      typeof explicitPlayer === "object" &&
+      ("playerNumber" in explicitPlayer || "playerName" in explicitPlayer)
+        ? explicitPlayer
+        : null;
 
-    const rawTop = ranked1st || {
-      playerNumber: "100",
-      playerName: "1위 챔피언",
-      playerGym: "무소속",
-    };
+    let confirmed1st = validExplicit;
+
+    if (!confirmed1st && Array.isArray(rankingData) && rankingData.length > 0) {
+      confirmed1st =
+        rankingData.find((p) => Number(p?.playerRank ?? p?.rank) === 1) || null;
+    }
+
+    if (!confirmed1st) {
+      const activeGradeId =
+        realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+      if (activeGradeId) {
+        try {
+          const standing = await fetchDedupedGradeStanding(activeGradeId);
+          confirmed1st =
+            standing.find((p) => Number(p?.playerRank ?? p?.rank) === 1) ||
+            null;
+        } catch (err) {
+          console.error("1위 우승자 조회 실패:", err);
+        }
+      }
+    }
+
+    if (!confirmed1st) {
+      openNotice({
+        variant: "warning",
+        title: "1위 확정 결과 없음",
+        body: "현재 체급의 확정된 1위 우승자 결과가 아직 등록되지 않았습니다.",
+        body2: "심판위원장 화면에서 순위표 확정을 완료한 뒤 다시 시도해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      return;
+    }
 
     const uidPhotos =
-      (rawTop.playerUid && uidPhotoMap.get(rawTop.playerUid)) || [];
+      (confirmed1st.playerUid && uidPhotoMap.get(confirmed1st.playerUid)) || [];
     const directPhotos = [
-      ...(Array.isArray(rawTop.photos) ? rawTop.photos : []),
-      ...(Array.isArray(rawTop.playerPhotos) ? rawTop.playerPhotos : []),
-      rawTop.profileImageUrl,
-      rawTop.playerPhoto,
-      rawTop.photoUrl,
+      ...(Array.isArray(confirmed1st.photos) ? confirmed1st.photos : []),
+      ...(Array.isArray(confirmed1st.playerPhotos)
+        ? confirmed1st.playerPhotos
+        : []),
+      confirmed1st.profileImageUrl,
+      confirmed1st.playerPhoto,
+      confirmed1st.photoUrl,
     ].filter((u) => typeof u === "string" && u.trim().length > 5);
 
     const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
     const primary =
-      allPhotos[0] || rawTop.profileImageUrl || rawTop.playerPhoto || "";
+      allPhotos[0] ||
+      confirmed1st.profileImageUrl ||
+      confirmed1st.playerPhoto ||
+      "";
 
     const topPlayerObj = {
-      ...rawTop,
+      ...confirmed1st,
       profileImageUrl: primary,
       photoUrl: primary,
       photos: allPhotos,
@@ -604,7 +740,7 @@ const ContestMonitoringHost = ({ contestId }) => {
       mode: "CHAMPION_SHOWCASE",
       label: "1위 단독 송출",
       icon: Award,
-      onClick: triggerChampionShowcase,
+      onClick: () => triggerChampionShowcase(),
       spanClass: "col-span-2 sm:col-span-1",
     },
   ];

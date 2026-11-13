@@ -121,9 +121,27 @@ const ManagementHome = ({ children }) => {
   };
 
   useEffect(() => {
-    loadQuickCheckCounts();
+    if (!contestId) {
+      loadQuickCheckCounts();
+      return;
+    }
+    if (quickCheckOpen) {
+      loadQuickCheckCounts();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickCheckOpen, contestId, location.pathname]);
+  }, [quickCheckOpen, contestId]);
+
+  useEffect(() => {
+    if (contestId) {
+      loadQuickCheckCounts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    contestId,
+    currentContest?.contests?.contestStagesAssignId,
+    currentContest?.contests?.contestPlayersFinalId,
+    currentContest?.contests?.contestJudgesAssignId,
+  ]);
 
   useEffect(() => {
     setQuickCheckOpen(false);

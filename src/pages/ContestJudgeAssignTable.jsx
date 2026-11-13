@@ -1,11 +1,11 @@
 "use client";
 
-import { useContext, useEffect, useState, useMemo } from "react";
+import { useContext, useEffect, useState, useMemo, useRef } from "react";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
-import { doc, setDoc, where } from "firebase/firestore";
+import { doc, runTransaction, where } from "firebase/firestore";
 import LoadingPage from "./LoadingPage";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
@@ -28,16 +28,15 @@ import SectionAssign from "../components/SectionAssign";
 import CategoryAssign from "../components/CategoryAssign";
 import GradeAssign from "../components/GradeAssign";
 import { db } from "../firebase";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import {
   normalizeSectionName,
   normalizeJudgesAssignArray,
   analyzeJudgeAssignmentHealth,
 } from "../utils/judgeAssignUtils";
 
-const sanitizeForFirestore = (data) =>
-  JSON.parse(
-    JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
-  );
+const getSeatSlotKey = (entry) =>
+  `${entry?.contestGradeId || ""}__${Number(entry?.seatIndex) || 0}`;
 
 const ContestJudgeAssignTable = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +54,7 @@ const ContestJudgeAssignTable = () => {
     id: "",
     judges: [],
   });
+  const baselineJudgesRef = useRef([]);
   const [judgesPoolArray, setJudgesPoolArray] = useState([]);
   const [categoriesArray, setCategoriesArray] = useState([]);
   const [gradesArray, setGradesArray] = useState([]);
@@ -99,10 +99,20 @@ const ContestJudgeAssignTable = () => {
           Number(b?.contestGradeIndex ?? 9999)
       );
 
+      const normalizedInitialJudges = normalizeJudgesAssignArray({
+        judges: judgesAssign?.judges || [],
+        categories: sortedCategories,
+        grades: sortedGrades,
+        judgesPool: judgesPool || [],
+        contestId,
+        generateUUID,
+      });
+      baselineJudgesRef.current = normalizedInitialJudges;
+
       setJudgesPoolArray(judgesPool || []);
       setJudgesAssignInfoRaw(
         judgesAssign && judgesAssign.id
-          ? judgesAssign
+          ? { ...judgesAssign, judges: normalizedInitialJudges }
           : {
               id: currentContest?.contests?.contestJudgesAssignId || "",
               contestId,
@@ -253,19 +263,107 @@ const ContestJudgeAssignTable = () => {
         throw new Error("심판 배정 문서 ID를 확인할 수 없습니다.");
       }
 
-      const payload = sanitizeForFirestore({
-        ...judgesAssignInfoEnriched,
-        id: targetId,
-        contestId:
-          judgesAssignInfoEnriched?.contestId ||
-          currentContest?.contests?.id ||
-          "",
-        updatedAt: Date.now(),
-      });
+      const resolvedContestId =
+        judgesAssignInfoEnriched?.contestId ||
+        currentContest?.contests?.id ||
+        "";
+      const localJudges = judgesAssignInfoEnriched?.judges || [];
+      const baselineJudges = baselineJudgesRef.current || [];
 
       const ref = doc(db, "contest_judges_assign", targetId);
-      await setDoc(ref, payload, { merge: false });
-      setJudgesAssignInfoRaw(payload);
+      const savedPayload = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        const remoteJudgesRaw = snap.exists()
+          ? Array.isArray(snap.data()?.judges)
+            ? snap.data().judges
+            : []
+          : [];
+        const remoteJudges = normalizeJudgesAssignArray({
+          judges: remoteJudgesRaw,
+          categories: categoriesArray,
+          grades: gradesArray,
+          judgesPool: judgesPoolArray,
+          contestId: resolvedContestId,
+          generateUUID,
+        });
+
+        const baselineMap = new Map(
+          baselineJudges.map((j) => [getSeatSlotKey(j), j])
+        );
+        const localMap = new Map(
+          localJudges.map((j) => [getSeatSlotKey(j), j])
+        );
+        const mergedMap = new Map(
+          remoteJudges.map((j) => [getSeatSlotKey(j), j])
+        );
+
+        const allKeys = new Set([
+          ...baselineMap.keys(),
+          ...localMap.keys(),
+          ...mergedMap.keys(),
+        ]);
+
+        allKeys.forEach((slotKey) => {
+          if (!slotKey || slotKey === "__0") return;
+          const baseEntry = baselineMap.get(slotKey);
+          const localEntry = localMap.get(slotKey);
+          const baseUid = baseEntry?.judgeUid || "";
+          const localUid = localEntry?.judgeUid || "";
+          if (localUid !== baseUid) {
+            if (localEntry) {
+              mergedMap.set(slotKey, localEntry);
+            } else {
+              mergedMap.delete(slotKey);
+            }
+          } else if (localEntry && !mergedMap.has(slotKey)) {
+            mergedMap.set(slotKey, localEntry);
+          }
+        });
+
+        const merged = normalizeJudgesAssignArray({
+          judges: Array.from(mergedMap.values()),
+          categories: categoriesArray,
+          grades: gradesArray,
+          judgesPool: judgesPoolArray,
+          contestId: resolvedContestId,
+          generateUUID,
+        });
+
+        const updatedAt = Date.now();
+        if (snap.exists()) {
+          transaction.update(
+            ref,
+            sanitizeForFirestore({
+              judges: merged,
+              contestId: resolvedContestId,
+              updatedAt,
+            })
+          );
+        } else {
+          transaction.set(
+            ref,
+            sanitizeForFirestore({
+              ...judgesAssignInfoEnriched,
+              id: targetId,
+              contestId: resolvedContestId,
+              judges: merged,
+              updatedAt,
+            })
+          );
+        }
+
+        return sanitizeForFirestore({
+          ...(snap.exists() ? snap.data() : {}),
+          ...judgesAssignInfoEnriched,
+          id: targetId,
+          contestId: resolvedContestId,
+          judges: merged,
+          updatedAt,
+        });
+      });
+
+      baselineJudgesRef.current = savedPayload.judges || [];
+      setJudgesAssignInfoRaw(savedPayload);
 
       const warnings = [];
       if (healthReport.missingSeatsTotal > 0) {

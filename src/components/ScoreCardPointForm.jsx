@@ -1,9 +1,9 @@
 import React from "react";
-import ybbf from "../assets/img/ybbf_logo.png";
 import CanvasWithImageData from "./CanvasWithImageData";
 import { getStagePlayerSortIndex } from "../functions/functions";
 
 const ScoreCardPointForm = ({
+  contestInfo,
   seatIndex,
   categoryTitle,
   gradeTitle,
@@ -25,7 +25,13 @@ const ScoreCardPointForm = ({
           <div className="flex w-1/3"></div>
           <div className="flex w-1/3 justify-center items-center">
             <div className="flex">
-              <img src={ybbf} alt="" className="w-32" />
+              {contestInfo?.contestOrgLogo ? (
+                <img
+                  src={contestInfo.contestOrgLogo}
+                  alt=""
+                  className="w-32"
+                />
+              ) : null}
             </div>
           </div>
           <div className="flex w-1/3 justify-end">
@@ -42,8 +48,12 @@ const ScoreCardPointForm = ({
           </div>
         </div>
         <div className="flex w-full h-auto justify-center items-center p-2 gap-x-2">
-          <span>6th</span> <span>YONGIN</span> <span>BODYBUILDING</span>
-          <span>FERDERATIONS</span>
+          <span>
+            {contestInfo?.contestPromoter ||
+              contestInfo?.contestAssociate ||
+              contestInfo?.contestTitleShort ||
+              "BODYBUILDING FEDERATIONS"}
+          </span>
         </div>
         <div className="flex w-full justify-center items-center p-2 gap-x-3 bg-black h-7 text-white font-light text-sm">
           <span>FINALS</span>
@@ -56,7 +66,9 @@ const ScoreCardPointForm = ({
               COMPETITION :
             </div>
             <div className="flex w-1/2 justify-start ml-2">
-              제6회 용인특례시 보디빌딩협회장배 Mr&Ms 보디빌딩 및 피트니스 대회
+              {contestInfo?.contestTitle ||
+                contestInfo?.contestTitleShort ||
+                ""}
             </div>
             <div className="flex justify-end" style={{ width: "90px" }}>
               CATEGORY :
@@ -70,12 +82,14 @@ const ScoreCardPointForm = ({
               PLACE :
             </div>
             <div className="flex w-1/2 justify-start ml-2">
-              용인시청 에이스홀
+              {contestInfo?.contestLocation || ""}
             </div>
             <div className="flex justify-end" style={{ width: "90px" }}>
               DATE :
             </div>
-            <div className="flex justify-start ml-2">2023-08-26</div>
+            <div className="flex justify-start ml-2">
+              {contestInfo?.contestDate || ""}
+            </div>
           </div>
         </div>
         <div
@@ -128,7 +142,7 @@ const ScoreCardPointForm = ({
                 </div>
               </div>
               {players?.length > 0 &&
-                players
+                [...players]
                   .sort(
                     (a, b) =>
                       getStagePlayerSortIndex(a, { categoryTitle }) -
@@ -137,8 +151,12 @@ const ScoreCardPointForm = ({
                   .map((player, pIdx) => {
                     const { playerNumber, playerScore, playerPointArray } =
                       player;
+                    const isExcluded = Number(playerScore) >= 1000;
                     return (
-                      <div className="flex w-auto border-t-2 border-black">
+                      <div
+                        key={player.playerUid || playerNumber || pIdx}
+                        className="flex w-auto border-t-2 border-black"
+                      >
                         <div
                           className="flex border-r-2 border-black justify-center items-center h-14 flex-col bg-white"
                           style={{ width: "100px" }}
@@ -151,20 +169,30 @@ const ScoreCardPointForm = ({
                           className="flex border-black justify-center items-center h-14 flex-col bg-white border-r-2"
                           style={{ width: "100px" }}
                         >
-                          <span className="text-4xl font-semibold font-sans">
-                            {playerScore}
-                          </span>
+                          {isExcluded ? (
+                            <span className="text-base font-semibold font-sans text-gray-600">
+                              순위제외
+                            </span>
+                          ) : (
+                            <span className="text-4xl font-semibold font-sans">
+                              {playerScore}
+                            </span>
+                          )}
                         </div>
                         <div
                           className="flex border-black justify-center items-center h-14 bg-white"
                           style={{ width: "500px" }}
                         >
-                          {playerPointArray?.length > 0 &&
+                          {!isExcluded &&
+                            playerPointArray?.length > 0 &&
                             playerPointArray.map((item, iIdx) => {
                               const { point } = item;
 
                               return (
-                                <div className="flex w-1/6 h-full justify-center items-center font-semibold font-sans text-xl border-r border-black last:border-r-0">
+                                <div
+                                  key={iIdx}
+                                  className="flex w-1/6 h-full justify-center items-center font-semibold font-sans text-xl border-r border-black last:border-r-0"
+                                >
                                   {point}
                                 </div>
                               );

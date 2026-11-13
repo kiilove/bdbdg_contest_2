@@ -56,6 +56,8 @@ import {
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
 import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
+import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 
 // 본부석 실시간 렌더링 에러 바운더리
 class BasecampErrorBoundary extends React.Component {
@@ -206,19 +208,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       }
       if (returnContestStage?.stages) {
         setStagesArray(
-          (returnContestStage.stages || []).sort(
+          [...(returnContestStage.stages || [])].sort(
             (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
           )
         );
       }
       if (returnPlayersFinal?.players) {
         setPlayersArray(
-          (returnPlayersFinal.players || [])
+          [...(returnPlayersFinal.players || [])]
+            .filter((f) => isActiveStagePlayer(f))
             .sort(
               (a, b) =>
                 getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
             )
-            .filter((f) => f.playerNoShow === false)
         );
       }
       if (returnJudgesAssign?.judges) {
@@ -250,14 +252,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       (docSnap) => {
         if (docSnap.exists()) {
           const remoteData = docSnap.data();
-          const remotePlayers = remoteData?.players || [];
-          if (remotePlayers.length > 0) {
-            const cleanList = remotePlayers
+          if (Array.isArray(remoteData?.players)) {
+            const cleanList = [...remoteData.players]
+              .filter((f) => isActiveStagePlayer(f))
               .sort(
                 (a, b) =>
                   getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
-              )
-              .filter((f) => f.playerNoShow === false);
+              );
             setPlayersArray(cleanList);
           }
         }
@@ -341,14 +342,20 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   ]);
 
   const fetchResultAndScoreBoard = async (gradeId, gradeTitle) => {
-    const condition = [where("gradeId", "==", gradeId)];
+    const contestId = currentContest?.contests?.id || currentContest?.id;
+    const condition = contestId
+      ? [where("contestId", "==", contestId), where("gradeId", "==", gradeId)]
+      : [where("gradeId", "==", gradeId)];
     try {
       const data = await fetchResultQuery.getDocuments(
         "contest_results_list",
         condition
       );
+      const deduped = dedupeContestResultsByGrade(data, contestId);
+      const targetDoc =
+        deduped.find((d) => d.gradeId === gradeId) || deduped[0] || null;
 
-      if (data?.length === 0) {
+      if (!targetDoc || !Array.isArray(targetDoc.result) || targetDoc.result.length === 0) {
         setMessage({
           variant: "warning",
           title: "확정된 순위 데이터 없음",
@@ -361,29 +368,89 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         return;
       }
 
-      const standingData = data[0].result.sort(
+      const standingData = [...(targetDoc.result || [])].sort(
         (a, b) => a.playerRank - b.playerRank
       );
 
-      const collectionInfo = `currentStage/${currentContest.contests.id}/screen`;
+      const collectionInfo = `currentStage/${contestId}/screen`;
       const newState = {
         players: [...standingData],
         gradeTitle: gradeTitle,
         status: { playStart: true },
       };
       await updateCurrentStage.updateData(collectionInfo, { ...newState });
+
+      if (contestId) {
+        const matchedGradeObj = (currentStageInfo?.grades || []).find(
+          (g) => g?.gradeId === gradeId
+        );
+        const broadcastPayload = {
+          contestId,
+          mode: "RANKING",
+          contestTitle:
+            contestInfo?.contestTitle ||
+            currentContest?.contestInfo?.contestTitle ||
+            currentContest?.contests?.contestTitle ||
+            "",
+          stageInfo: {
+            categoryTitle:
+              matchedGradeObj?.categoryTitle ||
+              currentStageInfo?.categoryTitle ||
+              realtimeData?.categoryTitle ||
+              "",
+            gradeTitle: gradeTitle || matchedGradeObj?.gradeTitle || "",
+            gradeId: gradeId || "",
+            stageNumber:
+              currentStageInfo?.stageNumber || realtimeData?.stageNumber || "",
+          },
+          rankingData: standingData,
+          activePlayer: null,
+          specialScreenData: null,
+          videoCommand: null,
+          calloutData: null,
+          updatedAt: Date.now(),
+        };
+        await Promise.all([
+          updateCurrentStage.updateData(
+            `currentBroadcast/${contestId}`,
+            broadcastPayload
+          ),
+          updateCurrentStage.updateData("currentBroadcast/ACTIVE_STAGE", {
+            ...broadcastPayload,
+            targetContestId: contestId,
+          }),
+        ]).catch(() => {});
+      }
     } catch (error) {
       console.log(error);
     }
   };
 
   const handleScreenEnd = async () => {
-    const collectionInfo = `currentStage/${currentContest.contests.id}/screen/status`;
+    const contestId = currentContest?.contests?.id || currentContest?.id;
+    if (!contestId) return;
+    const collectionInfo = `currentStage/${contestId}/screen/status`;
     const newState = {
       playStart: false,
       standingStart: false,
     };
     await updateCurrentStage.updateData(collectionInfo, { ...newState });
+
+    const standbyPayload = {
+      contestId,
+      mode: "STANDBY",
+      updatedAt: Date.now(),
+    };
+    await Promise.all([
+      updateCurrentStage.updateData(
+        `currentBroadcast/${contestId}`,
+        standbyPayload
+      ),
+      updateCurrentStage.updateData("currentBroadcast/ACTIVE_STAGE", {
+        ...standbyPayload,
+        targetContestId: contestId,
+      }),
+    ]).catch(() => {});
   };
 
   const effectiveCollectionName = resolveEffectiveCollectionName(
@@ -722,11 +789,11 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             setPlayersArray(
               syncedPlayersPool
                 .slice()
+                .filter((f) => isActiveStagePlayer(f))
                 .sort(
                   (a, b) =>
                     getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
                 )
-                .filter((f) => f.playerNoShow === false)
             );
           }
         } catch (gpSyncError) {
@@ -750,7 +817,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           ? effectivePool.filter(
               (p) =>
                 stageGradeIdSet.has(p?.contestGradeId) &&
-                p?.playerNoShow === false
+                isActiveStagePlayer(p)
             ).length
           : targetStage?.players?.length || 0;
 
@@ -759,26 +826,36 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       });
 
       // 종목/체급 변경 시 전광판 스크린 화면을 대기 및 종목/체급 안내(STANDBY)로 전환
-      await updateCurrentStage
-        .updateData(`currentBroadcast/${contestId}`, {
-          mode: "STANDBY",
-          contestTitle:
-            currentContest?.contestInfo?.contestTitle ||
-            currentContest?.contests?.contestTitle ||
-            "",
-          stageInfo: {
-            categoryTitle: categoryTitle || "",
-            gradeTitle: gradeTitle || "",
-            gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
-            stageNumber: newCurrentStateInfo.stageNumber || "",
-            playerCount: liveStagePlayerCount,
-          },
-          activePlayer: null,
-          specialScreenData: null,
-          calloutData: null,
-          updatedAt: Date.now(),
-        })
-        .catch(() => {});
+      const standbyBroadcastPayload = {
+        contestId,
+        mode: "STANDBY",
+        contestTitle:
+          contestInfo?.contestTitle ||
+          currentContest?.contestInfo?.contestTitle ||
+          currentContest?.contests?.contestTitle ||
+          "",
+        stageInfo: {
+          categoryTitle: categoryTitle || "",
+          gradeTitle: gradeTitle || "",
+          gradeId: targetStage?.grades?.[0]?.gradeId || gradeId || "",
+          stageNumber: newCurrentStateInfo.stageNumber || "",
+          playerCount: liveStagePlayerCount,
+        },
+        activePlayer: null,
+        specialScreenData: null,
+        calloutData: null,
+        updatedAt: Date.now(),
+      };
+      await Promise.all([
+        updateCurrentStage.updateData(
+          `currentBroadcast/${contestId}`,
+          standbyBroadcastPayload
+        ),
+        updateCurrentStage.updateData("currentBroadcast/ACTIVE_STAGE", {
+          ...standbyBroadcastPayload,
+          targetContestId: contestId,
+        }),
+      ]).catch(() => {});
 
       if (res) {
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
@@ -1248,7 +1325,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     </div>
   );
 
-  const ScoreCardView = ({ players, judges }) => (
+  const ScoreCardView = ({ players, judges, gradeId }) => (
     <div className="space-y-2.5">
       {players?.map((player, pIdx) => {
         const playerNumber = player.playerNumber;
@@ -1269,6 +1346,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               {judges?.map((judge, jIdx) => {
                 const finded = normalScoreData.find(
                   (f) =>
+                    (!f.gradeId || f.gradeId === gradeId) &&
                     f.playerNumber === playerNumber &&
                     f.seatIndex === judge.seatIndex
                 );
@@ -1451,10 +1529,25 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
-    if (realtimeData?.judges?.length > 0) {
-      return realtimeData.judges
-        .filter((j) => !j?.judgeUid && !j?.judgeName)
-        .map((j, i) => j?.seatIndex ?? i + 1);
+    const realtimeJudges = Array.isArray(realtimeData?.judges)
+      ? realtimeData.judges
+      : [];
+    const expectedCount =
+      Number(realtimeData?.stageJudgeCount) || realtimeJudges.length;
+    if (expectedCount > 0 && realtimeJudges.length > 0) {
+      const missing = [];
+      for (let i = 0; i < expectedCount; i += 1) {
+        const seatNo = i + 1;
+        const seatJudge =
+          realtimeJudges.find((j) => Number(j?.seatIndex) === seatNo) ??
+          (realtimeJudges[i]?.seatIndex === undefined
+            ? realtimeJudges[i]
+            : null);
+        if (!seatJudge?.judgeUid && !seatJudge?.judgeName) {
+          missing.push(seatNo);
+        }
+      }
+      return missing;
     }
     const firstStage = stagesArray?.[0];
     if (!firstStage) return [];
@@ -1881,9 +1974,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                 .filter(
                                   (f) =>
                                     f.contestGradeId === gradeId &&
-                                    f.playerNoShow === false
+                                    isActiveStagePlayer(f)
                                 )
-                                .sort((a, b) => a.playerIndex - b.playerIndex);
+                                .sort(
+                                  (a, b) =>
+                                    getStagePlayerSortIndex(
+                                      a,
+                                      currentStageInfo
+                                    ) -
+                                    getStagePlayerSortIndex(
+                                      b,
+                                      currentStageInfo
+                                    )
+                                );
 
                               const judges = realtimeData?.judges || [];
                               const isGradeSaved =
@@ -1955,6 +2058,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     <ScoreCardView
                                       players={filterdPlayers}
                                       judges={judges}
+                                      gradeId={gradeId}
                                     />
                                   ) : (
                                     <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
@@ -1994,6 +2098,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                                   const finded =
                                                     normalScoreData.find(
                                                       (f) =>
+                                                        (!f.gradeId ||
+                                                          f.gradeId ===
+                                                            gradeId) &&
                                                         f.playerNumber ===
                                                           player.playerNumber &&
                                                         f.seatIndex ===

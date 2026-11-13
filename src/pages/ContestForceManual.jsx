@@ -15,6 +15,7 @@ import {
   generateUUID,
   isGrandPrixPlayerEntry,
 } from "../functions/functions";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import BibTag from "../components/ui/BibTag";
 
 const inputClass =
@@ -161,13 +162,13 @@ const ContestForceManual = () => {
     try {
       const { name, id, value } = e.target;
 
-      const splitValue = value.split(",");
-      if (splitValue.length < 3) {
-        throw new Error("Value format is incorrect");
-      }
-
-      const gradeId = splitValue[0];
-      const gradeTitle = splitValue[1];
+      const rawValue = String(value || "");
+      const gradeId =
+        rawValue === "체급선택" || rawValue.startsWith("체급선택,")
+          ? "체급선택"
+          : gradesArray.some((g) => g.contestGradeId === rawValue)
+          ? rawValue
+          : rawValue.split(",")[0];
 
       const dummy = [...(invoiceInfo?.joins || [])];
       const newInvoiceInfo = { ...invoiceInfo };
@@ -179,32 +180,47 @@ const ContestForceManual = () => {
         (category) => category.contestCategoryId === id
       );
 
-      const matchedCategory = categorysArray.find(
-        (category) => category.contestCategoryId === id
-      );
-      const newValue = {
-        contestCategoryId: id,
-        contestCategoryTitle: name,
-        ...(matchedCategory?.contestCategorySection
-          ? { contestCategorySection: matchedCategory.contestCategorySection }
-          : {}),
-        contestGradeId: gradeId,
-        contestGradeTitle: gradeTitle,
-        isGradeChanged: false,
-        originalGradeId: gradeId,
-        originalGradeTitle: gradeTitle,
-      };
-
-      if (gradeId === "체급선택") {
+      if (gradeId === "체급선택" || !gradeId) {
         if (findIndex !== -1) {
           dummy.splice(findIndex, 1);
         }
-      } else if (!findCategory) {
+        setInvoiceInfo({ ...newInvoiceInfo, joins: [...dummy] });
+        return;
+      }
+
+      const matchedCategory = categorysArray.find(
+        (category) => category.contestCategoryId === id
+      );
+      const matchedGrade =
+        gradesArray.find(
+          (grade) =>
+            grade.contestGradeId === gradeId && grade.refCategoryId === id
+        ) || gradesArray.find((grade) => grade.contestGradeId === gradeId);
+
+      const resolvedGradeTitle = matchedGrade?.contestGradeTitle || "";
+      const resolvedCategoryTitle =
+        matchedCategory?.contestCategoryTitle || name || "";
+
+      const newValue = {
+        contestCategoryId: id,
+        contestCategoryTitle: resolvedCategoryTitle,
+        ...(matchedCategory?.contestCategorySection
+          ? { contestCategorySection: matchedCategory.contestCategorySection }
+          : {}),
+        ...(matchedCategory?.contestCategoryPriceType
+          ? { contestCategoryPriceType: matchedCategory.contestCategoryPriceType }
+          : {}),
+        contestGradeId: gradeId,
+        contestGradeTitle: resolvedGradeTitle,
+        isGradeChanged: false,
+        originalGradeId: gradeId,
+        originalGradeTitle: resolvedGradeTitle,
+      };
+
+      if (!findCategory) {
         dummy.push({ ...newValue });
-      } else {
-        if (findIndex !== -1) {
-          dummy.splice(findIndex, 1, { ...newValue });
-        }
+      } else if (findIndex !== -1) {
+        dummy.splice(findIndex, 1, { ...newValue });
       }
 
       setInvoiceInfo({ ...newInvoiceInfo, joins: [...dummy] });
@@ -221,6 +237,7 @@ const ContestForceManual = () => {
     const initInfo = {
       contestId: contestId,
       createdBy: "force",
+      createBy: "force",
       contestPriceSum: 0,
       playerUid: generateUUID(),
       playerNumber: overrideNumber !== undefined ? overrideNumber : playerNumber,
@@ -286,6 +303,7 @@ const ContestForceManual = () => {
         ...join,
         contestId: newData.contestId || contestId,
         createdBy: "force",
+        createBy: "force",
         playerNoShow: Boolean(newData.playerNoShow),
         playerNumber: startNumber + idx,
         playerIndex: startNumber + idx,
@@ -343,12 +361,12 @@ const ContestForceManual = () => {
           }
         });
 
-        const nextFinalDoc = {
+        const nextFinalDoc = sanitizeForFirestore({
           ...existingFinalData,
           contestId,
           players: mergedFinalPlayers,
           updatedAt: new Date().toISOString(),
-        };
+        });
         updatedFinalDocState = nextFinalDoc;
 
         if (finalSnap.exists()) {
@@ -367,12 +385,15 @@ const ContestForceManual = () => {
             }
           });
 
-          transaction.update(assignRef, {
-            ...existingAssignData,
-            contestId: existingAssignData.contestId || contestId,
-            players: mergedAssignPlayers,
-            updatedAt: new Date().toISOString(),
-          });
+          transaction.update(
+            assignRef,
+            sanitizeForFirestore({
+              ...existingAssignData,
+              contestId: existingAssignData.contestId || contestId,
+              players: mergedAssignPlayers,
+              updatedAt: new Date().toISOString(),
+            })
+          );
         }
       });
 
@@ -621,7 +642,6 @@ const ContestForceManual = () => {
                       contestCategoryId: categoryId,
                       contestCategoryIndex: categoryIndex,
                       contestCategoryTitle: categoryTitle,
-                      contestCategoryPriceType: categoryType,
                     } = category;
 
                     const matchedGrades = gradesArray
@@ -636,8 +656,8 @@ const ContestForceManual = () => {
                     const isSelected = Boolean(selectedJoin);
 
                     const selectVal = selectedJoin
-                      ? `${selectedJoin.contestGradeId},${selectedJoin.contestGradeTitle},${categoryType}`
-                      : "체급선택,,";
+                      ? selectedJoin.contestGradeId
+                      : "체급선택";
 
                     return (
                       <div
@@ -674,7 +694,7 @@ const ContestForceManual = () => {
                               : "bg-white border border-[#171717]/[0.12] text-[#525252]"
                           }`}
                         >
-                          <option value="체급선택,,">체급선택</option>
+                          <option value="체급선택">체급선택</option>
                           {matchedGrades?.length > 0 &&
                             matchedGrades.map((match, mIdx) => {
                               const {
@@ -686,13 +706,7 @@ const ContestForceManual = () => {
                                 <option
                                   key={gradeId || mIdx}
                                   id={gradeId}
-                                  value={
-                                    gradeId +
-                                    "," +
-                                    gradeTitle +
-                                    "," +
-                                    categoryType
-                                  }
+                                  value={gradeId}
                                 >
                                   {gradeTitle}
                                 </option>

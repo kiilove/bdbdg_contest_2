@@ -3,6 +3,7 @@
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "../firebase";
 import { getClientIp } from "./getClientIp";
+import { sanitizeForFirestore } from "./firestoreSanitize";
 
 /**
  * 참가 신청서 가격확인 로그 기록
@@ -33,12 +34,12 @@ export const writePriceCheckLog = async ({
       "priceCheckLogs"
     );
 
-    await addDoc(logRef, {
-      action, // add | del
-      invoiceId: invoice.id,
-      playerUid: invoice.playerUid || null,
-      playerName: invoice.playerName || null,
-      playerGym: invoice.playerGym || null,
+    const payload = sanitizeForFirestore({
+      action: action ?? "unknown", // add | del
+      invoiceId: invoice?.id ?? null,
+      playerUid: invoice?.playerUid || null,
+      playerName: invoice?.playerName || null,
+      playerGym: invoice?.playerGym || null,
       timestamp: new Date().toISOString(),
       clientInfo: {
         userID: sessionUser?.userID || null,
@@ -51,6 +52,8 @@ export const writePriceCheckLog = async ({
       },
       contestInfoSnapshot: currentContest?.contestInfo || null,
     });
+
+    await addDoc(logRef, payload);
   } catch (err) {
     console.error("❌ priceCheckLogs 기록 중 오류:", err);
   }

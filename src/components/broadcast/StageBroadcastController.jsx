@@ -15,7 +15,9 @@ import { where, doc, getDoc } from "firebase/firestore";
 import {
   extractPlayerPhotos,
   isNonPlayerUrl,
-} from "../../pages/ContestPlayerWeighInTable";
+} from "../../utils/playerPhotoUtils";
+import { dedupeContestResultsByGrade } from "../../utils/contestResultsUtils";
+import { isActiveStagePlayer } from "../../utils/playerEntryUtils";
 import { storage, db } from "../../firebase";
 import {
   ref as storageRef,
@@ -378,6 +380,10 @@ const StageBroadcastController = ({
     }
   };
 
+  const activeStagePlayers = (currentPlayers || []).filter((p) =>
+    isActiveStagePlayer(p)
+  );
+
   // 종목이나 체급(무대) 변경 시 전광판 화면을 대기 및 종목/체급 안내(STANDBY)로 전환
   const lastBroadcastStageKeyRef = useRef("");
 
@@ -412,7 +418,7 @@ const StageBroadcastController = ({
         gradeTitle: grd,
         gradeId: gradeId,
         stageNumber: stageNum,
-        playerCount: currentPlayers?.length || 0,
+        playerCount: activeStagePlayers.length,
       },
       activePlayer: null,
       specialScreenData: null,
@@ -422,13 +428,14 @@ const StageBroadcastController = ({
     }).catch((err) => {
       console.error("무대 변경 실시간 브로드캐스트 동기화 오류:", err);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentStage?.stageId,
     currentStage?.gradeId,
     currentStage?.categoryTitle,
     currentStage?.gradeTitle,
     currentStage?.stageNumber,
-    currentPlayers?.length,
+    activeStagePlayers.length,
     contestId,
   ]);
 
@@ -436,6 +443,9 @@ const StageBroadcastController = ({
   const handleSetStandby = async () => {
     if (!contestId) return;
     try {
+      const filteredPlayers = (currentPlayers || []).filter((p) =>
+        isActiveStagePlayer(p)
+      );
       await syncBroadcastPayload({
         mode: "STANDBY",
         contestTitle: realContestTitle,
@@ -450,7 +460,7 @@ const StageBroadcastController = ({
             currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
           stageNumber:
             currentStage?.stageNumber || currentStage?.stageIndex || "",
-          playerCount: currentPlayers?.length || 0,
+          playerCount: filteredPlayers.length,
         },
         activePlayer: null,
         specialScreenData: null,
@@ -632,6 +642,9 @@ const StageBroadcastController = ({
   const handleSendPosedown = async () => {
     if (!contestId) return;
     try {
+      const filteredPlayers = (currentPlayers || []).filter((p) =>
+        isActiveStagePlayer(p)
+      );
       await syncBroadcastPayload({
         mode: "POSEDOWN",
         contestTitle: realContestTitle,
@@ -646,7 +659,7 @@ const StageBroadcastController = ({
             currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
           stageNumber:
             currentStage?.stageNumber || currentStage?.stageIndex || "",
-          players: currentPlayers || [],
+          players: filteredPlayers,
         },
         activePlayer: null,
         specialScreenData: null,
@@ -666,13 +679,18 @@ const StageBroadcastController = ({
     if (!gId) return [];
 
     try {
-      const condition = [where("gradeId", "==", gId)];
+      const condition = contestId
+        ? [where("contestId", "==", contestId), where("gradeId", "==", gId)]
+        : [where("gradeId", "==", gId)];
       const data = await fetchResultQuery.getDocuments(
         "contest_results_list",
         condition
       );
-      if (data && data.length > 0 && data[0]?.result) {
-        return [...data[0].result].sort(
+      const deduped = dedupeContestResultsByGrade(data, contestId || null);
+      const targetDoc =
+        deduped.find((d) => d.gradeId === gId) || deduped[0] || null;
+      if (targetDoc?.result) {
+        return [...targetDoc.result].sort(
           (a, b) => (a.playerRank || 0) - (b.playerRank || 0)
         );
       }
@@ -906,14 +924,9 @@ const StageBroadcastController = ({
       rankingPhase: "FULL_RANKING",
       contestTitle: realContestTitle,
       stageInfo: {
-        categoryTitle:
-          currentStage?.categoryTitle ||
-          currentStage?.contestCategoryTitle ||
-          "공식 시상식",
-        gradeTitle:
-          currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
-        gradeId:
-          currentStage?.gradeId || currentStage?.grades?.[0]?.gradeId || "",
+        categoryTitle: activeCategoryTitle,
+        gradeTitle: activeGradeTitle,
+        gradeId: activeGradeId,
         stageNumber:
           currentStage?.stageNumber || currentStage?.stageIndex || "",
       },
@@ -1630,7 +1643,7 @@ const StageBroadcastController = ({
 
             <div className="flex flex-wrap items-center gap-2">
               {currentPlayers
-                .filter((p) => !p.playerNoShow)
+                .filter((p) => isActiveStagePlayer(p))
                 .map((player) => {
                   const isActive =
                     currentMode === "ATHLETE_INTRO" &&
@@ -1782,7 +1795,7 @@ const StageBroadcastController = ({
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {currentPlayers
-                .filter((p) => !p.playerNoShow)
+                .filter((p) => isActiveStagePlayer(p))
                 .map((p) => {
                   const id = p.playerNumber || p.playerUid;
                   const isChecked = selectedCalloutPlayers.includes(id);

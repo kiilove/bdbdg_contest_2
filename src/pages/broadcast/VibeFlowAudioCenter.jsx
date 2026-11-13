@@ -451,22 +451,43 @@ export const VibeFlowAudioCenter = () => {
 
   useEffect(() => {
     if (!contestId) return;
-    const stageAssignId = currentContest?.contests?.stageAssignId || contestId;
+    const stageAssignId =
+      currentContest?.contests?.contestStagesAssignId ||
+      currentContest?.contests?.stageAssignId;
+    let cancelled = false;
 
-    fetchStagesDoc
-      .getDocument(stageAssignId)
-      .then((res) => {
-        if (res?.stages && Array.isArray(res.stages)) {
-          const sorted = [...res.stages].sort(
+    (async () => {
+      try {
+        let stageDoc = null;
+        if (stageAssignId) {
+          stageDoc = await fetchStagesDoc.getDocument(stageAssignId);
+        } else {
+          const snap = await getDocs(
+            query(
+              collection(db, "contest_stages_assign"),
+              where("contestId", "==", contestId)
+            )
+          );
+          if (!snap.empty) {
+            stageDoc = snap.docs[0].data();
+          }
+        }
+        if (!cancelled && Array.isArray(stageDoc?.stages)) {
+          const sorted = [...stageDoc.stages].sort(
             (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
           );
           setContestStagesList(sorted);
         }
-      })
-      .catch((e) => {
+      } catch (e) {
         console.warn("[VibeFlow Audio] 대회 무대 시간표 로드 실패:", e);
-      });
-  }, [currentContest]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentContest, contestId]);
 
   // ⏱️ 재생 시간 추적 및 8초 전 대기 데크 프리로드
   const startTracking = () => {
@@ -684,11 +705,27 @@ export const VibeFlowAudioCenter = () => {
       const file = files[i];
       try {
         const durationSec = await new Promise((resolve) => {
+          let objectUrl = "";
           try {
-            const tempAudio = new Audio(URL.createObjectURL(file));
-            tempAudio.onloadedmetadata = () => resolve(Math.round(tempAudio.duration) || 0);
-            tempAudio.onerror = () => resolve(180);
+            objectUrl = URL.createObjectURL(file);
+            const tempAudio = new Audio(objectUrl);
+            tempAudio.onloadedmetadata = () => {
+              const dur = Math.round(tempAudio.duration) || 0;
+              URL.revokeObjectURL(objectUrl);
+              resolve(dur);
+            };
+            tempAudio.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              resolve(180);
+            };
           } catch {
+            if (objectUrl) {
+              try {
+                URL.revokeObjectURL(objectUrl);
+              } catch {
+                // ignore revoke error
+              }
+            }
             resolve(180);
           }
         });

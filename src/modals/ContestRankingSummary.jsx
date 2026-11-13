@@ -9,16 +9,22 @@ import {
   X,
 } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import {
-  useFirestoreAddData,
-  useFirestoreDeleteData,
-  useFirestoreQuery,
-} from "../hooks/useFirestores";
+import { useFirestoreQuery } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
 import { Modal } from "@mui/material";
 import { resolveEffectiveCollectionName } from "../components/monitoring/MonitoringDiagnosticsBar";
 import { getStagePlayerSortIndex } from "../functions/functions";
+import { db } from "../firebase";
+import {
+  isScoreEntered,
+  getTrimCountPerSide,
+  computeJudgeSeatNumbers,
+  assignMinMaxAndCalculateRankTotal,
+  playWarningSoundSafe,
+} from "../utils/scoringEngine";
+import { saveGradeResultsAtomically } from "../utils/contestResultsUtils";
+import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 
 const ContestRankingSummary = ({
   categoryId,
@@ -53,32 +59,7 @@ const ContestRankingSummary = ({
   void categoryJudgeType;
   void stageId;
 
-  // 경고음 재생 (동점/누락 발생 시 심판위원장 인지 강화)
-  const playWarningSound = () => {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(520, now);
-      osc.frequency.setValueAtTime(360, now + 0.18);
-      osc.frequency.setValueAtTime(520, now + 0.36);
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.75);
-    } catch (e) {}
-  };
-
   const scoreRankingQuery = useFirestoreQuery();
-  const resultQuery = useFirestoreQuery();
-  const resultDelete = useFirestoreDeleteData("contest_results_list");
-  const resultAdd = useFirestoreAddData("contest_results_list");
 
   const realtimeResultStateUpdate = useFirebaseRealtimeUpdateData();
 
@@ -91,84 +72,18 @@ const ContestRankingSummary = ({
     return numbers.slice(0, count);
   };
 
-  const isScoreEntered = (val) =>
-    val !== undefined && val !== null && val !== "" && Number(val) !== 0;
-
-  // 심판제별 최고·최저 제외 인원 (5심제=0명, 7심제=각 1명씩 제외, 9심제=각 2명씩 제외)
-  const getTrimCountPerSide = (count) => {
-    const n = Number(count) || 0;
-    if (n >= 9) return 2;
-    if (n >= 7) return 1;
-    return 0;
-  };
-
-  const assignMinMaxAndCalculateTotal = (group) => {
-    group.score.forEach((s) => {
-      s.isMin = false;
-      s.isMax = false;
-    });
-
-    const validSubmitted = group.score.filter((s) =>
-      isScoreEntered(s.playerScore)
-    );
-    const N = validSubmitted.length;
-    const trimCount = getTrimCountPerSide(N);
-
-    if (trimCount > 0) {
-      const sorted = [...validSubmitted].sort(
-        (a, b) => Number(a.playerScore) - Number(b.playerScore)
-      );
-
-      // 가장 좋은 등수(가장 작은 숫자 = 최고점) trimCount명 제외 -> isMin = true
-      for (let i = 0; i < trimCount; i++) {
-        sorted[i].isMin = true;
-      }
-
-      // 가장 낮은 등수(가장 큰 숫자 = 최저점) trimCount명 제외 -> isMax = true
-      for (let i = N - trimCount; i < N; i++) {
-        sorted[i].isMax = true;
-      }
-    }
-
-    const activeScores = validSubmitted.filter((s) => !s.isMin && !s.isMax);
-    if (activeScores.length === 0) {
-      group.totalScore = 0;
-    } else if (activeScores.some((s) => Number(s.playerScore) >= 1000)) {
-      group.totalScore = Math.max(
-        1000,
-        activeScores.reduce(
-          (acc, curr) => acc + Number(curr.playerScore || 0),
-          0
-        )
-      );
-    } else {
-      group.totalScore = activeScores.reduce(
-        (acc, curr) => acc + Number(curr.playerScore || 0),
-        0
-      );
-    }
-  };
-
   // 전체 심판 좌석 번호 목록 계산 (설정된 심판제 인원이 있으면 해당 좌석 수 고정)
-  const seatNumbers = useMemo(() => {
-    const expected = Number(expectedJudgeCount) || 0;
-    const maxInScores = scoreData.reduce(
-      (max, item) => Math.max(max, Number(item?.seatIndex) || 0),
-      0
-    );
-    const totalSeats = expected > 0 ? expected : maxInScores;
-    if (totalSeats > 0) {
-      return Array.from({ length: totalSeats }, (_, i) => i + 1);
-    }
-    return [];
-  }, [scoreData, expectedJudgeCount]);
+  const seatNumbers = useMemo(
+    () => computeJudgeSeatNumbers(scoreData, expectedJudgeCount),
+    [scoreData, expectedJudgeCount]
+  );
 
   const groupedByPlayerNumber = (arr, seats, sortCriteria = "playerIndex") => {
     const mapByNum = new Map();
 
     // 출전 선수 기본 명단 먼저 시드 (아직 0표인 선수도 누락 표시 가능)
     (stagePlayers || []).forEach((sp) => {
-      if (sp?.playerNoShow) return;
+      if (!isActiveStagePlayer(sp)) return;
       mapByNum.set(sp.playerNumber, {
         playerNumber: sp.playerNumber,
         playerIndex:
@@ -226,7 +141,7 @@ const ContestRankingSummary = ({
         playerUid: g.playerUid,
         score: alignedScores,
       };
-      assignMinMaxAndCalculateTotal(playerObj);
+      assignMinMaxAndCalculateRankTotal(playerObj);
       return playerObj;
     });
 
@@ -298,7 +213,7 @@ const ContestRankingSummary = ({
 
         if (!group) {
           group = {
-            contestId: curr.contestId,
+            contestId: currentContest?.contests?.id || curr?.contestId,
             categoryId: curr.categoryId,
             categoryTitle: curr.categoryTitle || categoryTitleProp,
             scoreType: curr.categoryJudgeType || "ranking",
@@ -342,30 +257,6 @@ const ContestRankingSummary = ({
     });
   };
 
-  const handleDeleteResult = async (contestId, targetGradeId) => {
-    const condition = [
-      where("contestId", "==", contestId),
-      where("gradeId", "==", targetGradeId),
-    ];
-
-    const returnQuery = await resultQuery.getDocuments(
-      "contest_results_list",
-      condition
-    );
-
-    if (!returnQuery || returnQuery.length === 0) {
-      return;
-    }
-
-    const deleteResults = await Promise.all(
-      returnQuery.map((result) => resultDelete.deleteData(result.id))
-    );
-
-    if (deleteResults.some((ok) => !ok)) {
-      throw new Error("기존 순위 결과 삭제 중 오류가 발생했습니다");
-    }
-  };
-
   const handleRealtimeUpdate = async (contestId, targetGradeId = gradeId) => {
     const collectionInfo = `currentStage/${contestId}`;
     const base = Array.isArray(currentResultSaved) ? currentResultSaved : [];
@@ -395,30 +286,12 @@ const ContestRankingSummary = ({
     setIsSaving(true);
 
     try {
-      for (const data of resultData) {
-        const { contestId, gradeId: itemGradeId } = data;
-        await handleDeleteResult(contestId, itemGradeId);
-      }
-
-      // 저장 시 임시 필드(isMissing) 정리하여 기존 DB 스키마 완벽 호환 유지
-      const sanitizedPayload = resultData.map((table) => ({
-        ...table,
-        result: (table.result || []).map((p) => ({
-          ...p,
-          score: (p.score || []).map(({ isMissing, ...restScore }) => ({
-            ...restScore,
-            playerScore: restScore.playerScore ?? 0,
-          })),
-        })),
-      }));
-
-      const addedDocs = await Promise.all(
-        sanitizedPayload.map((data) => resultAdd.addData({ ...data }))
-      );
-
-      if (addedDocs.some((doc) => !doc)) {
-        throw new Error("순위 결과 저장 중 오류가 발생했습니다");
-      }
+      await saveGradeResultsAtomically({
+        db,
+        resultTables: resultData,
+        fallbackContestId: currentContest?.contests?.id,
+        includePointArray: false,
+      });
 
       await handleRealtimeUpdate(currentContest.contests.id, gradeId);
 
@@ -534,7 +407,7 @@ const ContestRankingSummary = ({
           hasDuplicateRanks(table.result)
         );
         if (hasAnyDuplicate) {
-          playWarningSound();
+          playWarningSoundSafe();
           setDuplicateWarningOpen(true);
           hasWarnedDuplicateRef.current = true;
         }

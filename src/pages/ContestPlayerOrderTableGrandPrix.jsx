@@ -3,15 +3,18 @@ import LoadingPage from "./LoadingPage";
 import {
   useFirestoreGetDocument,
   useFirestoreQuery,
-  useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import { doc, runTransaction, where } from "firebase/firestore";
+import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import {
   generateToday,
   isGrandPrixPlayerEntry,
 } from "../functions/functions";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
+import { resolveOriginalGradeTitle } from "../utils/playerEntryUtils";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 import {
   Trophy,
   Save,
@@ -73,7 +76,6 @@ const ContestPlayerOrderTableGrandPrix = () => {
   );
   const fetchGradeDocument = useFirestoreGetDocument("contest_grades_list");
   const fetchPlayerFinal = useFirestoreGetDocument("contest_players_final");
-  const updatePlayerFinal = useFirestoreUpdateData("contest_players_final");
   const fetchResultQuery = useFirestoreQuery();
 
   const fetchPool = async (categoriesListId, gradesListId, playersFinalId) => {
@@ -188,7 +190,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
       return [...acc, ...matchingGrades];
     }, []);
 
-    const flattenedWinner = (resultInfo || [])
+    const dedupedResults = dedupeContestResultsByGrade(
+      resultInfo,
+      currentContest?.contests?.id
+    );
+
+    const flattenedWinner = dedupedResults
       .map((infoItem) => {
         const {
           result: playerResult,
@@ -224,6 +231,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
         const inheritedPhotos = findWinner.playerUid
           ? photoByUid.get(findWinner.playerUid) || {}
           : {};
+        const resolvedWonCategoryTitle = categoryTitle || "";
+        const resolvedWonGradeTitle =
+          wonGrade?.contestGradeTitle || gradeTitle || "";
 
         return {
           ...inheritedPhotos,
@@ -231,8 +241,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
           originalCategoryId: categoryId,
           originalGradeId: gradeId,
           originalGradeIndex,
-          originalcategoryTitle: categoryTitle,
-          originalgradeTitle: wonGrade?.contestGradeTitle || gradeTitle,
+          originalcategoryTitle: resolvedWonCategoryTitle,
+          originalCategoryTitle: resolvedWonCategoryTitle,
+          originalgradeTitle: resolvedWonGradeTitle,
+          originalGradeTitle: resolvedWonGradeTitle,
           wasGradeChangedInOriginal: Boolean(
             regularEntry?.isGradeChanged || regularEntry?.isGradeChange
           ),
@@ -274,12 +286,22 @@ const ContestPlayerOrderTableGrandPrix = () => {
       );
 
       const seenPlayers = new Set();
+      const seenOriginalGrades = new Set();
       const candidates = [];
 
       filteredMatching.forEach((match) => {
         const playerKey = getPlayerUniqueKey(match);
         if (!playerKey || seenPlayers.has(playerKey)) return;
+        if (
+          match.originalGradeId &&
+          seenOriginalGrades.has(match.originalGradeId)
+        ) {
+          return;
+        }
         seenPlayers.add(playerKey);
+        if (match.originalGradeId) {
+          seenOriginalGrades.add(match.originalGradeId);
+        }
 
         const saved = savedGpByGradeAndKey.get(
           `${grade.contestGradeId}_${playerKey}`
@@ -328,6 +350,10 @@ const ContestPlayerOrderTableGrandPrix = () => {
           fp?.playerIndexOriginal !== null
             ? fp.playerIndexOriginal
             : fp?.playerIndex ?? fp?.playerNumber ?? null;
+        const resolvedForceOrigGradeTitle =
+          resolveOriginalGradeTitle(fp) || wonGrade?.contestGradeTitle || "";
+        const resolvedForceOrigCategoryTitle =
+          fp.originalcategoryTitle || fp.originalCategoryTitle || "";
 
         candidates.push({
           ...fp,
@@ -339,6 +365,14 @@ const ContestPlayerOrderTableGrandPrix = () => {
           contestCategorySection: "그랑프리",
           contestGradeId: grade.contestGradeId,
           contestGradeTitle: grade.contestGradeTitle,
+          originalgradeTitle: resolvedForceOrigGradeTitle,
+          originalGradeTitle: resolvedForceOrigGradeTitle,
+          ...(resolvedForceOrigCategoryTitle
+            ? {
+                originalcategoryTitle: resolvedForceOrigCategoryTitle,
+                originalCategoryTitle: resolvedForceOrigCategoryTitle,
+              }
+            : {}),
           originalGradeIndex: resolvedWonOrder,
           playerIndexOriginal: resolvedForceOriginalIndex,
           isGradeChange: false,
@@ -620,12 +654,6 @@ const ContestPlayerOrderTableGrandPrix = () => {
         return;
       }
 
-      const latestFinalDoc = await fetchPlayerFinal.getDocument(playersFinalId);
-      const baseFinalList = latestFinalDoc || playersFinalList || {};
-      const baseFinalPlayers = Array.isArray(latestFinalDoc?.players)
-        ? latestFinalDoc.players
-        : playersFinalArray || [];
-
       const grandPrixCategoryIds = new Set(
         (categoriesArray || [])
           .filter((c) => c?.contestCategorySection === "그랑프리")
@@ -647,36 +675,57 @@ const ContestPlayerOrderTableGrandPrix = () => {
         )
       );
 
-      // 기존 baseFinalPlayers에서 일반 종목 엔트리는 그대로 유지하고,
-      // 아직 집계되지 않은 다른 그랑프리 체급의 강제 등록(force) 선수도 보존
-      const nonGrandPrixPlayers = baseFinalPlayers.filter((p) => {
-        if (!grandPrixGradeIds.has(p?.contestGradeId)) return true;
-        const pKey = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
-        if (incomingKeySet.has(pKey)) return false;
-        return p?.createdBy === "force" || p?.createBy === "force";
-      });
+      const finalRef = doc(db, "contest_players_final", playersFinalId);
+      let committedDoc = null;
+      let committedPlayers = [];
 
-      const finalPlayersMap = new Map();
-      [...nonGrandPrixPlayers, ...dedupedGrandPrixData].forEach((p) => {
-        if (!p) return;
-        const k = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
-        if (!finalPlayersMap.has(k)) {
-          finalPlayersMap.set(k, p);
+      await runTransaction(db, async (transaction) => {
+        const finalSnap = await transaction.get(finalRef);
+        const latestFinalDoc = finalSnap.exists() ? finalSnap.data() : null;
+        const baseFinalList = latestFinalDoc || playersFinalList || {};
+        const baseFinalPlayers = Array.isArray(latestFinalDoc?.players)
+          ? latestFinalDoc.players
+          : playersFinalArray || [];
+
+        // 기존 baseFinalPlayers에서 일반 종목 엔트리는 그대로 유지하고,
+        // 아직 집계되지 않은 다른 그랑프리 체급의 강제 등록(force) 선수도 보존
+        const nonGrandPrixPlayers = baseFinalPlayers.filter((p) => {
+          if (!grandPrixGradeIds.has(p?.contestGradeId)) return true;
+          const pKey = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
+          if (incomingKeySet.has(pKey)) return false;
+          return p?.createdBy === "force" || p?.createBy === "force";
+        });
+
+        const finalPlayersMap = new Map();
+        [...nonGrandPrixPlayers, ...dedupedGrandPrixData].forEach((p) => {
+          if (!p) return;
+          const k = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
+          if (!finalPlayersMap.has(k)) {
+            finalPlayersMap.set(k, p);
+          }
+        });
+        const finalPlayers = Array.from(finalPlayersMap.values());
+
+        const { id: _ignoredId, ...cleanBaseList } = baseFinalList;
+        const sanitizedPayload = sanitizeForFirestore({
+          ...cleanBaseList,
+          ...(contestId ? { contestId } : {}),
+          players: finalPlayers,
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (finalSnap.exists()) {
+          transaction.update(finalRef, sanitizedPayload);
+        } else {
+          transaction.set(finalRef, sanitizedPayload);
         }
-      });
-      const finalPlayers = Array.from(finalPlayersMap.values());
 
-      await updatePlayerFinal.updateData(playersFinalId, {
-        ...baseFinalList,
-        ...(contestId ? { contestId } : {}),
-        players: finalPlayers,
+        committedDoc = { id: playersFinalId, ...sanitizedPayload };
+        committedPlayers = finalPlayers;
       });
-      setPlayersFinalList({
-        ...baseFinalList,
-        ...(contestId ? { contestId } : {}),
-        players: finalPlayers,
-      });
-      setPlayersFinalArray(finalPlayers);
+
+      setPlayersFinalList(committedDoc);
+      setPlayersFinalArray(committedPlayers);
       setGrandPrixArray(dedupedGrandPrixData);
       setMessage({
         variant: "success",
@@ -890,11 +939,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
                                 playerUid,
                                 playerNumber,
                                 playerNoShow,
-                                originalgradeTitle,
                                 wasGradeChangedInOriginal,
                                 createdBy,
                                 createBy,
                               } = player;
+                              const resolvedOrigGradeTitle =
+                                resolveOriginalGradeTitle(player);
                               const gpIndex =
                                 player.grandPrixIndex ??
                                 player.playerIndex ??
@@ -1003,9 +1053,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
                                   </td>
                                   <td className="py-3 px-4">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      {originalgradeTitle && (
+                                      {resolvedOrigGradeTitle && (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.10] text-[11px] font-medium">
-                                          {originalgradeTitle} 1위
+                                          {isForce &&
+                                          resolvedOrigGradeTitle === gradeTitle
+                                            ? resolvedOrigGradeTitle
+                                            : `${resolvedOrigGradeTitle} 1위`}
                                         </span>
                                       )}
                                       {wasGradeChangedInOriginal && (

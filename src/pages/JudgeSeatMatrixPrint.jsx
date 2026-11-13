@@ -11,7 +11,6 @@ import { where } from "firebase/firestore";
 import ReactToPrint from "react-to-print";
 
 import { Printer, FileSpreadsheet, LayoutGrid } from "lucide-react";
-import * as XLSX from "xlsx";
 
 const num = (v, d = 0) => {
   const n = Number.parseInt(String(v).replace(/[^\d.-]/g, ""), 10);
@@ -153,7 +152,8 @@ export default function JudgeSeatMatrixPrint() {
     );
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const rows = [];
     Object.values(seatMatrix).forEach((cat) => {
       rows.push([cat.categoryTitle]);
@@ -165,7 +165,11 @@ export default function JudgeSeatMatrixPrint() {
       Object.values(cat.grades).forEach((gr) => {
         const row = [gr.gradeTitle];
         for (let i = 1; i <= seatCount; i++) {
-          row.push(gr.seats[i] || "배정안됨");
+          if (cat.judgeCount > 0 && i > cat.judgeCount) {
+            row.push("—");
+          } else {
+            row.push(gr.seats[i] || "배정안됨");
+          }
         }
         rows.push(row);
       });
@@ -413,22 +417,42 @@ export default function JudgeSeatMatrixPrint() {
                         </td>
 
                         {Array.from({ length: seatCount }, (_, i) => i + 1).map(
-                          (seat) => (
-                            <td
-                              key={seat}
-                              style={{
-                                border: "1px solid #dee2e6",
-                                padding: "10px 8px",
-                                textAlign: "center",
-                                fontSize: "11px",
-                                color: gr.seats[seat] ? "#212529" : "#dc3545",
-                                fontWeight: gr.seats[seat] ? "500" : "600",
-                                letterSpacing: gr.seats[seat] ? "0px" : "0.5px",
-                              }}
-                            >
-                              {gr.seats[seat] || "배정안됨"}
-                            </td>
-                          )
+                          (seat) => {
+                            const isUnusedSeat =
+                              cat.judgeCount > 0 && seat > cat.judgeCount;
+                            const assignedName = gr.seats[seat];
+
+                            return (
+                              <td
+                                key={seat}
+                                style={{
+                                  border: "1px solid #dee2e6",
+                                  padding: "10px 8px",
+                                  textAlign: "center",
+                                  fontSize: "11px",
+                                  color: isUnusedSeat
+                                    ? "#868e96"
+                                    : assignedName
+                                    ? "#212529"
+                                    : "#dc3545",
+                                  backgroundColor: isUnusedSeat
+                                    ? "#f8f9fa"
+                                    : undefined,
+                                  fontWeight: isUnusedSeat
+                                    ? "400"
+                                    : assignedName
+                                    ? "500"
+                                    : "600",
+                                  letterSpacing:
+                                    assignedName || isUnusedSeat
+                                      ? "0px"
+                                      : "0.5px",
+                                }}
+                              >
+                                {isUnusedSeat ? "—" : assignedName || "배정안됨"}
+                              </td>
+                            );
+                          }
                         )}
                       </tr>
                     ))}

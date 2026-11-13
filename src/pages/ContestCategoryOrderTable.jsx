@@ -159,7 +159,10 @@ const ContestCategoryOrderTable = () => {
   }, [currentContest]);
 
   useEffect(() => {
-    if (isRefresh) fetchPool();
+    if (isRefresh) {
+      fetchPool();
+      setIsRefresh(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRefresh]);
 
@@ -388,6 +391,7 @@ const ContestCategoryOrderTable = () => {
                                       title: "체급추가",
                                       categoryId,
                                       categoryTitle,
+                                      count: matchedGrades.length,
                                       info: { ...category },
                                     })
                                   }
@@ -466,92 +470,76 @@ const ContestCategoryOrderTable = () => {
 
                             {/* 하위 체급 목록 */}
                             <div className="w-full bg-[#fafafa] border-t border-[#171717]/[0.06] px-4 py-2.5 rounded-b-[12px]">
-                              <DragDropContext onDragEnd={() => {}}>
-                                <Droppable droppableId="dropGrade">
-                                  {(p2) => (
-                                    <div
-                                      className="flex w-full gap-2 flex-wrap items-center min-h-[36px]"
-                                      ref={p2.innerRef}
-                                      {...p2.droppableProps}
-                                    >
-                                      {matchedGrades?.length > 0 ? (
-                                        matchedGrades.map((match, mIdx) => {
-                                          const {
-                                            contestGradeId: gradeId,
-                                            contestGradeTitle: gradeTitle,
-                                          } = match;
-                                          return (
-                                            <div
-                                              className="inline-flex items-center justify-between bg-[#ffffff] border border-[#171717]/[0.08] px-3 h-9 rounded-[8px] gap-2.5 w-full sm:w-auto"
-                                              key={gradeId + mIdx}
-                                              id={gradeId + "grade"}
-                                            >
-                                              <span className="text-sm text-[#171717]">
-                                                {gradeTitle}
-                                              </span>
-                                              <div className="flex items-center gap-1">
-                                                <button
-                                                  type="button"
-                                                  title="체급 수정"
-                                                  className="w-6 h-6 rounded-[4px] hover:bg-[#f4f4f5] text-[#737373] hover:text-[#171717] flex justify-center items-center transition-colors duration-150"
-                                                  onClick={() =>
-                                                    setIsOpen({
-                                                      ...isOpen,
-                                                      grade: true,
-                                                      title: "체급수정",
-                                                      gradeId: gradeId,
-                                                      info: { ...match },
-                                                      categoryTitle,
-                                                    })
-                                                  }
-                                                >
-                                                  <Pencil
-                                                    size={14}
-                                                    strokeWidth={1.5}
-                                                  />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  title="체급 삭제"
-                                                  className="w-6 h-6 rounded-[4px] hover:bg-[#dc2626]/[0.08] text-[#737373] hover:text-[#dc2626] flex justify-center items-center transition-colors duration-150"
-                                                  onClick={() =>
-                                                    confirmDeletion(
-                                                      {
-                                                        variant: "danger",
-                                                        title: "체급 삭제 확인",
-                                                        body: `'${categoryTitle} - ${gradeTitle}' 체급을 삭제하시겠습니까?`,
-                                                        isButton: true,
-                                                        confirmButtonText:
-                                                          "삭제",
-                                                        cancelButtonText:
-                                                          "취소",
-                                                      },
-                                                      () =>
-                                                        handleDeleteGrade(
-                                                          gradeId
-                                                        )
-                                                    )
-                                                  }
-                                                >
-                                                  <Trash2
-                                                    size={14}
-                                                    strokeWidth={1.5}
-                                                  />
-                                                </button>
-                                              </div>
-                                            </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <span className="text-xs text-[#737373]">
-                                          등록된 세부 체급이 없습니다
+                              <div className="flex w-full gap-2 flex-wrap items-center min-h-[36px]">
+                                {matchedGrades?.length > 0 ? (
+                                  matchedGrades.map((match, mIdx) => {
+                                    const {
+                                      contestGradeId: gradeId,
+                                      contestGradeTitle: gradeTitle,
+                                    } = match;
+                                    return (
+                                      <div
+                                        className="inline-flex items-center justify-between bg-[#ffffff] border border-[#171717]/[0.08] px-3 h-9 rounded-[8px] gap-2.5 w-full sm:w-auto"
+                                        key={gradeId + mIdx}
+                                        id={gradeId + "grade"}
+                                      >
+                                        <span className="text-sm text-[#171717]">
+                                          {gradeTitle}
                                         </span>
-                                      )}
-                                      {p2.placeholder}
-                                    </div>
-                                  )}
-                                </Droppable>
-                              </DragDropContext>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            title="체급 수정"
+                                            className="w-6 h-6 rounded-[4px] hover:bg-[#f4f4f5] text-[#737373] hover:text-[#171717] flex justify-center items-center transition-colors duration-150"
+                                            onClick={() =>
+                                              setIsOpen({
+                                                ...isOpen,
+                                                grade: true,
+                                                title: "체급수정",
+                                                gradeId: gradeId,
+                                                info: { ...match },
+                                                categoryTitle,
+                                              })
+                                            }
+                                          >
+                                            <Pencil
+                                              size={14}
+                                              strokeWidth={1.5}
+                                            />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="체급 삭제"
+                                            className="w-6 h-6 rounded-[4px] hover:bg-[#dc2626]/[0.08] text-[#737373] hover:text-[#dc2626] flex justify-center items-center transition-colors duration-150"
+                                            onClick={() =>
+                                              confirmDeletion(
+                                                {
+                                                  variant: "danger",
+                                                  title: "체급 삭제 확인",
+                                                  body: `'${categoryTitle} - ${gradeTitle}' 체급을 삭제하시겠습니까?`,
+                                                  isButton: true,
+                                                  confirmButtonText: "삭제",
+                                                  cancelButtonText: "취소",
+                                                },
+                                                () => handleDeleteGrade(gradeId)
+                                              )
+                                            }
+                                          >
+                                            <Trash2
+                                              size={14}
+                                              strokeWidth={1.5}
+                                            />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="text-xs text-[#737373]">
+                                    등록된 세부 체급이 없습니다
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )}

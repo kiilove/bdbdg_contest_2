@@ -28,8 +28,8 @@ import CompareSetting from "../modals/CompareSetting";
 import ContestRankingSummary from "../modals/ContestRankingSummary";
 import ContestPointSummary from "../modals/ContestPointSummary";
 import dayjs from "dayjs";
-import { where } from "firebase/firestore";
-import html2canvas from "html2canvas";
+import { doc, onSnapshot, where } from "firebase/firestore";
+import { db } from "../firebase";
 import {
   Play,
   Settings,
@@ -50,6 +50,14 @@ import {
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
 import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
+import {
+  removeStageCompareByLocalIndex,
+  buildRealtimeCompareAfterCancel,
+} from "../utils/compareVoteUtils";
+import {
+  isActiveStagePlayer,
+  getAllStagePlayers,
+} from "../utils/playerEntryUtils";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -108,6 +116,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
+      osc2.onended = () => {
+        try {
+          ctx.close();
+        } catch {
+          // ignore close error
+        }
+      };
       osc2.start(now + 0.2);
       osc2.stop(now + 0.8);
     } catch (e) {
@@ -127,6 +142,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         return;
       }
 
+      const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
         scale: 2,
@@ -294,11 +310,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       if (returnPlayersFinal?.players) {
         setPlayersArray(
           [...(returnPlayersFinal.players || [])]
+            .filter((f) => isActiveStagePlayer(f))
             .sort(
               (a, b) =>
                 getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
             )
-            .filter((f) => f.playerNoShow === false)
         );
       } else {
         setPlayersArray([]);
@@ -309,10 +325,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
       if (returnCompareList) {
         setComparesList({ ...returnCompareList });
-        setComparesArray([...(returnCompareList.compares || [])]);
+      } else {
+        setComparesList({});
       }
 
       if (!returnCompareList?.compares?.length) {
+        setComparesArray([]);
         setCurrentCompareInfo({});
       }
     } catch (error) {
@@ -329,6 +347,76 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       setIsLoading(false);
     }
   };
+
+  // 계측 파이널 및 그랑프리/불참 변경 실시간 Live-Sync 리스너
+  useEffect(() => {
+    const finalDocId =
+      currentContest?.contests?.contestPlayersFinalId ||
+      currentContest?.contestPlayersFinalId;
+    if (!finalDocId) return;
+
+    const unsub = onSnapshot(
+      doc(db, "contest_players_final", finalDocId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const remoteData = docSnap.data();
+          const remotePlayers = Array.isArray(remoteData?.players)
+            ? remoteData.players
+            : [];
+          setPlayersArray(
+            [...remotePlayers]
+              .filter((f) => isActiveStagePlayer(f))
+              .sort(
+                (a, b) =>
+                  getStagePlayerSortIndex(a) - getStagePlayerSortIndex(b)
+              )
+          );
+        }
+      },
+      (err) => {
+        console.warn(
+          "[JudgeHead] contest_players_final 실시간 리스너 오류:",
+          err
+        );
+      }
+    );
+
+    return () => unsub();
+  }, [
+    currentContest?.contests?.contestPlayersFinalId,
+    currentContest?.contestPlayersFinalId,
+  ]);
+
+  // 심판 좌석 배정 실시간 Live-Sync 리스너
+  useEffect(() => {
+    const judgeAssignDocId =
+      currentContest?.contests?.contestJudgesAssignId ||
+      currentContest?.contestJudgesAssignId;
+    if (!judgeAssignDocId) return;
+
+    const unsub = onSnapshot(
+      doc(db, "contest_judges_assign", judgeAssignDocId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (Array.isArray(data?.judges)) {
+            setJudgesAssignArray(data.judges);
+          }
+        }
+      },
+      (err) => {
+        console.warn(
+          "[JudgeHead] contest_judges_assign 실시간 리스너 오류:",
+          err
+        );
+      }
+    );
+
+    return () => unsub();
+  }, [
+    currentContest?.contests?.contestJudgesAssignId,
+    currentContest?.contestJudgesAssignId,
+  ]);
 
   const effectiveCollectionName = resolveEffectiveCollectionName(
     contestInfo,
@@ -454,51 +542,39 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
   const handleCompareCancel = async (contestId, compareIndex) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
-    const newCompareArray = [...comparesArray];
-    newCompareArray.splice(compareIndex, 1);
-    let newRealtimeInfo = {
-      status: {
-        compareStart: false,
-        compareEnd: false,
-        compareCancel: false,
-        compareIng: false,
-      },
-    };
-
-    if (compareIndex > 0) {
-      newRealtimeInfo = {
-        compareIndex: comparesArray[compareIndex - 1].compareIndex,
-        status: {
-          compareStart: false,
-          compareEnd: false,
-          compareCancel: false,
-          compareIng: true,
-        },
-        playerLength: comparesArray[compareIndex - 1].comparePlayerLength,
-        scoreMode: comparesArray[compareIndex - 1].compareScoreMode,
-        players: [...comparesArray[compareIndex - 1].players],
-      };
-    }
+    const targetStageId = currentStageInfo?.stageId || realtimeData?.stageId;
+    const { nextAllCompares, nextStageCompares } =
+      removeStageCompareByLocalIndex(
+        comparesList?.compares || [],
+        targetStageId,
+        compareIndex
+      );
+    const newRealtimeInfo = buildRealtimeCompareAfterCancel(nextStageCompares);
 
     try {
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
         ...newRealtimeInfo,
       });
       setCompareStatus(() => ({
-        compareStart: false,
-        compareEnd: false,
+        ...newRealtimeInfo.status,
         compareCancel: true,
-        compareIng: false,
       }));
-      await updateCompare.updateData(comparesList.id, {
-        ...comparesList,
-        compares: [...newCompareArray],
-      });
-      setComparesList(() => ({
-        ...comparesList,
-        compares: [...newCompareArray],
+      if (comparesList?.id) {
+        await updateCompare.updateData(comparesList.id, {
+          ...comparesList,
+          compares: [...nextAllCompares],
+        });
+      }
+      setComparesList((prev) => ({
+        ...(prev || {}),
+        compares: [...nextAllCompares],
       }));
-      setComparesArray(() => [...newCompareArray]);
+      setComparesArray(() => [...nextStageCompares]);
+      setCurrentCompareInfo(
+        nextStageCompares.length > 0
+          ? { ...nextStageCompares[nextStageCompares.length - 1] }
+          : {}
+      );
       setParentRefresh(true);
       setCompareCancelMsgOpen(false);
     } catch (error) {
@@ -589,23 +665,14 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentStageInfo?.grades?.length > 0 &&
       playersArray?.length > 0
     ) {
-      const rawStagePlayers = playersArray
-        .filter(
-          (f) => f.contestGradeId === currentStageInfo.grades[0].gradeId
-        )
-        .sort((a, b) => a.playerIndex - b.playerIndex);
-
-      const seenStagePlayerKeys = new Set();
-      const dedupedStagePlayers = [];
-      rawStagePlayers.forEach((p) => {
-        const k = String(p.playerUid || p.playerNumber || p.playerName);
-        if (!seenStagePlayerKeys.has(k)) {
-          seenStagePlayerKeys.add(k);
-          dedupedStagePlayers.push(p);
-        }
-      });
-
-      setMatchedOriginalPlayers(dedupedStagePlayers);
+      const combinedStagePlayers = getAllStagePlayers(
+        playersArray,
+        currentStageInfo.grades,
+        currentStageInfo
+      );
+      setMatchedOriginalPlayers(combinedStagePlayers);
+    } else {
+      setMatchedOriginalPlayers([]);
     }
   }, [realtimeData, currentStageInfo, playersArray]);
 
@@ -689,7 +756,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
   }, [currentContest, currentStageInfo]);
 
-  // 현재 스테이지(gradeId)와 일치하는 비교심사만 화면에 표시
+  // 현재 스테이지(stageId)와 일치하는 비교심사만 화면에 표시 (comparesList 원본 전체 보존)
   useEffect(() => {
     const currentStageId = realtimeData?.stageId;
     if (!currentStageId) {
@@ -698,21 +765,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
-    if (comparesArray.length > 0) {
-      const filterCurrentStageCompareInfo = comparesArray.filter(
-        (f) =>
-          f.categoryId === realtimeData.categoryId &&
-          f.gradeId === realtimeData.gradeId
-      );
-      setCurrentCompareInfo({
-        ...filterCurrentStageCompareInfo[
-          filterCurrentStageCompareInfo?.length - 1
-        ],
-      });
-    }
-
-    const all = comparesList?.compares || [];
-    const filtered = all.filter((c) => c.stageId === currentStageId);
+    const all = Array.isArray(comparesList?.compares)
+      ? comparesList.compares
+      : [];
+    const filtered = all.filter((c) => c?.stageId === currentStageId);
 
     setComparesArray(filtered);
     setCurrentCompareInfo(
@@ -817,7 +873,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
     const fullyScoredUnconfirmedGrade = unconfirmedGrades.find((grade) => {
       const filtered = playersArray.filter(
-        (f) => f.contestGradeId === grade.gradeId && f.playerNoShow === false
+        (f) =>
+          f.contestGradeId === grade.gradeId && isActiveStagePlayer(f)
       );
 
       if (filtered.length === 0) return false;
@@ -826,6 +883,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         realtimeData.judges.every((judge) => {
           const scoreEntry = normalScoreData.find(
             (f) =>
+              (!f.gradeId || f.gradeId === grade.gradeId) &&
               f.playerNumber === player.playerNumber &&
               f.seatIndex === judge.seatIndex
           );
@@ -917,13 +975,24 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
-    if (realtimeData?.judges?.length > 0) {
-      return realtimeData.judges
-        .filter((j) => !j?.judgeUid && !j?.judgeName)
-        .map((j, i) => j?.seatIndex ?? i + 1);
+    const realtimeJudges = Array.isArray(realtimeData?.judges)
+      ? realtimeData.judges
+      : [];
+    const expectedCount =
+      Number(realtimeData?.stageJudgeCount) || realtimeJudges.length;
+    if (expectedCount > 0 && realtimeJudges.length > 0) {
+      return Array.from({ length: expectedCount }, (_, i) => {
+        const seatNo = i + 1;
+        const matched =
+          realtimeJudges.find((j) => Number(j?.seatIndex) === seatNo) ??
+          (realtimeJudges[i]?.seatIndex === undefined
+            ? realtimeJudges[i]
+            : null);
+        return !matched?.judgeUid && !matched?.judgeName ? seatNo : null;
+      }).filter(Boolean);
     }
     return [];
-  }, [realtimeData?.judges]);
+  }, [realtimeData?.judges, realtimeData?.stageJudgeCount]);
 
   const judgeSeatGapSummary = useMemo(
     () =>
@@ -1127,7 +1196,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                 stagePlayers={playersArray.filter(
                   (f) =>
                     f.contestGradeId === rankingSummaryProp?.gradeId &&
-                    f.playerNoShow === false
+                    isActiveStagePlayer(f)
                 )}
                 categoryTitleProp={rankingSummaryProp?.categoryTitle || ""}
                 gradeTitleProp={rankingSummaryProp?.gradeTitle || ""}
@@ -1162,7 +1231,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                 stagePlayers={playersArray.filter(
                   (f) =>
                     f.contestGradeId === pointSummaryProp?.gradeId &&
-                    f.playerNoShow === false
+                    isActiveStagePlayer(f)
                 )}
                 categoryTitleProp={pointSummaryProp?.categoryTitle || ""}
                 gradeTitleProp={pointSummaryProp?.gradeTitle || ""}
@@ -1445,9 +1514,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       .filter(
                         (f) =>
                           f.contestGradeId === gradeId &&
-                          f.playerNoShow === false
+                          isActiveStagePlayer(f)
                       )
-                      .sort((a, b) => a.playerIndex - b.playerIndex);
+                      .sort(
+                        (a, b) =>
+                          getStagePlayerSortIndex(a, currentStageInfo) -
+                          getStagePlayerSortIndex(b, currentStageInfo)
+                      );
 
                     const judges = realtimeData?.judges || [];
 
@@ -1459,6 +1532,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       judges.forEach((judge) => {
                         const scoreEntry = normalScoreData.find(
                           (f) =>
+                            (!f.gradeId || f.gradeId === gradeId) &&
                             f.playerNumber === player.playerNumber &&
                             f.seatIndex === judge.seatIndex
                         );
@@ -1731,6 +1805,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                                     {judges.map((judge) => {
                                       const finded = normalScoreData.find(
                                         (f) =>
+                                          (!f.gradeId ||
+                                            f.gradeId === gradeId) &&
                                           f.playerNumber ===
                                             player.playerNumber &&
                                           f.seatIndex === judge.seatIndex

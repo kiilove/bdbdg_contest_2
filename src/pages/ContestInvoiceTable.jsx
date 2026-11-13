@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useMemo } from "react";
+import React, { useContext, useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import {
   Search,
@@ -56,6 +56,7 @@ const ContestInvoiceTable = () => {
   const updateInvoice = useFirestoreUpdateData("invoices_pool");
   const deleteEntry = useFirestoreDeleteData("contest_entrys_list");
   const addEntry = useFirestoreAddData("contest_entrys_list");
+  const inFlightPriceCheckRef = useRef(new Set());
 
   const tabArray = [
     { id: 0, title: "전체 목록", subTitle: "접수된 전체 참가신청서 목록" },
@@ -220,7 +221,8 @@ const ContestInvoiceTable = () => {
 
   /** 입금확인 처리 */
   const handleIsPriceCheckUpdate = async (invoiceId, playerUid, checked) => {
-    if (!invoiceId) return;
+    if (!invoiceId || inFlightPriceCheckRef.current.has(invoiceId)) return;
+    inFlightPriceCheckRef.current.add(invoiceId);
     setIsLoading(true);
     try {
       const sessionUser = JSON.parse(sessionStorage.getItem("user") || "{}");
@@ -230,14 +232,23 @@ const ContestInvoiceTable = () => {
       if (findIndex === -1) return;
 
       const targetInvoice = invoiceList[findIndex];
-      const newInvoiceList = [...invoiceList];
+      const nextChecked = Boolean(checked);
+      if (Boolean(targetInvoice.isPriceCheck) === nextChecked) {
+        return;
+      }
+
       const newInvoice = {
         ...targetInvoice,
-        isPriceCheck: checked,
+        isPriceCheck: nextChecked,
       };
-      newInvoiceList.splice(findIndex, 1, newInvoice);
+      const invoicePatch = {
+        isPriceCheck: nextChecked,
+        ...(newInvoice.priceCheckLogs !== undefined
+          ? { priceCheckLogs: newInvoice.priceCheckLogs }
+          : {}),
+      };
 
-      if (checked) {
+      if (nextChecked) {
         let createdEntries = [];
         if (Array.isArray(targetInvoice.joins) && targetInvoice.joins.length > 0) {
           const {
@@ -250,13 +261,35 @@ const ContestInvoiceTable = () => {
             playerText,
             invoiceCreateAt,
             createBy,
+            createdBy,
           } = targetInvoice;
 
           const resolvedContestId = contestId || currentContest?.contests?.id;
           const resolvedInvoiceId = targetInvoice.id || invoiceId;
 
+          const existingEntries = resolvedContestId
+            ? await getQuery.getDocuments("contest_entrys_list", [
+                where("contestId", "==", resolvedContestId),
+              ])
+            : [];
+          const existingGradeIdsForInvoice = new Set(
+            (existingEntries || [])
+              .filter(
+                (entry) =>
+                  entry?.invoiceId && entry.invoiceId === resolvedInvoiceId
+              )
+              .map((entry) => entry.contestGradeId)
+              .filter(Boolean)
+          );
+
+          const joinsToCreate = targetInvoice.joins.filter(
+            (join) =>
+              join?.contestGradeId &&
+              !existingGradeIdsForInvoice.has(join.contestGradeId)
+          );
+
           const addedResults = await Promise.all(
-            targetInvoice.joins.map(async (join) => {
+            joinsToCreate.map(async (join) => {
               const {
                 contestCategoryTitle,
                 contestCategoryId,
@@ -274,7 +307,8 @@ const ContestInvoiceTable = () => {
                 playerTel: playerTel ?? "",
                 playerText: playerText ?? "",
                 invoiceCreateAt: invoiceCreateAt ?? null,
-                createBy: createBy || "web",
+                createBy: createBy || createdBy || "web",
+                createdBy: createdBy || createBy || "web",
                 contestCategoryTitle,
                 contestCategoryId,
                 contestGradeTitle,
@@ -314,9 +348,10 @@ const ContestInvoiceTable = () => {
           }
         }
 
-        const updatedInvoice = await updateInvoice.updateData(invoiceId, {
-          ...newInvoice,
-        });
+        const updatedInvoice = await updateInvoice.updateData(
+          invoiceId,
+          invoicePatch
+        );
         if (!updatedInvoice) {
           if (createdEntries.length > 0) {
             await Promise.all(
@@ -350,9 +385,10 @@ const ContestInvoiceTable = () => {
           return;
         }
 
-        const updatedInvoice = await updateInvoice.updateData(invoiceId, {
-          ...newInvoice,
-        });
+        const updatedInvoice = await updateInvoice.updateData(
+          invoiceId,
+          invoicePatch
+        );
         if (!updatedInvoice) {
           openNotice({
             variant: "error",
@@ -371,7 +407,9 @@ const ContestInvoiceTable = () => {
         });
       }
 
-      setInvoiceList([...newInvoiceList]);
+      setInvoiceList((prev) =>
+        prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...invoicePatch } : inv))
+      );
     } catch (error) {
       console.error(error);
       openNotice({
@@ -380,6 +418,7 @@ const ContestInvoiceTable = () => {
         body: "입금확인 처리 중 예기치 못한 오류가 발생했습니다.",
       });
     } finally {
+      inFlightPriceCheckRef.current.delete(invoiceId);
       setIsLoading(false);
     }
   };

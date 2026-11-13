@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useRef, useContext } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { FileText, FileSpreadsheet, Search } from "lucide-react";
-import { useFirestoreQuery } from "../hooks/useFirestores";
+import {
+  useFirestoreGetDocument,
+  useFirestoreQuery,
+} from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { exportContestResultsToExcel } from "../functions/functions";
 import ContestRankingSummaryPrintAll from "../modals/ContestRankingSummaryPrintAll";
-import { useDevice } from "../contexts/DeviceContext";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 
 const PrintSummary = () => {
-  const { isTabletOrMobile } = useDevice();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({});
   const [msgOpen, setMsgOpen] = useState(false);
-  const [collectionName, setCollectionName] = useState("");
   const [currentSection, setCurrentSection] = useState("all");
   const [currentCategoryId, setCurrentCategoryId] = useState("all");
   const [currentGradeId, setCurrentGradeId] = useState("all");
@@ -27,45 +28,76 @@ const PrintSummary = () => {
   const [showContestRankingSummary, setShowContestRankingSummary] =
     useState(false);
   const [searchParams, setSearchParams] = useState({});
-  const printRef = useRef();
   const { currentContest } = useContext(CurrentContestContext);
+  const fetchCategoryDoc = useFirestoreGetDocument("contest_categorys_list");
+  const fetchGradeDoc = useFirestoreGetDocument("contest_grades_list");
   const fetchCategories = useFirestoreQuery();
   const fetchGrades = useFirestoreQuery();
   const fetchResults = useFirestoreQuery();
 
   const fetchCategoryAndGrades = async (contestId) => {
-    const condition = [where("refContestId", "==", contestId)];
     try {
       setIsLoading(true);
-      const categoriesData = await fetchCategories.getDocuments(
-        "contest_categorys_list",
-        condition
-      );
-      let sortedCategories = [];
-      if (categoriesData[0]) {
-        sortedCategories = categoriesData[0].categorys.sort(
-          (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
+      const categoryListId = currentContest?.contests?.contestCategorysListId;
+      const gradeListId = currentContest?.contests?.contestGradesListId;
+
+      let rawCategoryDoc = categoryListId
+        ? await fetchCategoryDoc.getDocument(categoryListId)
+        : null;
+      if (!rawCategoryDoc?.categorys) {
+        const byContestId = await fetchCategories.getDocuments(
+          "contest_categorys_list",
+          [where("contestId", "==", contestId)]
         );
-        setCategoriesArray(sortedCategories);
+        rawCategoryDoc = byContestId?.[0] || null;
+      }
+      if (!rawCategoryDoc?.categorys) {
+        const byRefContestId = await fetchCategories.getDocuments(
+          "contest_categorys_list",
+          [where("refContestId", "==", contestId)]
+        );
+        rawCategoryDoc = byRefContestId?.[0] || null;
       }
 
-      const gradesData = await fetchGrades.getDocuments(
-        "contest_grades_list",
-        condition
-      );
-      let sortedGrades = [];
-      if (gradesData?.[0]?.grades) {
-        sortedGrades = [...gradesData[0].grades].sort(
-          (a, b) =>
-            (a.contestGradeIndex ?? a.gradeIndex ?? 0) -
-            (b.contestGradeIndex ?? b.gradeIndex ?? 0)
+      const sortedCategories = Array.isArray(rawCategoryDoc?.categorys)
+        ? [...rawCategoryDoc.categorys].sort(
+            (a, b) =>
+              (Number(a?.contestCategoryIndex) || 0) -
+              (Number(b?.contestCategoryIndex) || 0)
+          )
+        : [];
+      setCategoriesArray(sortedCategories);
+
+      let rawGradeDoc = gradeListId
+        ? await fetchGradeDoc.getDocument(gradeListId)
+        : null;
+      if (!rawGradeDoc?.grades) {
+        const byContestId = await fetchGrades.getDocuments(
+          "contest_grades_list",
+          [where("contestId", "==", contestId)]
         );
-        setGradesArray(sortedGrades);
+        rawGradeDoc = byContestId?.[0] || null;
       }
+      if (!rawGradeDoc?.grades) {
+        const byRefContestId = await fetchGrades.getDocuments(
+          "contest_grades_list",
+          [where("refContestId", "==", contestId)]
+        );
+        rawGradeDoc = byRefContestId?.[0] || null;
+      }
+
+      const sortedGrades = Array.isArray(rawGradeDoc?.grades)
+        ? [...rawGradeDoc.grades].sort(
+            (a, b) =>
+              (Number(a?.contestGradeIndex ?? a?.gradeIndex) || 0) -
+              (Number(b?.contestGradeIndex ?? b?.gradeIndex) || 0)
+          )
+        : [];
+      setGradesArray(sortedGrades);
 
       const sectionsGroup = sortedCategories.reduce((acc, category) => {
         const { contestCategorySection } = category;
-        if (!acc.includes(contestCategorySection)) {
+        if (contestCategorySection && !acc.includes(contestCategorySection)) {
           acc.push(contestCategorySection);
         }
         return acc;
@@ -94,14 +126,18 @@ const PrintSummary = () => {
         "contest_results_list",
         conditions
       );
+      const dedupedResults = dedupeContestResultsByGrade(
+        resultsData || [],
+        contestId
+      );
 
-      if (resultsData.length === 0) {
+      if (dedupedResults.length === 0) {
         setNoData(true);
         setFilteredResults([]);
         return;
       }
 
-      const enrichedResults = resultsData.map((result) => {
+      const enrichedResults = dedupedResults.map((result) => {
         const category = categoriesArray.find(
           (cat) => cat.contestCategoryId === result.categoryId
         );
@@ -194,7 +230,8 @@ const PrintSummary = () => {
         where("contestId", "==", contestId)
       );
       const snap = await getDocs(q);
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rawRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rows = dedupeContestResultsByGrade(rawRows, contestId);
 
       if (rows.length === 0) {
         setMessage({
@@ -252,10 +289,14 @@ const PrintSummary = () => {
 
   useEffect(() => {
     if (currentContest?.contests?.id) {
-      setCollectionName(currentContest.contests.collectionName);
       fetchCategoryAndGrades(currentContest.contests.id);
     }
-  }, [currentContest?.contests?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentContest?.contests?.id,
+    currentContest?.contests?.contestCategorysListId,
+    currentContest?.contests?.contestGradesListId,
+  ]);
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">

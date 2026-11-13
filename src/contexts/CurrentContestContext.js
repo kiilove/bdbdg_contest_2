@@ -15,7 +15,11 @@ export const CurrentContestProvider = ({ children }) => {
       const localContest = localStorage.getItem("currentContest");
       if (localContest) {
         const parsedLocal = JSON.parse(localContest);
-        if (parsedLocal && typeof parsedLocal === "object" && parsedLocal?.contests?.id) {
+        if (
+          parsedLocal &&
+          typeof parsedLocal === "object" &&
+          parsedLocal?.contests?.id
+        ) {
           sessionStorage.setItem("currentContest", JSON.stringify(parsedLocal));
           return parsedLocal;
         }
@@ -26,11 +30,14 @@ export const CurrentContestProvider = ({ children }) => {
     return null;
   });
 
-  // currentContest가 변경될 때마다 sessionStorage에 저장
+  // currentContest 변경 시 sessionStorage 및 localStorage 동기화
+  // -> rel="noopener" 새 탭 콘솔(/mc, /vibeflow-audio 등)에서도 항상 최신 대회를 즉시 상속받도록 보장
   useEffect(() => {
     try {
       if (currentContest) {
-        sessionStorage.setItem("currentContest", JSON.stringify(currentContest));
+        const serialized = JSON.stringify(currentContest);
+        sessionStorage.setItem("currentContest", serialized);
+        localStorage.setItem("currentContest", serialized);
       }
     } catch (error) {
       console.error("currentContest 스토리지 저장 오류:", error);

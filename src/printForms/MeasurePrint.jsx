@@ -7,6 +7,7 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
 import PrintTable from "./PrintTable";
 import { useMediaQuery } from "react-responsive";
+import { getStagePlayerSortIndex } from "../functions/functions";
 
 const MeasurePrint = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +37,7 @@ const MeasurePrint = () => {
   }, [currentContest]);
 
   const fetchPool = async (categoryId, gradeId, playerAssignId) => {
+    setIsLoading(true);
     try {
       const [categories, grades, players] = await Promise.all([
         fetchCategories.getDocument(categoryId),
@@ -47,27 +49,60 @@ const MeasurePrint = () => {
       setPlayerAssignArray(players?.players || []);
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const filteredPlayerList = useMemo(() => {
-    const filteredCategories = categoriesArray.filter((category) => {
-      return (
-        currentSection === "전체" ||
-        category.contestCategorySection === currentSection
-      );
-    });
+    const filteredCategories = [...categoriesArray]
+      .sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      )
+      .filter((category) => {
+        return (
+          currentSection === "전체" ||
+          category.contestCategorySection === currentSection
+        );
+      });
 
     return filteredCategories
       .map((category) => {
         const grades = gradesArray
           .filter((grade) => grade.refCategoryId === category.contestCategoryId)
-          .map((grade) => ({
-            ...grade,
-            players: playerAssignArray.filter(
-              (player) => player.contestGradeId === grade.contestGradeId
-            ),
-          }))
+          .sort(
+            (a, b) =>
+              (Number(a?.contestGradeIndex ?? a?.gradeIndex) || 0) -
+              (Number(b?.contestGradeIndex ?? b?.gradeIndex) || 0)
+          )
+          .map((grade) => {
+            const matchedPlayers = playerAssignArray
+              .filter(
+                (player) =>
+                  (player.originalGradeId || player.contestGradeId) ===
+                  grade.contestGradeId
+              )
+              .sort(
+                (a, b) =>
+                  getStagePlayerSortIndex(a, category) -
+                  getStagePlayerSortIndex(b, category)
+              )
+              .map((player, i) => ({
+                ...player,
+                index: i + 1,
+                playerName: String(player.playerName ?? ""),
+                note: player.playerNoShow
+                  ? "불참"
+                  : player.note || "",
+              }));
+
+            return {
+              ...grade,
+              players: matchedPlayers,
+            };
+          })
           .filter((grade) => grade.players.length > 0);
 
         return { ...category, grades };
@@ -76,10 +111,10 @@ const MeasurePrint = () => {
   }, [categoriesArray, gradesArray, playerAssignArray, currentSection]);
 
   useEffect(() => {
-    const contestTitle = currentContest?.contestInfo?.contestTitle;
+    const contestTitle = currentContest?.contestInfo?.contestTitle || "";
     const section = currentSection;
 
-    setDocumentTitle(`${contestTitle} 계측명단 ${section}`);
+    setDocumentTitle(`${contestTitle} 계측명단 ${section}`.trim());
   }, [currentContest, currentSection]);
 
   const columns = [
@@ -87,7 +122,7 @@ const MeasurePrint = () => {
     { label: "선수번호", key: "playerNumber", width: 15 },
     { label: "이름", key: "playerName", width: 20 },
     { label: "신장/체중", key: "heightWeight", width: 30, forcedValue: "/" },
-    { label: "비고", key: "notes", width: 25 },
+    { label: "비고", key: "note", width: 25 },
   ];
 
   return (

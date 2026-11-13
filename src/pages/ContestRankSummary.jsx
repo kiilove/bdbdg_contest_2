@@ -5,6 +5,12 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
 import { BibTag } from "../components/ui/BibTag";
+import {
+  isScoreEntered,
+  getTrimCountPerSide,
+  assignMinMaxAndCalculateRankTotal,
+  assignMinMaxAndCalculatePointTotal,
+} from "../utils/scoringEngine";
 
 const ContestRankSummary = () => {
   const [basicInfo, setBasicInfo] = useState({});
@@ -26,41 +32,6 @@ const ContestRankSummary = () => {
     return numbers.slice(0, count);
   };
 
-  const getTrimCountPerSide = (count) => {
-    const n = Number(count) || 0;
-    if (n >= 9) return 2;
-    if (n >= 7) return 1;
-    return 0;
-  };
-
-  const assignMinMaxAndCalculateTotal = (group) => {
-    const N = group.score.length;
-    const trimCount = getTrimCountPerSide(N);
-
-    group.score.forEach((s) => {
-      s.isMin = false;
-      s.isMax = false;
-    });
-
-    if (trimCount > 0) {
-      const sorted = [...group.score].sort(
-        (a, b) => Number(a.playerScore) - Number(b.playerScore)
-      );
-
-      for (let i = 0; i < trimCount; i++) {
-        sorted[i].isMin = true;
-      }
-
-      for (let i = N - trimCount; i < N; i++) {
-        sorted[i].isMax = true;
-      }
-    }
-
-    group.totalScore = group.score
-      .filter((s) => !s.isMin && !s.isMax)
-      .reduce((acc, curr) => acc + Number(curr.playerScore || 0), 0);
-  };
-
   const groupedByPlayerNumber = (
     arr,
     sortCriteria = "playerIndex",
@@ -68,9 +39,10 @@ const ContestRankSummary = () => {
   ) => {
     const groupedObj = arr.reduce((acc, curr) => {
       let group = acc.find((g) => g.playerNumber === curr.playerNumber);
+      const entered = isScoreEntered(curr.playerScore);
       const scoreItem = {
         seatIndex: Number(curr.seatIndex),
-        playerScore: Number(curr.playerScore),
+        playerScore: entered ? Number(curr.playerScore) : 0,
         randomIndex: generateUniqueRandomNumbers(11, 300, 1)[0],
         isMin: false,
         isMax: false,
@@ -100,7 +72,11 @@ const ContestRankSummary = () => {
 
     groupedObj.forEach((group) => {
       group.score.sort((a, b) => a.seatIndex - b.seatIndex);
-      assignMinMaxAndCalculateTotal(group);
+      if (scoreType === "point") {
+        assignMinMaxAndCalculatePointTotal(group);
+      } else {
+        assignMinMaxAndCalculateRankTotal(group);
+      }
     });
 
     groupedObj.sort((a, b) =>

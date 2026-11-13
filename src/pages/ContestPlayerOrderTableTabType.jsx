@@ -27,8 +27,11 @@ import {
   FolderOpen,
   Globe,
   PenLine,
+  UserPlus,
 } from "lucide-react";
 import BibTag from "../components/ui/BibTag";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
+import { resolveEntryOrigin } from "../utils/playerEntryUtils";
 
 let orderRowCounter = 0;
 const createOrderRowId = () =>
@@ -38,13 +41,6 @@ const stripInternalPlayerProps = (player) => {
   if (!player || typeof player !== "object") return player;
   const { _rowId, ...rest } = player;
   return rest;
-};
-
-const sanitizeForFirestore = (data) => {
-  if (data === undefined) return null;
-  return JSON.parse(
-    JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
-  );
 };
 
 const getPlayerRowEntryKey = (player, fallbackIdx = 0) => {
@@ -481,8 +477,7 @@ const ContestPlayerOrderTable = () => {
             grandPrixGradeIds.has(p.contestGradeId))
       );
 
-    const isForceEntry = (p) =>
-      Boolean(p && (p.createdBy === "force" || p.createBy === "force"));
+    const isForceEntry = (p) => resolveEntryOrigin(p) === "force";
 
     const mergePlayerPreservingWeighIn = (ap, existingPool, usedIdxSet) => {
       const apOrigGrade = ap.originalGradeId || ap.contestGradeId;
@@ -583,7 +578,12 @@ const ContestPlayerOrderTable = () => {
           (Array.isArray(efp.photos) && efp.photos.length > 0
             ? efp.photos
             : ap.photos) || [],
-        ...(efp.createdBy ? { createdBy: efp.createdBy } : {}),
+        ...(efp.createdBy || ap.createdBy
+          ? { createdBy: efp.createdBy || ap.createdBy }
+          : {}),
+        ...(efp.createBy || ap.createBy
+          ? { createBy: efp.createBy || ap.createBy }
+          : {}),
       };
     };
 
@@ -768,8 +768,8 @@ const ContestPlayerOrderTable = () => {
     isDuplicate,
     entryKey,
   }) => {
-    const { playerName, playerGym, playerNumber, createBy, invoiceCreateAt } =
-      player;
+    const { playerName, playerGym, playerNumber, invoiceCreateAt } = player;
+    const entryOrigin = resolveEntryOrigin(player);
     const checked = selectedEntries.has(entryKey);
 
     return (
@@ -826,13 +826,19 @@ const ContestPlayerOrderTable = () => {
               <span className="font-medium text-sm text-[#171717]">
                 {playerName}
               </span>
-              {createBy === "manual" && (
+              {entryOrigin === "force" && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] border border-[#2563eb]/20 text-[11px] font-medium">
+                  <UserPlus size={11} strokeWidth={1.5} />
+                  <span>강제</span>
+                </span>
+              )}
+              {entryOrigin === "manual" && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#16a34a]/[0.08] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
                   <PenLine size={11} strokeWidth={1.5} />
                   <span>수기</span>
                 </span>
               )}
-              {(createBy === undefined || createBy === "web") && (
+              {entryOrigin === "web" && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
                   <Globe size={11} strokeWidth={1.5} />
                   <span>웹</span>
@@ -1135,9 +1141,10 @@ const ContestPlayerOrderTable = () => {
                                     playerGym,
                                     playerUid,
                                     playerNumber,
-                                    createBy,
                                     invoiceCreateAt,
                                   } = player;
+                                  const entryOrigin =
+                                    resolveEntryOrigin(player);
 
                                   const uidOrIdentity =
                                     playerUid ||
@@ -1191,7 +1198,16 @@ const ContestPlayerOrderTable = () => {
                                           </div>
                                           <div className="flex flex-1 min-w-[200px] items-center gap-2 flex-wrap text-sm font-medium text-[#171717]">
                                             <span>{playerName}</span>
-                                            {createBy === "manual" && (
+                                            {entryOrigin === "force" && (
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-[#2563eb] border border-[#2563eb]/20 text-[11px] font-medium">
+                                                <UserPlus
+                                                  size={11}
+                                                  strokeWidth={1.5}
+                                                />
+                                                <span>강제</span>
+                                              </span>
+                                            )}
+                                            {entryOrigin === "manual" && (
                                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#16a34a]/[0.08] text-[#16a34a] border border-[#16a34a]/20 text-[11px] font-medium">
                                                 <PenLine
                                                   size={11}
@@ -1200,8 +1216,7 @@ const ContestPlayerOrderTable = () => {
                                                 <span>수기</span>
                                               </span>
                                             )}
-                                            {(createBy === undefined ||
-                                              createBy === "web") && (
+                                            {entryOrigin === "web" && (
                                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
                                                 <Globe
                                                   size={11}

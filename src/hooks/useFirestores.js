@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   collection,
   doc,
@@ -13,31 +13,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-
-function sanitizeFirestoreData(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) =>
-      item === undefined ? null : sanitizeFirestoreData(item)
-    );
-  }
-  if (value.constructor === Object) {
-    const sanitized = {};
-    Object.keys(value).forEach((key) => {
-      const val = value[key];
-      if (val !== undefined) {
-        sanitized[key] = sanitizeFirestoreData(val);
-      }
-    });
-    return sanitized;
-  }
-  return value;
-}
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 
 export function useFirestoreQuery() {
   const [data, setData] = useState([]);
@@ -58,6 +34,7 @@ export function useFirestoreQuery() {
 
     try {
       setLoading(true);
+      setError(null);
 
       let q = collection(db, collectionName);
 
@@ -79,20 +56,17 @@ export function useFirestoreQuery() {
       }
 
       const querySnapshot = await getDocs(q);
-
-      const documents = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const documents = querySnapshot.docs.map((snap) => ({
+        id: snap.id,
+        ...snap.data(),
       }));
-
-      // 데이터가 없는 경우에도 state를 초기화함
 
       setData(documents);
       setLoading(false);
       return documents;
-    } catch (error) {
-      console.error(error);
-      setError(error);
+    } catch (err) {
+      console.error(err);
+      setError(err);
       setLoading(false);
       return [];
     }
@@ -107,7 +81,7 @@ export function useFirestoreQuery() {
 }
 
 export function useFirestoreGetDocument(collectionName) {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -118,19 +92,19 @@ export function useFirestoreGetDocument(collectionName) {
     }
     try {
       setLoading(true);
+      setError(null);
       const docSnapshot = await getDoc(doc(db, collectionName, collectionId));
       if (docSnapshot.exists()) {
         const getData = { id: docSnapshot.id, ...docSnapshot.data() };
         setData(getData);
         return getData;
       } else {
-        setError({ message: "Document does not exist" });
-        setData([]);
+        setData(null);
         return null;
       }
-    } catch (error) {
-      console.error(error);
-      setError(error);
+    } catch (err) {
+      console.error(err);
+      setError(err);
       return null;
     } finally {
       setLoading(false);
@@ -151,15 +125,16 @@ export function useFirestoreAddData(collectionName) {
   const [error, setError] = useState(null);
 
   const addData = async (newData) => {
-    if (!collectionName) {
-      const err = new Error("Collection name is required for addData");
+    if (!collectionName || !newData || typeof newData !== "object") {
+      const err = new Error("Collection name and valid object payload are required for addData");
       console.error(err);
       setError(err);
       return null;
     }
     try {
       setLoading(true);
-      const sanitizedData = sanitizeFirestoreData(newData);
+      setError(null);
+      const sanitizedData = sanitizeForFirestore(newData);
       const docRef = await addDoc(
         collection(db, collectionName),
         sanitizedData
@@ -167,9 +142,9 @@ export function useFirestoreAddData(collectionName) {
       const addedData = { ...sanitizedData, id: docRef.id };
       setData(addedData);
       return addedData;
-    } catch (error) {
-      console.error(error);
-      setError(error);
+    } catch (err) {
+      console.error(err);
+      setError(err);
       return null;
     } finally {
       setLoading(false);
@@ -180,14 +155,14 @@ export function useFirestoreAddData(collectionName) {
 }
 
 export function useFirestoreUpdateData(collectionName) {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const updateData = async (id, newData, callback) => {
-    if (!collectionName || !id) {
+    if (!collectionName || !id || !newData || typeof newData !== "object") {
       const err = new Error(
-        "Collection name and document ID are required for updateData"
+        "Collection name, document ID, and valid object payload are required for updateData"
       );
       console.error(err);
       setError(err);
@@ -195,16 +170,19 @@ export function useFirestoreUpdateData(collectionName) {
     }
     try {
       setLoading(true);
-      const sanitizedData = sanitizeFirestoreData(newData);
+      setError(null);
+      const sanitizedData = sanitizeForFirestore(newData);
       await updateDoc(doc(db, collectionName, id), sanitizedData);
       const updatedData = { ...sanitizedData };
       setData(updatedData);
       setLoading(false);
-      callback && callback();
+      if (typeof callback === "function") {
+        callback();
+      }
       return updatedData;
-    } catch (error) {
-      console.error(error);
-      setError(error);
+    } catch (err) {
+      console.error(err);
+      setError(err);
       setLoading(false);
       return null;
     }
@@ -214,24 +192,33 @@ export function useFirestoreUpdateData(collectionName) {
 }
 
 export function useFirestoreDeleteData(collectionName) {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const deleteData = async (id) => {
     if (!collectionName || !id) {
-      console.error(
-        new Error("Collection name and document ID are required for deleteData")
+      const err = new Error(
+        "Collection name and document ID are required for deleteData"
       );
+      console.error(err);
+      setError(err);
       return false;
     }
     try {
+      setLoading(true);
+      setError(null);
       await deleteDoc(doc(db, collectionName, id));
       setData(id);
       return true;
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      setError(err);
       return false;
+    } finally {
+      setLoading(false);
     }
   };
 
-  return { data, deleteData };
+  return { data, loading, error, deleteData };
 }

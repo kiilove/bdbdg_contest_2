@@ -11,6 +11,7 @@ import {
   getStagePlayerSortIndex,
   isGrandPrixPlayerEntry,
 } from "../functions/functions";
+import { resolveOriginalGradeTitle } from "../utils/playerEntryUtils";
 
 const ContestPlayerOrderTableAfter = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -75,18 +76,17 @@ const ContestPlayerOrderTableAfter = () => {
     setIsLoading(true);
     const dummy = [];
 
-    categories
+    [...(categories || [])]
       .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
-      .map((category, cIdx) => {
-        const matchedGrades = grades.filter(
+      .forEach((category) => {
+        const matchedGrades = (grades || []).filter(
           (grade) => grade.refCategoryId === category.contestCategoryId
         );
         const matchedGradesLength = matchedGrades.length;
-        matchedGrades
+        [...matchedGrades]
           .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
-          .map((grade, gIdx) => {
-            const matchedPlayerWithPlayerNumber = [];
-            const matchedPlayers = players.filter(
+          .forEach((grade) => {
+            const matchedPlayers = (players || []).filter(
               (player) => player.contestGradeId === grade.contestGradeId
             );
 
@@ -161,7 +161,7 @@ const ContestPlayerOrderTableAfter = () => {
 
           <div className="flex flex-col gap-4">
             {matchedArray.length > 0 &&
-              matchedArray
+              [...matchedArray]
                 .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
                 .map((matched, mIdx) => {
                   const {
@@ -197,7 +197,7 @@ const ContestPlayerOrderTableAfter = () => {
 
                       {isMobile ? (
                         <div className="flex flex-col gap-2.5 p-3">
-                          {matchedPlayers
+                          {[...matchedPlayers]
                             .sort(
                               (a, b) =>
                                 getStagePlayerSortIndex(a, matched) -
@@ -211,6 +211,12 @@ const ContestPlayerOrderTableAfter = () => {
                                 playerNoShow,
                                 isGradeChanged,
                               } = player;
+                              const isGpRow = isGrandPrixPlayerEntry(
+                                player,
+                                matched
+                              );
+                              const origGradeTitle =
+                                resolveOriginalGradeTitle(player);
 
                               return (
                                 <div
@@ -236,8 +242,15 @@ const ContestPlayerOrderTableAfter = () => {
                                           }
                                         />
                                       </div>
-                                      <div className="flex gap-1">
-                                        {isGradeChanged && (
+                                      <div className="flex gap-1 flex-wrap justify-end">
+                                        {isGpRow && origGradeTitle && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
+                                            {origGradeTitle === gradeTitle
+                                              ? origGradeTitle
+                                              : `${origGradeTitle} 1위`}
+                                          </span>
+                                        )}
+                                        {!isGpRow && isGradeChanged && (
                                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#b45309]/[0.10] text-[#b45309] text-[11px] font-medium">
                                             월체
                                           </span>
@@ -281,7 +294,7 @@ const ContestPlayerOrderTableAfter = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#171717]/[0.06]">
-                              {matchedPlayers
+                              {[...matchedPlayers]
                                 .sort(
                                   (a, b) =>
                                     getStagePlayerSortIndex(a, matched) -
@@ -294,12 +307,13 @@ const ContestPlayerOrderTableAfter = () => {
                                     playerNumber,
                                     playerNoShow,
                                     isGradeChanged,
-                                    originalgradeTitle,
                                   } = player;
                                   const isGpRow = isGrandPrixPlayerEntry(
                                     player,
                                     matched
                                   );
+                                  const origGradeTitle =
+                                    resolveOriginalGradeTitle(player);
 
                                   return (
                                     <tr
@@ -349,9 +363,11 @@ const ContestPlayerOrderTableAfter = () => {
                                       </td>
                                       <td className="w-36 py-3 px-4">
                                         <div className="flex gap-1.5 flex-wrap">
-                                          {isGpRow && originalgradeTitle && (
+                                          {isGpRow && origGradeTitle && (
                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
-                                              {originalgradeTitle} 1위
+                                              {origGradeTitle === gradeTitle
+                                                ? origGradeTitle
+                                                : `${origGradeTitle} 1위`}
                                             </span>
                                           )}
                                           {!isGpRow && isGradeChanged && (

@@ -110,10 +110,33 @@ export const buildMonitoringReadiness = ({
     Boolean(playerFinalId) &&
     (resolvedPlayersCount === null || resolvedPlayersCount > 0);
   const hasJudgesGap = Boolean(judgeSeatGapSummary?.hasGap);
+  const realtimeJudges = Array.isArray(realtimeData?.judges)
+    ? realtimeData.judges
+    : [];
+  const derivedRealtimeEmptySeats = (() => {
+    const expectedCount =
+      Number(realtimeData?.stageJudgeCount) || realtimeJudges.length;
+    if (expectedCount <= 0 || realtimeJudges.length === 0) return [];
+    const missing = [];
+    for (let i = 0; i < expectedCount; i += 1) {
+      const seatNo = i + 1;
+      const seatJudge =
+        realtimeJudges.find((j) => Number(j?.seatIndex) === seatNo) ??
+        (realtimeJudges[i]?.seatIndex === undefined ? realtimeJudges[i] : null);
+      if (!seatJudge?.judgeUid && !seatJudge?.judgeName) {
+        missing.push(seatNo);
+      }
+    }
+    return missing;
+  })();
+  const effectiveEmptyJudgeSeats =
+    Array.isArray(emptyJudgeSeats) && emptyJudgeSeats.length > 0
+      ? emptyJudgeSeats
+      : derivedRealtimeEmptySeats;
   const hasJudges =
     Boolean(judgeAssignId) &&
     (resolvedJudgesCount === null || resolvedJudgesCount > 0) &&
-    emptyJudgeSeats.length === 0 &&
+    effectiveEmptyJudgeSeats.length === 0 &&
     !hasJudgesGap;
   const hasCompareDoc = Boolean(compareListId);
   const hasLiveStage = Boolean(realtimeData?.stageId);
@@ -249,15 +272,15 @@ export const buildMonitoringReadiness = ({
             (judgeSeatGapSummary?.totalExpectedSeats > 0 &&
               judgeSeatGapSummary?.totalAssignedSeats === 0)
           ? "missing"
-          : emptyJudgeSeats.length > 0
+          : effectiveEmptyJudgeSeats.length > 0
           ? "missing"
           : hasJudgesGap
           ? "warning"
           : "ready",
       valueText: !judgeAssignId
         ? "심판배정 문서 미연결"
-        : emptyJudgeSeats.length > 0
-        ? `현재 무대 미배정: ${emptyJudgeSeats.join(", ")}번석`
+        : effectiveEmptyJudgeSeats.length > 0
+        ? `현재 무대 미배정: ${effectiveEmptyJudgeSeats.join(", ")}번석`
         : hasJudgesGap
         ? judgeSeatGapSummary.headlineText
         : judgeSeatGapSummary?.totalExpectedSeats > 0
@@ -271,8 +294,8 @@ export const buildMonitoringReadiness = ({
         (judgeSeatGapSummary?.totalExpectedSeats > 0 &&
           judgeSeatGapSummary?.totalAssignedSeats === 0)
           ? "심판 좌석 배정 데이터(contest_judges_assign)가 비어 있습니다. 심판석 로그인 및 채점을 위해 좌석 배정을 저장해 주세요."
-          : emptyJudgeSeats.length > 0
-          ? `현재 진행 무대에 심판이 배정되지 않은 좌석(${emptyJudgeSeats.join(
+          : effectiveEmptyJudgeSeats.length > 0
+          ? `현재 진행 무대에 심판이 배정되지 않은 좌석(${effectiveEmptyJudgeSeats.join(
               ", "
             )}번)이 있습니다. 즉시 좌석 배정을 보강해 주세요.`
           : hasJudgesGap

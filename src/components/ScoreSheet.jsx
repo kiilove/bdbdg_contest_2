@@ -1,5 +1,4 @@
 import React from "react";
-import YbbfLogo from "../assets/img/ybbf_logo.png";
 import CanvasWithImageData from "./CanvasWithImageData";
 
 const ScoreSheet = ({
@@ -11,26 +10,28 @@ const ScoreSheet = ({
   scoreTable,
   judgeHeadInfo,
 }) => {
+  void contestId;
+  void gradeId;
   return (
     <div className="flex w-full h-auto flex-col">
       <div className="flex w-full h-auto p-10">
         <div className="flex w-1/6">
           <div className="flex p-2 w-full justify-center items-center border border-gray-500">
-            <img src={contestInfo?.contestOrgLogo} className="w-42" />
+            <img src={contestInfo?.contestOrgLogo} alt="" className="w-42" />
           </div>
         </div>
         <div className="flex w-5/6 justify-start pl-5 py-3">
           <div className="flex w-full justify-start items-start flex-col gap-y-2">
             <span className="font-extrabold text-lg text-gray-700">
-              {contestInfo.contestTitle}
+              {contestInfo?.contestTitle}
             </span>
             <span className="font-semibold text-base text-gray-700">
               <span className="mr-2">장소 : </span>
-              {contestInfo.contestLocation}
+              {contestInfo?.contestLocation}
             </span>
             <span className="font-semibold text-base text-gray-700">
               <span className="mr-2">일자 : </span>
-              {contestInfo.contestDate}
+              {contestInfo?.contestDate}
             </span>
           </div>
         </div>
@@ -84,7 +85,7 @@ const ScoreSheet = ({
                   순위
                 </div>
                 {scoreTable?.length > 0 &&
-                  scoreTable[0].score.map((judge, jIdx) => {
+                  (scoreTable[0]?.score || []).map((judge, jIdx) => {
                     const { seatIndex } = judge;
                     return (
                       <div

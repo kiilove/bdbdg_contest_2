@@ -8,27 +8,31 @@ import {
 } from "../hooks/useFirestores";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 
+const parsePositiveInt = (val, fallback) => {
+  const parsed = Number.parseInt(val, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 const initCategoryInfo = {
   contestCategoryId: "",
   contestCategoryIndex: "",
   contestCategoryTitle: "",
   contestCategorySection: "",
-  contestCategroyGender: "남",
+  contestCategoryGender: "남",
   contestCategoryPriceType: "기본참가비",
-  contestCategroyIsOverall: "off",
+  contestCategoryIsOverall: false,
   contestCategoryType: "",
   contestCategoryJudgeType: "ranking",
+  contestCategoryJudgeCount: 5,
 };
 
 const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setmessage] = useState({});
-  const { currentContest, setCurrentContest } = useContext(
-    CurrentContestContext
-  );
+  const { currentContest } = useContext(CurrentContestContext);
   const [categoryInfo, setCategoryInfo] = useState({
     ...initCategoryInfo,
-    contestCategoryIndex: parseInt(propState.count) + 1,
+    contestCategoryIndex: (Number.parseInt(propState?.count, 10) || 0) + 1,
   });
   const [categorysList, setCategorysList] = useState({});
   const [categorysArray, setCategorysArray] = useState([]);
@@ -69,9 +73,27 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
       {}
     );
 
+    const safeCategoryIndex = parsePositiveInt(
+      updatedCategoryInfo.contestCategoryIndex,
+      1
+    );
+    const safeJudgeCount = parsePositiveInt(
+      updatedCategoryInfo.contestCategoryJudgeCount,
+      5
+    );
+
+    const normalizedUpdatedInfo = {
+      ...updatedCategoryInfo,
+      contestCategoryIndex: safeCategoryIndex,
+      contestCategoryJudgeCount: safeJudgeCount,
+      contestCategoryIsOverall: Boolean(
+        updatedCategoryInfo.contestCategoryIsOverall
+      ),
+    };
+
     setCategoryInfo((prevInfo) => ({
       ...prevInfo,
-      ...updatedCategoryInfo,
+      ...normalizedUpdatedInfo,
     }));
 
     const dummy = [...categorysArray];
@@ -79,11 +101,8 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
     switch (propState.title) {
       case "종목추가":
         dummy.push({
-          ...updatedCategoryInfo,
+          ...normalizedUpdatedInfo,
           contestCategoryId: uuidv4(),
-          contestCategoryIndex: parseInt(
-            updatedCategoryInfo.contestCategoryIndex
-          ),
         });
 
         await handleSaveCategorys(dummy);
@@ -91,18 +110,15 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         setState(dummy);
         setCategoryInfo({
           ...initCategoryInfo,
-          contestCategoryIndex:
-            parseInt(updatedCategoryInfo.contestCategoryIndex) + 1,
-          contestCategoryJudgeCount: parseInt(
-            updatedCategoryInfo.contestCategoryJudgeCount
-          ),
+          contestCategoryIndex: safeCategoryIndex + 1,
+          contestCategoryJudgeCount: safeJudgeCount,
         });
 
         categoryInfoRef.current.contestCategorySection?.focus?.();
 
         break;
 
-      case "종목수정":
+      case "종목수정": {
         const findCategoryIndex = dummy.findIndex(
           (category) => category.contestCategoryId === propState.categoryId
         );
@@ -110,19 +126,14 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         if (findCategoryIndex !== -1) {
           dummy.splice(findCategoryIndex, 1, {
             ...dummy[findCategoryIndex],
-            ...updatedCategoryInfo,
-            contestCategoryIndex: parseInt(
-              updatedCategoryInfo.contestCategoryIndex
-            ),
-            contestCategoryJudgeCount: parseInt(
-              updatedCategoryInfo.contestCategoryJudgeCount
-            ),
+            ...normalizedUpdatedInfo,
           });
           await handleSaveCategorys(dummy);
           setCategorysArray(dummy);
           setState(dummy);
         }
         break;
+      }
 
       default:
         break;
@@ -169,9 +180,11 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         contestCategoryIsOverall: e.target.checked,
       });
     } else if (name === "contestCategoryIndex") {
+      const trimmed = String(value ?? "").trim();
+      const parsed = Number.parseInt(trimmed, 10);
       setCategoryInfo({
         ...categoryInfo,
-        contestCategoryIndex: parseInt(value),
+        contestCategoryIndex: trimmed === "" ? "" : Number.isFinite(parsed) ? parsed : "",
       });
     } else {
       setCategoryInfo({
@@ -183,8 +196,24 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
 
   useEffect(() => {
     getCategorys();
-    if (propState.title === "종목수정") {
-      setCategoryInfo({ ...propState.info });
+    if (propState.title === "종목수정" && propState.info) {
+      const rawOverall =
+        propState.info.contestCategoryIsOverall ??
+        propState.info.contestCategroyIsOverall;
+      setCategoryInfo({
+        ...initCategoryInfo,
+        ...propState.info,
+        contestCategoryGender:
+          propState.info.contestCategoryGender ||
+          propState.info.contestCategroyGender ||
+          "남",
+        contestCategoryIsOverall:
+          Boolean(rawOverall) && rawOverall !== "off",
+        contestCategoryJudgeCount: parsePositiveInt(
+          propState.info.contestCategoryJudgeCount,
+          5
+        ),
+      });
     }
     categoryInfoRef.current.contestCategorySection?.focus?.();
   }, []);

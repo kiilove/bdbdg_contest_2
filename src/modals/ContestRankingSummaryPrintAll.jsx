@@ -1,20 +1,14 @@
-import React, { useRef } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import ScoreSheet from "../components/ScoreSheet";
 import ScoreCardRankForm from "../components/ScoreCardRankForm";
 import ScoreCardPointForm from "../components/ScoreCardPointForm";
-import { useState } from "react";
-import {
-  useFirestoreGetDocument,
-  useFirestoreQuery,
-} from "../hooks/useFirestores";
-import { useContext } from "react";
+import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useEffect } from "react";
 import { where } from "firebase/firestore";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
 import { Printer, X } from "lucide-react";
-import { result } from "lodash";
+import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 
 const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
   const [resultTable, setResultTable] = useState([]);
@@ -42,12 +36,12 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
       await fetchQuery
         .getDocuments("contest_results_list", condition)
         .then((data) => {
-          console.log(data);
-          if (data.length === 0) {
-            console.log("데이터가 없음");
+          const deduped = dedupeContestResultsByGrade(data, propContestId);
+          if (deduped.length === 0) {
+            setResultTable([]);
             return;
           } else {
-            setResultTable(() => [...data]);
+            setResultTable(() => [...deduped]);
           }
         });
     } catch (error) {
@@ -108,29 +102,26 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
       return acc;
     }, []);
 
-    groupedSeatIndex
-      .sort((a, b) => a.seatIndex - b.seatIndex)
-      .map((judge, jIdx) => {
-        const findJudgeSignature = JudgeArray.find(
-          (f) => f.judgeUid === judge.judgeUid
-        );
-        if (findJudgeSignature) {
-          groupedSeatIndex[jIdx].judgeSignature =
-            findJudgeSignature.judgeSignature;
-          groupedSeatIndex[jIdx].judgeName = findJudgeSignature.judgeName;
-          groupedSeatIndex[jIdx].judgePromoter =
-            findJudgeSignature.judgePromoter;
-        }
-        const findPlayers = scoreArray.filter(
-          (f) => f.seatIndex === judge.seatIndex
-        );
-        const { playerNumber, playerScore, judgeUid } = findPlayers;
+    const sortedSeats = [...groupedSeatIndex].sort(
+      (a, b) => a.seatIndex - b.seatIndex
+    );
+    sortedSeats.forEach((judge, jIdx) => {
+      const findJudgeSignature = JudgeArray.find(
+        (f) => f.judgeUid === judge.judgeUid
+      );
+      if (findJudgeSignature) {
+        sortedSeats[jIdx].judgeSignature = findJudgeSignature.judgeSignature;
+        sortedSeats[jIdx].judgeName = findJudgeSignature.judgeName;
+        sortedSeats[jIdx].judgePromoter = findJudgeSignature.judgePromoter;
+      }
+      const findPlayers = scoreArray.filter(
+        (f) => f.seatIndex === judge.seatIndex
+      );
 
-        groupedSeatIndex[jIdx].players = [...findPlayers];
-      });
+      sortedSeats[jIdx].players = [...findPlayers];
+    });
 
-    console.log(groupedSeatIndex);
-    return groupedSeatIndex;
+    return sortedSeats;
     // .map((group) => {
     //   const playerItem = arr.filter(
     //     (item) => item.seatIndex === group.seatIndex
@@ -175,17 +166,20 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
   useEffect(() => {
     const scoreCollectionName =
       currentContest?.contestInfo?.contestCollectionName ||
-      currentContest?.contests?.collectionName;
+      currentContest?.contests?.collectionName ||
+      currentContest?.contests?.contestCollectionName;
     if (!props?.contestId || !props?.gradeId || !scoreCollectionName) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     fetchPool(props.contestId, props.gradeId, scoreCollectionName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     props,
     currentContest?.contestInfo?.contestCollectionName,
     currentContest?.contests?.collectionName,
+    currentContest?.contests?.contestCollectionName,
   ]);
 
   useEffect(() => {
@@ -249,88 +243,89 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
             <LoadingPage />
           </div>
         ) : resultTable?.length > 0 ? (
-          resultTable.map((table, rIdx) => {
-            const {
-              contestId,
-              categoryTitle,
-              gradeId,
-              gradeTitle,
-              result,
-            } = table;
+          <div ref={printRef} className="flex flex-col items-center w-auto">
+            {resultTable.map((table, rIdx) => {
+              const {
+                contestId,
+                categoryTitle,
+                gradeId,
+                gradeTitle,
+                result: tableResult,
+              } = table;
 
-            return (
-              <div
-                key={table.id || rIdx}
-                className="flex shadow-[0_1px_3px_rgba(0,0,0,0.08)] bg-white"
-                ref={printRef}
-                style={{ width: "210mm", minHeight: "297mm" }}
-              >
-                <div className="flex flex-col w-full h-auto">
-                  <div className="flex w-full break-after-page mb-20">
-                    <ScoreSheet
-                      contestId={contestId}
-                      contestInfo={currentContest.contestInfo}
-                      gradeId={gradeId}
-                      categoryTitle={categoryTitle}
-                      gradeTitle={gradeTitle}
-                      scoreTable={result}
-                      judgeHeadInfo={judgeHeadInfo}
-                    />
-                  </div>
-                  <div className="flex w-full h-auto flex-col">
-                    {scoreCardPrintArray?.length > 0 &&
-                      [...scoreCardPrintArray]
-                        .sort((a, b) => a.seatIndex - b.seatIndex)
-                        .map((card, cIdx) => {
-                          const {
-                            seatIndex,
-                            categoryTitle,
-                            gradeTitle,
-                            judgeSignature,
-                            judgeName,
-                            judgePromoter,
-                            players,
-                          } = card;
-                          const isPointType =
-                            (props?.categoryJudgeType || table?.scoreType) ===
-                            "point";
-                          return (
-                            <React.Fragment key={seatIndex ?? cIdx}>
-                              {isPointType ? (
-                                <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                  <ScoreCardPointForm
-                                    contestInfo={currentContest.contestInfo}
-                                    seatIndex={seatIndex}
-                                    categoryTitle={categoryTitle}
-                                    gradeTitle={gradeTitle}
-                                    judgeSignature={judgeSignature}
-                                    judgeName={judgeName}
-                                    judgePromoter={judgePromoter}
-                                    players={players}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                  <ScoreCardRankForm
-                                    contestInfo={currentContest.contestInfo}
-                                    seatIndex={seatIndex}
-                                    categoryTitle={categoryTitle}
-                                    gradeTitle={gradeTitle}
-                                    judgeSignature={judgeSignature}
-                                    judgeName={judgeName}
-                                    judgePromoter={judgePromoter}
-                                    players={players}
-                                  />
-                                </div>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
+              return (
+                <div
+                  key={table.id || rIdx}
+                  className="flex shadow-[0_1px_3px_rgba(0,0,0,0.08)] bg-white"
+                  style={{ width: "210mm", minHeight: "297mm" }}
+                >
+                  <div className="flex flex-col w-full h-auto">
+                    <div className="flex w-full break-after-page mb-20">
+                      <ScoreSheet
+                        contestId={contestId}
+                        contestInfo={currentContest?.contestInfo}
+                        gradeId={gradeId}
+                        categoryTitle={categoryTitle}
+                        gradeTitle={gradeTitle}
+                        scoreTable={tableResult}
+                        judgeHeadInfo={judgeHeadInfo}
+                      />
+                    </div>
+                    <div className="flex w-full h-auto flex-col">
+                      {scoreCardPrintArray?.length > 0 &&
+                        [...scoreCardPrintArray]
+                          .sort((a, b) => a.seatIndex - b.seatIndex)
+                          .map((card, cIdx) => {
+                            const {
+                              seatIndex,
+                              categoryTitle: cardCategoryTitle,
+                              gradeTitle: cardGradeTitle,
+                              judgeSignature,
+                              judgeName,
+                              judgePromoter,
+                              players,
+                            } = card;
+                            const isPointType =
+                              (props?.categoryJudgeType || table?.scoreType) ===
+                              "point";
+                            return (
+                              <React.Fragment key={seatIndex ?? cIdx}>
+                                {isPointType ? (
+                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
+                                    <ScoreCardPointForm
+                                      contestInfo={currentContest?.contestInfo}
+                                      seatIndex={seatIndex}
+                                      categoryTitle={cardCategoryTitle}
+                                      gradeTitle={cardGradeTitle}
+                                      judgeSignature={judgeSignature}
+                                      judgeName={judgeName}
+                                      judgePromoter={judgePromoter}
+                                      players={players}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
+                                    <ScoreCardRankForm
+                                      contestInfo={currentContest?.contestInfo}
+                                      seatIndex={seatIndex}
+                                      categoryTitle={cardCategoryTitle}
+                                      gradeTitle={cardGradeTitle}
+                                      judgeSignature={judgeSignature}
+                                      judgeName={judgeName}
+                                      judgePromoter={judgePromoter}
+                                      players={players}
+                                    />
+                                  </div>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         ) : (
           <div className="flex-1 flex items-center justify-center py-16 text-xs text-[#737373]">
             확정된 집계표 데이터가 없습니다.

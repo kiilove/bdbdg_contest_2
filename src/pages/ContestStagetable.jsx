@@ -20,6 +20,8 @@ import {
   GripVertical,
 } from "lucide-react";
 import BibTag from "../components/ui/BibTag";
+import { isActiveStagePlayer } from "../utils/playerEntryUtils";
+import { buildStageWithSyncedMetadata } from "../utils/stageMetadataUtils";
 
 const ContestStagetable = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -106,14 +108,17 @@ const ContestStagetable = () => {
     setStagesArray([...propData]);
   };
 
-  const handleInitStages = (contestId) => {
+  const handleInitStages = () => {
     const stages = [];
     let stageNumber = 0;
 
-    categoriesArray
-      .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+    [...categoriesArray]
+      .sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      )
       .forEach((category) => {
-        console.log(category);
         const {
           contestCategoryId: categoryId,
           contestCategoryTitle: categoryTitle,
@@ -130,8 +135,12 @@ const ContestStagetable = () => {
         if (matchedGrades?.length === 0) {
           return null;
         }
-        matchedGrades
-          .sort((a, b) => a.contestGradeIndex - b.contestGradeIndex)
+        [...matchedGrades]
+          .sort(
+            (a, b) =>
+              (Number(a?.contestGradeIndex) || 0) -
+              (Number(b?.contestGradeIndex) || 0)
+          )
           .forEach((grade) => {
             const {
               contestGradeId: gradeId,
@@ -141,8 +150,7 @@ const ContestStagetable = () => {
 
             const matchedPlayers = playersArray.filter(
               (player) =>
-                player.contestGradeId === gradeId &&
-                player.playerNoShow === false
+                player.contestGradeId === gradeId && isActiveStagePlayer(player)
             );
 
             if (
@@ -154,28 +162,29 @@ const ContestStagetable = () => {
             }
 
             stageNumber++;
-            const newStageInfo = {
-              stageId: uuidv4(),
-              stageNumber,
-              categoryJudgeCount,
-              categoryId,
-              categoryTitle,
-              categoryIsOverall,
-              categoryJudgeType,
-              categorySection,
-              grades: [
+            const newStageInfo = buildStageWithSyncedMetadata(
+              {
+                stageId: uuidv4(),
+                stageNumber,
+              },
+              [
                 {
                   categoryId,
                   categoryTitle,
                   categoryIndex,
                   categoryJudgeCount,
+                  categoryIsOverall,
+                  categoryJudgeType,
+                  categorySection,
                   gradeId,
                   gradeTitle,
                   gradeIndex,
-                  playerCount: matchedPlayers?.length,
+                  playerCount: matchedPlayers.length,
                 },
               ],
-            };
+              categoriesArray,
+              playersArray
+            );
 
             stages.push({ ...newStageInfo });
           });
@@ -226,45 +235,6 @@ const ContestStagetable = () => {
     }
   };
 
-  const buildStageWithMetadata = (baseStage, primaryGrade) => {
-    const matchedCat = (categoriesArray || []).find(
-      (c) => c?.contestCategoryId === primaryGrade?.categoryId
-    );
-    const resolvedSection =
-      matchedCat?.contestCategorySection ??
-      primaryGrade?.categorySection ??
-      baseStage?.categorySection ??
-      baseStage?.section;
-
-    return {
-      ...baseStage,
-      categoryId:
-        matchedCat?.contestCategoryId ??
-        primaryGrade?.categoryId ??
-        baseStage?.categoryId,
-      categoryTitle:
-        matchedCat?.contestCategoryTitle ??
-        primaryGrade?.categoryTitle ??
-        baseStage?.categoryTitle,
-      categoryJudgeCount:
-        matchedCat?.contestCategoryJudgeCount ??
-        primaryGrade?.categoryJudgeCount ??
-        baseStage?.categoryJudgeCount,
-      categoryIsOverall:
-        matchedCat?.contestCategoryIsOverall ??
-        primaryGrade?.categoryIsOverall ??
-        baseStage?.categoryIsOverall,
-      categoryJudgeType:
-        matchedCat?.contestCategoryJudgeType ??
-        primaryGrade?.categoryJudgeType ??
-        baseStage?.categoryJudgeType,
-      categorySection: resolvedSection,
-      ...(baseStage?.section !== undefined || resolvedSection !== undefined
-        ? { section: baseStage?.section ?? resolvedSection }
-        : {}),
-    };
-  };
-
   const splitStage = (stageId, gradeIndex) => {
     const stageIndex = stagesArray.findIndex(
       (stage) => stage.stageId === stageId
@@ -289,17 +259,19 @@ const ContestStagetable = () => {
     const [removedGrade] = remainingGrades.splice(gradeIndex, 1);
     if (!removedGrade || remainingGrades.length === 0) return;
 
-    const updatedParentStage = {
-      ...buildStageWithMetadata(parentStage, remainingGrades[0]),
-      stageId: parentStage.stageId,
-      grades: remainingGrades,
-    };
+    const updatedParentStage = buildStageWithSyncedMetadata(
+      { ...parentStage, stageId: parentStage.stageId },
+      remainingGrades,
+      categoriesArray,
+      playersArray
+    );
 
-    const newStage = {
-      ...buildStageWithMetadata(parentStage, removedGrade),
-      stageId: uuidv4(),
-      grades: [removedGrade],
-    };
+    const newStage = buildStageWithSyncedMetadata(
+      { ...parentStage, stageId: uuidv4() },
+      [removedGrade],
+      categoriesArray,
+      playersArray
+    );
 
     let updatedStagesArray = [...stagesArray];
     updatedStagesArray.splice(stageIndex, 1, updatedParentStage, newStage);
@@ -315,76 +287,91 @@ const ContestStagetable = () => {
   };
 
   const handleRefreshCategories = () => {
-    const updatedStages = [...stagesArray];
+    const updatedStages = stagesArray.map((stage) =>
+      buildStageWithSyncedMetadata(
+        stage,
+        stage.grades || [],
+        categoriesArray,
+        playersArray
+      )
+    );
 
-    categoriesArray
-      .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
+    [...categoriesArray]
+      .sort(
+        (a, b) =>
+          (Number(a?.contestCategoryIndex) || 0) -
+          (Number(b?.contestCategoryIndex) || 0)
+      )
       .forEach((category) => {
-        const matchedGrades = gradesArray.filter(
-          (grade) => grade.refCategoryId === category.contestCategoryId
-        );
+        const matchedGrades = gradesArray
+          .filter((grade) => grade.refCategoryId === category.contestCategoryId)
+          .sort(
+            (a, b) =>
+              (Number(a?.contestGradeIndex) || 0) -
+              (Number(b?.contestGradeIndex) || 0)
+          );
 
         if (matchedGrades?.length === 0) return;
 
-        matchedGrades.forEach((grade) => {
-          const matchedPlayers =
-            category.contestCategorySection === "그랑프리"
-              ? []
-              : playersArray.filter(
-                  (player) =>
-                    player.contestGradeId === grade.contestGradeId &&
-                    player.playerNoShow === false
-                );
+        const isGrandPrixOrOverall =
+          category.contestCategorySection === "그랑프리" ||
+          Boolean(category.contestCategoryIsOverall);
 
-          if (
-            category.contestCategorySection !== "그랑프리" &&
-            matchedPlayers.length === 0
-          )
+        matchedGrades.forEach((grade) => {
+          const matchedPlayers = playersArray.filter(
+            (player) =>
+              player.contestGradeId === grade.contestGradeId &&
+              isActiveStagePlayer(player)
+          );
+
+          if (!isGrandPrixOrOverall && matchedPlayers.length === 0) {
             return;
+          }
 
           const isAlreadyInStage = updatedStages.some((stage) =>
-            stage.grades.some((g) => g.gradeId === grade.contestGradeId)
+            (stage.grades || []).some((g) => g.gradeId === grade.contestGradeId)
           );
 
           if (!isAlreadyInStage) {
-            const newStageInfo = {
-              stageId: uuidv4(),
-              stageNumber: updatedStages.length + 1,
-              categoryJudgeCount: category.contestCategoryJudgeCount,
-              categoryId: category.contestCategoryId,
-              categoryTitle: category.contestCategoryTitle,
-              categoryIsOverall: category.contestCategoryIsOverall,
-              categoryJudgeType: category.contestCategoryJudgeType,
-              categorySection: category.contestCategorySection,
-              grades: [
+            const newStageInfo = buildStageWithSyncedMetadata(
+              {
+                stageId: uuidv4(),
+                stageNumber: updatedStages.length + 1,
+              },
+              [
                 {
                   categoryId: category.contestCategoryId,
                   categoryTitle: category.contestCategoryTitle,
                   categoryIndex: category.contestCategoryIndex,
                   categoryJudgeCount: category.contestCategoryJudgeCount,
+                  categoryIsOverall: category.contestCategoryIsOverall,
+                  categoryJudgeType: category.contestCategoryJudgeType,
+                  categorySection: category.contestCategorySection,
                   gradeId: grade.contestGradeId,
                   gradeTitle: grade.contestGradeTitle,
                   gradeIndex: grade.contestGradeIndex,
-                  playerCount:
-                    category.contestCategorySection === "그랑프리"
-                      ? 0
-                      : matchedPlayers?.length,
+                  playerCount: matchedPlayers.length,
                 },
               ],
-            };
-
-            console.log(newStageInfo);
+              categoriesArray,
+              playersArray
+            );
 
             updatedStages.push(newStageInfo);
           }
         });
       });
 
-    setStagesArray([...updatedStages]);
+    setStagesArray(
+      updatedStages.map((stage, idx) => ({
+        ...stage,
+        stageNumber: idx + 1,
+      }))
+    );
   };
 
   const onDragEnd = (result) => {
-    const { destination, source, draggableId, type } = result;
+    const { destination, source, type } = result;
 
     if (!destination) {
       return;
@@ -425,10 +412,12 @@ const ContestStagetable = () => {
       const [removed] = newGradeIds.splice(source.index, 1);
       newGradeIds.splice(destination.index, 0, removed);
 
-      const newStage = {
-        ...start,
-        grades: newGradeIds,
-      };
+      const newStage = buildStageWithSyncedMetadata(
+        start,
+        newGradeIds,
+        categoriesArray,
+        playersArray
+      );
 
       const newStagesArray = stagesArray
         .map((stage) => (stage.stageId === start.stageId ? newStage : stage))
@@ -444,17 +433,27 @@ const ContestStagetable = () => {
 
     const startGradeIds = Array.from(start.grades || []);
     const [removed] = startGradeIds.splice(source.index, 1);
-    const newStart = {
-      ...start,
-      grades: startGradeIds,
-    };
+    const newStart =
+      startGradeIds.length > 0
+        ? buildStageWithSyncedMetadata(
+            start,
+            startGradeIds,
+            categoriesArray,
+            playersArray
+          )
+        : {
+            ...start,
+            grades: [],
+          };
 
     const finishGradeIds = Array.from(finish.grades || []);
     finishGradeIds.splice(destination.index, 0, removed);
-    const newFinish = {
-      ...finish,
-      grades: finishGradeIds,
-    };
+    const newFinish = buildStageWithSyncedMetadata(
+      finish,
+      finishGradeIds,
+      categoriesArray,
+      playersArray
+    );
 
     const newStagesArray = stagesArray
       .map((stage) => {
@@ -641,12 +640,15 @@ const ContestStagetable = () => {
                                             gradeTitle,
                                             playerCount,
                                           } = grade;
+                                          const gradeDragId = `${stageId}::${
+                                            grade.gradeId || gIdx
+                                          }`;
 
                                           return (
                                             <Draggable
-                                              draggableId={`${stageId}-${gIdx}`}
+                                              draggableId={gradeDragId}
                                               index={gIdx}
-                                              key={`${stageId}-${gIdx}`}
+                                              key={gradeDragId}
                                             >
                                               {(provided, snapshot) => (
                                                 <div
