@@ -170,14 +170,16 @@ const ManagementHome = ({ children }) => {
     const userGroup = userInfo?.userGroup;
     if (!Array.isArray(MenuArray) || !userGroup) return [];
 
-    return MenuArray.filter((menu) =>
-      menu?.requiredGroup?.includes(userGroup)
+    return MenuArray.filter(
+      (menu) => !menu?.hidden && menu?.requiredGroup?.includes(userGroup)
     )
       .map((menu) => {
         if (menu.subMenus && menu.subMenus.length > 0) {
           const visibleSubMenus = menu.subMenus.filter(
             (sub) =>
-              sub?.requiredGroup?.includes(userGroup) && sub.title !== "로그아웃"
+              !sub?.hidden &&
+              sub?.requiredGroup?.includes(userGroup) &&
+              sub.title !== "로그아웃"
           );
           if (visibleSubMenus.length === 0) return null;
           return {

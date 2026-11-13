@@ -91,6 +91,7 @@ export const MenuArray = [
         icon: <Music {...iconProps} />,
         link: "/contestmusicsetting",
         requiredGroup: ["admin"],
+        hidden: true,
       },
     ],
   },
