@@ -159,11 +159,11 @@ export const buildMonitoringReadiness = ({
         : null,
       primaryAction: {
         label: "대회 기본정보",
-        path: "/contestinfo",
+        path: "/contest-setup?tab=info",
       },
       secondaryAction: {
-        label: "종목·체급 설정",
-        path: "/contesttimetable",
+        label: "종목·체급 설계",
+        path: "/contest-categories",
       },
     },
     {
@@ -175,12 +175,12 @@ export const buildMonitoringReadiness = ({
       valueText: "접수 명단 보강 · 현장 추가",
       reason: null,
       primaryAction: {
-        label: "참가신청서 관리",
-        path: "/contestinvoicetable",
+        label: "참가접수 · 입금확정",
+        path: "/contest-entries?tab=invoices",
       },
       secondaryAction: {
-        label: "수동 참가등록",
-        path: "/contestnewinvoicemanual",
+        label: "수기 신청서 등록",
+        path: "/contest-entries?tab=manual",
       },
     },
     {
@@ -200,12 +200,12 @@ export const buildMonitoringReadiness = ({
         ? "계측 후 최종 확정된 출전선수 명단(contest_players_final)이 0명입니다. 계측/번호 배정 후 최종 명단을 저장해 주세요."
         : null,
       primaryAction: {
-        label: "계측 · 번호배정",
-        path: "/contestplayerweighintable",
+        label: "② 선수 계측 · 확정",
+        path: "/stage-2-weighin",
       },
       secondaryAction: {
-        label: "최종 출전명단 확정",
-        path: "/contestplayerordertableafter",
+        label: "③ 최종 출전 · 강제등록",
+        path: "/stage-3-final",
       },
     },
     {
@@ -225,8 +225,8 @@ export const buildMonitoringReadiness = ({
         ? "편성된 무대 진행순서(contest_stages_assign)가 0개입니다. 무대 진행순서를 먼저 생성·저장해야 대회를 시작할 수 있습니다."
         : null,
       primaryAction: {
-        label: "무대 진행순서 편성",
-        path: "/conteststagetable",
+        label: "④ 무대 진행 큐 편성",
+        path: "/stage-4-stages",
       },
     },
     {
@@ -261,7 +261,11 @@ export const buildMonitoringReadiness = ({
           : null,
       primaryAction: {
         label: "심판 좌석배정",
-        path: "/contestjudgetable",
+        path: "/judges-hub?tab=assign",
+      },
+      secondaryAction: {
+        label: "심판 선발·비번",
+        path: "/judges-hub?tab=pool",
       },
     },
     {

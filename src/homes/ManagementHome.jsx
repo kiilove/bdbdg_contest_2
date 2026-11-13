@@ -190,14 +190,23 @@ const ManagementHome = ({ children }) => {
     }));
   };
 
-  const isRouteActive = (link) => {
-    if (!link) return false;
-    if (link === "/") {
-      return location.pathname === "/";
-    }
-    return (
-      location.pathname === link || location.pathname.startsWith(`${link}/`)
-    );
+  const isRouteActive = (itemOrLink) => {
+    const link = typeof itemOrLink === "string" ? itemOrLink : itemOrLink?.link;
+    const matchPaths =
+      typeof itemOrLink === "object" && Array.isArray(itemOrLink?.matchPaths)
+        ? itemOrLink.matchPaths
+        : link
+        ? [link]
+        : [];
+    if (matchPaths.length === 0) return false;
+
+    const currentPath = location.pathname.toLowerCase();
+    return matchPaths.some((p) => {
+      const target = String(p || "").toLowerCase();
+      if (!target) return false;
+      if (target === "/") return currentPath === "/";
+      return currentPath === target || currentPath.startsWith(`${target}/`);
+    });
   };
 
   const filteredMenus = useMemo(() => {
@@ -250,7 +259,7 @@ const ManagementHome = ({ children }) => {
       : userInfo?.userContext || "운영 매니저";
 
   const renderNavItem = (item) => {
-    const active = isRouteActive(item.link);
+    const active = isRouteActive(item);
     return (
       <button
         key={item.link}

@@ -1,60 +1,60 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import React from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import koKR from "antd/locale/ko_KR";
 import "./App.css";
 
 import Login from "./pages/Login";
 import ManagementHome from "./homes/ManagementHome";
-import ContestInfo from "./pages/ContestInfo";
-import ContestTimetable from "./pages/ContestTimetable";
 import { CurrentContestProvider } from "./contexts/CurrentContestContext";
-import NewContest from "./pages/NewContest";
-import ContestInvoiceTable from "./pages/ContestInvoiceTable";
-import ContestPlayerOrderTable from "./pages/ContestPlayerWeighInTable";
-import ContestNewInvoiceManual from "./pages/ContestNewInvoiceManual";
-import ContestJudgeTable from "./pages/ContestJudgeTable";
-import ContestPlayerOrderTableAfter from "./pages/ContestPlayerOrderTableAfter";
-import ContestMonitoring from "./pages/ContestMonitoring";
+import { DeviceProvider } from "./contexts/DeviceContext";
+
+import Dashboard from "./pages/Dashboard";
 import ContestRankSummary from "./pages/ContestRankSummary";
-import ContestStagetable from "./pages/ContestStagetable";
 import PrintBase from "./printForms/PrintBase";
-import PrintPlayersFinal from "./printForms/PrintPlayersFinal";
-import ContestPlayerOrderTableGrandPrix from "./pages/ContestPlayerOrderTableGrandPrix";
-import AwardList from "./printForms/AwardList";
+import MeasurePrint from "./printForms/MeasurePrint";
 import StandingTableType1 from "./pages/StandingTableType1";
-import RandomPlayerGenerator from "./pages/RandomPlayerGenerator";
-import ContestSearchAndDelete from "./pages/ContestSearchAndDelete";
-import PrintPlayerStanding from "./printForms/PrintPlayerStanding";
 import RankingAnnouncement from "./pages/RankingAnnouncement";
-import PrintSummary from "./printForms/PrintSummary";
 import ScreenLobby from "./pages/ScreenLobby";
 import Idle from "./pages/Idle";
-import DelaySettings from "./pages/DelaySettings";
-import ContestForceManual from "./pages/ContestForceManual";
-import QRCodeGenerator from "./pages/QRcodeGenerator";
 import SelectDatabase from "./pages/SelectDatabase";
-import MeasurePrint from "./printForms/MeasurePrint";
-import FinalPlayerListPrint from "./printForms/FinalPlayerListPrint";
-import StandingPrint from "./printForms/StandingPrint";
-import Dashboard from "./pages/Dashboard";
-import UnifiedPrint from "./printForms/UnifiedPrint";
-import { DeviceProvider } from "./contexts/DeviceContext";
 import Logout from "./pages/Logout";
-import GymGroupPrint from "./printForms/GymGroupPrint";
-import ContestPlayerWeighInTable from "./pages/ContestPlayerWeighInTable";
-import ContestMusicSetting from "./pages/ContestMusicSetting";
-import RealtimeAudioCenter from "./pages/RealtimeAudioCenter";
 import VibeFlowAudioCenter from "./pages/broadcast/VibeFlowAudioCenter";
-import AssociationManagers from "./pages/AssociationManagers";
-import ScoreResultManager from "./pages/ScoreResultManager";
-import SimpleInvoicesAdmin from "./pages/SimpleInvoicesAdmin";
-import ContestResultManager from "./pages/ContestResultManager";
-import JudgeAssignmentPrint from "./pages/JudgeAssignmentPrint";
-import JudgeSeatMatrixPrint from "./pages/JudgeSeatMatrixPrint";
 import StageLiveDisplay from "./pages/broadcast/StageLiveDisplay";
 import StageLiveDisplaySquare from "./pages/broadcast/StageLiveDisplaySquare";
-import ContestSponsorManager from "./pages/broadcast/ContestSponsorManager";
 import ContestMonitoringMC from "./pages/ContestMonitoringMC";
+
+// BDBDg v3 Workflow Hubs (5-Layer Raw-Data Preserving Pipeline)
+import ContestSetupHub from "./pages/hubs/ContestSetupHub";
+import ContestCategoriesHub from "./pages/hubs/ContestCategoriesHub";
+import ContestEntriesHub from "./pages/hubs/ContestEntriesHub";
+import Stage1NumberingHub from "./pages/hubs/Stage1NumberingHub";
+import Stage2WeighInHub from "./pages/hubs/Stage2WeighInHub";
+import Stage3FinalPlayersHub from "./pages/hubs/Stage3FinalPlayersHub";
+import Stage4StagesHub from "./pages/hubs/Stage4StagesHub";
+import JudgesHub from "./pages/hubs/JudgesHub";
+import LiveMonitoringHub from "./pages/hubs/LiveMonitoringHub";
+import AudioCenterHub from "./pages/hubs/AudioCenterHub";
+import BroadcastHub from "./pages/hubs/BroadcastHub";
+import PrintCenterHub from "./pages/hubs/PrintCenterHub";
+import RecoveryScoresHub from "./pages/hubs/RecoveryScoresHub";
+import SystemToolsHub from "./pages/hubs/SystemToolsHub";
+
+/**
+ * Legacy /contesttimetable 호환 라우터:
+ * state.tabId가 1이면 ① 초기 배번 확정, 2이면 심판 좌석 배정, 기본값은 종목·체급 설계로 연결
+ */
+const LegacyTimetableRedirect = () => {
+  const location = useLocation();
+  const tabId = String(location?.state?.tabId ?? "0");
+  if (tabId === "1") {
+    return <Stage1NumberingHub />;
+  }
+  if (tabId === "2") {
+    return <JudgesHub defaultTab="assign" />;
+  }
+  return <ContestCategoriesHub />;
+};
 
 const unslopAntdTheme = {
   token: {
@@ -124,201 +124,367 @@ function App() {
   return (
     <ConfigProvider locale={koKR} theme={unslopAntdTheme}>
       <CurrentContestProvider>
-      <DeviceProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route
-              path="/"
-              element={<ManagementHome children={<Dashboard />} />}
-            />
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/newcontest"
-              element={<ManagementHome children={<NewContest />} />}
-            />
-            <Route
-              path="/contestinfo/"
-              element={<ManagementHome children={<ContestInfo />} />}
-            />
-            <Route
-              path="/contesttimetable"
-              element={<ManagementHome children={<ContestTimetable />} />}
-            />
-            <Route
-              path="/contestmusicsetting"
-              element={<ManagementHome children={<ContestMusicSetting />} />}
-            />
-            <Route
-              path="/realtimeaudiocenter"
-              element={<ManagementHome children={<RealtimeAudioCenter />} />}
-            />
-            <Route
-              path="/vibeflowaudiocenter"
-              element={<ManagementHome children={<VibeFlowAudioCenter />} />}
-            />
-            <Route
-              path="/vibeflow-audio"
-              element={<VibeFlowAudioCenter />}
-            />
-            <Route
-              path="/contestinvoicetable"
-              element={<ManagementHome children={<ContestInvoiceTable />} />}
-            />
-            <Route
-              path="/contestplayerweighintable"
-              element={
-                <ManagementHome children={<ContestPlayerWeighInTable />} />
-              }
-            />
-            <Route
-              path="/contestplayerordertableafter"
-              element={
-                <ManagementHome children={<ContestPlayerOrderTableAfter />} />
-              }
-            />
-            <Route
-              path="/conteststagetable"
-              element={<ManagementHome children={<ContestStagetable />} />}
-            />
-            <Route
-              path="/contestnewinvoicemanual"
-              element={
-                <ManagementHome children={<ContestNewInvoiceManual />} />
-              }
-            />
-            <Route
-              path="/contestforcemanual"
-              element={<ManagementHome children={<ContestForceManual />} />}
-            />
-            <Route
-              path="/randomgenerator"
-              element={<ManagementHome children={<RandomPlayerGenerator />} />}
-            />
-            <Route
-              path="/contestjudgetable"
-              element={<ManagementHome children={<ContestJudgeTable />} />}
-            />
-            <Route
-              path="/contestplayerordergrandprix"
-              element={
-                <ManagementHome
-                  children={<ContestPlayerOrderTableGrandPrix />}
-                />
-              }
-            />
-            <Route
-              path="/contestmonitoring/:target"
-              element={<ManagementHome children={<ContestMonitoring />} />}
-            />
-            <Route
-              path="/contestranksummary"
-              element={<ManagementHome children={<ContestRankSummary />} />}
-            />
-            <Route
-              path="/print/:printType"
-              element={<ManagementHome children={<UnifiedPrint />} />}
-            />
-            <Route
-              path="/print-management"
-              element={<ManagementHome children={<UnifiedPrint />} />}
-            />
-            <Route
-              path="/printgymgroup"
-              element={<ManagementHome children={<GymGroupPrint />} />}
-            />
-            <Route
-              path="/print/gymgroup"
-              element={<ManagementHome children={<GymGroupPrint />} />}
-            />
-            <Route
-              path="/printsummary"
-              element={<ManagementHome children={<PrintSummary />} />}
-            />
-            <Route
-              path="/print/summary"
-              element={<ManagementHome children={<PrintSummary />} />}
-            />
-            <Route
-              path="/judgeassignmentPrint"
-              element={<ManagementHome children={<JudgeAssignmentPrint />} />}
-            />
-            <Route
-              path="/print/judgeassignment"
-              element={<ManagementHome children={<JudgeAssignmentPrint />} />}
-            />
-            <Route
-              path="/judgeseatmatrixprint"
-              element={<ManagementHome children={<JudgeSeatMatrixPrint />} />}
-            />
-            <Route
-              path="/print/judgeseatmatrix"
-              element={<ManagementHome children={<JudgeSeatMatrixPrint />} />}
-            />
-            <Route
-              path="/measureprint"
-              element={<ManagementHome children={<MeasurePrint />} />}
-            />
-            <Route
-              path="/printbase"
-              element={<ManagementHome children={<PrintBase />} />}
-            />
-            <Route path="/screenlobby" element={<ScreenLobby />} />
-            <Route path="/ranking" element={<RankingAnnouncement />} />
-            <Route path="/idle" element={<Idle />} />
-            <Route
-              path="/qrcode"
-              element={<ManagementHome children={<QRCodeGenerator />} />}
-            />
-            <Route
-              path="/clear"
-              element={<ManagementHome children={<ContestSearchAndDelete />} />}
-            />{" "}
-            <Route
-              path="/simpleinvoiceadmin"
-              element={<ManagementHome children={<SimpleInvoicesAdmin />} />}
-            />
-            <Route
-              path="/delay"
-              element={<ManagementHome children={<DelaySettings />} />}
-            />
-            <Route
-              path="/scoreresultmanager"
-              element={<ManagementHome children={<ScoreResultManager />} />}
-            />
-            <Route
-              path="/contestresultmanager"
-              element={<ManagementHome children={<ContestResultManager />} />}
-            />
-            <Route path="/selectdatabase" element={<SelectDatabase />} />
-            <Route
-              path="/screen1/:contestId"
-              element={<StandingTableType1 />}
-            />
-            <Route path="/logout" element={<Logout />} />
-            <Route
-              path="/association-managers"
-              element={<ManagementHome children={<AssociationManagers />} />}
-            />
-            <Route path="/stage-live" element={<StageLiveDisplay />} />
-            <Route path="/broadcast" element={<StageLiveDisplay />} />
-            <Route path="/stage-square" element={<StageLiveDisplaySquare />} />
-            <Route path="/broadcast-square" element={<StageLiveDisplaySquare />} />
-            <Route path="/ranking-square" element={<StageLiveDisplaySquare />} />
-            <Route path="/mc" element={<ContestMonitoringMC />} />
-            <Route path="/stage-mc" element={<ContestMonitoringMC />} />
-            <Route path="/mc-stage" element={<ContestMonitoringMC />} />
-            <Route
-              path="/sponsors"
-              element={<ManagementHome children={<ContestSponsorManager />} />}
-            />
-            <Route
-              path="/sponsor-management"
-              element={<ManagementHome children={<ContestSponsorManager />} />}
-            />
-          </Routes>
-        </BrowserRouter>
-      </DeviceProvider>
-    </CurrentContestProvider>
+        <DeviceProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* 대시보드 & 인증 */}
+              <Route
+                path="/"
+                element={<ManagementHome children={<Dashboard />} />}
+              />
+              <Route path="/login" element={<Login />} />
+              <Route path="/selectdatabase" element={<SelectDatabase />} />
+              <Route path="/logout" element={<Logout />} />
+
+              {/* 그룹 1. 대회 설계 · 접수 (L0 → L1) */}
+              <Route
+                path="/contest-setup"
+                element={<ManagementHome children={<ContestSetupHub />} />}
+              />
+              <Route
+                path="/contestinfo/*"
+                element={
+                  <ManagementHome
+                    children={<ContestSetupHub defaultTab="info" />}
+                  />
+                }
+              />
+              <Route
+                path="/qrcode"
+                element={
+                  <ManagementHome
+                    children={<ContestSetupHub defaultTab="qr" />}
+                  />
+                }
+              />
+              <Route
+                path="/newcontest"
+                element={
+                  <ManagementHome
+                    children={<ContestSetupHub defaultTab="new" />}
+                  />
+                }
+              />
+
+              <Route
+                path="/contest-categories"
+                element={<ManagementHome children={<ContestCategoriesHub />} />}
+              />
+              <Route
+                path="/contesttimetable"
+                element={
+                  <ManagementHome children={<LegacyTimetableRedirect />} />
+                }
+              />
+
+              <Route
+                path="/contest-entries"
+                element={<ManagementHome children={<ContestEntriesHub />} />}
+              />
+              <Route
+                path="/contestinvoicetable"
+                element={
+                  <ManagementHome
+                    children={<ContestEntriesHub defaultTab="invoices" />}
+                  />
+                }
+              />
+              <Route
+                path="/contestnewinvoicemanual"
+                element={
+                  <ManagementHome
+                    children={<ContestEntriesHub defaultTab="manual" />}
+                  />
+                }
+              />
+              <Route
+                path="/simpleinvoiceadmin"
+                element={
+                  <ManagementHome
+                    children={<ContestEntriesHub defaultTab="raw" />}
+                  />
+                }
+              />
+
+              {/* 그룹 2. 출전 확정 · 무대 편성 (L1 → L4) */}
+              <Route
+                path="/stage-1-numbering"
+                element={<ManagementHome children={<Stage1NumberingHub />} />}
+              />
+              <Route
+                path="/stage-2-weighin"
+                element={<ManagementHome children={<Stage2WeighInHub />} />}
+              />
+              <Route
+                path="/contestplayerweighintable"
+                element={<ManagementHome children={<Stage2WeighInHub />} />}
+              />
+
+              <Route
+                path="/stage-3-final"
+                element={
+                  <ManagementHome children={<Stage3FinalPlayersHub />} />
+                }
+              />
+              <Route
+                path="/contestplayerordertableafter"
+                element={
+                  <ManagementHome
+                    children={<Stage3FinalPlayersHub defaultTab="final" />}
+                  />
+                }
+              />
+              <Route
+                path="/contestforcemanual"
+                element={
+                  <ManagementHome
+                    children={<Stage3FinalPlayersHub defaultTab="force" />}
+                  />
+                }
+              />
+              <Route
+                path="/contestplayerordergrandprix"
+                element={
+                  <ManagementHome
+                    children={<Stage3FinalPlayersHub defaultTab="grandprix" />}
+                  />
+                }
+              />
+
+              <Route
+                path="/stage-4-stages"
+                element={<ManagementHome children={<Stage4StagesHub />} />}
+              />
+              <Route
+                path="/conteststagetable"
+                element={<ManagementHome children={<Stage4StagesHub />} />}
+              />
+
+              <Route
+                path="/judges-hub"
+                element={<ManagementHome children={<JudgesHub />} />}
+              />
+              <Route
+                path="/contestjudgetable"
+                element={
+                  <ManagementHome children={<JudgesHub defaultTab="pool" />} />
+                }
+              />
+
+              {/* 그룹 3. 본대회 라이브 운영 */}
+              <Route
+                path="/live-monitoring"
+                element={<Navigate to="/contestmonitoring/main" replace />}
+              />
+              <Route
+                path="/contestmonitoring/:target"
+                element={<ManagementHome children={<LiveMonitoringHub />} />}
+              />
+              <Route
+                path="/contestranksummary"
+                element={<ManagementHome children={<ContestRankSummary />} />}
+              />
+
+              <Route
+                path="/audio-center"
+                element={<ManagementHome children={<AudioCenterHub />} />}
+              />
+              <Route
+                path="/vibeflowaudiocenter"
+                element={
+                  <ManagementHome
+                    children={<AudioCenterHub defaultTab="vibeflow" />}
+                  />
+                }
+              />
+              <Route
+                path="/realtimeaudiocenter"
+                element={
+                  <ManagementHome
+                    children={<AudioCenterHub defaultTab="legacy" />}
+                  />
+                }
+              />
+              <Route
+                path="/contestmusicsetting"
+                element={
+                  <ManagementHome
+                    children={<AudioCenterHub defaultTab="setting" />}
+                  />
+                }
+              />
+              <Route path="/vibeflow-audio" element={<VibeFlowAudioCenter />} />
+
+              <Route
+                path="/broadcast-hub"
+                element={<ManagementHome children={<BroadcastHub />} />}
+              />
+              <Route
+                path="/sponsors"
+                element={
+                  <ManagementHome
+                    children={<BroadcastHub defaultTab="sponsors" />}
+                  />
+                }
+              />
+              <Route
+                path="/sponsor-management"
+                element={
+                  <ManagementHome
+                    children={<BroadcastHub defaultTab="sponsors" />}
+                  />
+                }
+              />
+              <Route
+                path="/delay"
+                element={
+                  <ManagementHome
+                    children={<BroadcastHub defaultTab="delay" />}
+                  />
+                }
+              />
+
+              {/* 그룹 4. 공식 기록 · 데이터 복구 */}
+              <Route
+                path="/print-center"
+                element={<ManagementHome children={<PrintCenterHub />} />}
+              />
+              <Route
+                path="/print-management"
+                element={<ManagementHome children={<PrintCenterHub />} />}
+              />
+              <Route
+                path="/print/:printType"
+                element={<ManagementHome children={<PrintCenterHub />} />}
+              />
+              <Route
+                path="/printgymgroup"
+                element={
+                  <ManagementHome
+                    children={<PrintCenterHub defaultType="gymgroup" />}
+                  />
+                }
+              />
+              <Route
+                path="/printsummary"
+                element={
+                  <ManagementHome
+                    children={<PrintCenterHub defaultType="summary" />}
+                  />
+                }
+              />
+              <Route
+                path="/judgeassignmentPrint"
+                element={
+                  <ManagementHome
+                    children={<PrintCenterHub defaultType="judgeassign" />}
+                  />
+                }
+              />
+              <Route
+                path="/judgeseatmatrixprint"
+                element={
+                  <ManagementHome
+                    children={<PrintCenterHub defaultType="judgematrix" />}
+                  />
+                }
+              />
+              <Route
+                path="/measureprint"
+                element={<ManagementHome children={<MeasurePrint />} />}
+              />
+              <Route
+                path="/printbase"
+                element={<ManagementHome children={<PrintBase />} />}
+              />
+
+              <Route
+                path="/recovery-scores"
+                element={<ManagementHome children={<RecoveryScoresHub />} />}
+              />
+              <Route
+                path="/scoreresultmanager"
+                element={
+                  <ManagementHome
+                    children={<RecoveryScoresHub defaultTab="raw" />}
+                  />
+                }
+              />
+              <Route
+                path="/contestresultmanager"
+                element={
+                  <ManagementHome
+                    children={<RecoveryScoresHub defaultTab="results" />}
+                  />
+                }
+              />
+              <Route
+                path="/manual-input"
+                element={
+                  <ManagementHome
+                    children={<RecoveryScoresHub defaultTab="results" />}
+                  />
+                }
+              />
+
+              <Route
+                path="/system-tools"
+                element={<ManagementHome children={<SystemToolsHub />} />}
+              />
+              <Route
+                path="/association-managers"
+                element={
+                  <ManagementHome
+                    children={<SystemToolsHub defaultTab="managers" />}
+                  />
+                }
+              />
+              <Route
+                path="/randomgenerator"
+                element={
+                  <ManagementHome
+                    children={<SystemToolsHub defaultTab="random" />}
+                  />
+                }
+              />
+              <Route
+                path="/clear"
+                element={
+                  <ManagementHome
+                    children={<SystemToolsHub defaultTab="clear" />}
+                  />
+                }
+              />
+
+              {/* 단독 송출 스크린 라우트 (사이드바 없음) */}
+              <Route path="/screenlobby" element={<ScreenLobby />} />
+              <Route path="/ranking" element={<RankingAnnouncement />} />
+              <Route path="/idle" element={<Idle />} />
+              <Route
+                path="/screen1/:contestId"
+                element={<StandingTableType1 />}
+              />
+              <Route path="/stage-live" element={<StageLiveDisplay />} />
+              <Route path="/broadcast" element={<StageLiveDisplay />} />
+              <Route
+                path="/stage-square"
+                element={<StageLiveDisplaySquare />}
+              />
+              <Route
+                path="/broadcast-square"
+                element={<StageLiveDisplaySquare />}
+              />
+              <Route
+                path="/ranking-square"
+                element={<StageLiveDisplaySquare />}
+              />
+              <Route path="/mc" element={<ContestMonitoringMC />} />
+              <Route path="/stage-mc" element={<ContestMonitoringMC />} />
+              <Route path="/mc-stage" element={<ContestMonitoringMC />} />
+            </Routes>
+          </BrowserRouter>
+        </DeviceProvider>
+      </CurrentContestProvider>
     </ConfigProvider>
   );
 }

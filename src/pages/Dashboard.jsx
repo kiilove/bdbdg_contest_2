@@ -466,23 +466,33 @@ const Dashboard = () => {
 
   const prepShortcuts = [
     {
-      to: "/contestinvoicetable",
-      label: "참가신청서 관리",
+      to: "/contest-entries",
+      label: "참가접수 · 입금확정",
       icon: <ClipboardCheck size={14} strokeWidth={1.5} />,
     },
     {
-      to: "/contestplayerweighintable",
-      label: "계측 · 선수번호",
+      to: "/stage-1-numbering",
+      label: "① 초기 배번",
+      icon: <Users size={14} strokeWidth={1.5} />,
+    },
+    {
+      to: "/stage-2-weighin",
+      label: "② 선수 계측",
       icon: <Scale size={14} strokeWidth={1.5} />,
     },
     {
-      to: "/conteststagetable",
-      label: "무대 진행순서",
+      to: "/judges-hub",
+      label: "심판 선발·배정",
+      icon: <UserCheck size={14} strokeWidth={1.5} />,
+    },
+    {
+      to: "/stage-4-stages",
+      label: "④ 무대 편성",
       icon: <CalendarClock size={14} strokeWidth={1.5} />,
     },
     {
-      to: "/print/measurement",
-      label: "출력물 인쇄",
+      to: "/print-center",
+      label: "출력·집계 센터",
       icon: <Printer size={14} strokeWidth={1.5} />,
     },
   ];

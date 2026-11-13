@@ -30,9 +30,10 @@ import { Empty } from "antd";
 import { useDevice } from "../contexts/DeviceContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 
-const UnifiedPrint = () => {
+const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
   const { isTabletOrMobile } = useDevice();
-  const { printType = "measurement" } = useParams();
+  const params = useParams();
+  const printType = forcedPrintType || params.printType || "measurement";
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [msgOpen, setMsgOpen] = useState(false);
@@ -494,28 +495,30 @@ const UnifiedPrint = () => {
       />
       <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
         {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
-        <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar">
-            {printTabs.map((tab) => {
-              const isActive = !tab.isExternal && printType === tab.type;
+        {!hideTopTabs && (
+          <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar">
+              {printTabs.map((tab) => {
+                const isActive = !tab.isExternal && printType === tab.type;
 
-              return (
-                <Link
-                  key={tab.type}
-                  to={tab.path}
-                  className={`h-9 px-3.5 rounded-[8px] text-[13px] font-medium no-underline whitespace-nowrap transition-colors duration-150 inline-flex items-center gap-1.5 ${
-                    isActive
-                      ? "bg-[#2563eb] text-[#ffffff]"
-                      : "text-[#525252] hover:bg-[#f4f4f5] hover:text-[#171717]"
-                  }`}
-                >
-                  {tab.icon && <span className="inline-flex items-center">{tab.icon}</span>}
-                  <span>{tab.label}</span>
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={tab.type}
+                    to={tab.path}
+                    className={`h-9 px-3.5 rounded-[8px] text-[13px] font-medium no-underline whitespace-nowrap transition-colors duration-150 inline-flex items-center gap-1.5 ${
+                      isActive
+                        ? "bg-[#2563eb] text-[#ffffff]"
+                        : "text-[#525252] hover:bg-[#f4f4f5] hover:text-[#171717]"
+                    }`}
+                  >
+                    {tab.icon && <span className="inline-flex items-center">{tab.icon}</span>}
+                    <span>{tab.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {isLoading ? (
           <LoadingPage />
