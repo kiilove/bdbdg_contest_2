@@ -12,8 +12,9 @@ import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
 import ContestHealthCheckModal from "../modals/ContestHealthCheckModal";
-import { Checkbox, Popconfirm } from "antd";
+import { Checkbox } from "antd";
 import {
   Save,
   GripVertical,
@@ -1012,13 +1013,14 @@ const ContestPlayerOrderTable = () => {
           {/* 액션 툴바 */}
           <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex flex-col lg:flex-row w-full justify-between lg:items-center gap-3">
             <div className="flex items-center gap-2">
-              <Popconfirm
-                title="배정 및 최종 명단 완전 초기화"
-                description="현재 대회의 contest_players_assign 및 contest_players_final 문서를 모두 빈 상태로 초기화합니다. 진행하시겠습니까?"
+              <ConfirmModalTrigger
+                variant="danger"
+                title="배정 및 최종 명단 비우기"
+                body="현재 대회의 선수 번호 배정 명단과 계측 최종 명단을 모두 빈 상태로 초기화합니다."
+                body2="원본 참가 신청서 데이터는 그대로 보존되며, 언제든 번호 재계산으로 다시 구성할 수 있습니다."
                 onConfirm={handleClearAssignAndFinal}
-                okText="완전 초기화 실행"
+                confirmText="초기화 실행"
                 cancelText="취소"
-                okButtonProps={{ danger: true }}
               >
                 <button
                   type="button"
@@ -1027,7 +1029,7 @@ const ContestPlayerOrderTable = () => {
                   <Trash2 size={15} strokeWidth={1.5} />
                   <span>배정명단 초기화 (비우기)</span>
                 </button>
-              </Popconfirm>
+              </ConfirmModalTrigger>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
