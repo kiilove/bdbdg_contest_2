@@ -2264,7 +2264,7 @@ export const VibeFlowAudioCenter = () => {
           setIsLoginModalOpen={setIsLoginModalOpen}
         />
 
-        <div className="max-w-[1600px] mx-auto p-6">
+        <div className="w-full px-5 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             <div className="lg:col-span-5 xl:col-span-4 space-y-4">
               <AudioPlayerCard

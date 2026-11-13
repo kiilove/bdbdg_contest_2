@@ -311,7 +311,7 @@ const ContestTimetable = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa]">
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
         <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex justify-center items-center w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#525252] shrink-0">

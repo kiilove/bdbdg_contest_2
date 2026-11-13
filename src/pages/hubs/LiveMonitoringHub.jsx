@@ -47,7 +47,7 @@ const LiveMonitoringHub = () => {
     <div className="w-full min-h-screen bg-[#fafafa]">
       {/* 현장 좌석 빠른 전환 바 (인쇄 시 자동 숨김) */}
       <div className="no-print print:hidden bg-white border-b border-[#171717]/[0.08]">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="w-full px-5 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {CONSOLE_MODES.map((m) => {
               const isActive = activeKey === m.key;

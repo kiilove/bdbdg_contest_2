@@ -157,7 +157,7 @@ const NewContest = () => {
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setMsgOpen(false)}
       />
-      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-[22px] sm:text-[24px] font-medium text-[#171717] tracking-tight leading-tight">
@@ -169,7 +169,7 @@ const NewContest = () => {
           </div>
         </header>
 
-        <div className="max-w-xl bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-6">
+        <div className="max-w-2xl bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-6">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
               <FolderPlus size={18} strokeWidth={1.5} className="text-[#525252]" />

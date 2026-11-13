@@ -25,7 +25,7 @@ const ContestCategoriesHub = () => {
           },
         ]}
       />
-      <div className="max-w-[1440px] mx-auto px-6 py-6">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6">
         <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
           <ContestCategoryOrderTable />
         </div>

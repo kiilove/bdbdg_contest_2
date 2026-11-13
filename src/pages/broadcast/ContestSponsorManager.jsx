@@ -672,14 +672,14 @@ const ContestSponsorManager = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-[#171717] p-6">
+    <div className="min-h-screen bg-[#fafafa] text-[#171717] w-full px-5 sm:px-6 lg:px-8 py-6">
       <ConfirmationModal
         isOpen={noticeOpen}
         message={noticeMessage}
         onCancel={() => setNoticeOpen(false)}
         onConfirm={() => setNoticeOpen(false)}
       />
-      <div className="max-w-[1600px] mx-auto space-y-5">
+      <div className="w-full space-y-5">
         <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">

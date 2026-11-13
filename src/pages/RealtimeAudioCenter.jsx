@@ -567,7 +567,7 @@ export default function RealtimeAudioCenter() {
     return (
       <div className="min-h-screen bg-[#fafafa] text-[#171717]">
         <header className="bg-[#ffffff] border-b border-[#171717]/[0.08]">
-          <div className="max-w-[1600px] mx-auto px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="w-full px-5 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] flex items-center justify-center text-[#525252] shrink-0">
                 <Radio size={18} strokeWidth={1.5} />
@@ -608,7 +608,7 @@ export default function RealtimeAudioCenter() {
           </div>
         </header>
 
-        <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <div className="w-full px-5 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           <div className="lg:col-span-4 space-y-4">
             <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="bg-[#f4f4f5] px-5 py-3 border-b border-[#171717]/[0.08] flex items-center justify-between">

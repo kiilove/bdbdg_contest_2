@@ -73,6 +73,62 @@
   }
 }
 
+/* Comfortable Management UI Typography Scale (Screen Only — Never affects LED Broadcast or A4 Print) */
+@media screen {
+  html.mgmt-ui-scale,
+  html.mgmt-ui-scale body {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  html.mgmt-ui-scale .print-sheet-preview,
+  html.mgmt-ui-scale #print-root,
+  html.mgmt-ui-scale .print-area {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  html.mgmt-ui-scale :is(.text-xs):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 13px;
+    line-height: 19px;
+  }
+
+  html.mgmt-ui-scale :is(.text-sm):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 14.5px;
+    line-height: 21px;
+  }
+
+  html.mgmt-ui-scale :is(.text-base):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  html.mgmt-ui-scale :is(.text-\[10px\]):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  html.mgmt-ui-scale :is(.text-\[11px\]):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 12.5px;
+    line-height: 18px;
+  }
+
+  html.mgmt-ui-scale :is(.text-\[12px\]):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 13.5px;
+    line-height: 19px;
+  }
+
+  html.mgmt-ui-scale :is(.text-\[13px\]):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 14.5px;
+    line-height: 21px;
+  }
+
+  html.mgmt-ui-scale :is(.text-\[14px\]):not(.print-sheet-preview *):not(#print-root *):not(.print-area *) {
+    font-size: 15px;
+    line-height: 22px;
+  }
+}
+
 /* Signature & Tabular Figure Helpers */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -133,14 +189,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 24px;
+  min-width: 38px;
+  height: 26px;
   padding: 0 8px;
-  border-radius: 4px;
+  border-radius: 5px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   background-color: var(--bg-raised);
   color: var(--text-primary);
@@ -168,12 +224,13 @@
 .ant-table-wrapper .ant-table-thead > tr > th {
   background-color: #f4f4f5 !important;
   color: #525252 !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
   border-bottom: 1px solid rgba(23, 23, 23, 0.08) !important;
 }
 
 .ant-table-wrapper .ant-table-tbody > tr > td {
+  font-size: 14.5px;
   border-bottom: 1px solid rgba(23, 23, 23, 0.06);
 }
 
@@ -208,6 +265,8 @@
 
   html,
   body {
+    font-size: 14px !important;
+    line-height: 20px !important;
     background-color: #ffffff !important;
     color: #000000 !important;
     -webkit-print-color-adjust: exact;

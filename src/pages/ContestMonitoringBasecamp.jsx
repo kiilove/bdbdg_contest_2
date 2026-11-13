@@ -1333,7 +1333,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] p-4 md:p-6 gap-4">
+        <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] px-5 sm:px-6 lg:px-8 py-5 gap-4">
           <ConfirmationModal
             isOpen={msgOpen}
             message={message}

@@ -56,6 +56,30 @@ const LegacyTimetableRedirect = () => {
   return <ContestCategoriesHub />;
 };
 
+const STANDALONE_DISPLAY_PREFIXES = [
+  "/stage-live",
+  "/broadcast",
+  "/stage-square",
+  "/broadcast-square",
+  "/ranking",
+  "/ranking-square",
+  "/screenlobby",
+  "/idle",
+  "/screen1",
+];
+
+const UiScaleController = () => {
+  const location = useLocation();
+  React.useEffect(() => {
+    const path = (location.pathname || "").toLowerCase();
+    const isStandaloneLed = STANDALONE_DISPLAY_PREFIXES.some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+    );
+    document.documentElement.classList.toggle("mgmt-ui-scale", !isStandaloneLed);
+  }, [location.pathname]);
+  return null;
+};
+
 const unslopAntdTheme = {
   token: {
     colorPrimary: "#2563eb",
@@ -76,15 +100,15 @@ const unslopAntdTheme = {
     borderRadiusSM: 6,
     fontFamily:
       '"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
-    fontSize: 14,
+    fontSize: 15,
     wireframe: false,
     boxShadowTertiary: "0 1px 2px rgba(0, 0, 0, 0.04)",
   },
   components: {
     Button: {
-      controlHeight: 36,
-      controlHeightLG: 44,
-      controlHeightSM: 28,
+      controlHeight: 38,
+      controlHeightLG: 46,
+      controlHeightSM: 30,
       fontWeight: 500,
       primaryShadow: "none",
       defaultShadow: "none",
@@ -102,20 +126,20 @@ const unslopAntdTheme = {
       borderRadius: 8,
     },
     Input: {
-      controlHeight: 36,
-      controlHeightLG: 44,
+      controlHeight: 38,
+      controlHeightLG: 46,
       borderRadius: 8,
     },
     Select: {
-      controlHeight: 36,
-      controlHeightLG: 44,
+      controlHeight: 38,
+      controlHeightLG: 46,
       borderRadius: 8,
     },
     Tabs: {
       itemSelectedColor: "#171717",
       inkBarColor: "#2563eb",
-      titleFontSize: 14,
-      titleFontSizeLG: 14,
+      titleFontSize: 15,
+      titleFontSizeLG: 16,
     },
   },
 };
@@ -126,6 +150,7 @@ function App() {
       <CurrentContestProvider>
         <DeviceProvider>
           <BrowserRouter>
+            <UiScaleController />
             <Routes>
               {/* 대시보드 & 인증 */}
               <Route

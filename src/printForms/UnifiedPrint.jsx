@@ -533,7 +533,7 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setMsgOpen(false)}
       />
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
         {/* 1. 상단 출력 관리 전체 네비게이션 탭 바 */}
         {!hideTopTabs && (
           <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-2 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
@@ -697,7 +697,7 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
             <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-x-auto p-4 sm:p-8 print:border-0 print:shadow-none print:p-0">
               <div
                 ref={printRef}
-                className="w-full max-w-4xl mx-auto bg-white min-h-[500px]"
+                className="print-sheet-preview w-full max-w-4xl mx-auto bg-white min-h-[500px]"
               >
                 <style>{UNIFIED_PRINT_PAGE_STYLE}</style>
                 {printType === "ranking" && resultArray.length === 0 ? (

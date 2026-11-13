@@ -146,8 +146,8 @@ const BroadcastHub = ({ defaultTab }) => {
       ) : activeTab === "delay" && isAdmin ? (
         <DelaySettings />
       ) : (
-        <div className="max-w-[1440px] mx-auto px-6 py-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="w-full px-5 sm:px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {SCREEN_ENDPOINTS.map((scr) => (
               <div
                 key={scr.key}

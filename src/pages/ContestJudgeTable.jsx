@@ -969,7 +969,7 @@ const ContestJudgeTable = () => {
           <LoadingPage />
         </div>
       ) : (
-        <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+        <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
           {/* 상단 헤더 */}
           <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">

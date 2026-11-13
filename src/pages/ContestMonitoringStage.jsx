@@ -211,7 +211,7 @@ const ContestMonitoringStage = () => {
   }
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] p-6 space-y-4">
+    <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717] px-5 sm:px-6 lg:px-8 py-6 space-y-4">
       <ConfirmationModal
         isOpen={msgOpen}
         message={message}

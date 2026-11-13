@@ -943,7 +943,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
           <LoadingPage propStyles={{ width: "80", height: "60" }} />
         </div>
       ) : (
-        <div className="flex flex-col w-full min-h-full bg-[#fafafa] text-[#171717] p-4 md:p-5 gap-4">
+        <div className="flex flex-col w-full min-h-full bg-[#fafafa] text-[#171717] px-5 sm:px-6 lg:px-8 py-5 gap-4">
           {/* 심판위원장 순위 확정 알림 다이얼로그 */}
           <Modal
             open={urgentModalOpen}

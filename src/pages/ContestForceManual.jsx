@@ -379,7 +379,7 @@ const ContestForceManual = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="max-w-[1440px] mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-6">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-6">
         <ConfirmationModal
           isOpen={msgOpen}
           onConfirm={() => {

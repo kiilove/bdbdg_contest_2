@@ -287,14 +287,14 @@ const ManagementHome = ({ children }) => {
         key={item.link}
         type="button"
         onClick={() => handleNavigate(item.link, item.title)}
-        className={`group w-full h-[34px] px-2.5 rounded-[8px] flex items-center gap-2.5 text-[14px] leading-5 text-left transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40 ${
+        className={`group w-full h-[38px] px-3 rounded-[8px] flex items-center gap-2.5 text-[15px] leading-5 text-left transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40 cursor-pointer ${
           active
-            ? "bg-white text-[#171717] font-medium border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-            : "text-[#525252] font-normal border border-transparent hover:bg-[#171717]/[0.04] hover:text-[#171717]"
+            ? "bg-white text-[#171717] font-semibold border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+            : "text-[#404040] font-normal border border-transparent hover:bg-[#171717]/[0.04] hover:text-[#171717]"
         }`}
       >
         <span
-          className={`w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-150 ${
+          className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center transition-colors duration-150 ${
             active
               ? "text-[#2563eb]"
               : "text-[#737373] group-hover:text-[#525252]"
@@ -316,13 +316,13 @@ const ManagementHome = ({ children }) => {
   const renderSidebarBody = (showCloseButton = false) => (
     <div className="flex flex-col h-full bg-[#f4f4f5] text-[#171717]">
       {/* Top Brand Header (56px) */}
-      <div className="h-[56px] px-4 flex items-center justify-between shrink-0">
+      <div className="h-[58px] px-4 flex items-center justify-between shrink-0">
         <button
           type="button"
           onClick={() => handleNavigate("/")}
           className="flex items-baseline gap-2 text-left focus:outline-none cursor-pointer"
         >
-          <span className="text-[16px] leading-none font-semibold text-[#171717]">
+          <span className="text-[18px] leading-none font-bold text-[#171717]">
             BDBDg
           </span>
           <span className="text-xs leading-4 text-[#737373]">
@@ -480,7 +480,7 @@ const ManagementHome = ({ children }) => {
               <button
                 type="button"
                 onClick={() => toggleSection(section.link)}
-                className="w-full px-3 pt-5 pb-1.5 flex items-center justify-between text-xs leading-4 font-medium text-[#737373] hover:text-[#525252] transition-colors duration-150 focus:outline-none"
+                className="w-full px-3 pt-5 pb-1.5 flex items-center justify-between text-xs leading-4 font-semibold text-[#525252] hover:text-[#171717] transition-colors duration-150 focus:outline-none cursor-pointer"
               >
                 <span>{section.title}</span>
                 <span className="text-[#737373]">
@@ -619,13 +619,13 @@ const ManagementHome = ({ children }) => {
         </>
       ) : !sidebarHidden ? (
         <>
-          {/* Desktop 248px Fixed Left Sidebar (always full viewport height) */}
-          <aside className="fixed inset-y-0 left-0 z-30 w-[248px] bg-[#f4f4f5] border-r border-[#171717]/[0.08] flex flex-col print:hidden no-print">
+          {/* Desktop 264px Fixed Left Sidebar (always full viewport height) */}
+          <aside className="fixed inset-y-0 left-0 z-30 w-[264px] bg-[#f4f4f5] border-r border-[#171717]/[0.08] flex flex-col print:hidden no-print">
             {renderSidebarBody(false)}
           </aside>
           <div
             aria-hidden="true"
-            className="w-[248px] shrink-0 print:hidden no-print"
+            className="w-[264px] shrink-0 print:hidden no-print"
           />
         </>
       ) : (

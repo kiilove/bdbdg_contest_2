@@ -389,7 +389,7 @@ const JudgeAssignmentPrint = () => {
         #print-root tbody tr:nth-child(odd) td { background: #fcfdff; }
       `}</style>
 
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
         {/* 타이틀 바 + 인쇄 버튼 */}
         <div className="no-print print:hidden bg-[#ffffff] rounded-[12px] p-5 border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">

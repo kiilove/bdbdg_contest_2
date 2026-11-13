@@ -259,7 +259,7 @@ const PrintSummary = () => {
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
         {isLoading && <LoadingPage />}
         {!isLoading && (
           <>
@@ -390,7 +390,7 @@ const PrintSummary = () => {
               </button>
             </div>
 
-            <div className="flex w-full bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-y-auto p-6 justify-center min-h-[320px] print:border-0 print:shadow-none print:p-0">
+            <div className="print-sheet-preview flex w-full bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-y-auto p-6 justify-center min-h-[320px] print:border-0 print:shadow-none print:p-0">
               {showContestRankingSummary ? (
                 noData ? (
                   <div className="py-16 text-center text-[13px] text-[#dc2626]">

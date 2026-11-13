@@ -284,7 +284,7 @@ const PrintPlayerStanding = () => {
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setMsgOpen(false)}
       />
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
         {isLoading && <LoadingPage />}
         {!isLoading && resultArray.length === 0 && (
           <>
@@ -459,7 +459,7 @@ const PrintPlayerStanding = () => {
 
             <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-x-auto print:border-0 print:shadow-none">
               <div
-                className="flex w-full h-full p-5 flex-col gap-y-2"
+                className="print-sheet-preview flex w-full h-full p-5 flex-col gap-y-2"
                 ref={printRef}
               >
                   {findResults?.length > 0 &&

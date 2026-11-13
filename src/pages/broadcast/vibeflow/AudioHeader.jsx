@@ -18,7 +18,7 @@ export const AudioHeader = ({
 }) => {
   return (
     <header className="bg-[#0f0f10] border-b border-[#ededed]/[0.08]">
-      <div className="max-w-[1600px] mx-auto px-6 py-3 min-h-[60px] flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="w-full px-5 sm:px-6 lg:px-8 py-3 min-h-[60px] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08] flex items-center justify-center text-[#a1a1a6] shrink-0">
             <Radio size={18} strokeWidth={1.5} />

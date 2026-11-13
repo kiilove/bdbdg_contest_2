@@ -29,7 +29,7 @@ const PipelineStageBanner = ({
 }) => {
   return (
     <div className="no-print print:hidden bg-white border-b border-[#171717]/[0.08]">
-      <div className="max-w-[1440px] mx-auto px-6 pt-4 pb-3.5 space-y-3">
+      <div className="w-full px-5 sm:px-6 lg:px-8 pt-4 pb-4 space-y-3">
         {/* Row 1: Step Breadcrumb + Prev/Next Pipeline Links */}
         {(layerBadge || prevStep || nextStep) && (
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -84,16 +84,16 @@ const PipelineStageBanner = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             {icon && (
-              <div className="w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#171717] flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-10 h-10 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-[#171717] flex items-center justify-center shrink-0 mt-0.5">
                 {icon}
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-[18px] leading-6 font-semibold text-[#171717] m-0 tracking-[-0.01em]">
+              <h1 className="text-[20px] sm:text-[22px] leading-7 font-semibold text-[#171717] m-0 tracking-[-0.01em]">
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-xs leading-4 text-[#737373] m-0 mt-0.5">
+                <p className="text-sm leading-5 text-[#525252] m-0 mt-1">
                   {subtitle}
                 </p>
               )}
@@ -105,8 +105,8 @@ const PipelineStageBanner = ({
               {actions.map((act, idx) => {
                 const baseCls =
                   act.variant === "primary"
-                    ? "h-8 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-[#2563eb] text-xs font-medium no-underline inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                    : "h-8 px-3 rounded-[8px] bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-xs font-medium no-underline inline-flex items-center gap-1.5 transition-colors cursor-pointer";
+                    ? "h-9 px-3.5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-[#2563eb] text-xs font-medium no-underline inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                    : "h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#f4f4f5] text-[#171717] border border-[#171717]/[0.12] text-xs font-medium no-underline inline-flex items-center gap-1.5 transition-colors cursor-pointer";
 
                 if (act.onClick) {
                   return (
@@ -175,7 +175,7 @@ const PipelineStageBanner = ({
                   key={tab.key}
                   type="button"
                   onClick={() => onTabChange && onTabChange(tab.key)}
-                  className={`h-9 px-3.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer border-0 ${
+                  className={`h-10 px-4 rounded-[8px] text-[14px] font-medium inline-flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer border-0 ${
                     isActive
                       ? "bg-[#171717] text-white"
                       : "bg-transparent text-[#525252] hover:bg-[#f4f4f5] hover:text-[#171717]"
