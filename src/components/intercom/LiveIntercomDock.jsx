@@ -399,7 +399,7 @@ const LiveIntercomDock = () => {
   useEffect(() => {
     if (!isOpen || !contestId || !activeRole) return;
     const unreadInOpenRoom = unackedAlertPackets.filter(
-      (pkt) => viewAllRooms || pkt.fromRole === toScope
+      (pkt) => viewAllRooms || isPacketInRoom(pkt, activeRole, toScope)
     );
     if (unreadInOpenRoom.length === 0) return;
 
@@ -412,7 +412,9 @@ const LiveIntercomDock = () => {
         packetId: pkt.id,
         stationRole: activeRole,
         stationLabel: myStationLabel,
-      }).catch(() => {});
+      }).catch(() => {
+        autoAckingIdsRef.current.delete(pkt.id);
+      });
     });
   }, [
     isOpen,

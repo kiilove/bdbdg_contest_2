@@ -50,8 +50,10 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
     const returnCategorys = await contestCategoryDocument.getDocument(
       currentContest.contests.contestCategorysListId
     );
-    setCategorysList({ ...returnCategorys });
-    setCategorysArray([...returnCategorys.categorys]);
+    if (returnCategorys) {
+      setCategorysList({ ...returnCategorys });
+      setCategorysArray([...(returnCategorys.categorys || [])]);
+    }
   };
 
   const handleUpdateCategorys = async () => {

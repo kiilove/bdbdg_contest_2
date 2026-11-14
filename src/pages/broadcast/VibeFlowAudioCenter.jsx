@@ -23,7 +23,18 @@ import {
   getStoredVibeFlowUser,
   clearVibeFlowToken,
   isTrackExposed,
+  getCachedVibeFlowPlaylist,
 } from "../../services/vibeflowService";
+import {
+  getAudioCacheKey,
+  getCachedAudioBlobUrlSync,
+  resolvePlayableAudioSource,
+  hydrateAllStoredAudioBlobUrls,
+  cacheOrWarmAudioTrack,
+  batchCacheOrWarmTracks,
+  evictCachedAudioTrack,
+  clearAllCachedAudio,
+} from "../../utils/indexedDbAudioStorage";
 
 // 📦 서브 모듈 & 컴포넌트 임포트
 import {
@@ -56,17 +67,53 @@ export const VibeFlowAudioCenter = () => {
     currentContest?.id ||
     "";
 
-  // 🔑 VibeFlows 인증 & 데이터 상태
+  // 🔑 VibeFlows 인증 & 데이터 상태 (로컬 플레이리스트 백업이 있으면 0ms 즉시 복원)
   const [token, setToken] = useState(() => getStoredVibeFlowToken());
   const [user, setUser] = useState(() => getStoredVibeFlowUser());
-  const [tracks, setTracks] = useState([]);
+  const [rawTracks, setRawTracks] = useState(() =>
+    getCachedVibeFlowPlaylist().filter(isTrackExposed)
+  );
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [rawApiResponse, setRawApiResponse] = useState(null);
 
-  // 🔐 모달 상태
+  // 🔐 모달 & 오프라인 음원 캐시 상태 (기본값: SSD에 저장된 음원만 재생/노출)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isCacheModalOpen, setIsCacheModalOpen] = useState(false);
+  const [audioCacheMap, setAudioCacheMap] = useState({});
+  const [ssdOnlyMode, setSsdOnlyModeState] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("vf_ssd_only_mode_v1");
+    return saved === null ? true : saved === "true";
+  });
+  const ssdOnlyModeRef = useRef(ssdOnlyMode);
+  ssdOnlyModeRef.current = ssdOnlyMode;
+
+  const setSsdOnlyMode = (val) => {
+    const next = Boolean(val);
+    ssdOnlyModeRef.current = next;
+    setSsdOnlyModeState(next);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("vf_ssd_only_mode_v1", String(next));
+      } catch {}
+    }
+  };
+
+  // SSD 전용 모드가 켜져 있으면 IndexedDB에 완전히 저장된("cached") 음원만 콘솔·시드 풀에 노출
+  const tracks = useMemo(() => {
+    if (!ssdOnlyMode) return rawTracks;
+    return rawTracks.filter((t) => {
+      const ck = getAudioCacheKey(t);
+      return Boolean(ck && audioCacheMap[ck]?.mode === "cached");
+    });
+  }, [rawTracks, ssdOnlyMode, audioCacheMap]);
+
+  const [isBatchCaching, setIsBatchCaching] = useState(false);
+  const [batchCacheProgress, setBatchCacheProgress] = useState(null);
+  const batchAbortRef = useRef(null);
+  const inFlightSilentCacheRef = useRef(new Set());
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState({});
 
@@ -219,11 +266,19 @@ export const VibeFlowAudioCenter = () => {
   const isFadingRef = useRef(false);
   const fadeAnimationRef = useRef(null);
   const fadeTimeoutsRef = useRef([]);
+  const loadingWatchdogTimersRef = useRef([]);
   const playRequestIdRef = useRef(0);
   const deckRequestIdRef = useRef({ A: 0, B: 0 });
   const stageAutoPlayTimeoutRef = useRef(null);
   const masterVolumeRef = useRef(volume);
   const rafRef = useRef(null);
+
+  const clearLoadingWatchdogs = () => {
+    if (loadingWatchdogTimersRef.current.length > 0) {
+      loadingWatchdogTimersRef.current.forEach((id) => clearTimeout(id));
+      loadingWatchdogTimersRef.current = [];
+    }
+  };
 
   const updateAudioTransition = (nextVal) => {
     audioTransitionRef.current = nextVal;
@@ -257,6 +312,7 @@ export const VibeFlowAudioCenter = () => {
   };
 
   const stopAllFades = (clearTransition = true) => {
+    clearLoadingWatchdogs();
     if (fadeAnimationRef.current) {
       cancelAnimationFrame(fadeAnimationRef.current);
       fadeAnimationRef.current = null;
@@ -280,10 +336,14 @@ export const VibeFlowAudioCenter = () => {
   const isAutoPlayRef = useRef(isAutoPlayOnStageChange);
   const currentTrackRef = useRef(currentTrack);
   const selectedCategoryTabRef = useRef(selectedCategoryTab);
+  const selectedDivisionRef = useRef(selectedDivision);
+  const searchTextRef = useRef(searchText);
   const tabConfigsRef = useRef(tabConfigs);
   const tracksRef = useRef(tracks);
+  const rawTracksRef = useRef(rawTracks);
   const customTracksRef = useRef(customTracks);
   const allAvailableTracksRef = useRef([]);
+  const allRawTracksRef = useRef([]);
   const filteredTracksRef = useRef([]);
   const seed1PoolRef = useRef([]);
   const seed2PoolRef = useRef([]);
@@ -294,8 +354,11 @@ export const VibeFlowAudioCenter = () => {
 
   currentTrackRef.current = currentTrack;
   selectedCategoryTabRef.current = selectedCategoryTab;
+  selectedDivisionRef.current = selectedDivision;
+  searchTextRef.current = searchText;
   tabConfigsRef.current = tabConfigs;
   tracksRef.current = tracks;
+  rawTracksRef.current = rawTracks;
   customTracksRef.current = customTracks;
   isRemoteSyncRef.current = isRemoteSync;
 
@@ -353,6 +416,58 @@ export const VibeFlowAudioCenter = () => {
   useEffect(() => {
     masterVolumeRef.current = volume;
   }, [volume]);
+
+  // 로컬 SSD(IndexedDB) 캐시 초기 적재 & 백그라운드 자동 저장 도우미
+  const isCacheHydratedRef = useRef(false);
+  useEffect(() => {
+    let mounted = true;
+    hydrateAllStoredAudioBlobUrls()
+      .then((initialMap) => {
+        if (mounted && initialMap) {
+          setAudioCacheMap(initialMap);
+        }
+      })
+      .finally(() => {
+        isCacheHydratedRef.current = true;
+      });
+    return () => {
+      mounted = false;
+      if (batchAbortRef.current) {
+        try {
+          batchAbortRef.current.abort();
+        } catch {}
+      }
+    };
+  }, []);
+
+  const backgroundCacheTrackSilently = (track) => {
+    // SSD 전용 모드에서는 미저장 VibeFlows 음원에 대해 백그라운드 서버 요청도 원천 차단
+    if (ssdOnlyModeRef.current && !isCustomTrack(track)) {
+      return;
+    }
+    const ck = getAudioCacheKey(track);
+    if (!ck || getCachedAudioBlobUrlSync(ck) || inFlightSilentCacheRef.current.has(ck)) {
+      return;
+    }
+    inFlightSilentCacheRef.current.add(ck);
+    cacheOrWarmAudioTrack(track)
+      .then((res) => {
+        if (res?.success && res.cacheKey) {
+          setAudioCacheMap((prev) => ({
+            ...prev,
+            [res.cacheKey]: {
+              mode: res.mode,
+              size: res.size || 0,
+              savedAt: res.savedAt || Date.now(),
+            },
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        inFlightSilentCacheRef.current.delete(ck);
+      });
+  };
 
   // Audio 객체 초기화 & 클린업
   useEffect(() => {
@@ -521,7 +636,7 @@ export const VibeFlowAudioCenter = () => {
         const remaining = dur > 0 ? dur - curTime : Infinity;
         if (
           autoNextEnabled &&
-          (curTime >= 10.0 || (dur > 0 && remaining <= 10.0)) &&
+          (curTime >= 4.0 || (dur > 0 && remaining <= 10.0)) &&
           !isPreCuedRef.current
         ) {
           const nextInfo = getNextSeedTrackRef.current
@@ -531,23 +646,31 @@ export const VibeFlowAudioCenter = () => {
             : null;
 
           if (nextInfo && nextInfo.track) {
-            const playableUrl = getTrackAudioUrl(nextInfo.track);
+            const { src: nextSrc, remoteUrl, isCachedBlob } = resolvePlayableAudioSource(
+              nextInfo.track
+            );
 
-            if (playableUrl) {
+            if (nextSrc || remoteUrl) {
               preCuedTrackRef.current = nextInfo;
               setPreCuedTrack(nextInfo.track);
               isPreCuedRef.current = true;
 
-              const idleDeckName = activeDeckRef.current === "A" ? "B" : "A";
-              const idleAudio = idleDeckName === "A" ? deckARef.current : deckBRef.current;
-              if (idleAudio) {
-                idleAudio.preload = "auto";
-                if (idleAudio.src !== playableUrl) {
-                  idleAudio.src = playableUrl;
+              // 원격 HTTP 소켓을 대기 데크에 미리 열어두면 해외 CDN(LAX) Keep-Alive 만료 시 좀비 연결이 발생하므로,
+              // 대기 곡은 백그라운드에서 즉시 로컬 SSD(IndexedDB)로 통째로 받아두고 Blob일 때만 데크에 적재
+              if (!isCachedBlob) {
+                backgroundCacheTrackSilently(nextInfo.track);
+              } else {
+                const idleDeckName = activeDeckRef.current === "A" ? "B" : "A";
+                const idleAudio = idleDeckName === "A" ? deckARef.current : deckBRef.current;
+                if (idleAudio) {
+                  idleAudio.preload = "auto";
+                  if (idleAudio.src !== nextSrc) {
+                    idleAudio.src = nextSrc;
+                    idleAudio.load();
+                  }
+                  idleAudio.volume = 0;
+                  idleAudio.currentTime = 0;
                 }
-                idleAudio.volume = 0;
-                idleAudio.currentTime = 0;
-                idleAudio.load();
               }
             }
           }
@@ -838,6 +961,16 @@ export const VibeFlowAudioCenter = () => {
           await remove(dbRef(database, `contests/${contestId}/customTracks/${track.id}`));
         } catch (e) {}
       }
+      const deletedCacheKey = getAudioCacheKey(track);
+      await evictCachedAudioTrack(track);
+      if (deletedCacheKey) {
+        setAudioCacheMap((prev) => {
+          if (!prev[deletedCacheKey]) return prev;
+          const next = { ...prev };
+          delete next[deletedCacheKey];
+          return next;
+        });
+      }
       message.success(`'${track.title || track.name}' 음원이 삭제되었습니다.`);
     } catch (error) {
       console.error("커스텀 음원 삭제 실패:", error);
@@ -845,7 +978,7 @@ export const VibeFlowAudioCenter = () => {
     }
   };
 
-  // 🎵 VibeFlows 음원 목록 로드
+  // 🎵 VibeFlows 음원 목록 로드 (해외 CDN/API 일시 지연 시 기존·백업 목록 보존)
   const loadVibeFlowTracks = async (authToken = token) => {
     if (!authToken) return;
     setIsLoadingTracks(true);
@@ -854,12 +987,36 @@ export const VibeFlowAudioCenter = () => {
       console.log("[VibeFlow Audio] fetchVibeFlowContestSongs 결과:", res);
       setRawApiResponse(res?.raw || res);
 
+      if (res?.isUnauthorized) {
+        const backup = getCachedVibeFlowPlaylist().filter(isTrackExposed);
+        if (rawTracksRef.current.length === 0 && backup.length > 0) {
+          setRawTracks(backup);
+        }
+        // 로컬 백업·SSD 음원이 이미 확보된 대회 현장에서는 토큰 만료 시에도 목록을 비우거나 로그인 모달로 화면을 가리지 않음
+        if (rawTracksRef.current.length === 0 && backup.length === 0) {
+          clearVibeFlowToken();
+          setToken(null);
+          setUser(null);
+          setIsLoginModalOpen(true);
+        }
+        return;
+      }
+
+      if (!res?.success) {
+        const backup = getCachedVibeFlowPlaylist().filter(isTrackExposed);
+        if (rawTracksRef.current.length === 0 && backup.length > 0) {
+          setRawTracks(backup);
+        }
+        if (rawTracksRef.current.length === 0 && backup.length === 0) {
+          message.warning(res?.error || "음원 목록 수신이 지연되고 있습니다. 잠시 후 새로고침해 주세요.");
+        }
+        return;
+      }
+
       let rawTrackList = [];
-      if (res && res.success && Array.isArray(res.tracks)) {
+      if (Array.isArray(res.tracks)) {
         rawTrackList = res.tracks;
-      } else if (res && Array.isArray(res.tracks)) {
-        rawTrackList = res.tracks;
-      } else if (res && Array.isArray(res.songs)) {
+      } else if (Array.isArray(res.songs)) {
         rawTrackList = res.songs;
       } else if (Array.isArray(res)) {
         rawTrackList = res;
@@ -869,7 +1026,9 @@ export const VibeFlowAudioCenter = () => {
 
       // 👁️ is_active = 1 (노출 중인 음원만 100% 필터링)
       const finalExposed = rawTrackList.filter(isTrackExposed);
-      setTracks(finalExposed);
+      if (finalExposed.length > 0 || rawTracksRef.current.length === 0) {
+        setRawTracks(finalExposed);
+      }
     } catch (err) {
       console.error("[VibeFlow Audio] 트랙 로드 에러:", err);
       if (err.message?.includes("401") || err.message?.includes("인증")) {
@@ -925,7 +1084,7 @@ export const VibeFlowAudioCenter = () => {
     clearVibeFlowToken();
     setToken(null);
     setUser(null);
-    setTracks([]);
+    setRawTracks([]);
     message.info("로그아웃되었습니다.");
   };
 
@@ -954,9 +1113,271 @@ export const VibeFlowAudioCenter = () => {
     return Math.round((config.fadeDuration || 0) * 1000);
   };
 
-  // 🎛️ 듀얼 데크 지능형 크로스페이드 (탭별 설정된 페이드 시간 적용 + Promise 경쟁/타이머 누수 방지 + 실시간 전환 상태 표시)
-  const crossfadeToTrack = (track, customDuration, triggerSource = "track") => {
-    const playableUrl = getTrackAudioUrl(track);
+  // 🛑 지연 중인 대기 데크 로딩 수동 취소 (현재 재생 중인 데크는 그대로 유지)
+  const handleCancelLoading = () => {
+    const activeTrans = audioTransitionRef.current;
+    if (!activeTrans || activeTrans.phase !== "loading") return;
+
+    playRequestIdRef.current += 1;
+    clearLoadingWatchdogs();
+
+    const targetDeckName = activeTrans.targetDeck;
+    const curDeckName = activeDeckRef.current;
+
+    if (targetDeckName && targetDeckName !== curDeckName) {
+      const targetAudio = targetDeckName === "A" ? deckARef.current : deckBRef.current;
+      deckRequestIdRef.current[targetDeckName] = 0;
+      if (targetAudio) {
+        try {
+          targetAudio.pause();
+          targetAudio.removeAttribute("src");
+          targetAudio.load();
+          targetAudio.volume = 0;
+        } catch {}
+      }
+    } else if (!isPlayingRef.current) {
+      const targetAudio = targetDeckName === "A" ? deckARef.current : deckBRef.current;
+      deckRequestIdRef.current = { A: 0, B: 0 };
+      if (targetAudio) {
+        try {
+          targetAudio.pause();
+          targetAudio.removeAttribute("src");
+          targetAudio.load();
+          targetAudio.volume = 0;
+        } catch {}
+      }
+    }
+
+    updateAudioTransition(null);
+  };
+
+  // 🛡️ 해외 CDN(LAX) 스트림 버퍼링 지연 시 자동 소켓 재연결 & 무한 대기 방지 워치독
+  const armLoadingWatchdog = ({
+    audioEl,
+    deckName,
+    requestId,
+    remoteUrl,
+    targetVol,
+    crossfadeDuration,
+    triggerSource,
+  }) => {
+    clearLoadingWatchdogs();
+    if (!audioEl || !remoteUrl) return;
+
+    // 4.5초 경과 시에도 버퍼가 시작되지 않으면 좀비 소켓을 강제 리셋 후 재요청
+    const retryTimer = setTimeout(() => {
+      if (
+        requestId !== playRequestIdRef.current ||
+        audioTransitionRef.current?.phase !== "loading" ||
+        audioEl.readyState >= 3
+      ) {
+        return;
+      }
+      try {
+        const sep = remoteUrl.includes("?") ? "&" : "?";
+        audioEl.pause();
+        audioEl.removeAttribute("src");
+        audioEl.load();
+        audioEl.src = `${remoteUrl}${sep}_retry=${Date.now()}`;
+        audioEl.preload = "auto";
+        audioEl.volume = crossfadeDuration <= 0 ? targetVol : 0;
+        audioEl.load();
+        audioEl.play().catch(() => {});
+      } catch {}
+    }, 4500);
+
+    // 11초 경과 시에도 응답이 없으면 버튼 잠금 완전 해제 및 연속 재생 시 다음 곡으로 자동 우회
+    const giveUpTimer = setTimeout(() => {
+      if (
+        requestId !== playRequestIdRef.current ||
+        audioTransitionRef.current?.phase !== "loading"
+      ) {
+        return;
+      }
+      playRequestIdRef.current += 1;
+      deckRequestIdRef.current[deckName] = 0;
+      try {
+        audioEl.pause();
+        audioEl.removeAttribute("src");
+        audioEl.load();
+        audioEl.volume = 0;
+      } catch {}
+      updateAudioTransition(null);
+
+      if (
+        (triggerSource === "auto-ended" ||
+          triggerSource === "autopilot" ||
+          triggerSource === "stage") &&
+        playNextSeedTrackRef.current
+      ) {
+        playNextSeedTrackRef.current(false, true, undefined, "autopilot");
+      } else {
+        message.warning(
+          "음원 서버 응답이 지연되어 로딩을 취소했습니다. 다시 클릭하거나 상단 '전곡 사전 다운로드'로 로컬에 저장해 주세요."
+        );
+      }
+    }, 11000);
+
+    loadingWatchdogTimersRef.current = [retryTimer, giveUpTimer];
+  };
+
+  // 💾 전곡 사전 다운로드 / 워밍업 제어 핸들러 (전체 원본 풀 기준으로 미저장 음원만 안전하게 수신)
+  const handleStartBatchCache = async ({ force = false } = {}) => {
+    if (isBatchCaching) return;
+    const pool = allRawTracksRef.current || [];
+    if (pool.length === 0) {
+      message.warning("다운로드할 음원 목록이 아직 로드되지 않았습니다.");
+      return;
+    }
+
+    const controller = new AbortController();
+    batchAbortRef.current = controller;
+    setIsBatchCaching(true);
+
+    try {
+      const result = await batchCacheOrWarmTracks(pool, {
+        concurrency: 1,
+        force,
+        existingStatusMap: audioCacheMap,
+        signal: controller.signal,
+        onTrackUpdate: (cacheKey, nextEntry) => {
+          setAudioCacheMap((prev) => {
+            const copy = { ...prev };
+            if (!nextEntry) {
+              delete copy[cacheKey];
+            } else {
+              copy[cacheKey] = nextEntry;
+            }
+            return copy;
+          });
+        },
+        onProgressSummary: (summary) => {
+          setBatchCacheProgress(summary);
+        },
+      });
+
+      if (!result.aborted) {
+        if (result.failedCount === 0) {
+          message.success(
+            `총 ${result.total}곡 사전 준비가 완료되었습니다. (SSD 저장 ${result.cachedCount}곡${
+              result.warmedCount > 0 ? `, 워밍업 ${result.warmedCount}곡` : ""
+            })`
+          );
+        } else {
+          message.warning(
+            `완료 ${result.cachedCount + result.warmedCount}곡 / 실패 ${result.failedCount}곡 — 실패 항목은 '재시도'를 눌러 다시 받을 수 있습니다.`
+          );
+        }
+      }
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        message.error("일괄 다운로드 중 오류가 발생했습니다: " + (err?.message || ""));
+      }
+    } finally {
+      batchAbortRef.current = null;
+      setIsBatchCaching(false);
+    }
+  };
+
+  const handleCancelBatchCache = () => {
+    if (batchAbortRef.current) {
+      try {
+        batchAbortRef.current.abort();
+      } catch {}
+    }
+  };
+
+  const handleCacheSingleTrack = async (track) => {
+    const ck = getAudioCacheKey(track);
+    if (!ck) return;
+    setAudioCacheMap((prev) => ({
+      ...prev,
+      [ck]: { mode: "downloading", progress: 0 },
+    }));
+    try {
+      const res = await cacheOrWarmAudioTrack(track, {
+        force: true,
+        onProgress: (pct) => {
+          setAudioCacheMap((prev) => ({
+            ...prev,
+            [ck]: { mode: "downloading", progress: pct },
+          }));
+        },
+      });
+      if (res.success) {
+        setAudioCacheMap((prev) => ({
+          ...prev,
+          [ck]: {
+            mode: res.mode,
+            size: res.size || 0,
+            savedAt: res.savedAt || Date.now(),
+          },
+        }));
+      } else {
+        setAudioCacheMap((prev) => ({
+          ...prev,
+          [ck]: { mode: "failed", error: res.error || "다운로드 실패" },
+        }));
+      }
+    } catch (err) {
+      setAudioCacheMap((prev) => ({
+        ...prev,
+        [ck]: { mode: "failed", error: err?.message || "오류 발생" },
+      }));
+    }
+  };
+
+  const handleClearAudioCache = async () => {
+    if (isBatchCaching) return;
+    await clearAllCachedAudio();
+    setAudioCacheMap({});
+    setBatchCacheProgress(null);
+    message.info("로컬에 저장된 오프라인 음원 캐시를 모두 비웠습니다.");
+  };
+
+  // 🎛️ 듀얼 데크 지능형 크로스페이드 (로컬 SSD Blob 우선 0ms 재생 + 좀비 소켓 강제 갱신 + 워치독 내장)
+  const crossfadeToTrack = (
+    track,
+    customDuration,
+    triggerSource = "track",
+    options = {}
+  ) => {
+    const { forceRemote = false, ssdSkipDepth = 0 } = options;
+    const remoteUrl = getTrackAudioUrl(track);
+    const resolved = forceRemote
+      ? { src: remoteUrl, remoteUrl, isCachedBlob: false }
+      : resolvePlayableAudioSource(track);
+    const playableUrl = resolved.src;
+    const isCachedBlob = resolved.isCachedBlob;
+
+    // 🔒 SSD 전용 모드 강제 가드: 로컬 SSD에 없는 VibeFlows 음원은 외부 서버 요청(Rate Limit 소모) 없이 즉시 차단
+    //    (비동기 깊이 제한 ssdSkipDepth <= 2 적용으로 동기 무한 재귀 가능성 100% 원천 차단)
+    if (ssdOnlyModeRef.current && !isCachedBlob && !isCustomTrack(track)) {
+      if (
+        ssdSkipDepth < 2 &&
+        (triggerSource === "auto-ended" ||
+          triggerSource === "autopilot" ||
+          triggerSource === "stage") &&
+        tracksRef.current.length > 0 &&
+        playNextSeedTrackRef.current
+      ) {
+        setTimeout(() => {
+          if (playNextSeedTrackRef.current) {
+            playNextSeedTrackRef.current(
+              false,
+              true,
+              customDuration,
+              "autopilot",
+              ssdSkipDepth + 1
+            );
+          }
+        }, 60);
+      } else if (ssdSkipDepth === 0) {
+        message.warning("현재 'SSD 전용 재생 모드'가 켜져 있어 디스크에 저장된 음원만 재생됩니다.");
+      }
+      return;
+    }
+
     if (!track || !playableUrl) {
       message.error("재생 가능한 음원 URL이 없습니다.");
       return;
@@ -1018,7 +1439,8 @@ export const VibeFlowAudioCenter = () => {
       preCuedTrackRef.current = null;
 
       const deckA = deckARef.current;
-      if (deckA.src !== playableUrl) {
+      // 이전 프리로드 연결이 끊겼거나 에러 상태인 경우(readyState < 3) 무조건 새 소켓으로 강제 재로드
+      if (deckA.src !== playableUrl || deckA.readyState < 3 || deckA.error) {
         deckA.src = playableUrl;
         deckA.preload = "auto";
         deckA.load();
@@ -1029,9 +1451,22 @@ export const VibeFlowAudioCenter = () => {
       setCurrentTrack(track);
       currentTrackRef.current = track;
 
+      if (!isCachedBlob) {
+        armLoadingWatchdog({
+          audioEl: deckA,
+          deckName: "A",
+          requestId,
+          remoteUrl,
+          targetVol,
+          crossfadeDuration,
+          triggerSource,
+        });
+      }
+
       deckA
         .play()
         .then(() => {
+          clearLoadingWatchdogs();
           if (requestId !== playRequestIdRef.current) {
             if (deckRequestIdRef.current.A !== playRequestIdRef.current || !isPlayingRef.current) {
               try {
@@ -1046,6 +1481,10 @@ export const VibeFlowAudioCenter = () => {
           isPlayingRef.current = true;
           updateRemoteNowPlaying(track, "play");
           startTracking();
+
+          if (!isCachedBlob) {
+            setTimeout(() => backgroundCacheTrackSilently(track), 1200);
+          }
 
           if (crossfadeDuration <= 0) {
             const latestVol = masterVolumeRef.current;
@@ -1110,6 +1549,31 @@ export const VibeFlowAudioCenter = () => {
         })
         .catch((err) => {
           if (requestId !== playRequestIdRef.current) return;
+          clearLoadingWatchdogs();
+          if (
+            isCachedBlob &&
+            remoteUrl &&
+            !forceRemote &&
+            err?.name !== "AbortError" &&
+            err?.name !== "NotAllowedError"
+          ) {
+            const badKey = getAudioCacheKey(track);
+            evictCachedAudioTrack(track).finally(() => {
+              if (badKey) {
+                setAudioCacheMap((prev) => {
+                  const next = { ...prev };
+                  delete next[badKey];
+                  return next;
+                });
+              }
+              if (!ssdOnlyModeRef.current) {
+                crossfadeToTrack(track, customDuration, triggerSource, { forceRemote: true });
+              } else {
+                updateAudioTransition(null);
+              }
+            });
+            return;
+          }
           updateAudioTransition(null);
           if (err.name === "AbortError") return;
           console.warn("[Mode Switch Play Error]:", err);
@@ -1152,7 +1616,8 @@ export const VibeFlowAudioCenter = () => {
       } catch (e) {}
     }
 
-    if (nextAudio.src !== playableUrl) {
+    // 대기 데크 소켓이 유휴 만료되었거나 버퍼 미완료(readyState < 3) 상태면 무조건 새 소켓으로 강제 재로드
+    if (nextAudio.src !== playableUrl || nextAudio.readyState < 3 || nextAudio.error) {
       nextAudio.src = playableUrl;
       nextAudio.preload = "auto";
       nextAudio.load();
@@ -1160,9 +1625,22 @@ export const VibeFlowAudioCenter = () => {
     nextAudio.currentTime = 0;
     nextAudio.volume = crossfadeDuration <= 0 ? targetVol : 0;
 
+    if (!isCachedBlob) {
+      armLoadingWatchdog({
+        audioEl: nextAudio,
+        deckName: nextDeckName,
+        requestId,
+        remoteUrl,
+        targetVol,
+        crossfadeDuration,
+        triggerSource,
+      });
+    }
+
     nextAudio
       .play()
       .then(() => {
+        clearLoadingWatchdogs();
         if (requestId !== playRequestIdRef.current) {
           if (deckRequestIdRef.current[nextDeckName] !== playRequestIdRef.current || !isPlayingRef.current) {
             try {
@@ -1185,6 +1663,10 @@ export const VibeFlowAudioCenter = () => {
         preCuedTrackRef.current = null;
         updateRemoteNowPlaying(track, "play");
         startTracking();
+
+        if (!isCachedBlob) {
+          setTimeout(() => backgroundCacheTrackSilently(track), 1200);
+        }
 
         if (isCurrentlyActive && crossfadeDuration > 0) {
           const startTime = performance.now();
@@ -1317,6 +1799,31 @@ export const VibeFlowAudioCenter = () => {
       })
       .catch((err) => {
         if (requestId !== playRequestIdRef.current) return;
+        clearLoadingWatchdogs();
+        if (
+          isCachedBlob &&
+          remoteUrl &&
+          !forceRemote &&
+          err?.name !== "AbortError" &&
+          err?.name !== "NotAllowedError"
+        ) {
+          const badKey = getAudioCacheKey(track);
+          evictCachedAudioTrack(track).finally(() => {
+            if (badKey) {
+              setAudioCacheMap((prev) => {
+                const next = { ...prev };
+                delete next[badKey];
+                return next;
+              });
+            }
+            if (!ssdOnlyModeRef.current) {
+              crossfadeToTrack(track, customDuration, triggerSource, { forceRemote: true });
+            } else {
+              updateAudioTransition(null);
+            }
+          });
+          return;
+        }
         updateAudioTransition(null);
         if (err.name === "AbortError") return;
         console.warn("[Dual-Deck Crossfade Error]:", err);
@@ -1578,11 +2085,17 @@ export const VibeFlowAudioCenter = () => {
     realtimeStage?.contestCategoryGender ||
     "";
 
-  // 🎵 전체 음원 통합 풀 (VibeFlows + 커스텀 음원)
+  // 🎵 재생 활성 음원 풀 (SSD 전용 모드 시 SSD 저장 음원 + 특별 연출 자체 음원만 포함)
   const allAvailableTracks = useMemo(() => {
     return [...tracks, ...customTracks];
   }, [tracks, customTracks]);
   allAvailableTracksRef.current = allAvailableTracks;
+
+  // 📦 사전 다운로드 매니저용 전체 원본 음원 풀 (미저장 음원 이어받기 지원)
+  const allRawTracks = useMemo(() => {
+    return [...rawTracks, ...customTracks];
+  }, [rawTracks, customTracks]);
+  allRawTracksRef.current = allRawTracks;
 
   // 📂 카테고리 탭 목록 생성 (공식 대표 종목 + 현재 대회 종목 + 로드된 트랙 + 특별 연출 통합)
   const categoryTabs = useMemo(() => {
@@ -1778,14 +2291,39 @@ export const VibeFlowAudioCenter = () => {
   }, [categoryBaseTracks, selectedDivision, searchText, allAvailableTracks]);
   filteredTracksRef.current = filteredTracks;
 
-  // ⏪ 이전 곡 재생 (2중 클릭 방지 및 상태 피드백 연동)
+  // 🔄 탭 · 세부 체급(2단계 필터) · 검색어 변경 시 현재 리스트에 없는 기존 대기곡(Pre-Cue) 즉시 갱신
+  useEffect(() => {
+    const cued = preCuedTrackRef.current?.track;
+    if (!cued) return;
+    const stillInList =
+      filteredTracks.length > 0 &&
+      filteredTracks.some((t) => isTrackEqual(t, cued));
+    if (!stillInList) {
+      preCuedTrackRef.current = null;
+      isPreCuedRef.current = false;
+      setPreCuedTrack(null);
+      if (!isCrossfadingRef.current && !isFadingRef.current) {
+        const idleDeckName = activeDeckRef.current === "A" ? "B" : "A";
+        const idleAudio = idleDeckName === "A" ? deckARef.current : deckBRef.current;
+        if (idleAudio) {
+          try {
+            idleAudio.pause();
+            idleAudio.removeAttribute("src");
+            idleAudio.load();
+            idleAudio.volume = 0;
+          } catch {}
+        }
+      }
+    }
+  }, [selectedCategoryTab, selectedDivision, searchText, filteredTracks]);
+
+  // ⏪ 이전 곡 재생 (로딩 지연 시에도 즉시 다른 곡 전환 가능)
   const handlePrevTrack = () => {
     const activeTrans = audioTransitionRef.current;
     if (
       activeTrans &&
-      (activeTrans.phase === "loading" ||
-        activeTrans.phase === "fading-out" ||
-        Date.now() - activeTrans.startedAt < 900)
+      (activeTrans.phase === "fading-out" ||
+        Date.now() - activeTrans.startedAt < 250)
     ) {
       return;
     }
@@ -1797,7 +2335,8 @@ export const VibeFlowAudioCenter = () => {
     }
 
     if (!currentTrack) {
-      crossfadeToTrack(list[0], 2000, "prev");
+      const target = list[0];
+      crossfadeToTrack(target, getFadeDuration(target, null), "prev");
       return;
     }
 
@@ -1825,24 +2364,27 @@ export const VibeFlowAudioCenter = () => {
       return;
     }
 
-    crossfadeToTrack(targetTrack, 2000, "prev");
+    crossfadeToTrack(
+      targetTrack,
+      getFadeDuration(targetTrack, currentTrackRef.current),
+      "prev"
+    );
   };
 
-  // ⏩ 다음 곡 재생 (2중 클릭 방지 및 상태 피드백 연동)
+  // ⏩ 다음 곡 재생 (로딩 지연 시에도 즉시 다른 곡 전환 가능)
   const handleNextTrack = () => {
     const activeTrans = audioTransitionRef.current;
     if (
       activeTrans &&
-      (activeTrans.phase === "loading" ||
-        activeTrans.phase === "fading-out" ||
-        Date.now() - activeTrans.startedAt < 900)
+      (activeTrans.phase === "fading-out" ||
+        Date.now() - activeTrans.startedAt < 250)
     ) {
       return;
     }
 
     // 1. 대기 데크에 이미 프리로드된 트랙이 있다면 즉시 전환
     if (preCuedTrackRef.current && preCuedTrackRef.current.track) {
-      playNextSeedTrack(false, false, 2000, "next");
+      playNextSeedTrack(false, false, undefined, "next");
       return;
     }
 
@@ -1853,7 +2395,14 @@ export const VibeFlowAudioCenter = () => {
     }
 
     if (!currentTrack) {
-      crossfadeToTrack(list[0], 2000, "next");
+      const target = list[0];
+      const tk = getTrackKey(target);
+      if (tk && !playedTrackIdsRef.current.includes(tk)) {
+        const nextPlayed = [...playedTrackIdsRef.current, tk];
+        playedTrackIdsRef.current = nextPlayed;
+        setPlayedTrackIds(nextPlayed);
+      }
+      crossfadeToTrack(target, getFadeDuration(target, null), "next");
       return;
     }
 
@@ -1879,7 +2428,18 @@ export const VibeFlowAudioCenter = () => {
       return;
     }
 
-    crossfadeToTrack(targetTrack, 2000, "next");
+    const tk = getTrackKey(targetTrack);
+    if (tk && !playedTrackIdsRef.current.includes(tk)) {
+      const nextPlayed = [...playedTrackIdsRef.current, tk];
+      playedTrackIdsRef.current = nextPlayed;
+      setPlayedTrackIds(nextPlayed);
+    }
+
+    crossfadeToTrack(
+      targetTrack,
+      getFadeDuration(targetTrack, currentTrackRef.current),
+      "next"
+    );
   };
 
   // 🌱 [시드 1] 1순위 정밀 매칭 풀
@@ -1935,6 +2495,44 @@ export const VibeFlowAudioCenter = () => {
     const standardPool = tracksRef.current;
     const s1Pool = seed1PoolRef.current;
     const s2Pool = seed2PoolRef.current;
+    const activeFilteredList = filteredTracksRef.current;
+
+    // 0. 사용자가 2단계 세부 부문/체급 필터(예: 마스터즈부, 학생부 등), 검색어, 또는 타 종목 탭을 명시 선택한 경우
+    //    화면에 표시된 해당 리스트(filteredTracks) 안에 있는 곡들만 다음 곡/연속 재생에 진입하도록 엄격 제한
+    const hasExplicitListFilter =
+      !isStageTransition &&
+      activeFilteredList.length > 0 &&
+      (selectedDivisionRef.current !== "ALL" ||
+        Boolean(searchTextRef.current && searchTextRef.current.trim()) ||
+        (selectedCategoryTabRef.current !== "ALL" &&
+          selectedCategoryTabRef.current !== "CURRENT_STAGE" &&
+          selectedCategoryTabRef.current !== matchedVibeCategoryRef.current));
+
+    if (hasExplicitListFilter) {
+      const unplayedInList = activeFilteredList.filter(
+        (t) =>
+          !currentPlayed.includes(getTrackKey(t)) &&
+          (!activeTrack || !isTrackEqual(t, activeTrack))
+      );
+      if (unplayedInList.length > 0) {
+        const randomIndex = Math.floor(Math.random() * unplayedInList.length);
+        return {
+          track: unplayedInList[randomIndex],
+          seedLevel: selectedDivisionRef.current !== "ALL" ? 1 : 2,
+          isExhausted: false,
+        };
+      }
+      const otherInList = activeTrack
+        ? activeFilteredList.filter((t) => !isTrackEqual(t, activeTrack))
+        : activeFilteredList;
+      const pool = otherInList.length > 0 ? otherInList : activeFilteredList;
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      return {
+        track: pool[randomIndex],
+        seedLevel: selectedDivisionRef.current !== "ALL" ? 1 : 2,
+        isReset: true,
+      };
+    }
 
     // 1. 자체 커스텀 음원 재생 중이거나(비-무대전환), 무재생 상태에서 커스텀 탭 선택 중인 경우
     const isPlayingCustom = !isStageTransition && activeTrack && isCustomTrack(activeTrack);
@@ -2101,15 +2699,15 @@ export const VibeFlowAudioCenter = () => {
     isStageTransition = false,
     silent = false,
     customDuration,
-    triggerSource = "autopilot"
+    triggerSource = "autopilot",
+    ssdSkipDepth = 0
   ) => {
     if (!isStageTransition && (triggerSource === "autopilot" || triggerSource === "next")) {
       const activeTrans = audioTransitionRef.current;
       if (
         activeTrans &&
-        (activeTrans.phase === "loading" ||
-          activeTrans.phase === "fading-out" ||
-          Date.now() - activeTrans.startedAt < 900)
+        (activeTrans.phase === "fading-out" ||
+          Date.now() - activeTrans.startedAt < 250)
       ) {
         return;
       }
@@ -2117,10 +2715,19 @@ export const VibeFlowAudioCenter = () => {
 
     const latestPlayed = playedTrackIdsRef.current;
     let nextTrackInfo = null;
-    if (!isStageTransition && preCuedTrackRef.current && preCuedTrackRef.current.track) {
-      nextTrackInfo = preCuedTrackRef.current;
+    const cuedCandidate = preCuedTrackRef.current;
+    const isCuedValidForActiveFilter =
+      cuedCandidate?.track &&
+      (filteredTracksRef.current.length === 0 ||
+        filteredTracksRef.current.some((t) =>
+          isTrackEqual(t, cuedCandidate.track)
+        ));
+
+    if (!isStageTransition && cuedCandidate?.track && isCuedValidForActiveFilter) {
+      nextTrackInfo = cuedCandidate;
       preCuedTrackRef.current = null;
     } else {
+      preCuedTrackRef.current = null;
       nextTrackInfo = getNextSeedTrack(isStageTransition ? [] : latestPlayed, {
         isStageTransition,
       });
@@ -2150,7 +2757,8 @@ export const VibeFlowAudioCenter = () => {
     crossfadeToTrack(
       track,
       effectiveDuration,
-      isStageTransition ? "stage" : triggerSource
+      isStageTransition ? "stage" : triggerSource,
+      { ssdSkipDepth }
     );
   };
 
@@ -2269,6 +2877,27 @@ export const VibeFlowAudioCenter = () => {
     };
   }, []);
 
+  const cacheHeaderStats = useMemo(() => {
+    const seen = new Set();
+    let total = 0;
+    let ready = 0;
+    let ssdCached = 0;
+    for (const t of allRawTracks) {
+      const ck = getAudioCacheKey(t);
+      if (!ck || seen.has(ck)) continue;
+      seen.add(ck);
+      total += 1;
+      const mode = audioCacheMap[ck]?.mode;
+      if (mode === "cached") {
+        ssdCached += 1;
+        ready += 1;
+      } else if (mode === "warmed") {
+        ready += 1;
+      }
+    }
+    return { total, ready, ssdCached };
+  }, [allRawTracks, audioCacheMap]);
+
   return (
     <ConfigProvider
       theme={{
@@ -2291,6 +2920,9 @@ export const VibeFlowAudioCenter = () => {
           currentStageCategory={currentStageCategory}
           isRemoteSync={isRemoteSync}
           setIsRemoteSync={setIsRemoteSync}
+          ssdOnlyMode={ssdOnlyMode}
+          setSsdOnlyMode={setSsdOnlyMode}
+          ssdCachedCount={cacheHeaderStats.ssdCached}
           rawApiResponse={rawApiResponse}
           setIsRawModalOpen={setIsRawModalOpen}
           isLoadingTracks={isLoadingTracks}
@@ -2299,6 +2931,11 @@ export const VibeFlowAudioCenter = () => {
           user={user}
           handleLogout={handleLogout}
           setIsLoginModalOpen={setIsLoginModalOpen}
+          onOpenCacheModal={() => setIsCacheModalOpen(true)}
+          totalTrackCount={cacheHeaderStats.total}
+          readyTrackCount={cacheHeaderStats.ready}
+          isBatchCaching={isBatchCaching}
+          batchCacheProgress={batchCacheProgress}
         />
 
         <div className="w-full px-5 sm:px-6 lg:px-8 py-6">
@@ -2322,6 +2959,7 @@ export const VibeFlowAudioCenter = () => {
                 handlePlayTrack={handlePlayTrack}
                 handlePrevTrack={handlePrevTrack}
                 handleNextTrack={handleNextTrack}
+                handleCancelLoading={handleCancelLoading}
               />
 
               <AudioTabControls
@@ -2347,6 +2985,9 @@ export const VibeFlowAudioCenter = () => {
                 currentTrack={currentTrack}
                 isPlaying={isPlaying}
                 audioTransition={audioTransition}
+                hasPlayableTracks={
+                  filteredTracks.length > 0 || allAvailableTracks.length > 0
+                }
                 handlePlayTrack={handlePlayTrack}
                 playNextSeedTrack={playNextSeedTrack}
                 onOpenGuideModal={() => setIsGuideModalOpen(true)}
@@ -2389,11 +3030,15 @@ export const VibeFlowAudioCenter = () => {
                 currentTrack={currentTrack}
                 isPlaying={isPlaying}
                 audioTransition={audioTransition}
+                hasPlayableTracks={
+                  filteredTracks.length > 0 || allAvailableTracks.length > 0
+                }
                 handlePlayTrack={handlePlayTrack}
                 handleDeleteCustomMusic={handleDeleteCustomMusic}
                 seed1Pool={seed1Pool}
                 seed2Pool={seed2Pool}
                 token={token}
+                audioCacheMap={audioCacheMap}
               />
             </div>
           </div>
@@ -2415,6 +3060,18 @@ export const VibeFlowAudioCenter = () => {
           rawApiResponse={rawApiResponse}
           isGuideModalOpen={isGuideModalOpen}
           setIsGuideModalOpen={setIsGuideModalOpen}
+          isCacheModalOpen={isCacheModalOpen}
+          setIsCacheModalOpen={setIsCacheModalOpen}
+          allAvailableTracks={allRawTracks}
+          ssdOnlyMode={ssdOnlyMode}
+          setSsdOnlyMode={setSsdOnlyMode}
+          audioCacheMap={audioCacheMap}
+          isBatchCaching={isBatchCaching}
+          batchCacheProgress={batchCacheProgress}
+          handleStartBatchCache={handleStartBatchCache}
+          handleCancelBatchCache={handleCancelBatchCache}
+          handleCacheSingleTrack={handleCacheSingleTrack}
+          handleClearAudioCache={handleClearAudioCache}
         />
         <ConfirmationModal
           isOpen={noticeOpen}

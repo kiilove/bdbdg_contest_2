@@ -99,7 +99,8 @@ const ContestRankingSummary = ({
     // 출전 선수 기본 명단 먼저 시드 (아직 0표인 선수도 누락 표시 가능)
     (stagePlayers || []).forEach((sp) => {
       if (!isActiveStagePlayer(sp)) return;
-      mapByNum.set(sp.playerNumber, {
+      const numKey = String(sp.playerNumber ?? "").trim();
+      mapByNum.set(numKey, {
         playerNumber: sp.playerNumber,
         playerIndex:
           getStagePlayerSortIndex(sp) || Number(sp.playerNumber) || 0,
@@ -111,7 +112,8 @@ const ContestRankingSummary = ({
     });
 
     arr.forEach((curr) => {
-      let group = mapByNum.get(curr.playerNumber);
+      const numKey = String(curr.playerNumber ?? "").trim();
+      let group = mapByNum.get(numKey);
       if (!group) {
         group = {
           playerNumber: curr.playerNumber,
@@ -122,7 +124,7 @@ const ContestRankingSummary = ({
           playerUid: curr.playerUid || "",
           rawBySeat: new Map(),
         };
-        mapByNum.set(curr.playerNumber, group);
+        mapByNum.set(numKey, group);
       }
       group.rawBySeat.set(Number(curr.seatIndex), curr);
     });
@@ -257,7 +259,7 @@ const ContestRankingSummary = ({
       const currentGroup = next[summaryIndex];
       if (!currentGroup) return prev;
       const updatedResult = currentGroup.result.map((item) =>
-        item.playerNumber === targetPlayerNumber
+        String(item.playerNumber) === String(targetPlayerNumber)
           ? {
               ...item,
               playerRank: Number.isNaN(parsedRank) ? null : parsedRank,

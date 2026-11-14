@@ -19,6 +19,7 @@ import {
   formatSeconds,
   isMatchingCustomTab,
 } from "./constants";
+import { getAudioCacheKey } from "../../../utils/indexedDbAudioStorage";
 import { BibTag, StatusDot } from "../../../components/ui/BibTag";
 
 export const AudioTrackTable = ({
@@ -38,6 +39,7 @@ export const AudioTrackTable = ({
   handleDeleteCustomMusic,
   seed1Pool = [],
   seed2Pool = [],
+  audioCacheMap = {},
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -157,6 +159,8 @@ export const AudioTrackTable = ({
                 pageItems.map((record, idx) => {
                   const globalIdx = startIndex + idx;
                   const key = getTrackKey(record) || globalIdx;
+                  const cacheKey = getAudioCacheKey(record);
+                  const cacheInfo = cacheKey ? audioCacheMap[cacheKey] : null;
                   const isSeed1 = key && seed1Set.has(key);
                   const isSeed2 = key && seed2Set.has(key);
                   const isThisTrackActive = isTrackEqual(currentTrack, record);
@@ -276,6 +280,23 @@ export const AudioTrackTable = ({
                           ) : activePlaying ? (
                             <span className="text-[11px] leading-4 px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/20 text-[#60a5fa] border border-[#2563eb]/35 shrink-0">
                               출력 중
+                            </span>
+                          ) : null}
+                          {cacheInfo?.mode === "cached" ? (
+                            <Tooltip title="이 노트북 SSD(IndexedDB)에 영구 저장됨 · 무지연 로컬 재생">
+                              <span className="text-[10px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#10b981]/12 text-[#34d399] border border-[#10b981]/30 shrink-0 cursor-default">
+                                SSD
+                              </span>
+                            </Tooltip>
+                          ) : cacheInfo?.mode === "warmed" ? (
+                            <Tooltip title="CDN 및 브라우저 미디어 캐시 워밍업 완료">
+                              <span className="text-[10px] leading-4 font-mono px-1.5 py-0.5 rounded-[4px] bg-[#2563eb]/12 text-[#93c5fd] border border-[#2563eb]/30 shrink-0 cursor-default">
+                                WARM
+                              </span>
+                            </Tooltip>
+                          ) : cacheInfo?.mode === "downloading" ? (
+                            <span className="text-[10px] leading-4 font-mono tabular-nums px-1.5 py-0.5 rounded-[4px] bg-[#232325] text-[#a1a1a6] border border-[#ededed]/[0.10] shrink-0">
+                              저장 {cacheInfo.progress || 0}%
                             </span>
                           ) : null}
                         </div>

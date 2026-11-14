@@ -345,33 +345,35 @@ const StageLiveDisplaySquare = () => {
   }, [contestId, currentMode, broadcastData, directBroadcastData, globalActiveBroadcast]);
 
   const activeCategory =
-    legacyStageData?.categoryTitle ||
     broadcastData?.stageInfo?.categoryTitle ||
+    legacyStageData?.categoryTitle ||
     legacyStageData?.screen?.gradeTitle ||
     "";
   const activeGrade =
-    legacyStageData?.gradeTitle ||
     broadcastData?.stageInfo?.gradeTitle ||
+    legacyStageData?.gradeTitle ||
     "";
   const activeGradeId =
-    legacyStageData?.gradeId ||
     broadcastData?.stageInfo?.gradeId ||
+    legacyStageData?.gradeId ||
     "";
   const activeStageNumber =
+    broadcastData?.stageInfo?.stageNumber ||
     legacyStageData?.stageNumber ||
     legacyStageData?.stageId ||
-    broadcastData?.stageInfo?.stageNumber ||
     "";
   const activePlayers =
     broadcastData?.stageInfo?.players ||
+    legacyStageData?.stagePlayers ||
     legacyStageData?.players ||
     legacyStageData?.screen?.players ||
     [];
   const activePlayerCount =
-    legacyStageData?.players?.length ||
-    legacyStageData?.playerCount ||
     broadcastData?.stageInfo?.players?.length ||
     broadcastData?.stageInfo?.playerCount ||
+    legacyStageData?.stagePlayers?.length ||
+    legacyStageData?.players?.length ||
+    legacyStageData?.playerCount ||
     0;
 
   const stageInfo = {
@@ -571,6 +573,7 @@ const StageLiveDisplaySquare = () => {
           backgroundVideoUrl={videoSettings.rankingVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           rankingPhase={broadcastData?.rankingPhase}
+          phaseUpdatedAt={broadcastData?.updatedAt}
           onFinishCeremony={handleFinishCeremony}
         />
       )}

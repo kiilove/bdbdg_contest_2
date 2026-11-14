@@ -34,8 +34,9 @@ const SquareRankingCeremonyScene = ({
   backgroundVideoUrl,
   colorTheme = "GOLD",
   rankingPhase, // "FULL_RANKING" or "CHAMPION_SOLO" (Realtime DB 콘솔 제어)
+  phaseUpdatedAt,
   onFinishCeremony,
-  autoTransitionSeconds = 3, // 1위 단독 전환까지 걸리는 시간 (빠르고 다이내믹한 3초 카운트다운)
+  autoTransitionSeconds = 9, // 2~10위 발표 애니메이션(최대 4.5s)이 모두 노출된 후 1위 단독 전환
 }) => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -52,12 +53,15 @@ const SquareRankingCeremonyScene = ({
   const [ranks, setRanks] = useState(rankingData);
   const [countdown, setCountdown] = useState(autoTransitionSeconds);
 
-  // 📡 본부석 콘솔에서 rankingPhase 변경 시 즉시 동기화
+  // 📡 본부석 콘솔에서 rankingPhase 또는 재전송(updatedAt) 변경 시 즉시 동기화
   useEffect(() => {
     if (rankingPhase) {
       setPhase(rankingPhase);
+      if (rankingPhase === "FULL_RANKING") {
+        setCountdown(autoTransitionSeconds);
+      }
     }
-  }, [rankingPhase]);
+  }, [rankingPhase, phaseUpdatedAt, autoTransitionSeconds]);
 
   const { currentContest } = useContext(CurrentContestContext);
   const fetchResultQuery = useFirestoreQuery();

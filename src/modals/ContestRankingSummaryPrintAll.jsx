@@ -31,6 +31,9 @@ const ContestRankingSummaryPrintAll = ({ props, setClose, onDeleted }) => {
   const { currentContest } = useContext(CurrentContestContext);
 
   const fetchPool = async (propContestId, propGradeId, scoreCollectionName) => {
+    setResultTable([]);
+    setScoreCardsArray([]);
+    setScoreCardPrintArray([]);
     const condition = [
       where("contestId", "==", propContestId),
       where("gradeId", "==", propGradeId),
@@ -160,10 +163,12 @@ const ContestRankingSummaryPrintAll = ({ props, setClose, onDeleted }) => {
   }, [judgesArray]);
 
   useEffect(() => {
-    if (scoreCardsArray?.length > 0 && judgesArray?.length > 0) {
+    if (scoreCardsArray?.length > 0) {
       setScoreCardPrintArray(() => [
-        ...handleGroupBySeatIndex(scoreCardsArray, judgesArray),
+        ...handleGroupBySeatIndex(scoreCardsArray, judgesArray || []),
       ]);
+    } else {
+      setScoreCardPrintArray([]);
     }
   }, [scoreCardsArray, judgesArray]);
 

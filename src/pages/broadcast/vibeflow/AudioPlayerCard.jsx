@@ -32,6 +32,7 @@ export const AudioPlayerCard = ({
   handlePlayTrack,
   handlePrevTrack,
   handleNextTrack,
+  handleCancelLoading,
 }) => {
   const currentVolumePercent = Math.round((volume ?? 1) * 100);
 
@@ -50,10 +51,10 @@ export const AudioPlayerCard = ({
     audioTransition?.targetTrack?.name ||
     "";
 
-  const isSkipBlocked = phase === "loading" || phase === "fading-out";
+  // 로딩 지연 중에도 이전/다음 곡 전환은 언제든 즉시 가능하도록 허용 (페이드아웃 정지 중에만 잠금)
+  const isSkipBlocked = phase === "fading-out";
   const isToggleBlocked =
     (!currentTrack && !audioTransition?.targetTrack) ||
-    phase === "loading" ||
     phase === "fading-out";
 
   const isPrevTriggering =
@@ -323,7 +324,7 @@ export const AudioPlayerCard = ({
           <Tooltip
             title={
               phase === "loading"
-                ? "음원 다운로드 · 버퍼링 중입니다"
+                ? "클릭 시 현재 로딩을 취소하고 기존 상태를 유지합니다"
                 : phase === "fading-out"
                 ? "페이드아웃 정지 진행 중입니다"
                 : isPlaying
@@ -334,9 +335,15 @@ export const AudioPlayerCard = ({
             <button
               type="button"
               disabled={isToggleBlocked}
-              onClick={() =>
-                currentTrack && handlePlayTrack(currentTrack, "player")
-              }
+              onClick={() => {
+                if (phase === "loading" && handleCancelLoading) {
+                  handleCancelLoading();
+                  return;
+                }
+                if (currentTrack) {
+                  handlePlayTrack(currentTrack, "player");
+                }
+              }}
               aria-label={isPlaying ? "일시정지" : "재생"}
               className={`h-11 px-5 min-w-[152px] rounded-[8px] text-[13px] font-medium flex items-center justify-center gap-2 cursor-pointer transition-[background-color,border-color,color,transform,opacity] duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed ${
                 phase === "loading"

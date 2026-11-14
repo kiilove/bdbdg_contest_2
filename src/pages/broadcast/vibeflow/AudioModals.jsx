@@ -1,6 +1,20 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { Drawer, Input } from "antd";
-import { Radio, Code, BookOpen, Lock, X } from "lucide-react";
+import {
+  Radio,
+  Code,
+  BookOpen,
+  Lock,
+  X,
+  HardDrive,
+  Download,
+  Loader2,
+  Check,
+  AlertCircle,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
+import { getAudioCacheKey } from "../../../utils/indexedDbAudioStorage";
 
 const darkDrawerStyles = {
   header: {
@@ -39,7 +53,79 @@ export const AudioModals = ({
   rawApiResponse,
   isGuideModalOpen,
   setIsGuideModalOpen,
+  isCacheModalOpen = false,
+  setIsCacheModalOpen,
+  allAvailableTracks = [],
+  ssdOnlyMode = true,
+  setSsdOnlyMode,
+  audioCacheMap = {},
+  isBatchCaching = false,
+  batchCacheProgress = null,
+  handleStartBatchCache,
+  handleCancelBatchCache,
+  handleCacheSingleTrack,
+  handleClearAudioCache,
 }) => {
+  const [cacheFilter, setCacheFilter] = useState("all");
+
+  const uniqueCacheTracks = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const t of allAvailableTracks) {
+      const ck = getAudioCacheKey(t);
+      if (!ck || seen.has(ck)) continue;
+      seen.add(ck);
+      list.push({ track: t, cacheKey: ck, status: audioCacheMap[ck] || null });
+    }
+    return list;
+  }, [allAvailableTracks, audioCacheMap]);
+
+  const cacheStats = useMemo(() => {
+    let cached = 0;
+    let warmed = 0;
+    let failed = 0;
+    let pending = 0;
+    let totalBytes = 0;
+    for (const item of uniqueCacheTracks) {
+      const mode = item.status?.mode;
+      if (mode === "cached") {
+        cached += 1;
+        totalBytes += Number(item.status?.size || 0);
+      } else if (mode === "warmed") {
+        warmed += 1;
+      } else if (mode === "failed") {
+        failed += 1;
+      } else {
+        pending += 1;
+      }
+    }
+    return {
+      total: uniqueCacheTracks.length,
+      cached,
+      warmed,
+      ready: cached + warmed,
+      failed,
+      pending,
+      totalMb: (totalBytes / (1024 * 1024)).toFixed(1),
+    };
+  }, [uniqueCacheTracks]);
+
+  const visibleCacheItems = useMemo(() => {
+    if (cacheFilter === "pending") {
+      return uniqueCacheTracks.filter(
+        (i) => !i.status?.mode || i.status.mode === "downloading"
+      );
+    }
+    if (cacheFilter === "ready") {
+      return uniqueCacheTracks.filter(
+        (i) => i.status?.mode === "cached" || i.status?.mode === "warmed"
+      );
+    }
+    if (cacheFilter === "failed") {
+      return uniqueCacheTracks.filter((i) => i.status?.mode === "failed");
+    }
+    return uniqueCacheTracks;
+  }, [uniqueCacheTracks, cacheFilter]);
   return (
     <>
       <Drawer
@@ -246,6 +332,285 @@ export const AudioModals = ({
                 무대 전환 시에도 자동 중단되지 않으며, 각 탭에 지정된 페이드 시간과 연속 재생 설정을 따릅니다.
               </p>
             </div>
+          </div>
+        </div>
+      </Drawer>
+
+      <Drawer
+        placement="right"
+        width={580}
+        open={isCacheModalOpen}
+        onClose={() => setIsCacheModalOpen && setIsCacheModalOpen(false)}
+        styles={darkDrawerStyles}
+        title={
+          <span className="font-medium text-[15px] flex items-center gap-2 text-[#ededed]">
+            <HardDrive size={18} strokeWidth={1.5} className="text-[#85858b]" />
+            <span>전곡 사전 다운로드 · 로컬 오프라인 캐시</span>
+          </span>
+        }
+        footer={
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              disabled={isBatchCaching || cacheStats.ready === 0}
+              onClick={() => handleClearAudioCache && handleClearAudioCache()}
+              className="h-9 px-3 rounded-[8px] bg-[#19191b] hover:bg-[#e5484d]/15 border border-[#ededed]/[0.08] hover:border-[#e5484d]/40 text-xs font-medium text-[#a1a1a6] hover:text-[#e5484d] inline-flex items-center gap-1.5 cursor-pointer transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+              <span>캐시 비우기</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCacheModalOpen && setIsCacheModalOpen(false)}
+              className="h-9 px-4 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.10] text-[#ededed] text-xs font-medium cursor-pointer transition-colors duration-150"
+            >
+              닫기
+            </button>
+          </div>
+        }
+      >
+        <div className="flex flex-col h-full gap-4 text-xs text-[#a1a1a6]">
+          <div className="grid grid-cols-4 gap-2.5 shrink-0">
+            <div className="p-3 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08]">
+              <div className="text-[11px] text-[#85858b]">전체 음원</div>
+              <div className="mt-1 text-[18px] leading-6 font-mono tabular-nums font-medium text-[#ededed]">
+                {cacheStats.total}
+              </div>
+            </div>
+            <div className="p-3 rounded-[8px] bg-[#19191b] border border-[#10b981]/25">
+              <div className="text-[11px] text-[#6ee7b7]">SSD 영구 저장</div>
+              <div className="mt-1 text-[18px] leading-6 font-mono tabular-nums font-medium text-[#34d399]">
+                {cacheStats.cached}
+              </div>
+            </div>
+            <div className="p-3 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08]">
+              <div className="text-[11px] text-[#85858b]">워밍업 / 미저장</div>
+              <div className="mt-1 text-[18px] leading-6 font-mono tabular-nums font-medium text-[#ededed]">
+                {cacheStats.warmed} / {cacheStats.pending}
+              </div>
+            </div>
+            <div className="p-3 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08]">
+              <div className="text-[11px] text-[#85858b]">저장 용량</div>
+              <div className="mt-1 text-[18px] leading-6 font-mono tabular-nums font-medium text-[#ededed]">
+                {cacheStats.totalMb}
+                <span className="text-[11px] text-[#85858b] ml-0.5">MB</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-[8px] bg-[#19191b] border border-[#ededed]/[0.08] space-y-3 shrink-0">
+            {ssdOnlyMode && (
+              <div className="px-3 py-2 rounded-[6px] bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-between gap-2 text-[11px] text-[#a7f3d0]">
+                <span>
+                  메인 재생 목록·오토파일럿에는 <strong>SSD 저장 완료({cacheStats.cached}곡)</strong>만 노출됩니다. 미저장 음원은 이 창에서만 확인·다운로드할 수 있습니다.
+                </span>
+                {typeof setSsdOnlyMode === "function" && (
+                  <button
+                    type="button"
+                    onClick={() => setSsdOnlyMode(false)}
+                    className="shrink-0 px-2 py-1 rounded bg-[#141415]/70 hover:bg-[#141415] border border-[#10b981]/30 text-[#6ee7b7] cursor-pointer"
+                  >
+                    전체 표시로 전환
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="text-[13px] font-medium text-[#ededed]">
+                  {isBatchCaching
+                    ? "노트북 디스크에 음원을 내려받는 중입니다 (절전 자동 방지 중)"
+                    : cacheStats.total > 0 && cacheStats.ready >= cacheStats.total
+                    ? "모든 대회 음원이 준비되었습니다"
+                    : "대회 전곡을 미리 내려받아 현장 재생 지연을 원천 차단합니다"}
+                </div>
+                <div className="text-[11px] text-[#85858b] mt-0.5">
+                  현재 도메인({typeof window !== "undefined" ? window.location.host : "bdbdgmain3.web.app"})의 로컬 IndexedDB에 보관되어 인터넷이 느려도 0초 즉시 재생됩니다.
+                </div>
+              </div>
+            </div>
+
+            {isBatchCaching && batchCacheProgress && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                  <span className="text-[#93c5fd] truncate max-w-[360px]">
+                    {batchCacheProgress.activeTitles?.length > 0
+                      ? `수신 중: ${batchCacheProgress.activeTitles.join(", ")}`
+                      : "대기열 정리 중..."}
+                  </span>
+                  <span className="text-[#ededed]">
+                    {batchCacheProgress.completed}/{batchCacheProgress.total} ({batchCacheProgress.percent}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-[#0f0f10] overflow-hidden border border-[#ededed]/[0.06]">
+                  <div
+                    className="h-full bg-[#2563eb] transition-[width] duration-200"
+                    style={{ width: `${batchCacheProgress.percent || 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {isBatchCaching ? (
+                <button
+                  type="button"
+                  onClick={() => handleCancelBatchCache && handleCancelBatchCache()}
+                  className="h-9 px-4 rounded-[8px] bg-[#e5484d]/20 hover:bg-[#e5484d]/30 border border-[#e5484d]/45 text-[#fca5a5] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <span>다운로드 일시 중지</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={cacheStats.total === 0}
+                    onClick={() =>
+                      handleStartBatchCache && handleStartBatchCache({ force: false })
+                    }
+                    className="h-9 px-4 rounded-[8px] bg-[#ededed] hover:bg-white text-[#141415] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Download size={14} strokeWidth={1.75} />
+                    <span>
+                      {cacheStats.pending > 0 || cacheStats.failed > 0
+                        ? `미저장 음원 일괄 다운로드 (${cacheStats.pending + cacheStats.failed}곡)`
+                        : "전곡 캐시 상태 재확인"}
+                    </span>
+                  </button>
+
+                  {cacheStats.ready > 0 && (
+                    <button
+                      type="button"
+                      disabled={cacheStats.total === 0}
+                      onClick={() =>
+                        handleStartBatchCache && handleStartBatchCache({ force: true })
+                      }
+                      className="h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.10] text-[#ededed] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <RotateCcw size={13} strokeWidth={1.6} />
+                      <span>전체 다시 받기</span>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-1">
+              {[
+                { key: "all", label: `전체 (${cacheStats.total})` },
+                { key: "pending", label: `미저장 (${cacheStats.pending})` },
+                { key: "ready", label: `준비됨 (${cacheStats.ready})` },
+                { key: "failed", label: `실패 (${cacheStats.failed})` },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setCacheFilter(tab.key)}
+                  className={`h-7 px-2.5 rounded-[6px] text-[11px] font-medium cursor-pointer transition-colors ${
+                    cacheFilter === tab.key
+                      ? "bg-[#232325] text-[#ededed] border border-[#ededed]/[0.14]"
+                      : "bg-transparent text-[#85858b] hover:text-[#ededed]"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-[#85858b]">
+              로그인 갱신 후에도 캐시 유지됨
+            </span>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-[8px] border border-[#ededed]/[0.08] bg-[#0f0f10] divide-y divide-[#ededed]/[0.06]">
+            {visibleCacheItems.length === 0 ? (
+              <div className="py-12 text-center text-xs text-[#85858b]">
+                {cacheStats.total === 0
+                  ? "먼저 VibeFlows 로그인 또는 음원 로드를 진행해 주세요."
+                  : "해당 조건의 음원이 없습니다."}
+              </div>
+            ) : (
+              visibleCacheItems.map(({ track, cacheKey, status }, i) => {
+                const mode = status?.mode;
+                const category =
+                  track.contest_category_kr || track.category || track.folder || "기타";
+                const sizeMb = status?.size
+                  ? `${(status.size / (1024 * 1024)).toFixed(1)}MB`
+                  : "";
+
+                return (
+                  <div
+                    key={cacheKey}
+                    className="px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-[#19191b]/70"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono tabular-nums text-[11px] text-[#85858b]">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                        <span className="text-xs font-medium text-[#ededed] truncate">
+                          {track.title || track.name || "Untitled"}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-[#85858b] truncate">
+                        {category}
+                        {track.contest_division_kr
+                          ? ` · ${track.contest_division_kr}`
+                          : ""}
+                        {sizeMb ? ` · ${sizeMb}` : ""}
+                        {mode === "failed" && status?.error
+                          ? ` · ${status.error}`
+                          : ""}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      {mode === "cached" ? (
+                        <span className="h-6 px-2 rounded-[4px] bg-[#10b981]/12 border border-[#10b981]/30 text-[#34d399] text-[11px] font-mono inline-flex items-center gap-1">
+                          <Check size={12} strokeWidth={2} />
+                          <span>SSD 저장됨</span>
+                        </span>
+                      ) : mode === "warmed" ? (
+                        <span className="h-6 px-2 rounded-[4px] bg-[#2563eb]/15 border border-[#2563eb]/35 text-[#93c5fd] text-[11px] font-mono inline-flex items-center gap-1">
+                          <Check size={12} strokeWidth={2} />
+                          <span>워밍업됨</span>
+                        </span>
+                      ) : mode === "downloading" ? (
+                        <span className="h-6 px-2 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.10] text-[#93c5fd] text-[11px] font-mono tabular-nums inline-flex items-center gap-1">
+                          <Loader2 size={12} strokeWidth={2} className="animate-spin" />
+                          <span>{status?.progress || 0}%</span>
+                        </span>
+                      ) : mode === "failed" ? (
+                        <button
+                          type="button"
+                          disabled={isBatchCaching}
+                          onClick={() =>
+                            handleCacheSingleTrack && handleCacheSingleTrack(track)
+                          }
+                          className="h-7 px-2.5 rounded-[6px] bg-[#e5484d]/15 hover:bg-[#e5484d]/25 border border-[#e5484d]/35 text-[#fca5a5] text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                        >
+                          <AlertCircle size={12} strokeWidth={1.8} />
+                          <span>재시도</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isBatchCaching}
+                          onClick={() =>
+                            handleCacheSingleTrack && handleCacheSingleTrack(track)
+                          }
+                          className="h-7 px-2.5 rounded-[6px] bg-[#19191b] hover:bg-[#232325] border border-[#ededed]/[0.10] text-[#a1a1a6] hover:text-[#ededed] text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                        >
+                          <Download size={12} strokeWidth={1.6} />
+                          <span>저장</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </Drawer>

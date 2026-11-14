@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { db, database } from "../firebase";
 import {
+  sanitizeForFirestore,
+  sanitizeForRealtimeDb,
+} from "../utils/firestoreSanitize";
+import {
   applyEmergencyJudgeSeatSwap,
   normalizeSectionName,
   sortJudgesByName,
@@ -60,7 +64,11 @@ const LiveJudgeSwapModal = ({
   // 현재 무대에 배정된 좌석 맵 (judgeUid -> seatIndex[])
   const seatedSeatsByUid = useMemo(() => {
     const map = new Map();
-    const list = Array.isArray(realtimeData?.judges) ? realtimeData.judges : [];
+    const list = Array.isArray(realtimeData?.judges)
+      ? realtimeData.judges
+      : realtimeData?.judges && typeof realtimeData.judges === "object"
+      ? Object.values(realtimeData.judges)
+      : [];
     list.forEach((j, idx) => {
       const uid = j?.judgeUid;
       if (!uid) return;
@@ -353,16 +361,22 @@ const LiveJudgeSwapModal = ({
           });
 
           if (snap.exists()) {
-            transaction.update(assignRef, {
-              judges: finalSwapResult.nextJudgesAssign,
-              updatedAt: new Date(now).toISOString(),
-            });
+            transaction.update(
+              assignRef,
+              sanitizeForFirestore({
+                judges: finalSwapResult.nextJudgesAssign,
+                updatedAt: new Date(now).toISOString(),
+              })
+            );
           } else {
-            transaction.set(assignRef, {
-              contestId,
-              judges: finalSwapResult.nextJudgesAssign,
-              updatedAt: new Date(now).toISOString(),
-            });
+            transaction.set(
+              assignRef,
+              sanitizeForFirestore({
+                contestId,
+                judges: finalSwapResult.nextJudgesAssign,
+                updatedAt: new Date(now).toISOString(),
+              })
+            );
           }
         });
       } else {
@@ -442,7 +456,10 @@ const LiveJudgeSwapModal = ({
         });
       }
 
-      await update(ref(database, `currentStage/${contestId}`), rtdbUpdates);
+      await update(
+        ref(database, `currentStage/${contestId}`),
+        sanitizeForRealtimeDb(rtdbUpdates)
+      );
 
       if (typeof onSwapSuccess === "function") {
         onSwapSuccess({

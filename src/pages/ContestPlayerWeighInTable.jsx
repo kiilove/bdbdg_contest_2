@@ -125,7 +125,7 @@ const ContestPlayerWeighInTable = () => {
           currentContest.contests.contestGradesListId
         );
 
-        setGradesArray([...returnGrades?.grades]);
+        setGradesArray([...(returnGrades?.grades || [])]);
       }
 
       // 📥 1. 신청서/엔트리 풀에서 선수 사진 · 지정 슬롯 · 원체급 맵 일괄 로드
@@ -591,9 +591,12 @@ const ContestPlayerWeighInTable = () => {
               ? !!dbPlayer.isGradeChanged
               : !!lp.isGradeChanged;
 
+            const basePlayer = isLocalDirty
+              ? { ...dbPlayer, ...lp }
+              : { ...lp, ...dbPlayer };
+
             return {
-              ...dbPlayer,
-              ...lp,
+              ...basePlayer,
               heightWeight: safeHW,
               playerHeight: safeHeight,
               playerWeight: safeWeight,
@@ -608,24 +611,48 @@ const ContestPlayerWeighInTable = () => {
                 ? !!lp.isWeighedIn
                 : Boolean(dbPlayer.isWeighedIn || lp.isWeighedIn),
               isGradeChanged: resolvedGradeChanged,
-              originalGradeId:
-                lp.originalGradeId ||
-                dbPlayer.originalGradeId ||
-                dbPlayer.contestGradeId,
-              originalGradeTitle:
-                lp.originalGradeTitle ||
-                dbPlayer.originalGradeTitle ||
-                dbPlayer.contestGradeTitle,
-              contestGradeId: resolvedGradeChanged
-                ? lp.contestGradeId || dbPlayer.contestGradeId
-                : lp.contestGradeId || dbPlayer.originalGradeId || dbPlayer.contestGradeId,
-              contestGradeTitle: resolvedGradeChanged
-                ? lp.contestGradeTitle || dbPlayer.contestGradeTitle
-                : lp.contestGradeTitle || dbPlayer.originalGradeTitle || dbPlayer.contestGradeTitle,
-              playerNumber:
-                Number(lp.playerNumber) || Number(dbPlayer.playerNumber) || 0,
-              playerIndex:
-                Number(lp.playerIndex) || Number(dbPlayer.playerIndex) || 0,
+              originalGradeId: isLocalDirty
+                ? lp.originalGradeId ||
+                  dbPlayer.originalGradeId ||
+                  dbPlayer.contestGradeId
+                : dbPlayer.originalGradeId ||
+                  lp.originalGradeId ||
+                  dbPlayer.contestGradeId,
+              originalGradeTitle: isLocalDirty
+                ? lp.originalGradeTitle ||
+                  dbPlayer.originalGradeTitle ||
+                  dbPlayer.contestGradeTitle
+                : dbPlayer.originalGradeTitle ||
+                  lp.originalGradeTitle ||
+                  dbPlayer.contestGradeTitle,
+              contestGradeId: isLocalDirty
+                ? resolvedGradeChanged
+                  ? lp.contestGradeId || dbPlayer.contestGradeId
+                  : lp.contestGradeId ||
+                    dbPlayer.originalGradeId ||
+                    dbPlayer.contestGradeId
+                : resolvedGradeChanged
+                ? dbPlayer.contestGradeId || lp.contestGradeId
+                : dbPlayer.originalGradeId ||
+                  dbPlayer.contestGradeId ||
+                  lp.contestGradeId,
+              contestGradeTitle: isLocalDirty
+                ? resolvedGradeChanged
+                  ? lp.contestGradeTitle || dbPlayer.contestGradeTitle
+                  : lp.contestGradeTitle ||
+                    dbPlayer.originalGradeTitle ||
+                    dbPlayer.contestGradeTitle
+                : resolvedGradeChanged
+                ? dbPlayer.contestGradeTitle || lp.contestGradeTitle
+                : dbPlayer.originalGradeTitle ||
+                  dbPlayer.contestGradeTitle ||
+                  lp.contestGradeTitle,
+              playerNumber: isLocalDirty
+                ? Number(lp.playerNumber) || Number(dbPlayer.playerNumber) || 0
+                : Number(dbPlayer.playerNumber) || Number(lp.playerNumber) || 0,
+              playerIndex: isLocalDirty
+                ? Number(lp.playerIndex) || Number(dbPlayer.playerIndex) || 0
+                : Number(dbPlayer.playerIndex) || Number(lp.playerIndex) || 0,
               ...resolvedPhotoFields,
               photos: combinedPhotos,
             };
@@ -1769,12 +1796,14 @@ const ContestPlayerWeighInTable = () => {
     const currentPlayerInfo = newPlayers[playerFindIndex];
     const catId = currentPlayerInfo.contestCategoryId || currentCategoryId;
 
-    // 🌟 선수의 진짜 원래 배정 체급(Original Grade) 확정
-    const assignOriginal = (playersAssign?.players || []).find(
-      (p) =>
-        p.playerUid === currentPlayerInfo.playerUid &&
-        p.contestCategoryId === catId
-    );
+    // 🌟 선수의 진짜 원래 배정 체급(Original Grade) 확정 (강제 수동추가 등 빈 UID 오매칭 방지)
+    const assignOriginal = currentPlayerInfo.playerUid
+      ? (playersAssign?.players || []).find(
+          (p) =>
+            p.playerUid === currentPlayerInfo.playerUid &&
+            p.contestCategoryId === catId
+        )
+      : null;
 
     const origGradeId =
       currentPlayerInfo.originalGradeId ||

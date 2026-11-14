@@ -49,7 +49,7 @@ const Idle = () => {
         condition
       );
       if (data.length > 0) {
-        setSponsors([...data[0]?.sponsors]);
+        setSponsors([...(data[0]?.sponsors || [])]);
         console.log("Sponsors fetched:", data[0]?.sponsors);
       } else {
         console.log("No sponsors found for contestId:", contestId);

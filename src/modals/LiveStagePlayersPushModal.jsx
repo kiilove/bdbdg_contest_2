@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { db, database } from "../firebase";
 import {
+  sanitizeForFirestore,
+  sanitizeForRealtimeDb,
+} from "../utils/firestoreSanitize";
+import {
   buildLiveStageRealtimeSnapshot,
   extractRtdbPlayerArray,
   getStageBackupKey,
@@ -37,7 +41,7 @@ const LiveStagePlayersPushModal = ({
     () =>
       Array.isArray(currentStageInfo?.grades) && currentStageInfo.grades.length > 0
         ? currentStageInfo.grades
-        : realtimeData?.stageGrades || [],
+        : extractRtdbPlayerArray(realtimeData?.stageGrades),
     [currentStageInfo?.grades, realtimeData?.stageGrades]
   );
 
@@ -509,11 +513,14 @@ const LiveStagePlayersPushModal = ({
             }
           });
 
-          tx.update(finalRef, {
-            players: updatedExisting,
-            stageOverrideBackups: existingBackups,
-            updatedAt: new Date().toISOString(),
-          });
+          tx.update(
+            finalRef,
+            sanitizeForFirestore({
+              players: updatedExisting,
+              stageOverrideBackups: existingBackups,
+              updatedAt: new Date().toISOString(),
+            })
+          );
         });
       }
 
@@ -535,7 +542,7 @@ const LiveStagePlayersPushModal = ({
       });
 
       // 이미 로그인한 심판은 로그인 상태를 유지하되, 채점 제출 완료(isEnd)만 해제하여 재채점 가능화
-      const nextJudges = (realtimeData?.judges || []).map((j) => ({
+      const nextJudges = extractRtdbPlayerArray(realtimeData?.judges).map((j) => ({
         ...j,
         isEnd: false,
       }));
@@ -546,20 +553,23 @@ const LiveStagePlayersPushModal = ({
         // ignore
       }
 
-      await update(ref(database, `currentStage/${contestId}`), {
-        ...liveSnapshot,
-        judges: nextJudges,
-        resultSaved: [],
-        compares: {
-          status: {
-            compareStart: false,
-            compareEnd: false,
-            compareCancel: false,
-            compareIng: false,
+      await update(
+        ref(database, `currentStage/${contestId}`),
+        sanitizeForRealtimeDb({
+          ...liveSnapshot,
+          judges: nextJudges,
+          resultSaved: [],
+          compares: {
+            status: {
+              compareStart: false,
+              compareEnd: false,
+              compareCancel: false,
+              compareIng: false,
+            },
+            confirmed: { count: 0 },
           },
-          confirmed: { count: 0 },
-        },
-      });
+        })
+      );
 
       onAfterPush?.(activePlayers.length);
       onClose?.();

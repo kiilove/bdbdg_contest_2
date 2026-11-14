@@ -58,7 +58,18 @@ const ContestAwardCreator = ({ props, setClose }) => {
         ...finded,
       };
 
-      const flattenPlayerInfo = newPlayerInfo?.result?.map((player) => {
+      const flattenPlayerInfo = (newPlayerInfo?.result || [])
+        .filter((player) => {
+          const r = Number(player?.playerRank);
+          return (
+            Number.isFinite(r) &&
+            r >= 1 &&
+            r < 1000 &&
+            player?.playerNoShow !== true &&
+            player?.isRankExcluded !== true
+          );
+        })
+        .map((player) => {
         const { playerName, playerGym, playerNumber, playerRank, playerUid } =
           player;
         const {

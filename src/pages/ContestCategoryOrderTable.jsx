@@ -50,15 +50,15 @@ const ContestCategoryOrderTable = () => {
 
     if (returnCategories) {
       setCategoriesList(returnCategories);
-      setCategoriesArray([
-        ...returnCategories?.categorys.sort(
+      setCategoriesArray(
+        [...(returnCategories?.categorys || [])].sort(
           (a, b) => a.contestCategoryIndex - b.contestCategoryIndex
-        ),
-      ]);
+        )
+      );
     }
 
     if (returnGrades) {
-      setGradesArray([...returnGrades?.grades]);
+      setGradesArray([...(returnGrades?.grades || [])]);
     }
   };
 

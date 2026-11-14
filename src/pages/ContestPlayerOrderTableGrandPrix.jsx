@@ -186,8 +186,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
       }
     });
 
+    const isGrandPrixCategory = (cat) =>
+      cat?.contestCategorySection === "그랑프리" ||
+      String(cat?.contestCategoryTitle || "").includes("그랑프리");
+
     const filteredCategories = (categories || [])
-      .filter((f) => f.contestCategorySection === "그랑프리")
+      .filter(isGrandPrixCategory)
       .sort(
         (a, b) =>
           (Number(a?.contestCategoryIndex) || 0) -
@@ -592,8 +596,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
     setIsLoading(true);
 
     let dummy = [];
-    categories
-      .filter((f) => f.contestCategorySection === "그랑프리")
+    (categories || [])
+      .filter(
+        (f) =>
+          f?.contestCategorySection === "그랑프리" ||
+          String(f?.contestCategoryTitle || "").includes("그랑프리")
+      )
       .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
       .forEach((category) => {
         const matchedGrades = grades.filter(
@@ -714,7 +722,11 @@ const ContestPlayerOrderTableGrandPrix = () => {
 
       const grandPrixCategoryIds = new Set(
         (categoriesArray || [])
-          .filter((c) => c?.contestCategorySection === "그랑프리")
+          .filter(
+            (c) =>
+              c?.contestCategorySection === "그랑프리" ||
+              String(c?.contestCategoryTitle || "").includes("그랑프리")
+          )
           .map((c) => c.contestCategoryId)
           .filter(Boolean)
       );

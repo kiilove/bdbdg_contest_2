@@ -1093,3 +1093,107 @@ test("14. Layer-isolated direct player edit & forward-only inheritance (Zero Ret
   assert.equal(u101Gp.playerName, "홍길동(그랑프리전용표기)");
   assert.equal(u101Gp.playerGym, "슈퍼짐");
 });
+
+test("15. VibeFlow SSD Audio Cache — stable cache keys across signed URL rotation & blob-first playback isolation", async () => {
+  const {
+    getAudioCacheKey,
+    normalizeAudioUrlForKey,
+    resolvePlayableAudioSource,
+  } = await import("../src/utils/indexedDbAudioStorage.js");
+
+  const trackDay1 = {
+    uuid: "song-901",
+    title: "노란 가로등 잔상",
+    audio_url: "https://media.vibeflows.net/songs/901.mp3?token=day1&exp=1000",
+  };
+  const trackDay2 = {
+    uuid: "song-901",
+    title: "노란 가로등 잔상",
+    audio_url: "https://media.vibeflows.net/songs/901.mp3?token=day2&exp=9999",
+  };
+
+  // Signed URL rotation must produce identical stable cache keys
+  assert.equal(getAudioCacheKey(trackDay1), "vf:song-901");
+  assert.equal(getAudioCacheKey(trackDay1), getAudioCacheKey(trackDay2));
+  assert.equal(
+    normalizeAudioUrlForKey(trackDay1.audio_url),
+    "https://media.vibeflows.net/songs/901.mp3"
+  );
+
+  // Custom Storage track uses stable storagePath
+  const customCeremony = {
+    id: "bgm_1",
+    is_custom: true,
+    storagePath: "custom_bgm/국민의례 음악/anthem.mp3",
+    downloadURL: "https://firebasestorage.googleapis.com/v0/b/x/o/anthem.mp3?token=abc",
+  };
+  assert.equal(
+    getAudioCacheKey(customCeremony),
+    "storage:custom_bgm/국민의례 음악/anthem.mp3"
+  );
+
+  // Blob-first resolution returns blob: URL for local deck while preserving remote https:// URL for RTDB sync
+  const fakeMemoryLookup = (key) =>
+    key === "vf:song-901" ? "blob:https://bdbdgmain3.web.app/local-uuid-901" : "";
+
+  const resolvedCached = resolvePlayableAudioSource(trackDay2, fakeMemoryLookup);
+  assert.equal(resolvedCached.isCachedBlob, true);
+  assert.equal(resolvedCached.src, "blob:https://bdbdgmain3.web.app/local-uuid-901");
+  assert.equal(resolvedCached.remoteUrl, trackDay2.audio_url);
+
+  const uncachedTrack = {
+    uuid: "song-902",
+    audio_url: "https://media.vibeflows.net/songs/902.mp3",
+  };
+  const resolvedUncached = resolvePlayableAudioSource(uncachedTrack, fakeMemoryLookup);
+  assert.equal(resolvedUncached.isCachedBlob, false);
+  assert.equal(resolvedUncached.src, uncachedTrack.audio_url);
+});
+
+test("16. Live Judge Swap Sparse RTDB Object Safety — zero undefined holes when currentRealtimeJudges is sparse object", () => {
+  const sparseRealtimeJudges = {
+    0: { seatIndex: 1, judgeUid: "j1", judgeName: "김일번", isLogined: true, isEnd: false },
+    2: { seatIndex: 3, judgeUid: "j3", judgeName: "박삼번", isLogined: true, isEnd: false },
+  };
+  const plan = applyEmergencyJudgeSeatSwap({
+    judges: [
+      { stageId: "s1", seatIndex: 1, judgeUid: "j1", judgeName: "김일번", contestGradeId: "g1" },
+      { stageId: "s1", seatIndex: 3, judgeUid: "j3", judgeName: "박삼번", contestGradeId: "g1" },
+    ],
+    categories: [{ contestCategoryId: "c1", contestCategorySection: "1부" }],
+    grades: [{ contestGradeId: "g1", refCategoryId: "c1" }],
+    stages: [
+      {
+        stageId: "s1",
+        stageNumber: 1,
+        categoryId: "c1",
+        grades: [{ gradeId: "g1", gradeTitle: "-70kg" }],
+      },
+    ],
+    currentStage: {
+      stageId: "s1",
+      stageNumber: 1,
+      categoryId: "c1",
+      grades: [{ gradeId: "g1", gradeTitle: "-70kg" }],
+    },
+    seatIndex: 4,
+    replacementJudge: {
+      judgeUid: "j4",
+      judgeName: "최사번",
+      onedayPassword: "4444",
+      isHead: false,
+    },
+    currentRealtimeJudges: sparseRealtimeJudges,
+    scope: "stage_only",
+    swapMode: "replace",
+    contestId: "contest_1",
+    timestamp: 1700000011111,
+  });
+
+  assert.equal(Array.isArray(plan.nextRealtimeJudges), true);
+  assert.equal(plan.nextRealtimeJudges.some((item) => item === undefined), false);
+  assert.deepEqual(
+    plan.nextRealtimeJudges.map((j) => j.seatIndex),
+    [1, 3, 4]
+  );
+});

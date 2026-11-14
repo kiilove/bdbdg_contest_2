@@ -62,6 +62,7 @@ import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 import {
   buildLiveStageRealtimeSnapshot,
+  extractRtdbPlayerArray,
   isLiveStageOverrideActive,
   resolveEffectiveStagePlayers,
   rollbackLiveStageToOriginal,
@@ -1738,6 +1739,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                   realtimeData,
                 });
                 setRollbackConfirmOpen(false);
+                reloadBasecampData();
                 setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
                 const bibSummary =
                   Array.isArray(res?.restoredBibs) && res.restoredBibs.length > 0
@@ -1792,6 +1794,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             gradesArray={gradesArray}
             normalScoreData={normalScoreData}
             onSwapSuccess={(info) => {
+              reloadBasecampData();
               setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
               const pinText = info?.replacementJudge?.onedayPassword
                 ? `인증번호: ${info.replacementJudge.onedayPassword}`
@@ -1838,6 +1841,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             currentStageInfo={currentStageInfo}
             realtimeData={realtimeData}
             onAfterPush={(count) => {
+              reloadBasecampData();
               setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
               setMessage({
                 variant: "info",
@@ -1851,6 +1855,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               setMsgOpen(true);
             }}
             onAfterRollback={(res) => {
+              reloadBasecampData();
               setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
               const bibSummary =
                 Array.isArray(res?.restoredBibs) && res.restoredBibs.length > 0
@@ -2014,11 +2019,12 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             currentStage={currentStageInfo}
             currentPlayers={
               currentStageInfo?.grades
-                ? playersArray.filter((p) =>
-                    currentStageInfo.grades.some(
-                      (g) => g.gradeId === p.contestGradeId
-                    )
-                  )
+                ? resolveEffectiveStagePlayers({
+                    realtimeData,
+                    fallbackPlayers: playersArray,
+                    gradeIds: currentStageInfo.grades.map((g) => g.gradeId),
+                    stageInfo: currentStageInfo,
+                  })
                 : []
             }
           />
@@ -2153,7 +2159,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
                         <div className="p-4 bg-white">
                           {isTabletOrMobile ? (
-                            <JudgeCardView judges={realtimeData?.judges} />
+                            <JudgeCardView
+                              judges={extractRtdbPlayerArray(realtimeData?.judges)}
+                            />
                           ) : (
                             <div className="overflow-x-auto rounded-[8px] border border-[#171717]/[0.08]">
                               <table className="w-full border-collapse text-sm">
@@ -2174,7 +2182,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#171717]/[0.06] bg-white">
-                                  {(realtimeData?.judges || []).map(
+                                  {extractRtdbPlayerArray(realtimeData?.judges).map(
                                     (judge, idx) => {
                                       const { isEnd, isLogined } = judge;
                                       let dotStatus = "idle";
@@ -2345,7 +2353,9 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                   stageInfo: currentStageInfo,
                                 });
 
-                              const judges = realtimeData?.judges || [];
+                              const judges = extractRtdbPlayerArray(
+                                realtimeData?.judges
+                              );
                               const isGradeSaved =
                                 Array.isArray(realtimeData?.resultSaved) &&
                                 realtimeData.resultSaved.includes(gradeId);

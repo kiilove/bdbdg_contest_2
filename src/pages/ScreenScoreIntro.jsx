@@ -201,7 +201,7 @@ const ScreenScoreIntro = ({ categoryTitle, gradeTitle, rankOrder = [] }) => {
               .sort((a, b) => a.playerRank - b.playerRank)
               .map((player, pIdx) => {
                 const { score, playerNumber } = player;
-                const randomScore = score.sort(
+                const randomScore = [...(score || [])].sort(
                   (a, b) => a.randomIndex - b.randomIndex
                 );
 

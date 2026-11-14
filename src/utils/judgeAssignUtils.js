@@ -866,17 +866,22 @@ export const applyEmergencyJudgeSeatSwap = ({
     targetStages = [matchedCurrentStage, ...remainingInSection];
   }
 
-  const realtimeList = Array.isArray(currentRealtimeJudges)
-    ? currentRealtimeJudges.map((j) => (j ? { ...j } : j))
+  const rawRealtimeList = Array.isArray(currentRealtimeJudges)
+    ? currentRealtimeJudges
+    : currentRealtimeJudges && typeof currentRealtimeJudges === "object"
+    ? Object.values(currentRealtimeJudges)
     : [];
+  const realtimeList = rawRealtimeList
+    .filter(Boolean)
+    .map((j, idx) => ({
+      ...j,
+      seatIndex: Number(j?.seatIndex || idx + 1),
+    }));
 
   const findRealtimeSlotIndex = (sIdx) => {
-    const byField = realtimeList.findIndex(
+    return realtimeList.findIndex(
       (j) => Number(j?.seatIndex) === Number(sIdx)
     );
-    if (byField !== -1) return byField;
-    if (sIdx - 1 >= 0 && sIdx - 1 < realtimeList.length) return sIdx - 1;
-    return -1;
   };
 
   const targetSlotIdx = findRealtimeSlotIndex(targetSeat);
@@ -1030,10 +1035,9 @@ export const applyEmergencyJudgeSeatSwap = ({
       replacementJudge
     );
   } else if (targetSeat >= 1) {
-    realtimeList[targetSeat - 1] = buildSwappedSlot(
-      null,
-      targetSeat,
-      replacementJudge
+    realtimeList.push(buildSwappedSlot(null, targetSeat, replacementJudge));
+    realtimeList.sort(
+      (a, b) => Number(a?.seatIndex || 0) - Number(b?.seatIndex || 0)
     );
   }
 
@@ -1046,6 +1050,14 @@ export const applyEmergencyJudgeSeatSwap = ({
         realtimeList[partnerSlotIdx],
         numericPartnerSeat,
         outgoingJudge
+      );
+      affectedSeats.push(numericPartnerSeat);
+    } else if (numericPartnerSeat >= 1 && outgoingJudge) {
+      realtimeList.push(
+        buildSwappedSlot(null, numericPartnerSeat, outgoingJudge)
+      );
+      realtimeList.sort(
+        (a, b) => Number(a?.seatIndex || 0) - Number(b?.seatIndex || 0)
       );
       affectedSeats.push(numericPartnerSeat);
     }

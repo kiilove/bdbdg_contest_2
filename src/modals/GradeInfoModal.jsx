@@ -34,8 +34,10 @@ const GradeInfoModal = ({ setClose, propState, setState }) => {
     const returnGrades = await contestGradeDocument.getDocument(
       currentContest.contests.contestGradesListId
     );
-    setGradesList({ ...returnGrades });
-    setGradesArray([...returnGrades.grades]);
+    if (returnGrades) {
+      setGradesList({ ...returnGrades });
+      setGradesArray([...(returnGrades.grades || [])]);
+    }
   };
 
   const handleUpdateGrades = async () => {
@@ -122,7 +124,7 @@ const GradeInfoModal = ({ setClose, propState, setState }) => {
     if (name === "contestGradeIndex") {
       setGradeInfo({
         ...gradeInfo,
-        contestGradeIndex: parseInt(value),
+        contestGradeIndex: value === "" ? "" : parseInt(value, 10) || 0,
       });
     } else {
       setGradeInfo({

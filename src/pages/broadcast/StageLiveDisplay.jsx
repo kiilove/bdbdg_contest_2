@@ -386,35 +386,37 @@ const StageLiveDisplay = () => {
     });
   }, [contestId, currentMode, broadcastData, directBroadcastData, globalActiveBroadcast]);
 
-  // 1. 스테이지 정보 (본부석 currentStage 및 방송 제어기 실시간 동기화)
+  // 1. 스테이지 정보 (방송 제어기 송출 체급 우선 -> 본부석 currentStage 동기화)
   const activeCategory =
-    legacyStageData?.categoryTitle ||
     broadcastData?.stageInfo?.categoryTitle ||
+    legacyStageData?.categoryTitle ||
     legacyStageData?.screen?.gradeTitle ||
     "";
   const activeGrade =
-    legacyStageData?.gradeTitle ||
     broadcastData?.stageInfo?.gradeTitle ||
+    legacyStageData?.gradeTitle ||
     "";
   const activeGradeId =
-    legacyStageData?.gradeId ||
     broadcastData?.stageInfo?.gradeId ||
+    legacyStageData?.gradeId ||
     "";
   const activeStageNumber =
+    broadcastData?.stageInfo?.stageNumber ||
     legacyStageData?.stageNumber ||
     legacyStageData?.stageId ||
-    broadcastData?.stageInfo?.stageNumber ||
     "";
   const activePlayers =
     broadcastData?.stageInfo?.players ||
+    legacyStageData?.stagePlayers ||
     legacyStageData?.players ||
     legacyStageData?.screen?.players ||
     [];
   const activePlayerCount =
-    legacyStageData?.players?.length ||
-    legacyStageData?.playerCount ||
     broadcastData?.stageInfo?.players?.length ||
     broadcastData?.stageInfo?.playerCount ||
+    legacyStageData?.stagePlayers?.length ||
+    legacyStageData?.players?.length ||
+    legacyStageData?.playerCount ||
     0;
 
   const stageInfo = {
@@ -731,6 +733,7 @@ const StageLiveDisplay = () => {
           backgroundVideoUrl={videoSettings.rankingVideoUrl}
           colorTheme={broadcastData?.colorTheme || "GOLD"}
           rankingPhase={broadcastData?.rankingPhase}
+          phaseUpdatedAt={broadcastData?.updatedAt}
           onFinishCeremony={handleFinishCeremony}
         />
       )}

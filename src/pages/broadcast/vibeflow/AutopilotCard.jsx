@@ -24,6 +24,7 @@ export const AutopilotCard = ({
   currentTrack,
   isPlaying,
   audioTransition = null,
+  hasPlayableTracks = false,
   handlePlayTrack,
   playNextSeedTrack,
   onOpenGuideModal,
@@ -41,8 +42,10 @@ export const AutopilotCard = ({
     0,
     Math.min(100, Math.round(audioTransition?.progress || 0))
   );
-  const isBusyLocked = phase === "loading" || phase === "fading-out";
-  const isPoolEmpty = seed1Pool.length === 0 && seed2Pool.length === 0;
+  // 로딩 지연 시에도 '다음 곡'으로 즉시 건너뛸 수 있도록 허용 (페이드아웃 정지 중에만 잠금)
+  const isBusyLocked = phase === "fading-out";
+  const isPoolEmpty =
+    seed1Pool.length === 0 && seed2Pool.length === 0 && !hasPlayableTracks;
 
   return (
     <div className="bg-[#19191b] border border-[#ededed]/[0.08] rounded-[12px] p-5 space-y-4">

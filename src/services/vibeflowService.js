@@ -12,9 +12,41 @@ const VIBEFLOW_API_URL = "https://api.vibeflows.net/playlist/contest-songs";
 const TOKEN_STORAGE_KEY = "vf_access_token";
 const USER_STORAGE_KEY = "vf_user_info";
 const EXPIRY_STORAGE_KEY = "vf_token_expires_at";
+const PLAYLIST_BACKUP_KEY = "vf_playlist_backup_v1";
 
-// ⏱️ 토큰 로컬 저장 유효기간: 24시간 (밀리초)
-export const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
+/**
+ * 마지막으로 성공 수신한 VibeFlows 음원 목록 로컬 백업 조회
+ * (해외 CDN/API 간헐적 지연·타임아웃 시에도 목록 유실 0% 보장)
+ */
+export const getCachedVibeFlowPlaylist = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PLAYLIST_BACKUP_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.tracks) && parsed.tracks.length > 0) {
+      return parsed.tracks;
+    }
+    return [];
+  } catch {
+    return [];
+  }
+};
+
+const saveCachedVibeFlowPlaylist = (tracks) => {
+  if (typeof window === "undefined" || !Array.isArray(tracks) || tracks.length === 0) {
+    return;
+  }
+  try {
+    localStorage.setItem(
+      PLAYLIST_BACKUP_KEY,
+      JSON.stringify({ savedAt: Date.now(), tracks })
+    );
+  } catch {}
+};
+
+// ⏱️ 토큰 로컬 저장 유효기간: 72시간 (전날 세팅 후 대회 종료까지 만료 방지)
+export const TOKEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
 /**
  * ⌛ 토큰 만료 여부 확인
@@ -155,7 +187,7 @@ export const getVibeFlowTokenRemainingMinutes = () => {
  */
 export const loginVibeFlow = async (email, password, rememberMe = true) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
     const response = await fetch(VIBEFLOW_AUTH_URL, {
@@ -315,15 +347,14 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
     };
   }
 
-  const tryFetch = async (url) => {
+  const tryFetch = async (url, timeoutMs = 20000) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
         signal: controller.signal,
       });
@@ -336,12 +367,13 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
   };
 
   try {
-    // 1차 시도: 쿼리 파라미터 포함 (?is_active=1)
-    let fetchRes = await tryFetch(`${VIBEFLOW_API_URL}?is_active=1&active=1`);
+    // 1차 시도: 쿼리 파라미터 포함 (?is_active=1) — Cloudflare 해외 라우팅(LAX) 감안 20초 타임아웃
+    let fetchRes = await tryFetch(`${VIBEFLOW_API_URL}?is_active=1&active=1`, 20000);
 
-    // 만약 1차 시도가 실패했거나 에러인 경우 2차 시도 (순수 URL)
+    // 1차 시도가 네트워크 지연/일시 오류인 경우 600ms 대기 후 순수 URL로 2차 재시도
     if (!fetchRes.ok || (fetchRes.status && fetchRes.status >= 400 && fetchRes.status !== 401)) {
-      fetchRes = await tryFetch(VIBEFLOW_API_URL);
+      await new Promise((r) => setTimeout(r, 600));
+      fetchRes = await tryFetch(VIBEFLOW_API_URL, 22000);
     }
 
     if (!fetchRes.ok) {
@@ -392,6 +424,10 @@ export const fetchVibeFlowContestSongs = async (customToken = null) => {
     if (exposedTracks.length === 0 && rawTracks.length > 0) {
       console.warn("[VibeFlow Service] isTrackExposed 필터링 후 0건이라 원본 트랙을 반환합니다.");
       exposedTracks = rawTracks;
+    }
+
+    if (exposedTracks.length > 0) {
+      saveCachedVibeFlowPlaylist(exposedTracks);
     }
 
     return {
