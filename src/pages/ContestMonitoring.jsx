@@ -76,6 +76,16 @@ const ContestMonitoring = () => {
 
   const contestId = currentContest?.contests?.id || currentContest?.id || "";
   const isDarkScreen = currentTab === 2;
+
+  useEffect(() => {
+    const mappedRole =
+      currentTab === 1 ? "HEAD_JUDGE" : currentTab === 2 ? "MC" : "HQ";
+    window.dispatchEvent(
+      new CustomEvent("bdbdg:intercom-role-sync", {
+        detail: { role: mappedRole },
+      })
+    );
+  }, [currentTab]);
   const screenMeta =
     currentTab === 1
       ? { type: "judgeHead", label: "심판위원장 모니터링 화면" }

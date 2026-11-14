@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Monitor,
@@ -8,8 +8,11 @@ import {
   ExternalLink,
   AudioWaveform,
   Tv,
+  MessageSquare,
+  AlertTriangle,
 } from "lucide-react";
 import ContestMonitoring from "../ContestMonitoring";
+import { STATION_ROLES } from "../../utils/liveIntercomEngine";
 
 const CONSOLE_MODES = [
   {
@@ -43,6 +46,49 @@ const LiveMonitoringHub = () => {
   const navigate = useNavigate();
   const activeKey = String(params.target || "main").toLowerCase();
 
+  const fallbackRole =
+    activeKey === "judgehead" ? "HEAD_JUDGE" : activeKey === "mc" ? "MC" : "HQ";
+
+  const [intercomState, setIntercomState] = useState({
+    unreadCount: 0,
+    hasUrgent: false,
+    activeRole: fallbackRole,
+  });
+
+  useEffect(() => {
+    const handleUnreadState = (e) => {
+      if (!e?.detail) return;
+      setIntercomState((prev) => ({
+        unreadCount: Number(e.detail.unreadCount || 0),
+        hasUrgent: Boolean(e.detail.hasUrgent),
+        activeRole: e.detail.activeRole || prev.activeRole || fallbackRole,
+      }));
+    };
+    const handleRoleSync = (e) => {
+      const nextRole = e?.detail?.role;
+      if (nextRole && STATION_ROLES[nextRole]) {
+        setIntercomState((prev) => ({ ...prev, activeRole: nextRole }));
+      }
+    };
+    window.addEventListener("bdbdg:intercom-unread-state", handleUnreadState);
+    window.addEventListener("bdbdg:intercom-role-sync", handleRoleSync);
+    return () => {
+      window.removeEventListener(
+        "bdbdg:intercom-unread-state",
+        handleUnreadState
+      );
+      window.removeEventListener("bdbdg:intercom-role-sync", handleRoleSync);
+    };
+  }, [fallbackRole]);
+
+  const effectiveRole =
+    activeKey === "all"
+      ? intercomState.activeRole || "HQ"
+      : fallbackRole;
+  const roleShortLabel =
+    STATION_ROLES[effectiveRole]?.shortLabel || "본부석";
+  const hasUnread = intercomState.unreadCount > 0;
+
   return (
     <div className="w-full min-h-screen bg-[#fafafa]">
       {/* 현장 좌석 빠른 전환 바 (인쇄 시 자동 숨김) */}
@@ -72,6 +118,31 @@ const LiveMonitoringHub = () => {
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("bdbdg:open-intercom"))
+              }
+              className={`h-8 px-3 rounded-full text-xs font-extrabold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                hasUnread
+                  ? intercomState.hasUrgent
+                    ? "bg-[#DC2626] text-white border-2 border-[#FEE500] shadow-md animate-pulse"
+                    : "bg-[#FEE500] text-[#191919] border-2 border-[#191919] shadow-md animate-pulse"
+                  : "bg-[#FEE500] hover:bg-[#FDD835] border border-black/15 text-[#191919]"
+              }`}
+            >
+              {hasUnread && intercomState.hasUrgent ? (
+                <AlertTriangle size={13} strokeWidth={2.2} />
+              ) : (
+                <MessageSquare size={12} strokeWidth={2.1} />
+              )}
+              <span>{roleShortLabel} 실시간 톡</span>
+              {hasUnread && (
+                <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-[#FF3B30] text-white text-[10px] font-mono font-extrabold tabular-nums inline-flex items-center justify-center">
+                  {intercomState.unreadCount}
+                </span>
+              )}
+            </button>
             <a
               href="/mc"
               target="_blank"

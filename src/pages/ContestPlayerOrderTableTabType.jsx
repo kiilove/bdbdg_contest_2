@@ -27,11 +27,19 @@ import {
   FolderOpen,
   Globe,
   PenLine,
+  Pencil,
   UserPlus,
+  Hash,
 } from "lucide-react";
 import BibTag from "../components/ui/BibTag";
+import LayerPlayerEditDrawer from "../components/player/LayerPlayerEditDrawer";
 import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import { resolveEntryOrigin } from "../utils/playerEntryUtils";
+import {
+  applyStage1AssignDirectEdit,
+  buildPatchedLayerPlayer,
+  isSameLayerPlayerEntry,
+} from "../utils/layerPlayerEditUtils";
 
 let orderRowCounter = 0;
 const createOrderRowId = () =>
@@ -67,6 +75,9 @@ const ContestPlayerOrderTable = () => {
   // ✅ 개별 항목 선택 상태 (고유 행 key 기준)
   const [selectedEntries, setSelectedEntries] = useState(new Set());
   const [healthModalOpen, setHealthModalOpen] = useState(false);
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [isDirectSaving, setIsDirectSaving] = useState(false);
   const deletedSignaturesRef = useRef(new Set());
 
   const { currentContest } = useContext(CurrentContestContext);
@@ -224,11 +235,37 @@ const ContestPlayerOrderTable = () => {
     setSelectedEntries(new Set());
   };
 
-  // assign 저장본으로 화면 재구성 (있을 때만)
-  const rebuildFromAssign = () => {
+  // assign 저장본으로 화면 재구성 (수동 수정된 선수번호/순번 보존)
+  const rebuildFromAssign = (explicitAssignedList = null) => {
     const grouped = {};
-    const assigned = playersAssign?.players || [];
+    const sortedCategories = [...categorysArray].sort(
+      (a, b) => (a.contestCategoryIndex ?? 9999) - (b.contestCategoryIndex ?? 9999)
+    );
+    sortedCategories.forEach((cat) => {
+      const catGrades = [...gradesArray]
+        .filter((g) => g.refCategoryId === cat.contestCategoryId)
+        .sort((a, b) => (a.contestGradeIndex ?? 9999) - (b.contestGradeIndex ?? 9999));
+      catGrades.forEach((grd) => {
+        const key = `${cat.contestCategoryId}__${grd.contestGradeId}`;
+        grouped[key] = {
+          ...cat,
+          ...grd,
+          contestCategoryId: cat.contestCategoryId,
+          contestCategoryTitle: cat.contestCategoryTitle,
+          contestGradeId: grd.contestGradeId,
+          contestGradeTitle: grd.contestGradeTitle,
+          matchedPlayers: [],
+          matchedGradesLength: catGrades.length,
+        };
+      });
+    });
+
+    const assigned = Array.isArray(explicitAssignedList)
+      ? explicitAssignedList
+      : playersAssign?.players || [];
+    let fallbackSeq = startPlayerNumber;
     assigned.forEach((p) => {
+      fallbackSeq += 1;
       const key = `${p.contestCategoryId}__${p.contestGradeId}`;
       if (!grouped[key]) {
         const cat =
@@ -249,23 +286,33 @@ const ContestPlayerOrderTable = () => {
           matchedGradesLength: 1,
         };
       }
+      const preservedNum = Number(p.playerNumber) > 0 ? Number(p.playerNumber) : fallbackSeq;
+      const preservedIdx = Number(p.playerIndex) > 0 ? Number(p.playerIndex) : preservedNum;
       grouped[key].matchedPlayers.push({
         ...p,
+        playerNumber: preservedNum,
+        playerIndex: preservedIdx,
         _rowId: p._rowId || createOrderRowId(),
       });
     });
 
-    const rebuilt = Object.values(grouped).map((group) => ({
-      ...group,
-      matchedPlayers: [...group.matchedPlayers].sort(
+    const rebuilt = Object.values(grouped)
+      .sort(
         (a, b) =>
-          (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
-          (Number(b.playerIndex) || Number(b.playerNumber) || 0)
-      ),
-    }));
+          (a.contestCategoryIndex ?? 9999) - (b.contestCategoryIndex ?? 9999) ||
+          (a.contestGradeIndex ?? 9999) - (b.contestGradeIndex ?? 9999)
+      )
+      .map((group) => ({
+        ...group,
+        matchedPlayers: [...group.matchedPlayers].sort(
+          (a, b) =>
+            (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
+            (Number(b.playerIndex) || Number(b.playerNumber) || 0)
+        ),
+      }));
 
     deletedSignaturesRef.current = new Set();
-    setMatchedArray(renumberAll(rebuilt, startPlayerNumber));
+    setMatchedArray(rebuilt);
     setSelectedEntries(new Set());
   };
 
@@ -433,11 +480,10 @@ const ContestPlayerOrderTable = () => {
     }
   };
 
-  // 저장은 assign + final 동기화 (계측 필드 및 그랑프리/강제등록 선수 안전 보존)
+  // 1단계 저장: 오직 contest_players_assign 레이어 문서만 갱신 (이미 저장된 2·3단계 문서는 역연동하지 않음)
   const handleUpdatePlayersAssign = async (assignId) => {
     const targetAssignId =
       assignId || currentContest?.contests?.contestPlayersAssignId;
-    const targetFinalId = currentContest?.contests?.contestPlayersFinalId;
     const contestId = currentContest?.contests?.id;
 
     if (!targetAssignId) {
@@ -456,32 +502,11 @@ const ContestPlayerOrderTable = () => {
       (m.matchedPlayers || []).map(stripInternalPlayerProps)
     );
 
-    const grandPrixCategoryIds = new Set(
-      (categorysArray || [])
-        .filter((c) => c?.contestCategorySection === "그랑프리")
-        .map((c) => c.contestCategoryId)
-        .filter(Boolean)
-    );
-    const grandPrixGradeIds = new Set(
-      (gradesArray || [])
-        .filter((g) => grandPrixCategoryIds.has(g?.refCategoryId))
-        .map((g) => g.contestGradeId)
-        .filter(Boolean)
-    );
-
-    const isGrandPrixEntry = (p) =>
-      Boolean(
-        p &&
-          (p.contestCategoryTitle === "그랑프리" ||
-            grandPrixCategoryIds.has(p.contestCategoryId) ||
-            grandPrixGradeIds.has(p.contestGradeId))
-      );
-
     const isForceEntry = (p) => resolveEntryOrigin(p) === "force";
 
-    const mergePlayerPreservingWeighIn = (ap, existingPool, usedIdxSet) => {
+    const mergePlayerPreservingAssignMeta = (ap, existingPool, usedIdxSet) => {
       const apOrigGrade = ap.originalGradeId || ap.contestGradeId;
-      let matchIdx = existingPool.findIndex((efp, idx) => {
+      const matchIdx = existingPool.findIndex((efp, idx) => {
         if (usedIdxSet.has(idx) || !efp) return false;
         const efpOrigGrade = efp.originalGradeId || efp.contestGradeId;
         if (ap.playerUid && efp.playerUid) {
@@ -498,19 +523,6 @@ const ContestPlayerOrderTable = () => {
         );
       });
 
-      if (matchIdx === -1 && ap.playerUid) {
-        matchIdx = existingPool.findIndex((efp, idx) => {
-          if (usedIdxSet.has(idx) || !efp || isGrandPrixEntry(efp)) {
-            return false;
-          }
-          return (
-            efp.isGradeChanged &&
-            efp.playerUid === ap.playerUid &&
-            efp.contestCategoryId === ap.contestCategoryId
-          );
-        });
-      }
-
       if (matchIdx === -1) {
         return {
           ...ap,
@@ -521,51 +533,16 @@ const ContestPlayerOrderTable = () => {
 
       usedIdxSet.add(matchIdx);
       const efp = existingPool[matchIdx];
-      const preservedGradeChanged =
-        efp.isGradeChanged !== undefined
-          ? Boolean(efp.isGradeChanged)
-          : Boolean(ap.isGradeChanged);
 
       return {
         ...efp,
         ...ap,
-        originalGradeId: apOrigGrade,
-        originalGradeTitle: ap.originalGradeTitle || ap.contestGradeTitle,
-        isGradeChanged: preservedGradeChanged,
-        contestGradeId: preservedGradeChanged
-          ? efp.contestGradeId || ap.contestGradeId
-          : ap.contestGradeId,
-        contestGradeTitle: preservedGradeChanged
-          ? efp.contestGradeTitle || ap.contestGradeTitle
-          : ap.contestGradeTitle,
+        originalGradeId: ap.contestGradeId,
+        originalGradeTitle: ap.contestGradeTitle,
+        contestGradeId: ap.contestGradeId,
+        contestGradeTitle: ap.contestGradeTitle,
         playerNumber: ap.playerNumber,
-        playerIndex:
-          preservedGradeChanged && Number(ap.playerIndex) < 1000
-            ? Number(ap.playerIndex) + 1000
-            : ap.playerIndex,
-        playerNoShow:
-          efp.playerNoShow !== undefined
-            ? Boolean(efp.playerNoShow)
-            : Boolean(ap.playerNoShow),
-        isWeighedIn:
-          efp.isWeighedIn !== undefined ? efp.isWeighedIn : ap.isWeighedIn,
-        isMeasurement:
-          efp.isMeasurement !== undefined
-            ? efp.isMeasurement
-            : ap.isMeasurement,
-        measuredHeight:
-          efp.measuredHeight !== undefined
-            ? efp.measuredHeight
-            : ap.measuredHeight,
-        measuredWeight:
-          efp.measuredWeight !== undefined
-            ? efp.measuredWeight
-            : ap.measuredWeight,
-        heightWeight: efp.heightWeight || ap.heightWeight || "",
-        playerHeight: efp.playerHeight || ap.playerHeight || "",
-        playerWeight: efp.playerWeight || ap.playerWeight || "",
-        height: efp.height || ap.height || "",
-        weight: efp.weight || ap.weight || "",
+        playerIndex: ap.playerIndex,
         stagePhoto1: efp.stagePhoto1 || ap.stagePhoto1 || "",
         stagePhoto2: efp.stagePhoto2 || ap.stagePhoto2 || "",
         stagePhotoUrl1: efp.stagePhotoUrl1 || ap.stagePhotoUrl1 || "",
@@ -593,33 +570,18 @@ const ContestPlayerOrderTable = () => {
 
       await runTransaction(db, async (transaction) => {
         const assignRef = doc(db, "contest_players_assign", targetAssignId);
-        const finalRef = targetFinalId
-          ? doc(db, "contest_players_final", targetFinalId)
-          : null;
-
         const assignSnap = await transaction.get(assignRef);
-        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
 
         const existingAssignData = assignSnap.exists()
           ? assignSnap.data()
           : playersAssign || {};
         const existingAssignPlayers = existingAssignData?.players || [];
-        const existingFinalData = finalSnap?.exists()
-          ? finalSnap.data()
-          : { contestId, players: [] };
-        const existingFinalPlayers = existingFinalData?.players || [];
-
-        const referencePool =
-          existingFinalPlayers.length > 0
-            ? existingFinalPlayers
-            : existingAssignPlayers;
 
         const usedAssignIdx = new Set();
         const mergedAssignPlayers = allPlayers.map((ap) =>
-          mergePlayerPreservingWeighIn(ap, existingAssignPlayers, usedAssignIdx)
+          mergePlayerPreservingAssignMeta(ap, existingAssignPlayers, usedAssignIdx)
         );
 
-        // 강제등록(createdBy: "force") 선수가 신청서 기준 재계산 등으로 누락된 경우 보존 (사용자가 명시적으로 삭제한 중복은 제외)
         const isExplicitlyDeleted = (p) => {
           const sig = `${p?.contestGradeId || ""}__${p?.playerUid || ""}__${
             p?.playerNumber ?? ""
@@ -627,7 +589,7 @@ const ContestPlayerOrderTable = () => {
           return deletedSignaturesRef.current.has(sig);
         };
 
-        referencePool.forEach((ep) => {
+        existingAssignPlayers.forEach((ep) => {
           if (!isForceEntry(ep) || isExplicitlyDeleted(ep)) return;
           const alreadyExists = mergedAssignPlayers.some(
             (mp) =>
@@ -638,33 +600,6 @@ const ContestPlayerOrderTable = () => {
           );
           if (!alreadyExists) {
             mergedAssignPlayers.push(stripInternalPlayerProps(ep));
-          }
-        });
-
-        const usedFinalIdx = new Set();
-        const mergedFinalPlayers = allPlayers.map((ap) =>
-          mergePlayerPreservingWeighIn(ap, referencePool, usedFinalIdx)
-        );
-
-        existingFinalPlayers.forEach((efp, idx) => {
-          if (usedFinalIdx.has(idx) || !efp) return;
-          if (
-            (isGrandPrixEntry(efp) || isForceEntry(efp)) &&
-            !isExplicitlyDeleted(efp)
-          ) {
-            const alreadyInFinal = mergedFinalPlayers.some(
-              (mp) =>
-                mp.contestGradeId === efp.contestGradeId &&
-                ((mp.playerUid &&
-                  efp.playerUid &&
-                  mp.playerUid === efp.playerUid) ||
-                  (Number(mp.playerNumber) === Number(efp.playerNumber) &&
-                    (mp.playerName || "").trim() ===
-                      (efp.playerName || "").trim()))
-            );
-            if (!alreadyInFinal) {
-              mergedFinalPlayers.push(stripInternalPlayerProps(efp));
-            }
           }
         });
 
@@ -681,20 +616,6 @@ const ContestPlayerOrderTable = () => {
         } else {
           transaction.set(assignRef, nextAssignDoc);
         }
-
-        if (finalRef) {
-          const nextFinalDoc = sanitizeForFirestore({
-            ...existingFinalData,
-            contestId,
-            players: mergedFinalPlayers,
-            updatedAt: new Date().toISOString(),
-          });
-          if (finalSnap?.exists()) {
-            transaction.update(finalRef, nextFinalDoc);
-          } else {
-            transaction.set(finalRef, nextFinalDoc);
-          }
-        }
       });
 
       deletedSignaturesRef.current = new Set();
@@ -705,10 +626,12 @@ const ContestPlayerOrderTable = () => {
       const hasDup = Object.keys(duplicatesMap).length > 0;
       setMessage({
         variant: hasDup ? "warning" : "success",
-        title: hasDup ? "선수 배정 저장 완료 (중복 번호 확인)" : "선수 번호 배정 저장 완료",
+        title: hasDup
+          ? "1단계 초기 배번 저장 완료 (중복 확인)"
+          : "1단계 초기 배번 저장 완료",
         body: hasDup
-          ? "선수 배정 명단이 저장되었으나 중복된 선수번호가 남아 있습니다."
-          : "계측 명단 및 선수 번호 배정이 정상적으로 저장되었습니다.",
+          ? "초기 배번 문서(contest_players_assign)가 저장되었으나 중복 항목이 남아 있습니다."
+          : "1단계 초기 배번 문서(contest_players_assign)에 정상 저장되었습니다. 아직 2단계를 저장하지 않았다면 다음 단계로 자동 승계됩니다.",
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -726,6 +649,132 @@ const ContestPlayerOrderTable = () => {
       setMsgOpen(true);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 1단계 개별 선수 직접 수정 저장 (contest_players_assign 단독 반영)
+  const handleDirectEditAssignSave = async (beforePlayer, patchFields) => {
+    const targetAssignId = currentContest?.contests?.contestPlayersAssignId;
+    const contestId = currentContest?.contests?.id;
+
+    if (!targetAssignId) {
+      setMessage({
+        variant: "error",
+        title: "배정 문서 확인 필요",
+        body: "선수 배정 문서를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+      return;
+    }
+
+    try {
+      setIsDirectSaving(true);
+      const nowIso = new Date().toISOString();
+      const currentScreenFlat = matchedArray.flatMap((m) =>
+        (m.matchedPlayers || []).map(stripInternalPlayerProps)
+      );
+
+      let committedAssignDoc = null;
+      let committedList = [];
+
+      await runTransaction(db, async (transaction) => {
+        const assignRef = doc(db, "contest_players_assign", targetAssignId);
+        const assignSnap = await transaction.get(assignRef);
+        const existingAssignData = assignSnap.exists()
+          ? assignSnap.data()
+          : playersAssign || {};
+        const baseList =
+          Array.isArray(existingAssignData?.players) &&
+          existingAssignData.players.length > 0
+            ? existingAssignData.players
+            : currentScreenFlat;
+
+        const nextPlayers = applyStage1AssignDirectEdit(
+          baseList,
+          beforePlayer,
+          patchFields,
+          nowIso
+        );
+
+        const nextDoc = sanitizeForFirestore({
+          ...existingAssignData,
+          contestId,
+          players: nextPlayers,
+          updatedAt: nowIso,
+        });
+
+        if (assignSnap.exists()) {
+          transaction.update(assignRef, nextDoc);
+        } else {
+          transaction.set(assignRef, nextDoc);
+        }
+
+        committedAssignDoc = nextDoc;
+        committedList = nextPlayers;
+      });
+
+      // 화면 로컬 상태도 즉시 갱신 (다른 번호는 건드리지 않고 수정 행만 반영)
+      const patchedLocalPlayer = {
+        ...buildPatchedLayerPlayer(beforePlayer, patchFields, {
+          layer: "assign",
+          nowIso,
+        }),
+        _rowId: beforePlayer._rowId || createOrderRowId(),
+      };
+
+      setMatchedArray((prev) => {
+        const strippedGroups = prev.map((group) => ({
+          ...group,
+          matchedPlayers: (group.matchedPlayers || []).filter(
+            (p) =>
+              p._rowId !== beforePlayer._rowId &&
+              !isSameLayerPlayerEntry(p, beforePlayer)
+          ),
+        }));
+
+        const targetGroupIdx = strippedGroups.findIndex(
+          (g) => g.contestGradeId === patchedLocalPlayer.contestGradeId
+        );
+        if (targetGroupIdx >= 0) {
+          strippedGroups[targetGroupIdx] = {
+            ...strippedGroups[targetGroupIdx],
+            matchedPlayers: [
+              ...strippedGroups[targetGroupIdx].matchedPlayers,
+              patchedLocalPlayer,
+            ].sort(
+              (a, b) =>
+                (Number(a.playerIndex) || Number(a.playerNumber) || 0) -
+                (Number(b.playerIndex) || Number(b.playerNumber) || 0)
+            ),
+          };
+          return strippedGroups;
+        }
+        return prev;
+      });
+
+      if (committedAssignDoc) {
+        setPlayersAssign({ ...committedAssignDoc, id: targetAssignId });
+      } else if (committedList.length > 0) {
+        rebuildFromAssign(committedList);
+      }
+
+      setEditDrawerOpen(false);
+      setEditingPlayer(null);
+    } catch (error) {
+      console.error("1단계 선수 직접 수정 실패:", error);
+      setMessage({
+        variant: "error",
+        title: "선수 정보 수정 실패",
+        body: "1단계 초기 배번 문서에 선수 정보를 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsDirectSaving(false);
     }
   };
 
@@ -819,6 +868,18 @@ const ContestPlayerOrderTable = () => {
                 </>
               )}
               <BibTag number={playerNumber} />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingPlayer(player);
+                  setEditDrawerOpen(true);
+                }}
+                className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer shrink-0"
+              >
+                <Pencil size={12} strokeWidth={1.6} />
+                <span>수정</span>
+              </button>
             </div>
           </div>
           <div className="flex flex-col gap-1">
@@ -986,6 +1047,23 @@ const ContestPlayerOrderTable = () => {
             onClose={() => setHealthModalOpen(false)}
           />
 
+          <LayerPlayerEditDrawer
+            open={editDrawerOpen}
+            onClose={() => {
+              if (!isDirectSaving) {
+                setEditDrawerOpen(false);
+                setEditingPlayer(null);
+              }
+            }}
+            layer="assign"
+            player={editingPlayer}
+            categoriesArray={categorysArray}
+            gradesArray={gradesArray}
+            allLayerPlayers={matchedArray.flatMap((m) => m.matchedPlayers || [])}
+            onSave={handleDirectEditAssignSave}
+            isSaving={isDirectSaving}
+          />
+
           {!currentContest?.contests?.contestPlayersAssignId && (
             <div className="bg-[#b45309]/[0.06] border border-[#b45309]/25 rounded-[12px] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-2.5">
@@ -1039,6 +1117,21 @@ const ContestPlayerOrderTable = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setMatchedArray((prev) => renumberAll(prev, startPlayerNumber))
+                }
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer"
+                title="현재 순서 기준으로 시작번호부터 일련번호를 다시 매깁니다"
+              >
+                <Hash
+                  size={15}
+                  strokeWidth={1.5}
+                  className="text-[#525252]"
+                />
+                <span>일련번호 재정렬</span>
+              </button>
               <button
                 type="button"
                 onClick={() => initEntryList()}
@@ -1132,7 +1225,10 @@ const ContestPlayerOrderTable = () => {
                                     이름
                                   </div>
                                   <div className="flex w-3/12">소속</div>
-                                  <div className="flex w-2/12">신청일</div>
+                                  <div className="flex w-28">신청일</div>
+                                  <div className="flex w-20 justify-center">
+                                    관리
+                                  </div>
                                 </div>
 
                                 {matchedPlayers.map((player, pIdx) => {
@@ -1257,8 +1353,26 @@ const ContestPlayerOrderTable = () => {
                                           <div className="flex w-3/12 text-sm text-[#525252]">
                                             {playerGym || "-"}
                                           </div>
-                                          <div className="flex w-2/12 text-xs text-[#737373] font-mono tabular-nums">
+                                          <div className="flex w-28 text-xs text-[#737373] font-mono tabular-nums">
                                             {invoiceCreateAt || "-"}
+                                          </div>
+                                          <div className="flex w-20 justify-center">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingPlayer(player);
+                                                setEditDrawerOpen(true);
+                                              }}
+                                              className="inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0"
+                                            >
+                                              <Pencil
+                                                size={13}
+                                                strokeWidth={1.5}
+                                                className="shrink-0"
+                                              />
+                                              <span>수정</span>
+                                            </button>
                                           </div>
                                         </div>
                                       )}

@@ -1,18 +1,26 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import ScoreSheet from "../components/ScoreSheet";
 import ScoreCardRankForm from "../components/ScoreCardRankForm";
-import ScoreCardPointForm from "../components/ScoreCardPointForm";
 import { useFirestoreQuery } from "../hooks/useFirestores";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { where } from "firebase/firestore";
 import LoadingPage from "../pages/LoadingPage";
 import ReactToPrint from "react-to-print";
-import { Printer, X } from "lucide-react";
-import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
+import { Printer, Trash2, X } from "lucide-react";
+import { db, database } from "../firebase";
+import ConfirmationModal from "../messageBox/ConfirmationModal";
+import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
+import {
+  dedupeContestResultsByGrade,
+  deleteContestResultDocumentById,
+} from "../utils/contestResultsUtils";
 
-const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
+const ContestRankingSummaryPrintAll = ({ props, setClose, onDeleted }) => {
   const [resultTable, setResultTable] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState({});
   const [judgesArray, setJudgesArray] = useState([]);
   const [judgeHeadInfo, setJudgeHeadInfo] = useState();
   const [scoreCardsArray, setScoreCardsArray] = useState([]);
@@ -193,9 +201,58 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
       document.title = `${contestTitle}_${categoryTitle}_${gradeTitle}_집계표`;
     }
   }, [currentContest, resultTable]);
+  const activeResultDoc = resultTable?.[0] || null;
+
+  const handleDeleteActiveDoc = async () => {
+    if (!activeResultDoc?.id || isDeletingDoc) return;
+    const exactId = String(activeResultDoc.id).trim();
+    setIsDeletingDoc(true);
+    try {
+      await deleteContestResultDocumentById({
+        db,
+        database,
+        docId: exactId,
+        contestId: activeResultDoc.contestId || props?.contestId || "",
+        gradeId: activeResultDoc.gradeId || props?.gradeId || "",
+      });
+      setResultTable((prev) => prev.filter((item) => item.id !== exactId));
+      setNoticeMessage({
+        variant: "success",
+        title: "채점표(집계표) 문서 삭제 완료",
+        body: "선택한 채점표 문서 1건이 정확히 삭제되었습니다.",
+        body4: `삭제된 문서 ID: ${exactId}`,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+      if (typeof onDeleted === "function") {
+        onDeleted(exactId);
+      }
+    } catch (err) {
+      console.error("집계표 문서 삭제 실패:", err);
+      setNoticeMessage({
+        variant: "error",
+        title: "문서 삭제 실패",
+        body: "채점표(집계표) 문서를 삭제하는 중 오류가 발생했습니다.",
+        body4: err?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setNoticeOpen(true);
+    } finally {
+      setIsDeletingDoc(false);
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col bg-white overflow-hidden">
-      <div className="sticky top-0 z-10 shrink-0 bg-white border-b border-[#171717]/[0.08] px-5 py-3.5 flex items-center justify-between gap-3">
+      <ConfirmationModal
+        isOpen={noticeOpen}
+        message={noticeMessage}
+        onCancel={() => setNoticeOpen(false)}
+        onConfirm={() => setNoticeOpen(false)}
+      />
+      <div className="no-print print:hidden sticky top-0 z-10 shrink-0 bg-white border-b border-[#171717]/[0.08] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-[#171717] m-0">
             집계표 및 채점표 출력 미리보기
@@ -209,10 +266,35 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
               {props?.gradeTitle || resultTable?.[0]?.gradeTitle
                 ? ` (${props?.gradeTitle || resultTable?.[0]?.gradeTitle})`
                 : ""}
+              {activeResultDoc?.id ? ` · 문서 ID: ${activeResultDoc.id}` : ""}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {activeResultDoc?.id && (
+            <ConfirmModalTrigger
+              variant="danger"
+              title="확정 채점표(집계표) 문서 단건 삭제"
+              body="현재 조회 중인 채점표(집계표) 문서 1건만 정확히 삭제하시겠습니까?"
+              body2={`'${activeResultDoc.categoryTitle || "-"} · ${
+                activeResultDoc.gradeTitle || "-"
+              }' — 지정된 문서 ID 1건만 삭제되며 심판 원시 채점 데이터 및 타 체급 문서는 유지됩니다.`}
+              body4={`컬렉션: contest_results_list | 문서 ID: ${activeResultDoc.id}`}
+              confirmText="이 문서만 정확히 삭제"
+              cancelText="취소"
+              disabled={isDeletingDoc}
+              onConfirm={handleDeleteActiveDoc}
+            >
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/30 text-[#dc2626] text-xs sm:text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 size={14} strokeWidth={1.6} />
+                <span>이 채점표 문서만 삭제</span>
+              </button>
+            </ConfirmModalTrigger>
+          )}
           <ReactToPrint
             trigger={() => (
               <button
@@ -285,38 +367,20 @@ const ContestRankingSummaryPrintAll = ({ props, setClose }) => {
                               judgePromoter,
                               players,
                             } = card;
-                            const isPointType =
-                              (props?.categoryJudgeType || table?.scoreType) ===
-                              "point";
                             return (
                               <React.Fragment key={seatIndex ?? cIdx}>
-                                {isPointType ? (
-                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                    <ScoreCardPointForm
-                                      contestInfo={currentContest?.contestInfo}
-                                      seatIndex={seatIndex}
-                                      categoryTitle={cardCategoryTitle}
-                                      gradeTitle={cardGradeTitle}
-                                      judgeSignature={judgeSignature}
-                                      judgeName={judgeName}
-                                      judgePromoter={judgePromoter}
-                                      players={players}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="flex w-full h-auto justify-center items-start break-after-page">
-                                    <ScoreCardRankForm
-                                      contestInfo={currentContest?.contestInfo}
-                                      seatIndex={seatIndex}
-                                      categoryTitle={cardCategoryTitle}
-                                      gradeTitle={cardGradeTitle}
-                                      judgeSignature={judgeSignature}
-                                      judgeName={judgeName}
-                                      judgePromoter={judgePromoter}
-                                      players={players}
-                                    />
-                                  </div>
-                                )}
+                                <div className="flex w-full h-auto justify-center items-start break-after-page">
+                                  <ScoreCardRankForm
+                                    contestInfo={currentContest?.contestInfo}
+                                    seatIndex={seatIndex}
+                                    categoryTitle={cardCategoryTitle}
+                                    gradeTitle={cardGradeTitle}
+                                    judgeSignature={judgeSignature}
+                                    judgeName={judgeName}
+                                    judgePromoter={judgePromoter}
+                                    players={players}
+                                  />
+                                </div>
                               </React.Fragment>
                             );
                           })}

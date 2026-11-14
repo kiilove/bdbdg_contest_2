@@ -85,6 +85,7 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
     const normalizedUpdatedInfo = {
       ...updatedCategoryInfo,
       contestCategoryIndex: safeCategoryIndex,
+      contestCategoryJudgeType: "ranking",
       contestCategoryJudgeCount: safeJudgeCount,
       contestCategoryIsOverall: Boolean(
         updatedCategoryInfo.contestCategoryIsOverall
@@ -363,24 +364,6 @@ const CategoryInfoModal = ({ setClose, propState, setState, setRefresh }) => {
               <option>기본참가비</option>
               <option>타입1</option>
               <option>타입2</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
-            <label className="text-xs font-medium text-[#525252] sm:text-right">
-              심사 종류
-            </label>
-            <select
-              name="contestCategoryJudgeType"
-              onChange={(e) => handleInputValues(e)}
-              value={categoryInfo.contestCategoryJudgeType}
-              ref={(ref) =>
-                (categoryInfoRef.current.contestCategoryJudgeType = ref)
-              }
-              className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
-            >
-              <option value="ranking">랭킹형</option>
-              <option value="point">점수형</option>
             </select>
           </div>
 

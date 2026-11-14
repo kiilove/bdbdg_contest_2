@@ -1,5 +1,5 @@
 /**
- * 심판 채점(랭킹형 / 점수형) 최고·최저 제외 및 합산 순수 엔진
+ * 심판 채점(랭킹형) 최고·최저 제외 및 합산 순수 엔진
  * - 기존 비즈니스 로직(5심제=제외없음, 7심제=최고/최저 각 1명 제외, 9심제=각 2명 제외,
  *   순위제외 >= 1000 처리 규칙)을 100% 동일하게 보존합니다.
  */
@@ -64,61 +64,6 @@ export const assignMinMaxAndCalculateRankTotal = (group) => {
     }
 
     // 가장 낮은 등수(가장 큰 숫자 = 최저점) trimCount명 제외 -> isMax = true
-    for (let i = N - trimCount; i < N; i++) {
-      sorted[i].isMax = true;
-    }
-  }
-
-  const activeScores = validSubmitted.filter((s) => !s.isMin && !s.isMax);
-  if (activeScores.length === 0) {
-    group.totalScore = 0;
-  } else if (activeScores.some((s) => Number(s.playerScore) >= 1000)) {
-    group.totalScore = Math.max(
-      1000,
-      activeScores.reduce((acc, curr) => acc + Number(curr.playerScore || 0), 0)
-    );
-  } else {
-    group.totalScore = activeScores.reduce(
-      (acc, curr) => acc + Number(curr.playerScore || 0),
-      0
-    );
-  }
-  return group;
-};
-
-/**
- * [점수형(포인트형)] 최저점 · 최고점 제외 및 합산 (순위제외 >= 1000은 최저점 취급)
- */
-export const assignMinMaxAndCalculatePointTotal = (group) => {
-  if (!group || !Array.isArray(group.score)) return group;
-
-  group.score.forEach((s) => {
-    s.isMin = false;
-    s.isMax = false;
-  });
-
-  const validSubmitted = group.score.filter((s) =>
-    isScoreEntered(s.playerScore)
-  );
-  const N = validSubmitted.length;
-  const trimCount = getTrimCountPerSide(N);
-
-  if (trimCount > 0) {
-    const toComparablePoint = (val) => {
-      const num = Number(val) || 0;
-      return num >= 1000 ? -1 : num;
-    };
-    const sorted = [...validSubmitted].sort(
-      (a, b) =>
-        toComparablePoint(a.playerScore) - toComparablePoint(b.playerScore)
-    );
-
-    // 최저점(가장 작은 숫자) trimCount명 제외 -> isMin = true
-    for (let i = 0; i < trimCount; i++) {
-      sorted[i].isMin = true;
-    }
-
-    // 최고점(가장 큰 숫자) trimCount명 제외 -> isMax = true
     for (let i = N - trimCount; i < N; i++) {
       sorted[i].isMax = true;
     }

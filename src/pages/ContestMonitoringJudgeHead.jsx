@@ -26,7 +26,6 @@ import { getStagePlayerSortIndex } from "../functions/functions";
 import { Drawer, Modal } from "@mui/material";
 import CompareSetting from "../modals/CompareSetting";
 import ContestRankingSummary from "../modals/ContestRankingSummary";
-import ContestPointSummary from "../modals/ContestPointSummary";
 import dayjs from "dayjs";
 import { doc, onSnapshot, where } from "firebase/firestore";
 import { db } from "../firebase";
@@ -54,10 +53,8 @@ import {
   removeStageCompareByLocalIndex,
   buildRealtimeCompareAfterCancel,
 } from "../utils/compareVoteUtils";
-import {
-  isActiveStagePlayer,
-  getAllStagePlayers,
-} from "../utils/playerEntryUtils";
+import { resolveEffectiveStagePlayers } from "../utils/liveStageSnapshotUtils";
+import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const navigate = useNavigate();
@@ -79,8 +76,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   const [compareCancelMsgOpen, setCompareCancelMsgOpen] = useState(false);
   const [rankingSummaryOpen, setRankingSummaryOpen] = useState(false);
   const [rankingSummaryProp, setRankingSummaryProp] = useState({});
-  const [pointSummaryOpen, setPointSummaryOpen] = useState(false);
-  const [pointSummaryProp, setPointSummaryProp] = useState({});
   const [message, setMessage] = useState({});
 
   // 채점 완료 순위 확정 안내 모달 상태
@@ -554,7 +549,23 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     try {
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
         ...newRealtimeInfo,
+        status: {
+          ...newRealtimeInfo.status,
+          compareCancel: true,
+        },
+        canceledAt: Date.now(),
       });
+      if (Array.isArray(realtimeData?.judges) && realtimeData.judges.length > 0) {
+        const unlockedJudges = realtimeData.judges.map((j, idx) => ({
+          ...j,
+          seatIndex: j?.seatIndex ?? idx + 1,
+          isEnd: false,
+          errors: "",
+        }));
+        await updateRealtimeCompare.updateData(`currentStage/${contestId}`, {
+          judges: unlockedJudges,
+        });
+      }
       setCompareStatus(() => ({
         ...newRealtimeInfo.status,
         compareCancel: true,
@@ -662,14 +673,20 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
     if (
       realtimeData?.stageJudgeCount &&
-      currentStageInfo?.grades?.length > 0 &&
-      playersArray?.length > 0
+      (currentStageInfo?.grades?.length > 0 ||
+        realtimeData?.stageGrades?.length > 0) &&
+      (playersArray?.length > 0 || realtimeData?.hasLiveStageSnapshot)
     ) {
-      const combinedStagePlayers = getAllStagePlayers(
-        playersArray,
-        currentStageInfo.grades,
-        currentStageInfo
-      );
+      const effectiveGrades =
+        currentStageInfo?.grades?.length > 0
+          ? currentStageInfo.grades
+          : realtimeData.stageGrades || [];
+      const combinedStagePlayers = resolveEffectiveStagePlayers({
+        realtimeData,
+        fallbackPlayers: playersArray,
+        gradeIds: effectiveGrades.map((g) => g?.gradeId).filter(Boolean),
+        stageInfo: currentStageInfo,
+      });
       setMatchedOriginalPlayers(combinedStagePlayers);
     } else {
       setMatchedOriginalPlayers([]);
@@ -846,13 +863,38 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       currentStageInfo.grades.length === 0 ||
       !realtimeData?.judges ||
       realtimeData.judges.length === 0 ||
-      rankingSummaryOpen ||
-      pointSummaryOpen
+      rankingSummaryOpen
     ) {
       if (alertTimerRef.current) {
         clearTimeout(alertTimerRef.current);
         alertTimerRef.current = null;
       }
+      return;
+    }
+
+    const allJudgesSubmitted = realtimeData.judges.every((j) =>
+      Boolean(j?.isEnd)
+    );
+    const isCompareVoting = Boolean(
+      realtimeData?.compares?.status?.compareStart
+    );
+
+    // 심판들이 채점/재채점/투표 중(isEnd === false)일 때는 DB에 남아 있는 이전 점수로 인해 완료 팝업이 미리 뜨지 않도록 차단
+    if (!allJudgesSubmitted || isCompareVoting) {
+      if (alertTimerRef.current) {
+        clearTimeout(alertTimerRef.current);
+        alertTimerRef.current = null;
+      }
+      setUrgentModalOpen(false);
+      const savedList = Array.isArray(realtimeData?.resultSaved)
+        ? realtimeData.resultSaved
+        : [];
+      currentStageInfo.grades.forEach((g) => {
+        if (g?.gradeId && !savedList.includes(g.gradeId)) {
+          hasAlertedRef.current[g.gradeId] = false;
+          hasCapturedRef.current[g.gradeId] = false;
+        }
+      });
       return;
     }
 
@@ -942,10 +984,10 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     normalScoreData,
     currentStageInfo,
     realtimeData?.judges,
+    realtimeData?.compares?.status?.compareStart,
     realtimeData?.resultSaved,
     playersArray,
     rankingSummaryOpen,
-    pointSummaryOpen,
   ]);
 
   useEffect(() => {
@@ -967,12 +1009,45 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
   const activeStageMatchedPlayersCount = useMemo(() => {
     if (!realtimeData?.stageId) return undefined;
-    const grades = currentStageInfo?.grades || [];
+    const grades =
+      currentStageInfo?.grades?.length > 0
+        ? currentStageInfo.grades
+        : realtimeData?.stageGrades || [];
     if (!grades.length) return 0;
-    const gradeSet = new Set(grades.map((g) => g?.gradeId).filter(Boolean));
-    return (playersArray || []).filter((p) => gradeSet.has(p.contestGradeId))
-      .length;
-  }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
+    const gradeIds = grades.map((g) => g?.gradeId).filter(Boolean);
+    return resolveEffectiveStagePlayers({
+      realtimeData,
+      fallbackPlayers: playersArray,
+      gradeIds,
+      stageInfo: currentStageInfo,
+    }).length;
+  }, [realtimeData, currentStageInfo, playersArray]);
+
+  // 2개 이상의 체급이 함께 묶인 통합무대 여부 (통합무대에서는 비교심사 비노출)
+  const isCombinedStage = useMemo(() => {
+    const stageGradesList =
+      Array.isArray(currentStageInfo?.grades) &&
+      currentStageInfo.grades.length > 0
+        ? currentStageInfo.grades
+        : Array.isArray(realtimeData?.stageGrades) &&
+          realtimeData.stageGrades.length > 0
+        ? realtimeData.stageGrades
+        : [];
+    if (stageGradesList.length > 0) {
+      return stageGradesList.length > 1;
+    }
+    return /\s+통합$/.test(String(realtimeData?.gradeTitle || "").trim());
+  }, [
+    currentStageInfo?.grades,
+    realtimeData?.stageGrades,
+    realtimeData?.gradeTitle,
+  ]);
+
+  useEffect(() => {
+    if (isCombinedStage && compareOpen) {
+      setCompareOpen(false);
+    }
+  }, [isCombinedStage, compareOpen]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
     const realtimeJudges = Array.isArray(realtimeData?.judges)
@@ -1076,25 +1151,14 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       className="flex-1 inline-flex items-center justify-center gap-2 h-10 px-5 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base transition-colors cursor-pointer"
                       onClick={() => {
                         setUrgentModalOpen(false);
-                        if (urgentGradeInfo?.categoryJudgeType === "point") {
-                          setPointSummaryProp({
-                            categoryId: urgentGradeInfo.categoryId,
-                            gradeId: urgentGradeInfo.gradeId,
-                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                            categoryTitle: urgentGradeInfo.categoryTitle || "",
-                            gradeTitle: urgentGradeInfo.gradeTitle || "",
-                          });
-                          setPointSummaryOpen(true);
-                        } else {
-                          setRankingSummaryProp({
-                            categoryId: urgentGradeInfo.categoryId,
-                            gradeId: urgentGradeInfo.gradeId,
-                            categoryJudgeType: urgentGradeInfo.categoryJudgeType,
-                            categoryTitle: urgentGradeInfo.categoryTitle || "",
-                            gradeTitle: urgentGradeInfo.gradeTitle || "",
-                          });
-                          setRankingSummaryOpen(true);
-                        }
+                        setRankingSummaryProp({
+                          categoryId: urgentGradeInfo.categoryId,
+                          gradeId: urgentGradeInfo.gradeId,
+                          categoryJudgeType: "ranking",
+                          categoryTitle: urgentGradeInfo.categoryTitle || "",
+                          gradeTitle: urgentGradeInfo.gradeTitle || "",
+                        });
+                        setRankingSummaryOpen(true);
                       }}
                     >
                       <span>순위표 확인 및 확정</span>
@@ -1152,7 +1216,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               },
             }}
           >
-            {compareOpen && (
+            {compareOpen && !isCombinedStage && (
               <CompareSetting
                 stageInfo={currentStageInfo}
                 setClose={setCompareOpen}
@@ -1193,48 +1257,14 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   realtimeData?.judges?.length ||
                   0
                 }
-                stagePlayers={playersArray.filter(
-                  (f) =>
-                    f.contestGradeId === rankingSummaryProp?.gradeId &&
-                    isActiveStagePlayer(f)
-                )}
+                stagePlayers={resolveEffectiveStagePlayers({
+                  realtimeData,
+                  fallbackPlayers: playersArray,
+                  gradeIds: rankingSummaryProp?.gradeId,
+                  stageInfo: currentStageInfo,
+                })}
                 categoryTitleProp={rankingSummaryProp?.categoryTitle || ""}
                 gradeTitleProp={rankingSummaryProp?.gradeTitle || ""}
-              />
-            </div>
-          </Drawer>
-          <Drawer
-            anchor="right"
-            open={pointSummaryOpen}
-            onClose={() => setPointSummaryOpen(false)}
-            PaperProps={{
-              sx: {
-                width: { xs: "100vw", xl: "min(92vw, 1320px)" },
-                maxWidth: "100vw",
-                bgcolor: "#f8fafc",
-                boxShadow: "-12px 0 40px rgba(15, 23, 42, 0.14)",
-              },
-            }}
-          >
-            <div className="w-full h-full overflow-y-auto outline-none">
-              <ContestPointSummary
-                categoryId={pointSummaryProp?.categoryId}
-                gradeId={pointSummaryProp?.gradeId}
-                stageId={realtimeData?.stageId}
-                setClose={setPointSummaryOpen}
-                currentResultSaved={realtimeData?.resultSaved}
-                expectedJudgeCount={
-                  realtimeData?.stageJudgeCount ||
-                  realtimeData?.judges?.length ||
-                  0
-                }
-                stagePlayers={playersArray.filter(
-                  (f) =>
-                    f.contestGradeId === pointSummaryProp?.gradeId &&
-                    isActiveStagePlayer(f)
-                )}
-                categoryTitleProp={pointSummaryProp?.categoryTitle || ""}
-                gradeTitleProp={pointSummaryProp?.gradeTitle || ""}
               />
             </div>
           </Drawer>
@@ -1336,8 +1366,8 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
             />
           )}
 
-          {/* 비교심사 운영 카드 */}
-          {realtimeData?.stageId && (
+          {/* 비교심사 운영 카드 (단일 체급 무대에서만 표시 · 통합무대에서는 비노출) */}
+          {realtimeData?.stageId && !isCombinedStage && (
             <div className="bg-white rounded-[12px] border border-[#171717]/[0.09] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 bg-[#fafafa] border-b border-[#171717]/[0.08]">
                 <div className="flex items-center gap-2">
@@ -1404,22 +1434,48 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                         <StatusDot status="active" />
                         {currentCompareInfo?.compareIndex}차 비교심사 진행 중
                       </span>
+                      {currentCompareInfo?.confirmedBy === "head_authority" && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#fffbeb] border border-[#fde68a] text-[#b45309] text-xs font-bold">
+                          심판위원장 직권확정
+                        </span>
+                      )}
+                      {(currentCompareInfo?.confirmedBy === "tie_break" ||
+                        currentCompareInfo?.compareScoreMode === "tieBreak") && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#f5f3ff] border border-[#c4b5fd] text-[#6d28d9] text-xs font-bold">
+                          동점자 재심사 (
+                          {currentCompareInfo?.tieBreakStartRank || 1}~
+                          {currentCompareInfo?.tieBreakEndRank ||
+                            currentCompareInfo?.comparePlayerLength ||
+                            2}
+                          위 결정)
+                        </span>
+                      )}
                       <span className="font-mono tabular-nums">
                         선발 인원: {currentCompareInfo?.comparePlayerLength}명
                       </span>
                       <span>·</span>
                       <span>
                         채점 방식:{" "}
-                        {currentCompareInfo?.compareScoreMode === "compare" ||
-                        currentCompareInfo?.compareScoreMode === "topOnly"
+                        {currentCompareInfo?.compareScoreMode === "tieBreak"
+                          ? `동점자 전용 (${
+                              currentCompareInfo?.tieBreakStartRank || 1
+                            }~${
+                              currentCompareInfo?.tieBreakEndRank ||
+                              currentCompareInfo?.comparePlayerLength ||
+                              2
+                            }위만 선택)`
+                          : currentCompareInfo?.compareScoreMode === "compare" ||
+                            currentCompareInfo?.compareScoreMode === "topOnly"
                           ? "비교심사 대상자만 채점"
+                          : currentCompareInfo?.compareScoreMode === "topWithSub"
+                          ? "이전 차수 선발 인원 전체 채점"
                           : "출전 선수 전원 채점"}
                       </span>
                     </div>
 
                     {comparesArray?.length > 0 &&
                       comparesArray.map((compare, cIdx) => {
-                        const { players, compareIndex } = compare;
+                        const { players, compareIndex, confirmedBy } = compare;
 
                         return (
                           <div
@@ -1430,6 +1486,21 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                               <span className="px-2.5 py-1 rounded-[6px] bg-white border border-[#d4d4d8] text-[#171717] text-xs sm:text-sm font-bold mr-0.5 tabular-nums">
                                 {compareIndex}차 호명 선수
                               </span>
+                              {confirmedBy === "head_authority" && (
+                                <span className="px-2 py-0.5 rounded-[5px] bg-[#fffbeb] border border-[#fde68a] text-[#b45309] text-xs font-bold">
+                                  직권확정
+                                </span>
+                              )}
+                              {(confirmedBy === "tie_break" ||
+                                compare?.compareScoreMode === "tieBreak") && (
+                                <span className="px-2 py-0.5 rounded-[5px] bg-[#f5f3ff] border border-[#c4b5fd] text-[#6d28d9] text-xs font-bold tabular-nums">
+                                  동점자 재심사 ({compare?.tieBreakStartRank || 1}~
+                                  {compare?.tieBreakEndRank ||
+                                    players?.length ||
+                                    2}
+                                  위)
+                                </span>
+                              )}
                               {players?.map((top, tIdx) => (
                                 <span
                                   key={tIdx}
@@ -1508,19 +1579,13 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                   currentStageInfo.grades.map((grade, gIdx) => {
                     const { categoryTitle, categoryId, gradeTitle, gradeId } =
                       grade;
-                    const { categoryJudgeType } = currentStageInfo;
 
-                    const filterdPlayers = playersArray
-                      .filter(
-                        (f) =>
-                          f.contestGradeId === gradeId &&
-                          isActiveStagePlayer(f)
-                      )
-                      .sort(
-                        (a, b) =>
-                          getStagePlayerSortIndex(a, currentStageInfo) -
-                          getStagePlayerSortIndex(b, currentStageInfo)
-                      );
+                    const filterdPlayers = resolveEffectiveStagePlayers({
+                      realtimeData,
+                      fallbackPlayers: playersArray,
+                      gradeIds: gradeId,
+                      stageInfo: currentStageInfo,
+                    });
 
                     const judges = realtimeData?.judges || [];
 
@@ -1586,11 +1651,6 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                               <span className="text-base sm:text-lg font-bold text-[#171717]">
                                 {gradeTitle}
                               </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#eff6ff] border border-[#bfdbfe] text-xs font-semibold text-[#1d4ed8]">
-                                {categoryJudgeType === "point"
-                                  ? "점수형 심사"
-                                  : "랭킹형 심사"}
-                              </span>
                             </div>
                           </div>
 
@@ -1610,91 +1670,47 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                               <span>집계표 캡처</span>
                             </button>
 
-                            {categoryJudgeType === "point" ? (
-                              <button
-                                type="button"
-                                disabled={isGradeConfirmed}
-                                onClick={() => {
-                                  if (!isGradeConfirmed) {
-                                    setPointSummaryProp({
-                                      categoryId,
-                                      gradeId,
-                                      categoryJudgeType,
-                                      categoryTitle,
-                                      gradeTitle,
-                                    });
-                                    setPointSummaryOpen(true);
-                                  }
-                                }}
-                                className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] text-xs sm:text-sm font-bold transition-colors ${
-                                  isGradeConfirmed
-                                    ? "bg-[#f0fdf4] text-[#15803d] border border-[#86efac] cursor-default"
-                                    : isAllScored
-                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs cursor-pointer"
-                                    : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#b45309] border border-[#fcd34d] cursor-pointer"
-                                }`}
-                              >
-                                {isGradeConfirmed ? (
-                                  <>
-                                    <Check
-                                      size={15}
-                                      strokeWidth={2.4}
-                                      className="text-[#16a34a]"
-                                    />
-                                    <span>순위표 확정 완료</span>
-                                  </>
-                                ) : isAllScored ? (
-                                  <>
-                                    <span className="h-2 w-2 rounded-full bg-white" />
-                                    <span>점수형 순위 집계표 열기 · 확정</span>
-                                  </>
-                                ) : (
-                                  <span>점수형 집계표 보기 (채점 중)</span>
-                                )}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={isGradeConfirmed}
-                                onClick={() => {
-                                  if (!isGradeConfirmed) {
-                                    setRankingSummaryProp({
-                                      categoryId,
-                                      gradeId,
-                                      categoryJudgeType,
-                                      categoryTitle,
-                                      gradeTitle,
-                                    });
-                                    setRankingSummaryOpen(true);
-                                  }
-                                }}
-                                className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] text-xs sm:text-sm font-bold transition-colors ${
-                                  isGradeConfirmed
-                                    ? "bg-[#f0fdf4] text-[#15803d] border border-[#86efac] cursor-default"
-                                    : isAllScored
-                                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs cursor-pointer"
-                                    : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#b45309] border border-[#fcd34d] cursor-pointer"
-                                }`}
-                              >
-                                {isGradeConfirmed ? (
-                                  <>
-                                    <Check
-                                      size={15}
-                                      strokeWidth={2.4}
-                                      className="text-[#16a34a]"
-                                    />
-                                    <span>순위표 확정 완료</span>
-                                  </>
-                                ) : isAllScored ? (
-                                  <>
-                                    <span className="h-2 w-2 rounded-full bg-white" />
-                                    <span>랭킹형 순위 집계표 열기 · 확정</span>
-                                  </>
-                                ) : (
-                                  <span>랭킹형 집계표 보기 (채점 중)</span>
-                                )}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              disabled={isGradeConfirmed}
+                              onClick={() => {
+                                if (!isGradeConfirmed) {
+                                  setRankingSummaryProp({
+                                    categoryId,
+                                    gradeId,
+                                    categoryJudgeType: "ranking",
+                                    categoryTitle,
+                                    gradeTitle,
+                                  });
+                                  setRankingSummaryOpen(true);
+                                }
+                              }}
+                              className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] text-xs sm:text-sm font-bold transition-colors ${
+                                isGradeConfirmed
+                                  ? "bg-[#f0fdf4] text-[#15803d] border border-[#86efac] cursor-default"
+                                  : isAllScored
+                                  ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs cursor-pointer"
+                                  : "bg-[#fffbeb] hover:bg-[#fef3c7] text-[#b45309] border border-[#fcd34d] cursor-pointer"
+                              }`}
+                            >
+                              {isGradeConfirmed ? (
+                                <>
+                                  <Check
+                                    size={15}
+                                    strokeWidth={2.4}
+                                    className="text-[#16a34a]"
+                                  />
+                                  <span>순위표 확정 완료</span>
+                                </>
+                              ) : isAllScored ? (
+                                <>
+                                  <span className="h-2 w-2 rounded-full bg-white" />
+                                  <span>순위 집계표 열기 · 확정</span>
+                                </>
+                              ) : (
+                                <span>순위 집계표 보기 (채점 중)</span>
+                              )}
+                            </button>
                           </div>
                         </div>
 

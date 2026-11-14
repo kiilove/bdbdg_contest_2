@@ -9,9 +9,16 @@ import {
   X,
 } from "lucide-react";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
-import { useFirestoreQuery } from "../hooks/useFirestores";
+import {
+  useFirestoreGetDocument,
+  useFirestoreQuery,
+  useFirestoreUpdateData,
+} from "../hooks/useFirestores";
 import { where } from "firebase/firestore";
-import { useFirebaseRealtimeUpdateData } from "../hooks/useFirebaseRealtime";
+import {
+  useFirebaseRealtimeGetDocument,
+  useFirebaseRealtimeUpdateData,
+} from "../hooks/useFirebaseRealtime";
 import { Modal } from "@mui/material";
 import { resolveEffectiveCollectionName } from "../components/monitoring/MonitoringDiagnosticsBar";
 import { getStagePlayerSortIndex } from "../functions/functions";
@@ -25,6 +32,7 @@ import {
 } from "../utils/scoringEngine";
 import { saveGradeResultsAtomically } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
+import { extractTieBreakGroupsFromResult } from "../utils/compareVoteUtils";
 
 const ContestRankingSummary = ({
   categoryId,
@@ -54,12 +62,19 @@ const ContestRankingSummary = ({
   // 동점자 감지 경고 및 강제등록 확인 모달 상태
   const [duplicateWarningOpen, setDuplicateWarningOpen] = useState(false);
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
+  const [tieBreakConfirmTarget, setTieBreakConfirmTarget] = useState(null);
+  const [isLaunchingTieBreak, setIsLaunchingTieBreak] = useState(false);
   const hasWarnedDuplicateRef = useRef(false);
 
   void categoryJudgeType;
-  void stageId;
 
+  const activeContestId = currentContest?.contests?.id || "";
   const scoreRankingQuery = useFirestoreQuery();
+  const fetchCompareList = useFirestoreGetDocument("contest_compares_list");
+  const updateCompareList = useFirestoreUpdateData("contest_compares_list");
+  const { data: realtimeStage } = useFirebaseRealtimeGetDocument(
+    activeContestId ? `currentStage/${activeContestId}` : null
+  );
 
   const realtimeResultStateUpdate = useFirebaseRealtimeUpdateData();
 
@@ -259,15 +274,50 @@ const ContestRankingSummary = ({
 
   const handleRealtimeUpdate = async (contestId, targetGradeId = gradeId) => {
     const collectionInfo = `currentStage/${contestId}`;
-    const base = Array.isArray(currentResultSaved) ? currentResultSaved : [];
+    const base = Array.isArray(realtimeStage?.resultSaved)
+      ? realtimeStage.resultSaved
+      : Array.isArray(currentResultSaved)
+      ? currentResultSaved
+      : [];
     const newResultSaved =
       targetGradeId && !base.includes(targetGradeId)
         ? [...base, targetGradeId]
         : base;
 
-    const updated = await realtimeResultStateUpdate.updateData(collectionInfo, {
+    const patch = {
       resultSaved: newResultSaved,
-    });
+    };
+
+    // 현재 진행 중인 무대의 모든 체급 순위확정이 완료된 경우, 로그인된 심판석 상태도 '심사 종료(isEnd: true)'로 함께 마감 동기화
+    const isSameLiveStage =
+      !stageId || !realtimeStage?.stageId || realtimeStage.stageId === stageId;
+    if (isSameLiveStage && realtimeStage) {
+      const liveGradeIds =
+        Array.isArray(realtimeStage.stageGrades) &&
+        realtimeStage.stageGrades.length > 0
+          ? realtimeStage.stageGrades.map((g) => g?.gradeId).filter(Boolean)
+          : realtimeStage.gradeId
+          ? [realtimeStage.gradeId]
+          : targetGradeId
+          ? [targetGradeId]
+          : [];
+      const allLiveGradesConfirmed =
+        liveGradeIds.length > 0 &&
+        liveGradeIds.every((gid) => newResultSaved.includes(gid));
+
+      if (allLiveGradesConfirmed && Array.isArray(realtimeStage.judges)) {
+        patch.judges = realtimeStage.judges.map((j, idx) => ({
+          ...j,
+          seatIndex: j?.seatIndex ?? idx + 1,
+          isEnd: j?.isLogined ? true : Boolean(j?.isEnd),
+        }));
+      }
+    }
+
+    const updated = await realtimeResultStateUpdate.updateData(
+      collectionInfo,
+      patch
+    );
 
     if (!updated) {
       throw new Error("실시간 순위 확정 상태 업데이트에 실패했습니다");
@@ -415,6 +465,201 @@ const ContestRankingSummary = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoreData, seatNumbers, isLoadingScores]);
+
+  // 순수 심판 점수 합산 기준 동점 그룹 산출 (임시 수동 입력과 무관하게 정확한 잠금 순위 계산)
+  const pureTieGroupsByGrade = useMemo(() => {
+    const map = new Map();
+    if (!scoreData || scoreData.length === 0) return map;
+    const pureTables = groupByGrade(scoreData, seatNumbers, "totalScore");
+    pureTables.forEach((tbl) => {
+      const targetGid = tbl.gradeId || gradeId || "";
+      const groups = extractTieBreakGroupsFromResult(tbl.result, targetGid);
+      if (groups.length > 0) {
+        map.set(targetGid, {
+          categoryId: tbl.categoryId || categoryId || "",
+          categoryTitle: tbl.categoryTitle || categoryTitleProp || "",
+          gradeId: targetGid,
+          gradeTitle: tbl.gradeTitle || gradeTitleProp || "",
+          groups,
+        });
+      }
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scoreData, seatNumbers, gradeId, categoryId, categoryTitleProp, gradeTitleProp]);
+
+  const allPureTieGroups = useMemo(() => {
+    const flat = [];
+    pureTieGroupsByGrade.forEach((meta) => {
+      meta.groups.forEach((grp) => {
+        flat.push({ meta, group: grp });
+      });
+    });
+    return flat;
+  }, [pureTieGroupsByGrade]);
+
+  // 현재 실제 진행 중인 무대와 일치할 때만 동점자 재비교심사 호출 허용 (이전 종료 무대 오발송 방지)
+  const canLaunchLiveTieBreak = useMemo(() => {
+    if (!activeContestId || !realtimeStage?.stageId) return false;
+    if (stageId && realtimeStage.stageId !== stageId) return false;
+    if (
+      Array.isArray(realtimeStage.stageGrades) &&
+      realtimeStage.stageGrades.length > 0 &&
+      gradeId
+    ) {
+      return realtimeStage.stageGrades.some((g) => g?.gradeId === gradeId);
+    }
+    if (realtimeStage.gradeId && gradeId && !stageId) {
+      return realtimeStage.gradeId === gradeId;
+    }
+    return true;
+  }, [activeContestId, realtimeStage, stageId, gradeId]);
+
+  const handleLaunchTieBreakRound = async (targetPayload) => {
+    if (!targetPayload || isLaunchingTieBreak || !activeContestId) return;
+    const { meta, group } = targetPayload;
+    if (!group?.tiedPlayers?.length) return;
+
+    setIsLaunchingTieBreak(true);
+    try {
+      const effectiveStageId = stageId || realtimeStage?.stageId || "";
+      const compareListId =
+        currentContest?.contests?.contestComparesListId || "";
+      let baseCompares = [];
+      let loadedCompareDoc = null;
+
+      if (compareListId) {
+        loadedCompareDoc = await fetchCompareList.getDocument(compareListId);
+        if (Array.isArray(loadedCompareDoc?.compares)) {
+          baseCompares = [...loadedCompareDoc.compares];
+        }
+      }
+
+      const stageScopedCompares = baseCompares.filter((c) =>
+        effectiveStageId
+          ? c?.stageId === effectiveStageId
+          : c?.gradeId === meta.gradeId
+      );
+      const nextCompareIndex =
+        Math.max(
+          stageScopedCompares.length,
+          Number(realtimeStage?.compares?.compareIndex || 0)
+        ) + 1;
+
+      const confirmedNumbers = group.tiedPlayers
+        .map((p) => Number(p.playerNumber))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+
+      const compareEntry = {
+        contestId: activeContestId,
+        stageId: effectiveStageId,
+        categoryId: meta.categoryId || realtimeStage?.categoryId || "",
+        categoryTitle: meta.categoryTitle || realtimeStage?.categoryTitle || "",
+        gradeId: meta.gradeId || gradeId || "",
+        gradeTitle: meta.gradeTitle || gradeTitleProp || "",
+        compareIndex: nextCompareIndex,
+        comparePlayerLength: group.count,
+        compareScoreMode: "tieBreak",
+        confirmedBy: "tie_break",
+        tieBreakStartRank: group.startRank,
+        tieBreakEndRank: group.endRank,
+        players: group.tiedPlayers,
+        lockedPlayers: group.lockedPlayers,
+        votedResult: [],
+      };
+
+      // 1) Firestore contest_compares_list 이력 우선 반영 (사회자/전광판/취소 연동)
+      if (compareListId) {
+        await updateCompareList.updateData(compareListId, {
+          ...(loadedCompareDoc || {}),
+          compares: [...baseCompares, compareEntry],
+        });
+      }
+
+      // 2) RTDB 심판석 완료 잠금 해제 + 확정 체급 해제 + 동점자 전용 채점판(tieBreak) 푸시
+      const unlockedJudges = Array.isArray(realtimeStage?.judges)
+        ? realtimeStage.judges.map((j, idx) => ({
+            ...j,
+            seatIndex: j?.seatIndex ?? idx + 1,
+            isEnd: false,
+            errors: "",
+          }))
+        : undefined;
+
+      const baseSaved = Array.isArray(realtimeStage?.resultSaved)
+        ? realtimeStage.resultSaved
+        : Array.isArray(currentResultSaved)
+        ? currentResultSaved
+        : [];
+      const nextResultSaved = baseSaved.filter((gid) => gid !== meta.gradeId);
+
+      const nextRealtimeCompares = {
+        ...(realtimeStage?.compares || {}),
+        stageId: effectiveStageId,
+        compareIndex: nextCompareIndex,
+        playerLength: group.count,
+        scoreMode: "tieBreak",
+        confirmedBy: "tie_break",
+        tieBreakGradeId: meta.gradeId || gradeId || null,
+        tieBreakGradeTitle: meta.gradeTitle || gradeTitleProp || null,
+        tieBreakStartRank: group.startRank,
+        tieBreakEndRank: group.endRank,
+        players: group.tiedPlayers,
+        prevPlayers: [],
+        lockedPlayers: group.lockedPlayers,
+        judges: [],
+        confirmed: {
+          count: confirmedNumbers.length,
+          numbers: confirmedNumbers,
+        },
+        status: {
+          compareStart: false,
+          compareEnd: false,
+          compareCancel: false,
+          compareIng: true,
+          isTieBreak: true,
+        },
+      };
+
+      const stagePatch = {
+        resultSaved: nextResultSaved,
+        compares: nextRealtimeCompares,
+      };
+      if (unlockedJudges) {
+        stagePatch.judges = unlockedJudges;
+      }
+
+      const updated = await realtimeResultStateUpdate.updateData(
+        `currentStage/${activeContestId}`,
+        stagePatch
+      );
+      if (!updated) {
+        throw new Error("동점자 재심사 실시간 상태 전송에 실패했습니다.");
+      }
+
+      setTieBreakConfirmTarget(null);
+      setDuplicateWarningOpen(false);
+      setClose(false);
+    } catch (err) {
+      console.error("Failed to launch tie-break round:", err);
+      setIsSaveSuccess(false);
+      setMessage({
+        title: "동점자 재비교심사 시작 실패",
+        body: "재비교심사 채점판을 열지 못했습니다.",
+        body2: err?.message || "네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsLaunchingTieBreak(false);
+    }
+  };
+
+  // 동점자 재심사 코드는 유지하되, 현장 룰 확정 전까지 버튼 및 확인 메시지 박스만 비노출 처리
+  void tieBreakConfirmTarget;
+  void allPureTieGroups;
+  void canLaunchLiveTieBreak;
+  void handleLaunchTieBreakRound;
 
   // 전체 동점 선수 요약 텍스트 (모달 표시용)
   const allTiedPlayersSummary = useMemo(() => {
@@ -819,10 +1064,10 @@ const ContestRankingSummary = ({
                     <table className="w-full text-center border-collapse">
                       <thead>
                         <tr className="bg-[#f4f4f5] text-[#171717] border-b border-[#d4d4d8]">
-                          <th className="py-2.5 px-3 w-24 text-xs sm:text-sm font-bold border-r border-[#e4e4e7] whitespace-nowrap">
+                          <th className="py-2.5 px-3 w-24 min-w-[92px] text-xs sm:text-sm font-bold border-r border-[#e4e4e7] whitespace-nowrap">
                             선수번호
                           </th>
-                          <th className="py-2.5 px-3 w-32 text-xs sm:text-sm font-bold border-r border-[#d4d4d8] whitespace-nowrap bg-[#fafafa]">
+                          <th className="py-2.5 px-3 w-36 min-w-[144px] text-xs sm:text-sm font-bold border-r border-[#d4d4d8] whitespace-nowrap bg-[#fafafa]">
                             최종순위
                           </th>
                           {headerSeats.map((seatNo) => {
@@ -830,16 +1075,16 @@ const ContestRankingSummary = ({
                             return (
                               <th
                                 key={seatNo}
-                                className={`py-2.5 px-2 min-w-[74px] text-xs sm:text-sm font-bold border-r border-[#e4e4e7] whitespace-nowrap ${
+                                className={`py-2.5 px-2 min-w-[76px] text-xs sm:text-sm font-bold border-r border-[#e4e4e7] whitespace-nowrap ${
                                   seatMissing
                                     ? "bg-[#fef2f2] text-[#dc2626]"
                                     : "text-[#3f3f46]"
                                 }`}
                               >
                                 <div className="flex flex-col items-center gap-0.5">
-                                  <span>{seatNo}번 심판</span>
+                                  <span className="whitespace-nowrap">{seatNo}번 심판</span>
                                   {seatMissing && (
-                                    <span className="px-1.5 py-0.5 rounded-[4px] bg-[#dc2626] text-white text-[10px] font-bold leading-none">
+                                    <span className="px-1.5 py-0.5 rounded-[4px] bg-[#dc2626] text-white text-[10px] font-bold leading-none whitespace-nowrap">
                                       미채점
                                     </span>
                                   )}
@@ -847,7 +1092,7 @@ const ContestRankingSummary = ({
                               </th>
                             );
                           })}
-                          <th className="py-2.5 px-3 w-28 text-xs sm:text-sm font-bold bg-[#eff6ff] text-[#1d4ed8] border-l border-[#bfdbfe] whitespace-nowrap">
+                          <th className="py-2.5 px-3 w-28 min-w-[106px] text-xs sm:text-sm font-bold bg-[#eff6ff] text-[#1d4ed8] border-l border-[#bfdbfe] whitespace-nowrap">
                             유효 기표합산
                           </th>
                         </tr>
@@ -876,25 +1121,25 @@ const ContestRankingSummary = ({
                                       {playerNumber}
                                     </span>
                                   </td>
-                                  <td className="py-2.5 px-3 border-r border-[#d4d4d8]">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#f4f4f5] border border-[#d4d4d8] text-xs font-semibold text-[#737373]">
+                                  <td className="py-2.5 px-3 border-r border-[#d4d4d8] whitespace-nowrap">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#f4f4f5] border border-[#d4d4d8] text-xs font-semibold text-[#737373] whitespace-nowrap">
                                       순위제외
                                     </span>
                                   </td>
                                   {score.map((s) => (
                                     <td
                                       key={s.seatIndex}
-                                      className="py-2.5 px-2 border-r border-[#e4e4e7]"
+                                      className="py-2.5 px-2 border-r border-[#e4e4e7] whitespace-nowrap"
                                     >
-                                      <span className="text-xs font-semibold text-[#a1a1aa]">
+                                      <span className="text-xs font-semibold text-[#a1a1aa] whitespace-nowrap">
                                         {s.playerScore >= 1000
                                           ? "순위제외"
                                           : s.playerScore ?? "-"}
                                       </span>
                                     </td>
                                   ))}
-                                  <td className="py-2.5 px-3 bg-[#f4f4f5] border-l border-[#d4d4d8]">
-                                    <span className="text-xs sm:text-sm font-semibold text-[#737373]">
+                                  <td className="py-2.5 px-3 bg-[#f4f4f5] border-l border-[#d4d4d8] whitespace-nowrap">
+                                    <span className="text-xs sm:text-sm font-semibold text-[#737373] whitespace-nowrap">
                                       제외
                                     </span>
                                   </td>
@@ -999,21 +1244,22 @@ const ContestRankingSummary = ({
                                     </div>
 
                                     {isRankDuplicated && (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-[11px] font-bold">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-[11px] font-bold whitespace-nowrap shrink-0">
                                         <AlertTriangle
                                           size={12}
                                           strokeWidth={2.3}
+                                          className="shrink-0"
                                         />
-                                        동점 · 순위 수정
+                                        <span>동점 · 순위 수정</span>
                                       </span>
                                     )}
                                     {isRankInvalid && !rowHasMissing && (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-[11px] font-bold">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#dc2626] text-white text-[11px] font-bold whitespace-nowrap shrink-0">
                                         순위 미입력
                                       </span>
                                     )}
                                     {!needsTieBreak && isAlert && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[5px] bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe] text-[11px] font-semibold">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe] text-[11px] font-semibold whitespace-nowrap shrink-0">
                                         동점 조정됨
                                       </span>
                                     )}
@@ -1034,9 +1280,9 @@ const ContestRankingSummary = ({
                                     return (
                                       <td
                                         key={seatIndex}
-                                        className="py-2.5 px-1.5 border-r border-[#e4e4e7] bg-[#fef2f2]"
+                                        className="py-2.5 px-1.5 border-r border-[#e4e4e7] bg-[#fef2f2] whitespace-nowrap"
                                       >
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-white border border-[#fca5a5] text-[#dc2626] text-xs font-bold">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-white border border-[#fca5a5] text-[#dc2626] text-xs font-bold whitespace-nowrap">
                                           점수누락
                                         </span>
                                       </td>
@@ -1047,15 +1293,15 @@ const ContestRankingSummary = ({
                                     return (
                                       <td
                                         key={seatIndex}
-                                        className="py-2 px-1.5 border-r border-[#e4e4e7] bg-[#fafafa]"
+                                        className="py-2 px-1.5 border-r border-[#e4e4e7] bg-[#fafafa] whitespace-nowrap"
                                       >
-                                        <div className="inline-flex flex-col items-center justify-center min-w-[54px] px-1.5 py-0.5 rounded-[6px] bg-[#f4f4f5]/80 border border-[#e4e4e7]">
-                                          <span className="font-mono tabular-nums text-xs sm:text-sm font-semibold line-through text-[#a1a1aa]">
+                                        <div className="inline-flex flex-col items-center justify-center min-w-[56px] px-2 py-0.5 rounded-[6px] bg-[#f4f4f5]/80 border border-[#e4e4e7] whitespace-nowrap">
+                                          <span className="font-mono tabular-nums text-xs sm:text-sm font-semibold line-through text-[#a1a1aa] whitespace-nowrap">
                                             {playerScore >= 1000
                                               ? "제외"
                                               : playerScore}
                                           </span>
-                                          <span className="text-[10px] font-medium text-[#737373] leading-tight">
+                                          <span className="text-[10px] font-medium text-[#737373] leading-tight whitespace-nowrap">
                                             {isMin ? "최고제외" : "최저제외"}
                                           </span>
                                         </div>
@@ -1066,9 +1312,9 @@ const ContestRankingSummary = ({
                                   return (
                                     <td
                                       key={seatIndex}
-                                      className="py-2.5 px-2 border-r border-[#e4e4e7]"
+                                      className="py-2.5 px-2 border-r border-[#e4e4e7] whitespace-nowrap"
                                     >
-                                      <span className="font-mono tabular-nums font-bold text-[#171717] text-base sm:text-[17px]">
+                                      <span className="font-mono tabular-nums font-bold text-[#171717] text-base sm:text-[17px] whitespace-nowrap">
                                         {playerScore >= 1000
                                           ? "순위제외"
                                           : playerScore}
@@ -1081,22 +1327,22 @@ const ContestRankingSummary = ({
                                 <td
                                   className={
                                     needsTieBreak
-                                      ? "py-2.5 px-3 bg-[#fef2f2] border-l border-[#fca5a5]"
-                                      : "py-2.5 px-3 bg-[#eff6ff]/50 border-l border-[#bfdbfe]"
+                                      ? "py-2.5 px-3 bg-[#fef2f2] border-l border-[#fca5a5] whitespace-nowrap"
+                                      : "py-2.5 px-3 bg-[#eff6ff]/50 border-l border-[#bfdbfe] whitespace-nowrap"
                                   }
                                 >
                                   <div className="flex flex-col items-center justify-center">
                                     <span
                                       className={
                                         needsTieBreak
-                                          ? "font-mono tabular-nums font-extrabold text-[#dc2626] text-base sm:text-lg"
-                                          : "font-mono tabular-nums font-extrabold text-[#1d4ed8] text-base sm:text-lg"
+                                          ? "font-mono tabular-nums font-extrabold text-[#dc2626] text-base sm:text-lg whitespace-nowrap"
+                                          : "font-mono tabular-nums font-extrabold text-[#1d4ed8] text-base sm:text-lg whitespace-nowrap"
                                       }
                                     >
                                       {rowHasMissing ? "미완료" : totalScore}
                                     </span>
                                     {needsTieBreak && !rowHasMissing && (
-                                      <span className="mt-0.5 px-1.5 py-0.5 rounded-[4px] bg-[#dc2626] text-white text-[10px] font-bold leading-none">
+                                      <span className="mt-0.5 px-2 py-0.5 rounded-[4px] bg-[#dc2626] text-white text-[10px] font-bold leading-none whitespace-nowrap">
                                         동점 합산
                                       </span>
                                     )}
@@ -1166,7 +1412,7 @@ const ContestRankingSummary = ({
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end shrink-0">
                     {hasDuplicates &&
                       !hasInvalid &&
                       !hasAnyInvalid &&
@@ -1174,7 +1420,7 @@ const ContestRankingSummary = ({
                       !hasAnyMissing && (
                         <button
                           type="button"
-                          className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#fef2f2] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-semibold text-xs sm:text-sm border border-[#fca5a5] transition-colors cursor-pointer"
+                          className="h-9 px-3.5 rounded-[8px] bg-white hover:bg-[#fef2f2] disabled:opacity-50 disabled:cursor-not-allowed text-[#dc2626] font-semibold text-xs sm:text-sm border border-[#fca5a5] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                           disabled={isSaving}
                           onClick={() => !isSaving && setForceConfirmOpen(true)}
                         >
@@ -1186,8 +1432,8 @@ const ContestRankingSummary = ({
                       type="button"
                       className={
                         cannotConfirm
-                          ? "h-10 px-5 rounded-[8px] bg-[#e4e4e7] text-[#737373] font-bold text-xs sm:text-sm cursor-not-allowed"
-                          : "h-10 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base shadow-xs transition-colors active:scale-[0.99] cursor-pointer"
+                          ? "h-10 px-5 rounded-[8px] bg-[#e4e4e7] text-[#737373] font-bold text-xs sm:text-sm cursor-not-allowed whitespace-nowrap shrink-0"
+                          : "h-10 px-5 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base shadow-xs transition-colors active:scale-[0.99] cursor-pointer whitespace-nowrap shrink-0"
                       }
                       onClick={() =>
                         !cannotConfirm && handleSaveResult(summaryTable)

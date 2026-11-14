@@ -9,7 +9,7 @@ const ContestCategoriesHub = () => {
       <PipelineStageBanner
         layerBadge="대회 골격 설계"
         title="종목 · 체급 설계"
-        subtitle="부(1부/2부/그랑프리) 구분, 종목별 심판제(5·7·9심) 및 심사방식(랭킹·점수형), 체급 진행 순서를 구성합니다."
+        subtitle="부(1부/2부/그랑프리) 구분, 종목별 심판제(5·7·9심), 체급 진행 순서를 구성합니다."
         icon={<Layers size={17} strokeWidth={1.6} />}
         sourceCollection="대회 요강 기준"
         targetCollection="contest_categorys_list · contest_grades_list"

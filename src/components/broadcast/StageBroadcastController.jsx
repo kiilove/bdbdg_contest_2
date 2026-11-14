@@ -1164,6 +1164,15 @@ const StageBroadcastController = ({
     );
   };
 
+  const isCombinedStage =
+    Array.isArray(currentStage?.grades) && currentStage.grades.length > 1;
+
+  useEffect(() => {
+    if (isCombinedStage && isCalloutModalOpen) {
+      setIsCalloutModalOpen(false);
+    }
+  }, [isCombinedStage, isCalloutModalOpen]);
+
   const sceneButtons = [
     {
       key: "STANDBY",
@@ -1172,13 +1181,17 @@ const StageBroadcastController = ({
       isActive: currentMode === "STANDBY",
       onClick: handleSetStandby,
     },
-    {
-      key: "COMPARISON_CALLOUT",
-      label: "비교심사 호명",
-      icon: Users,
-      isActive: currentMode === "COMPARISON_CALLOUT",
-      onClick: () => setIsCalloutModalOpen(true),
-    },
+    ...(!isCombinedStage
+      ? [
+          {
+            key: "COMPARISON_CALLOUT",
+            label: "비교심사 호명",
+            icon: Users,
+            isActive: currentMode === "COMPARISON_CALLOUT",
+            onClick: () => setIsCalloutModalOpen(true),
+          },
+        ]
+      : []),
     {
       key: "POSEDOWN",
       label: "포즈다운 배틀",

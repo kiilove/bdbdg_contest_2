@@ -1,26 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Select } from "antd";
+import React, { useMemo } from "react";
 import {
-  User,
-  Phone,
   Users,
   RotateCcw,
   Shuffle,
   Trash2,
+  CheckCircle2,
   AlertTriangle,
-  Check,
 } from "lucide-react";
 import {
+  normalizeSectionName,
   sortJudgesByName,
   buildJudgeAssignRecord,
   pickFairRandomJudges,
   inspectScopeSeat,
 } from "../utils/judgeAssignUtils";
+import { JudgeSeatSlotCard } from "./judges/JudgeSeatSlotCard";
 
 const SectionAssign = ({
   judgesAssignInfo,
+  rawJudges = [],
   judgesPoolArray,
   categoriesArray = [],
   filteredBySection,
@@ -31,18 +31,8 @@ const SectionAssign = ({
   setMsgOpen,
   excludeHeadInRandom = true,
   balanceWorkload = true,
+  workloadByUid = {},
 }) => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
   const categoryById = useMemo(() => {
     const map = {};
     (categoriesArray || []).forEach((c) => {
@@ -161,7 +151,6 @@ const SectionAssign = ({
           .filter((r) => Number(r.seatIndex) === Number(seatIndex) && r.judgeUid)
           .map((r) => r.contestGradeId)
       );
-      // 동일 체급 다른 좌석에 이미 앉아있는 체급은 충돌 방지를 위해 제외
       const conflictGradeIds = new Set(
         prevJudges
           .filter(
@@ -381,21 +370,47 @@ const SectionAssign = ({
     }));
   };
 
-  const commonSelectProps = {
-    showSearch: true,
-    allowClear: false,
-    optionFilterProp: "data-search",
-    filterOption: (input, option) => {
-      const hay = (option?.props?.["data-search"] || "")
-        .toString()
-        .toLowerCase();
-      return hay.includes((input || "").toLowerCase());
-    },
-    placeholder: "심판 선택",
+  /** 종목·체급 재생성으로 끊어진 동일 섹션 이전 좌석 배정을 현재 체급들로 복원 */
+  const handleRestoreOrphanSeats = (section, recoverableSeats) => {
+    const contestId = currentContest?.contests?.id;
+    if (!contestId || !recoverableSeats.length) return;
+
+    const sectionGradeIds = new Set(
+      (section.sectionGrades || []).map((g) => g.contestGradeId).filter(Boolean)
+    );
+
+    setJudgesAssignInfo((prev) => {
+      const cleaned = (prev?.judges || []).filter(
+        (r) => !sectionGradeIds.has(r.contestGradeId)
+      );
+      const restored = [];
+      recoverableSeats.forEach(({ seatIndex, judge }) => {
+        restored.push(
+          ...createRecordsForSectionSeat(
+            section.sectionGrades,
+            judge,
+            seatIndex,
+            contestId
+          )
+        );
+      });
+      return {
+        ...(prev || {}),
+        judges: [...cleaned, ...restored],
+      };
+    });
   };
 
+  if (!filteredBySection || filteredBySection.length === 0) {
+    return (
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] py-12 text-center text-sm text-[#737373]">
+        등록된 종목 및 부(섹션) 정보가 없습니다
+      </div>
+    );
+  }
+
   return (
-    <div className="flex w-full flex-col gap-4 pt-2">
+    <div className="flex w-full flex-col gap-4">
       {filteredBySection.map((section, sectionIdx) => {
         const judgeCountsInSection = (section.sectionCategory || [])
           .map((c) => Number(c?.contestCategoryJudgeCount || 0))
@@ -416,7 +431,21 @@ const SectionAssign = ({
             .filter(Boolean)
         );
 
-        // 현재 섹션에서 모든 대상 체급에 완전히 배정된 심판 UID 집합 (중복 배정 방지용)
+        // 섹션 내 총 필요 좌석 vs 배정 완료 좌석 계산
+        const expectedSectionSlots = (section.sectionGrades || []).reduce(
+          (sum, g) => {
+            const cat = categoryById[g?.refCategoryId];
+            return sum + Number(cat?.contestCategoryJudgeCount || 0);
+          },
+          0
+        );
+        const assignedSectionSlots = (judgesAssignInfo.judges || []).filter(
+          (r) => sectionGradeIds.has(r.contestGradeId) && Boolean(r.judgeUid)
+        ).length;
+        const isSectionComplete =
+          expectedSectionSlots > 0 &&
+          assignedSectionSlots >= expectedSectionSlots;
+
         const assignedJudgesInSection = Array.from(
           new Set(
             (judgesAssignInfo.judges || [])
@@ -426,61 +455,143 @@ const SectionAssign = ({
           )
         );
 
+        // 종목/체급 삭제·재생성으로 연결이 끊어진 동일 섹션(예: 그랑프리)의 이전 좌석 배정 감지
+        const recoverableSeats = [];
+        if (assignedSectionSlots === 0 && (section.sectionGrades || []).length > 0) {
+          const orphanBySeat = new Map();
+          (rawJudges || []).forEach((r) => {
+            const rSec = normalizeSectionName(r?.sectionName);
+            const sNo = Number(r?.seatIndex);
+            if (
+              rSec === section.sectionName &&
+              Number.isFinite(sNo) &&
+              sNo >= 1 &&
+              sNo <= maxSeats &&
+              r?.judgeUid &&
+              poolByUid[r.judgeUid] &&
+              !sectionGradeIds.has(r.contestGradeId)
+            ) {
+              if (!orphanBySeat.has(sNo)) {
+                orphanBySeat.set(sNo, poolByUid[r.judgeUid]);
+              }
+            }
+          });
+          Array.from(orphanBySeat.entries())
+            .sort((a, b) => a[0] - b[0])
+            .forEach(([seatIndex, judge]) => {
+              recoverableSeats.push({ seatIndex, judge });
+            });
+        }
+
         return (
           <div
             key={section.sectionName || sectionIdx}
-            className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+            className="bg-white rounded-[12px] border border-[#171717]/[0.08] overflow-hidden"
           >
-            <div className="px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users size={16} strokeWidth={1.5} className="text-[#525252]" />
-                <span className="text-[15px] font-semibold text-[#171717]">
+            {/* 섹션 헤더 */}
+            <div className="px-5 py-3.5 bg-[#fafafa] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="w-7 h-7 rounded-[6px] bg-white border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
+                  <Users
+                    size={14}
+                    strokeWidth={1.6}
+                    className="text-[#525252]"
+                  />
+                </div>
+                <span className="text-base font-semibold text-[#171717]">
                   {section.sectionName || "미지정"}
                 </span>
-                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#ffffff] border border-[#171717]/[0.08] px-2 py-0.5 rounded-[4px]">
+                <span className="font-mono text-xs tabular-nums text-[#525252] bg-white border border-[#171717]/[0.08] px-2 py-0.5 rounded-[5px]">
                   {minSeats !== maxSeats
-                    ? `${minSeats}~${maxSeats}석`
-                    : `${maxSeats}석`}
+                    ? `${minSeats}~${maxSeats}인 심판제`
+                    : `${maxSeats}인 심판제`}
                 </span>
-                <span className="text-xs text-[#737373] tabular-nums">
+                <span className="text-xs text-[#737373] font-mono tabular-nums">
                   {section.sectionCategory.length}종목 ·{" "}
                   {section.sectionGrades.length}체급
                 </span>
+                {expectedSectionSlots > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] font-mono text-xs tabular-nums border ${
+                      isSectionComplete
+                        ? "bg-[#16a34a]/[0.08] text-[#16a34a] border-[#16a34a]/20 font-medium"
+                        : "bg-[#dc2626]/[0.06] text-[#dc2626] border-[#dc2626]/20 font-medium"
+                    }`}
+                  >
+                    {isSectionComplete && (
+                      <CheckCircle2 size={12} strokeWidth={1.8} />
+                    )}
+                    <span>
+                      {assignedSectionSlots}/{expectedSectionSlots}석
+                    </span>
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => handleRandomAssign(section, allSeats)}
-                  className="h-9 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150"
+                  className="h-8 px-3 rounded-[7px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border-0"
                 >
-                  <RotateCcw size={14} strokeWidth={1.5} />
-                  <span>{isMobile ? "랜덤" : "빈·누락 좌석 채우기"}</span>
+                  <RotateCcw size={13} strokeWidth={1.6} />
+                  <span>빈·누락 좌석 채우기</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleAllRandomAssign(section, allSeats)}
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#eaeaea] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150"
+                  className="h-8 px-3 rounded-[7px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
                 >
                   <Shuffle
-                    size={14}
-                    strokeWidth={1.5}
+                    size={13}
+                    strokeWidth={1.6}
                     className="text-[#525252]"
                   />
-                  <span>{isMobile ? "전체" : "모두 재배정"}</span>
+                  <span>모두 재배정</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleResetAssign(section)}
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1.5 transition-colors duration-150"
+                  className="h-8 px-2.5 rounded-[7px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer"
                 >
-                  <Trash2 size={14} strokeWidth={1.5} />
+                  <Trash2 size={13} strokeWidth={1.6} />
                   <span>초기화</span>
                 </button>
               </div>
             </div>
 
-            <div className="p-4 flex flex-col gap-2">
+            {recoverableSeats.length > 0 && (
+              <div className="mx-4 mt-4 px-3.5 py-2.5 rounded-[8px] bg-[#b45309]/[0.06] border border-[#b45309]/25 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-start sm:items-center gap-2 text-xs text-[#171717]">
+                  <AlertTriangle
+                    size={14}
+                    strokeWidth={1.7}
+                    className="text-[#b45309] shrink-0 mt-0.5 sm:mt-0"
+                  />
+                  <span>
+                    종목·체급 재생성 전 배정된{" "}
+                    <strong className="font-semibold">
+                      {recoverableSeats
+                        .map((s) => `${s.seatIndex}번 ${s.judge.judgeName}`)
+                        .join(", ")}
+                    </strong>{" "}
+                    기록이 남아 있습니다. 현재 체급에 연결하시겠습니까?
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleRestoreOrphanSeats(section, recoverableSeats)
+                  }
+                  className="h-8 px-3 rounded-[7px] bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer border-0 shrink-0"
+                >
+                  <span>이전 배정 현재 체급에 복원</span>
+                </button>
+              </div>
+            )}
+
+            {/* 좌석 번호판 그리드 */}
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {allSeats.map((seatNumber) => {
                 const seatState = inspectScopeSeat({
                   judges: judgesAssignInfo.judges || [],
@@ -529,192 +640,45 @@ const SectionAssign = ({
 
                 const isHigherSeatOnly = minSeats > 0 && seatNumber > minSeats;
 
-                const statusBadges = (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {isHigherSeatOnly && (
-                      <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-mono tabular-nums bg-[#f4f4f5] text-[#737373]">
-                        {seatNumber}인+ 전용
-                      </span>
-                    )}
-                    {seatState.status === "multi" && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
-                        <AlertTriangle size={12} strokeWidth={1.5} />
-                        <span>종목별 상이</span>
-                      </span>
-                    )}
-                    {seatState.status === "partial" && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.10] text-[#b45309] tabular-nums">
-                        <AlertTriangle size={12} strokeWidth={1.5} />
-                        <span>누락 {seatState.missingCount}체급</span>
-                      </span>
-                    )}
-                    {isRemovedFromPool && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.10] text-[#dc2626]">
-                        선발 해제됨
-                      </span>
-                    )}
-                  </div>
-                );
-
-                const selectElement = (
-                  <div className="flex flex-col gap-1 w-full">
-                    <div className="flex items-center gap-2">
-                      <Select
-                        {...commonSelectProps}
-                        className="flex-1"
-                        value={selectValue}
-                        onChange={(newJudgeUid) => {
-                          if (newJudgeUid === "__MULTI__") return;
-                          if (newJudgeUid === "unselect") {
-                            handleRemoveAssign(section, seatNumber);
-                          } else {
-                            handleSelectJudge(section, seatNumber, newJudgeUid);
-                          }
-                        }}
-                      >
-                        <Select.Option value="unselect" data-search="">
-                          선택 안함
-                        </Select.Option>
-
-                        {seatState.status === "multi" && (
-                          <Select.Option value="__MULTI__" data-search="">
-                            종목·체급별 개별 배정됨 ({breakdownText})
-                          </Select.Option>
-                        )}
-
-                        {isRemovedFromPool && (
-                          <Select.Option
-                            value={seatState.primaryJudgeUid}
-                            data-search=""
-                          >
-                            [선발 해제됨]{" "}
-                            {seatState.judgeBreakdown[0]?.judgeName ||
-                              seatState.primaryJudgeUid}
-                          </Select.Option>
-                        )}
-
-                        {selectableSorted.map((judge) => {
-                          const label = `${judge.isHead ? "위원장 / " : ""}${
-                            judge.judgeName
-                          } (${judge.judgePromoter || "-"} / ${
-                            judge.judgeTel || "-"
-                          })`;
-                          const searchBlob = `${judge.judgeName || ""} ${
-                            judge.judgePromoter || ""
-                          } ${judge.judgeTel || ""}`;
-                          return (
-                            <Select.Option
-                              key={judge.judgeUid}
-                              value={judge.judgeUid}
-                              data-search={searchBlob}
-                            >
-                              {label}
-                            </Select.Option>
-                          );
-                        })}
-                      </Select>
-
-                      {seatState.status === "partial" &&
-                        seatState.primaryJudgeUid &&
-                        !isRemovedFromPool && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleFillPartialSeat(
-                                section,
-                                seatNumber,
-                                seatState.primaryJudgeUid
-                              )
-                            }
-                            className="h-8 px-2.5 rounded-[6px] bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-medium inline-flex items-center gap-1 shrink-0 transition-colors"
-                            title="누락된 하위 체급에도 이 심판을 동일하게 채웁니다"
-                          >
-                            <Check size={13} strokeWidth={1.75} />
-                            <span>누락 채우기</span>
-                          </button>
-                        )}
-                    </div>
-
-                    {seatState.status === "multi" && (
-                      <span className="text-[11px] text-[#737373] pl-1">
-                        현재 하위 배정: {breakdownText} (새 심판 선택 시 섹션
-                        일괄 변경)
-                      </span>
-                    )}
-                  </div>
-                );
-
-                if (isMobile) {
-                  return (
-                    <div
-                      key={seatNumber}
-                      className={`p-3 border rounded-[8px] space-y-2.5 ${
-                        seatState.status === "partial" || isRemovedFromPool
-                          ? "bg-[#b45309]/[0.03] border-[#b45309]/25"
-                          : "bg-[#fafafa] border-[#171717]/[0.08]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-sm font-medium tabular-nums text-[#171717]">
-                          좌석 {seatNumber}
-                        </span>
-                        {statusBadges}
-                      </div>
-
-                      {selectedJudgeInfo && seatState.status !== "multi" && (
-                        <div className="p-2.5 bg-[#ffffff] border border-[#171717]/[0.08] rounded-[8px] space-y-1">
-                          <div className="flex items-center gap-2">
-                            <User
-                              size={14}
-                              strokeWidth={1.5}
-                              className="text-[#525252]"
-                            />
-                            <span className="text-sm font-medium text-[#171717]">
-                              {selectedJudgeInfo.judgeName}
-                            </span>
-                            {selectedJudgeInfo.isHead && (
-                              <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.08] text-[#b45309]">
-                                위원장
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[#525252] tabular-nums">
-                            <Phone
-                              size={12}
-                              strokeWidth={1.5}
-                              className="text-[#737373]"
-                            />
-                            <span>{selectedJudgeInfo.judgeTel}</span>
-                          </div>
-                          <div className="text-xs text-[#737373]">
-                            {selectedJudgeInfo.judgePromoter}
-                          </div>
-                        </div>
-                      )}
-
-                      {selectElement}
-                    </div>
-                  );
-                }
-
                 return (
-                  <div
+                  <JudgeSeatSlotCard
                     key={seatNumber}
-                    className={`flex items-center gap-4 px-3.5 py-2 border rounded-[8px] transition-colors duration-150 ${
-                      seatState.status === "partial" || isRemovedFromPool
-                        ? "bg-[#b45309]/[0.03] border-[#b45309]/25"
-                        : "bg-[#fafafa] border-[#171717]/[0.06] hover:bg-[#f4f4f5]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 w-44 shrink-0">
-                      <span className="font-mono text-sm font-medium tabular-nums text-[#525252]">
-                        좌석 {seatNumber}
-                      </span>
-                      {statusBadges}
-                    </div>
-
-                    <div className="flex-1">{selectElement}</div>
-                  </div>
+                    seatNumber={seatNumber}
+                    status={seatState.status}
+                    selectValue={selectValue}
+                    selectedJudgeInfo={selectedJudgeInfo}
+                    fallbackJudgeName={
+                      seatState.judgeBreakdown[0]?.judgeName ||
+                      seatState.primaryJudgeUid
+                    }
+                    isRemovedFromPool={isRemovedFromPool}
+                    isHigherSeatOnly={isHigherSeatOnly}
+                    missingCount={seatState.missingCount}
+                    multiLabel="종목별 상이"
+                    breakdownText={breakdownText}
+                    selectableJudges={selectableSorted}
+                    workloadByUid={workloadByUid}
+                    onSelectChange={(newJudgeUid) => {
+                      if (newJudgeUid === "__MULTI__") return;
+                      if (newJudgeUid === "unselect") {
+                        handleRemoveAssign(section, seatNumber);
+                      } else {
+                        handleSelectJudge(section, seatNumber, newJudgeUid);
+                      }
+                    }}
+                    onClearSeat={() => handleRemoveAssign(section, seatNumber)}
+                    onFillPartial={
+                      seatState.status === "partial" &&
+                      seatState.primaryJudgeUid
+                        ? () =>
+                            handleFillPartialSeat(
+                              section,
+                              seatNumber,
+                              seatState.primaryJudgeUid
+                            )
+                        : undefined
+                    }
+                  />
                 );
               })}
             </div>

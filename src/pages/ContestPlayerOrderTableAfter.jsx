@@ -1,17 +1,23 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import LoadingPage from "./LoadingPage";
 import { useFirestoreGetDocument } from "../hooks/useFirestores";
+import { doc, runTransaction } from "firebase/firestore";
+import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { FileText } from "lucide-react";
+import { FileText, Pencil, Search } from "lucide-react";
+import { Input } from "antd";
 import BibTag from "../components/ui/BibTag";
+import LayerPlayerEditDrawer from "../components/player/LayerPlayerEditDrawer";
 import {
   getStagePlayerSortIndex,
   isGrandPrixPlayerEntry,
 } from "../functions/functions";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import { resolveOriginalGradeTitle } from "../utils/playerEntryUtils";
+import { applyStage3FinalDirectEdit } from "../utils/layerPlayerEditUtils";
 
 const ContestPlayerOrderTableAfter = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,15 +28,22 @@ const ContestPlayerOrderTableAfter = () => {
 
   const [matchedArray, setMatchedArray] = useState([]);
   const [categoriesArray, setCategoriesArray] = useState([]);
-
   const [gradesArray, setGradesArray] = useState([]);
   const [playersArray, setPlayersArray] = useState([]);
+  const [searchKeyword, setSearchKeyword] = useState("");
+
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [editingIsGp, setEditingIsGp] = useState(false);
+  const [isDirectSaving, setIsDirectSaving] = useState(false);
+
   const { currentContest } = useContext(CurrentContestContext);
 
   const fetchCategoryDocument = useFirestoreGetDocument(
     "contest_categorys_list"
   );
   const fetchGradeDocument = useFirestoreGetDocument("contest_grades_list");
+  const fetchPlayerAssign = useFirestoreGetDocument("contest_players_assign");
   const fetchPlayerFinal = useFirestoreGetDocument("contest_players_final");
 
   useEffect(() => {
@@ -42,7 +55,12 @@ const ContestPlayerOrderTableAfter = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const fetchPool = async (categoriesListId, gradesListId, playersFinalId) => {
+  const fetchPool = async (
+    categoriesListId,
+    gradesListId,
+    playersFinalId,
+    playersAssignId
+  ) => {
     if (
       categoriesListId === undefined ||
       gradesListId === undefined ||
@@ -60,20 +78,42 @@ const ContestPlayerOrderTableAfter = () => {
       return;
     }
     try {
-      await fetchCategoryDocument.getDocument(categoriesListId).then((data) => {
-        setCategoriesArray(() => [...data.categorys]);
-      });
-      await fetchGradeDocument.getDocument(gradesListId).then((data) => {
-        setGradesArray(() => [...data.grades]);
-      });
-      await fetchPlayerFinal.getDocument(playersFinalId).then((data) => {
-        setPlayersArray(() => [...data.players]);
-      });
-    } catch (error) {}
+      setIsLoading(true);
+      const [catData, gradeData, finalData] = await Promise.all([
+        fetchCategoryDocument.getDocument(categoriesListId),
+        fetchGradeDocument.getDocument(gradesListId),
+        fetchPlayerFinal.getDocument(playersFinalId),
+      ]);
+
+      setCategoriesArray([...(catData?.categorys || [])]);
+      setGradesArray([...(gradeData?.grades || [])]);
+
+      let resolvedPlayers = Array.isArray(finalData?.players)
+        ? finalData.players
+        : [];
+      // 3단계 저장본이 아직 비어 있을 때는 2단계(weighInPlayers) -> 1단계(assign) 순으로 초기 승계 조회
+      if (resolvedPlayers.length === 0) {
+        if (
+          Array.isArray(finalData?.weighInPlayers) &&
+          finalData.weighInPlayers.length > 0
+        ) {
+          resolvedPlayers = finalData.weighInPlayers;
+        } else if (playersAssignId) {
+          const assignData = await fetchPlayerAssign.getDocument(
+            playersAssignId
+          );
+          resolvedPlayers = assignData?.players || [];
+        }
+      }
+      setPlayersArray([...resolvedPlayers]);
+    } catch (error) {
+      console.error("최종 출전 명단 로드 오류:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const initPlayersFinalList = (categories, grades, players) => {
-    setIsLoading(true);
     const dummy = [];
 
     [...(categories || [])]
@@ -101,7 +141,6 @@ const ContestPlayerOrderTableAfter = () => {
       });
 
     setMatchedArray([...dummy]);
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -111,15 +150,118 @@ const ContestPlayerOrderTableAfter = () => {
     fetchPool(
       currentContest.contests.contestCategorysListId,
       currentContest.contests.contestGradesListId,
-      currentContest.contests.contestPlayersFinalId
+      currentContest.contests.contestPlayersFinalId,
+      currentContest.contests.contestPlayersAssignId
     );
-  }, [currentContest?.contests]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentContest?.contests?.id]);
 
   useEffect(() => {
-    if (playersArray.length > 0) {
+    if (categoriesArray.length > 0) {
       initPlayersFinalList(categoriesArray, gradesArray, playersArray);
     }
-  }, [playersArray]);
+  }, [categoriesArray, gradesArray, playersArray]);
+
+  const handleOpenEditDrawer = (player, isGpRow = false) => {
+    setEditingPlayer(player);
+    setEditingIsGp(Boolean(isGpRow));
+    setEditDrawerOpen(true);
+  };
+
+  // 3단계 개별 선수 직접 수정 저장 (contest_players_final.players 단독 반영 — 1·2단계 및 타 레이어 불변)
+  const handleDirectEditFinalSave = async (beforePlayer, patchFields) => {
+    const playersFinalId = currentContest?.contests?.contestPlayersFinalId;
+    const contestId = currentContest?.contests?.id;
+
+    if (!playersFinalId) {
+      setMessage({
+        variant: "error",
+        title: "최종 출전 문서 확인 필요",
+        body: "최종 출전 명단 문서를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+      return;
+    }
+
+    try {
+      setIsDirectSaving(true);
+      const nowIso = new Date().toISOString();
+      let committedPlayers = [];
+
+      await runTransaction(db, async (transaction) => {
+        const finalRef = doc(db, "contest_players_final", playersFinalId);
+        const finalSnap = await transaction.get(finalRef);
+        const existingData = finalSnap.exists() ? finalSnap.data() : {};
+        const baseList =
+          Array.isArray(existingData?.players) && existingData.players.length > 0
+            ? existingData.players
+            : playersArray;
+
+        const nextPlayers = applyStage3FinalDirectEdit(
+          baseList,
+          beforePlayer,
+          patchFields,
+          {
+            isGrandPrix: editingIsGp || isGrandPrixPlayerEntry(beforePlayer),
+            nowIso,
+          }
+        );
+
+        const sanitizedPlayers = sanitizeForFirestore(nextPlayers);
+
+        if (finalSnap.exists()) {
+          transaction.update(finalRef, {
+            ...(contestId ? { contestId } : {}),
+            players: sanitizedPlayers,
+            updatedAt: nowIso,
+          });
+        } else {
+          transaction.set(finalRef, {
+            ...(contestId ? { contestId } : {}),
+            players: sanitizedPlayers,
+            updatedAt: nowIso,
+          });
+        }
+
+        committedPlayers = sanitizedPlayers;
+      });
+
+      setPlayersArray([...committedPlayers]);
+      setEditDrawerOpen(false);
+      setEditingPlayer(null);
+    } catch (error) {
+      console.error("3단계 선수 직접 수정 오류:", error);
+      setMessage({
+        variant: "error",
+        title: "선수 정보 수정 실패",
+        body: "최종 출전 명단(contest_players_final) 저장 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsDirectSaving(false);
+    }
+  };
+
+  const filteredMatchedArray = useMemo(() => {
+    const q = searchKeyword.trim().toLowerCase();
+    if (!q) return matchedArray;
+    return matchedArray
+      .map((item) => ({
+        ...item,
+        matchedPlayers: (item.matchedPlayers || []).filter((p) => {
+          const name = String(p.playerName || "").toLowerCase();
+          const gym = String(p.playerGym || "").toLowerCase();
+          const num = String(p.playerNumber || "");
+          return name.includes(q) || gym.includes(q) || num.includes(q);
+        }),
+      }))
+      .filter((item) => item.matchedPlayers.length > 0);
+  }, [matchedArray, searchKeyword]);
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa] text-[#171717]">
@@ -129,7 +271,7 @@ const ContestPlayerOrderTableAfter = () => {
         </div>
       ) : (
         <div className="w-full px-5 sm:px-6 lg:px-8 py-6 space-y-5">
-          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex items-center justify-between gap-4">
+          <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-9 h-9 rounded-[8px] bg-[#f4f4f5] border border-[#171717]/[0.08]">
                 <FileText
@@ -140,16 +282,33 @@ const ContestPlayerOrderTableAfter = () => {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-[#171717] m-0 tracking-tight">
-                  선수 확정 명단 (계측 후)
+                  선수 확정 명단 (계측 후 · L3 최종)
                 </h1>
                 <p className="text-xs text-[#737373] m-0">
-                  계측 및 월체·불참 반영이 완료된 체급별 출전 선수 명단
+                  계측 및 월체·불참 반영이 완료된 출전 명단이며, 행별 [수정]으로 3단계 최종 문서만 단독 수정할 수 있습니다.
                 </p>
               </div>
             </div>
-            <span className="text-xs font-medium text-[#525252] font-mono tabular-nums bg-[#f4f4f5] px-2.5 py-1 rounded-[4px] border border-[#171717]/[0.08]">
-              총 {playersArray.length}명
-            </span>
+
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <Input
+                allowClear
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="배번 · 이름 · 소속 검색"
+                prefix={
+                  <Search
+                    size={14}
+                    strokeWidth={1.6}
+                    className="text-[#737373]"
+                  />
+                }
+                className="w-56 h-9 text-xs rounded-[8px]"
+              />
+              <span className="text-xs font-medium text-[#525252] font-mono tabular-nums bg-[#f4f4f5] px-2.5 py-1.5 rounded-[6px] border border-[#171717]/[0.08]">
+                총 {playersArray.length}명
+              </span>
+            </div>
           </div>
 
           <ConfirmationModal
@@ -159,9 +318,26 @@ const ContestPlayerOrderTableAfter = () => {
             message={message}
           />
 
+          <LayerPlayerEditDrawer
+            open={editDrawerOpen}
+            onClose={() => {
+              if (!isDirectSaving) {
+                setEditDrawerOpen(false);
+                setEditingPlayer(null);
+              }
+            }}
+            layer={editingIsGp ? "grandprix" : "final"}
+            player={editingPlayer}
+            categoriesArray={categoriesArray}
+            gradesArray={gradesArray}
+            allLayerPlayers={playersArray}
+            onSave={handleDirectEditFinalSave}
+            isSaving={isDirectSaving}
+          />
+
           <div className="flex flex-col gap-4">
-            {matchedArray.length > 0 &&
-              [...matchedArray]
+            {filteredMatchedArray.length > 0 &&
+              [...filteredMatchedArray]
                 .sort((a, b) => a.contestCategoryIndex - b.contestCategoryIndex)
                 .map((matched, mIdx) => {
                   const {
@@ -242,7 +418,7 @@ const ContestPlayerOrderTableAfter = () => {
                                           }
                                         />
                                       </div>
-                                      <div className="flex gap-1 flex-wrap justify-end">
+                                      <div className="flex gap-1.5 items-center flex-wrap justify-end">
                                         {isGpRow && origGradeTitle && (
                                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
                                             {origGradeTitle === gradeTitle
@@ -260,6 +436,16 @@ const ContestPlayerOrderTableAfter = () => {
                                             불참
                                           </span>
                                         )}
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleOpenEditDrawer(player, isGpRow)
+                                          }
+                                          className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer shrink-0"
+                                        >
+                                          <Pencil size={12} strokeWidth={1.6} />
+                                          <span>수정</span>
+                                        </button>
                                       </div>
                                     </div>
                                     <div
@@ -290,7 +476,10 @@ const ContestPlayerOrderTableAfter = () => {
                                 <th className="w-28 py-2.5 px-4">선수번호</th>
                                 <th className="w-44 py-2.5 px-4">이름</th>
                                 <th className="py-2.5 px-4">소속</th>
-                                <th className="w-36 py-2.5 px-4">비고</th>
+                                <th className="w-40 py-2.5 px-4">비고</th>
+                                <th className="w-24 py-2.5 px-4 text-center">
+                                  관리
+                                </th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#171717]/[0.06]">
@@ -307,6 +496,7 @@ const ContestPlayerOrderTableAfter = () => {
                                     playerNumber,
                                     playerNoShow,
                                     isGradeChanged,
+                                    playerText,
                                   } = player;
                                   const isGpRow = isGrandPrixPlayerEntry(
                                     player,
@@ -359,9 +549,14 @@ const ContestPlayerOrderTableAfter = () => {
                                             : "text-[#525252]"
                                         }`}
                                       >
-                                        {playerGym || "-"}
+                                        <div>{playerGym || "-"}</div>
+                                        {playerText && (
+                                          <div className="text-[11px] text-[#737373] mt-0.5">
+                                            {playerText}
+                                          </div>
+                                        )}
                                       </td>
-                                      <td className="w-36 py-3 px-4">
+                                      <td className="w-40 py-3 px-4">
                                         <div className="flex gap-1.5 flex-wrap">
                                           {isGpRow && origGradeTitle && (
                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] text-[#525252] border border-[#171717]/[0.08] text-[11px] font-medium">
@@ -381,6 +576,22 @@ const ContestPlayerOrderTableAfter = () => {
                                             </span>
                                           )}
                                         </div>
+                                      </td>
+                                      <td className="w-24 py-3 px-4 text-center whitespace-nowrap">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleOpenEditDrawer(player, isGpRow)
+                                          }
+                                          className="inline-flex items-center justify-center gap-1 h-8 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#f4f4f5] text-[#525252] hover:text-[#171717] text-xs font-medium border border-[#171717]/[0.12] transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0"
+                                        >
+                                          <Pencil
+                                            size={13}
+                                            strokeWidth={1.5}
+                                            className="shrink-0"
+                                          />
+                                          <span>수정</span>
+                                        </button>
                                       </td>
                                     </tr>
                                   );

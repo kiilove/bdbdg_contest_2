@@ -4,18 +4,22 @@ import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   collection,
   getDocs,
-  deleteDoc,
-  doc,
   query,
   where,
 } from "firebase/firestore";
 import { FileSpreadsheet, RefreshCw, Trash2 } from "lucide-react";
-import { db } from "../firebase";
+import { db, database } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { exportContestResultsToExcel } from "../functions/functions";
 import BibTag from "../components/ui/BibTag";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import ConfirmModalTrigger from "../components/ui/ConfirmModalTrigger";
+import {
+  deleteContestResultDocumentById,
+  deleteContestResultDocumentsByIds,
+  extractResultDocTimestamp,
+  formatResultDocTimestamp,
+} from "../utils/contestResultsUtils";
 
 const ContestResultManager = () => {
   const { currentContest } = useContext(CurrentContestContext);
@@ -44,7 +48,9 @@ const ContestResultManager = () => {
       rows.sort((a, b) => {
         const c = (a.categoryTitle || "").localeCompare(b.categoryTitle || "");
         if (c !== 0) return c;
-        return (a.gradeTitle || "").localeCompare(b.gradeTitle || "");
+        const g = (a.gradeTitle || "").localeCompare(b.gradeTitle || "");
+        if (g !== 0) return g;
+        return extractResultDocTimestamp(b) - extractResultDocTimestamp(a);
       });
       setDocs(rows);
     } catch (e) {
@@ -62,14 +68,23 @@ const ContestResultManager = () => {
     }
   };
 
-  const deleteOne = async (docId) => {
+  const deleteOne = async (docu) => {
+    const exactId = String(typeof docu === "string" ? docu : docu?.id || "").trim();
+    if (!exactId) return;
     try {
-      await deleteDoc(doc(db, "contest_results_list", docId));
-      setDocs((prev) => prev.filter((d) => d.id !== docId));
+      await deleteContestResultDocumentById({
+        db,
+        database,
+        docId: exactId,
+        contestId: (typeof docu === "object" && docu?.contestId) || contestId,
+        gradeId: (typeof docu === "object" && docu?.gradeId) || "",
+      });
+      setDocs((prev) => prev.filter((d) => d.id !== exactId));
       openNotice({
         variant: "success",
-        title: "집계 문서 삭제 완료",
-        body: "선택한 결과 문서가 삭제되었습니다.",
+        title: "채점표(집계) 문서 삭제 완료",
+        body: "선택한 채점표(확정 결과) 문서 1건이 정확히 삭제되었습니다.",
+        body4: `삭제된 문서 ID: ${exactId}`,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -87,18 +102,21 @@ const ContestResultManager = () => {
   };
 
   const deleteGradeGroup = async (cat, grd) => {
-    const targets = grouped[cat][grd] || [];
+    const targets = grouped[cat]?.[grd] || [];
+    if (targets.length === 0) return;
     try {
-      await Promise.all(
-        targets.map((d) => deleteDoc(doc(db, "contest_results_list", d.id)))
-      );
-      setDocs((prev) =>
-        prev.filter((d) => !(d.categoryTitle === cat && d.gradeTitle === grd))
-      );
+      const deletedIds = await deleteContestResultDocumentsByIds({
+        db,
+        database,
+        docs: targets,
+        contestId,
+      });
+      const deletedSet = new Set(deletedIds);
+      setDocs((prev) => prev.filter((d) => !deletedSet.has(d.id)));
       openNotice({
         variant: "success",
         title: "체급 결과 삭제 완료",
-        body: `'${cat} / ${grd}' 체급의 집계 결과가 삭제되었습니다.`,
+        body: `'${cat} / ${grd}' 체급의 집계 결과 문서(${deletedIds.length}건)가 삭제되었습니다.`,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -116,15 +134,20 @@ const ContestResultManager = () => {
   };
 
   const deleteAllInContest = async () => {
+    if (docs.length === 0) return;
     try {
-      await Promise.all(
-        docs.map((d) => deleteDoc(doc(db, "contest_results_list", d.id)))
-      );
-      setDocs([]);
+      const deletedIds = await deleteContestResultDocumentsByIds({
+        db,
+        database,
+        docs,
+        contestId,
+      });
+      const deletedSet = new Set(deletedIds);
+      setDocs((prev) => prev.filter((d) => !deletedSet.has(d.id)));
       openNotice({
         variant: "success",
         title: "전체 결과 삭제 완료",
-        body: "현재 대회의 모든 집계 결과 문서가 삭제되었습니다.",
+        body: `현재 대회의 모든 집계 결과 문서(${deletedIds.length}건)가 삭제되었습니다.`,
         isButton: true,
         confirmButtonText: "확인",
       });
@@ -327,8 +350,8 @@ const ContestResultManager = () => {
 
                       <div className="space-y-4">
                         {grouped[cat][grd].map((docu) => {
-                          const { id, result = [], scoreType } = docu;
-                          const isPointType = scoreType === "point";
+                          const { id, gradeId, result = [] } = docu;
+                          const savedTime = formatResultDocTimestamp(docu);
                           const maxSeat =
                             result?.[0]?.score?.reduce(
                               (m, s) => Math.max(m, s.seatIndex || 0),
@@ -341,27 +364,40 @@ const ContestResultManager = () => {
                               className="rounded-[8px] border border-[#171717]/[0.08] overflow-hidden"
                             >
                               <div className="bg-[#f4f4f5] px-4 py-2.5 border-b border-[#171717]/[0.08] flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-[12px] text-[#737373]">
-                                  문서 ID{" "}
-                                  <code className="font-mono text-[#525252] ml-1">
-                                    {id}
-                                  </code>
-                                </span>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[#737373]">
+                                  <span>
+                                    문서 ID{" "}
+                                    <code className="font-mono text-[#171717] bg-white px-1.5 py-0.5 rounded border border-[#171717]/[0.08] ml-1">
+                                      {id}
+                                    </code>
+                                  </span>
+                                  {gradeId && (
+                                    <span>
+                                      체급 ID{" "}
+                                      <code className="font-mono text-[#525252]">
+                                        {gradeId}
+                                      </code>
+                                    </span>
+                                  )}
+                                  <span>집계 인원 {result.length}명</span>
+                                  {savedTime && <span>저장 시각 {savedTime}</span>}
+                                </div>
                                 <ConfirmModalTrigger
                                   variant="danger"
-                                  title="결과 문서 삭제"
-                                  body="선택한 확정 결과 문서를 삭제하시겠습니까?"
-                                  body4={`문서 ID: ${id}`}
-                                  confirmText="문서 삭제"
+                                  title="확정 채점표(집계) 문서 단건 삭제"
+                                  body="선택한 확정 채점표(집계 결과) 문서 1건만 정확히 삭제하시겠습니까?"
+                                  body2={`'${cat} · ${grd}' (${result.length}명) — 지정된 문서 ID 1건만 삭제되며 다른 문서는 유지됩니다.`}
+                                  body4={`컬렉션: contest_results_list | 문서 ID: ${id}`}
+                                  confirmText="이 문서만 정확히 삭제"
                                   cancelText="취소"
-                                  onConfirm={() => deleteOne(id)}
+                                  onConfirm={() => deleteOne(docu)}
                                 >
                                   <button
                                     type="button"
-                                    className="h-7 px-2.5 rounded-[6px] text-[#dc2626] hover:bg-[#dc2626]/[0.08] text-[12px] font-medium inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer"
+                                    className="h-7 px-2.5 rounded-[6px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/25 text-[#dc2626] text-[12px] font-medium inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer whitespace-nowrap"
                                   >
                                     <Trash2 size={13} strokeWidth={1.5} />
-                                    <span>문서 삭제</span>
+                                    <span>이 채점표 문서만 삭제</span>
                                   </button>
                                 </ConfirmModalTrigger>
                               </div>
@@ -466,20 +502,15 @@ const ContestResultManager = () => {
                                                 </div>
                                                 {(s.isMin || s.isMax) && (
                                                   <div className="mt-1 flex gap-1 justify-center">
-                                                    {(() => {
-                                                      const isHighest = isPointType
-                                                        ? s.isMax
-                                                        : s.isMin;
-                                                      return isHighest ? (
-                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
-                                                          최고제외
-                                                        </span>
-                                                      ) : (
-                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
-                                                          최저제외
-                                                        </span>
-                                                      );
-                                                    })()}
+                                                    {s.isMin ? (
+                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
+                                                        최고제외
+                                                      </span>
+                                                    ) : (
+                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
+                                                        최저제외
+                                                      </span>
+                                                    )}
                                                   </div>
                                                 )}
                                               </td>

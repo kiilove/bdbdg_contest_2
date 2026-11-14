@@ -22,8 +22,13 @@ import {
   ChevronUp,
   ChevronDown,
   RotateCcw,
+  Pencil,
 } from "lucide-react";
 import BibTag from "../components/ui/BibTag";
+import LayerPlayerEditDrawer from "../components/player/LayerPlayerEditDrawer";
+import {
+  applyStage3FinalDirectEdit,
+} from "../utils/layerPlayerEditUtils";
 
 const getPlayerUniqueKey = (p) =>
   String(p?.playerUid || p?.playerNumber || p?.playerName || "");
@@ -69,6 +74,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
   const [playersFinalList, setPlayersFinalList] = useState({});
   const [resultPlayersArray, setResultFinalArray] = useState([]);
   const [grandPrixArray, setGrandPrixArray] = useState([]);
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [isDirectSaving, setIsDirectSaving] = useState(false);
   const { currentContest } = useContext(CurrentContestContext);
 
   const fetchCategoryDocument = useFirestoreGetDocument(
@@ -135,6 +143,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
     const regularByUidAndGrade = new Map();
     const photoByUid = new Map();
     const savedGpByGradeAndKey = new Map();
+    const savedGpByGradeAndOrigGrade = new Map();
 
     (existingFinalPlayers || []).forEach((fp) => {
       if (!fp) return;
@@ -143,6 +152,12 @@ const ContestPlayerOrderTableGrandPrix = () => {
 
       if (isGpLike && fp.contestGradeId && uKey) {
         savedGpByGradeAndKey.set(`${fp.contestGradeId}_${uKey}`, fp);
+        if (fp.originalGradeId) {
+          savedGpByGradeAndOrigGrade.set(
+            `${fp.contestGradeId}__orig:${fp.originalGradeId}`,
+            fp
+          );
+        }
       } else {
         if (fp.contestGradeId && uKey) {
           regularByUidAndGrade.set(`${fp.contestGradeId}_${uKey}`, fp);
@@ -253,9 +268,13 @@ const ContestPlayerOrderTableGrandPrix = () => {
             findWinner?.playerIndex ??
             findWinner?.playerNumber ??
             null,
-          playerName: findWinner.playerName,
-          playerNumber: findWinner.playerNumber,
-          playerGym: findWinner.playerGym,
+          playerName: regularEntry?.playerName || findWinner.playerName,
+          playerNumber:
+            regularEntry?.playerNumber ?? findWinner.playerNumber,
+          playerGym:
+            regularEntry?.playerGym !== undefined
+              ? regularEntry.playerGym
+              : findWinner.playerGym,
           playerUid: findWinner.playerUid,
           totalScore: findWinner.totalScore,
           // 그랑프리에서는 월체를 완전히 무시하고 체급 순서(grandPrixIndex)로만 무대에 정렬
@@ -266,6 +285,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
           invoiceCreateAt: generateToday(),
           invoiceId: "",
           playerTel: regularEntry?.playerTel || "",
+          playerBirth: regularEntry?.playerBirth || "",
           playerText: regularEntry?.playerText || "",
           playerNoShow: false,
         };
@@ -303,9 +323,13 @@ const ContestPlayerOrderTableGrandPrix = () => {
           seenOriginalGrades.add(match.originalGradeId);
         }
 
-        const saved = savedGpByGradeAndKey.get(
-          `${grade.contestGradeId}_${playerKey}`
-        );
+        const saved =
+          savedGpByGradeAndKey.get(`${grade.contestGradeId}_${playerKey}`) ||
+          (match.originalGradeId
+            ? savedGpByGradeAndOrigGrade.get(
+                `${grade.contestGradeId}__orig:${match.originalGradeId}`
+              )
+            : null);
         const { regularPlayerIndex, ...matchRest } = match;
         const resolvedOriginalIndex =
           saved?.playerIndexOriginal !== undefined &&
@@ -315,8 +339,41 @@ const ContestPlayerOrderTableGrandPrix = () => {
             ? regularPlayerIndex
             : saved?.playerIndex ?? matchRest.playerNumber ?? null;
 
+        const savedOrigTitle = saved ? resolveOriginalGradeTitle(saved) : "";
+
         candidates.push({
           ...matchRest,
+          ...(saved?._entryId ? { _entryId: saved._entryId } : {}),
+          // 이미 그랑프리 레이어에 저장된 값이 있으면 역연동 덮어쓰기 없이 저장값 우선 보존!
+          playerName: saved?.playerName || matchRest.playerName,
+          playerNumber:
+            saved?.playerNumber !== undefined && saved?.playerNumber !== null
+              ? saved.playerNumber
+              : matchRest.playerNumber,
+          playerGym:
+            saved?.playerGym !== undefined
+              ? saved.playerGym
+              : matchRest.playerGym,
+          playerTel:
+            saved?.playerTel !== undefined
+              ? saved.playerTel
+              : matchRest.playerTel,
+          playerBirth:
+            saved?.playerBirth !== undefined
+              ? saved.playerBirth
+              : matchRest.playerBirth,
+          playerText:
+            saved?.playerText !== undefined
+              ? saved.playerText
+              : matchRest.playerText,
+          ...(savedOrigTitle
+            ? {
+                originalGradeTitle: savedOrigTitle,
+                originalgradeTitle: savedOrigTitle,
+              }
+            : {}),
+          ...(saved?.layer3Edited ? { layer3Edited: true } : {}),
+          ...(saved?.gpLayerSaved ? { gpLayerSaved: true } : {}),
           contestCategoryId: grade.refCategoryId,
           contestCategoryTitle:
             parentCategory?.contestCategoryTitle || "그랑프리",
@@ -638,6 +695,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
             playerIndex: gpIdx,
             isGradeChange: false,
             isGradeChanged: false,
+            gpLayerSaved: true,
           });
         });
       });
@@ -749,6 +807,81 @@ const ContestPlayerOrderTableGrandPrix = () => {
     }
   };
 
+  const handleDirectEditGrandPrixSave = async (beforePlayer, patchFields) => {
+    const contestId = currentContest?.contests?.id;
+    const playersFinalId = currentContest?.contests?.contestPlayersFinalId;
+    if (!playersFinalId || !beforePlayer) {
+      setMessage({
+        variant: "error",
+        title: "최종명단 문서 확인 필요",
+        body: "최종 출전 명단 문서를 확인할 수 없습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+      return;
+    }
+
+    setIsDirectSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const finalRef = doc(db, "contest_players_final", playersFinalId);
+      let committedDoc = null;
+      let committedPlayers = [];
+
+      await runTransaction(db, async (transaction) => {
+        const finalSnap = await transaction.get(finalRef);
+        const latestFinalDoc = finalSnap.exists() ? finalSnap.data() : null;
+        const baseFinalList = latestFinalDoc || playersFinalList || {};
+        const baseFinalPlayers = Array.isArray(latestFinalDoc?.players)
+          ? latestFinalDoc.players
+          : playersFinalArray || [];
+
+        const nextPlayers = applyStage3FinalDirectEdit(
+          baseFinalPlayers,
+          beforePlayer,
+          patchFields,
+          { isGrandPrix: true, nowIso }
+        );
+
+        const { id: _ignoredId, ...cleanBaseList } = baseFinalList;
+        const sanitizedPayload = sanitizeForFirestore({
+          ...cleanBaseList,
+          ...(contestId ? { contestId } : {}),
+          players: nextPlayers,
+          updatedAt: nowIso,
+        });
+
+        if (finalSnap.exists()) {
+          transaction.update(finalRef, sanitizedPayload);
+        } else {
+          transaction.set(finalRef, sanitizedPayload);
+        }
+
+        committedDoc = { id: playersFinalId, ...sanitizedPayload };
+        committedPlayers = nextPlayers;
+      });
+
+      setPlayersFinalList(committedDoc);
+      setPlayersFinalArray(committedPlayers);
+      setEditDrawerOpen(false);
+      setEditingPlayer(null);
+    } catch (error) {
+      console.error("그랑프리 선수 직접 수정 실패:", error);
+      setMessage({
+        variant: "error",
+        title: "그랑프리 선수 수정 실패",
+        body: "그랑프리 선수 정보를 저장하는 중 오류가 발생했습니다.",
+        body4: error?.message,
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setMsgOpen(true);
+    } finally {
+      setIsDirectSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (!currentContest?.contests?.id) {
       return;
@@ -801,6 +934,23 @@ const ContestPlayerOrderTableGrandPrix = () => {
             onConfirm={() => setMsgOpen(false)}
             onCancel={() => setMsgOpen(false)}
             message={message}
+          />
+
+          <LayerPlayerEditDrawer
+            open={editDrawerOpen}
+            onClose={() => {
+              if (!isDirectSaving) {
+                setEditDrawerOpen(false);
+                setEditingPlayer(null);
+              }
+            }}
+            layer="grandprix"
+            player={editingPlayer}
+            categoriesArray={categoriesArray}
+            gradesArray={gradesArray}
+            allLayerPlayers={grandPrixArray}
+            onSave={handleDirectEditGrandPrixSave}
+            isSaving={isDirectSaving}
           />
 
           <div className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -928,6 +1078,9 @@ const ContestPlayerOrderTableGrandPrix = () => {
                               </th>
                               <th className="w-56 py-2.5 px-4 whitespace-nowrap">
                                 우승 체급 / 비고
+                              </th>
+                              <th className="w-24 py-2.5 px-4 text-center whitespace-nowrap">
+                                관리
                               </th>
                             </tr>
                           </thead>
@@ -1076,11 +1229,25 @@ const ContestPlayerOrderTableGrandPrix = () => {
                                           불참
                                         </span>
                                       )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingPlayer(player);
+                                          setEditDrawerOpen(true);
+                                        }}
+                                        className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-[6px] border border-[#171717]/[0.12] bg-white hover:bg-[#f4f4f5] text-[11px] font-medium text-[#171717] transition-colors cursor-pointer whitespace-nowrap"
+                                        title="그랑프리 레이어 선수 정보 직접 수정"
+                                      >
+                                        <Pencil size={11} strokeWidth={1.75} />
+                                        <span>수정</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>

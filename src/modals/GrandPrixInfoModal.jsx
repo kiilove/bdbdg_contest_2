@@ -230,8 +230,7 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
         (categoryInfo.contestCategorySection || "").trim() || "그랑프리",
       contestCategoryType:
         (categoryInfo.contestCategoryType || "").trim() || "그랑프리",
-      contestCategoryJudgeType:
-        categoryInfo.contestCategoryJudgeType || "ranking",
+      contestCategoryJudgeType: "ranking",
       contestCategoryJudgeCount:
         Number.parseInt(categoryInfo.contestCategoryJudgeCount, 10) || 7,
       contestCategoryIsOverall: true,
@@ -416,24 +415,6 @@ const GrandPrixInfoModal = ({ setClose, propState, setState, setRefresh }) => {
               ref={(ref) => (categoryInfoRef.current.contestCategoryTitle = ref)}
               className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
             />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">
-            <label className="text-xs font-medium text-[#525252] sm:text-right">
-              심사 종류
-            </label>
-            <select
-              name="contestCategoryJudgeType"
-              onChange={handleInputValues}
-              value={categoryInfo.contestCategoryJudgeType || "ranking"}
-              ref={(ref) =>
-                (categoryInfoRef.current.contestCategoryJudgeType = ref)
-              }
-              className="h-9 w-full rounded-[8px] border border-[#171717]/[0.14] bg-[#ffffff] px-3 text-sm text-[#171717] outline-none focus:border-[#2563eb] transition-colors duration-150"
-            >
-              <option value="ranking">랭킹형</option>
-              <option value="point">점수형</option>
-            </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] items-center gap-2">

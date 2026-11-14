@@ -56,11 +56,7 @@ export const buildStageWithSyncedMetadata = (
           primaryGrade.categoryJudgeCount ??
           baseStage.categoryJudgeCount
       ) || 5,
-    categoryJudgeType:
-      matchedCat?.contestCategoryJudgeType ??
-      primaryGrade.categoryJudgeType ??
-      baseStage.categoryJudgeType ??
-      "ranking",
+    categoryJudgeType: "ranking",
     categoryIsOverall:
       matchedCat?.contestCategoryIsOverall ??
       primaryGrade.categoryIsOverall ??

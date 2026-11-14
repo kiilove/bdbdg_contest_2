@@ -751,3 +751,314 @@ export const summarizeJudgeSeatGaps = ({
     preWarningText,
   };
 };
+
+/**
+ * 본부석 실시간 심판 긴급 변경 / 좌석 맞교체 순수 계산 헬퍼
+ * - scope === "current_stage": 현재 진행 무대에 속한 체급들만 변경
+ * - scope === "section_remaining": 현재 무대 + 동일 섹션(부)의 이후 남은 무대 체급들까지 일괄 변경
+ * - swapMode === "replace": 대상 좌석(seatIndex)에 선택 심판 배정
+ * - swapMode === "exchange": 현재 무대 다른 좌석(partnerSeatIndex)에 앉아있는 심판과 1:1 좌석 맞교체
+ *
+ * V1 / V2 / V3 하위 호환을 위해 Firestore `contest_judges_assign` 배열과
+ * RTDB `currentStage/{contestId}/judges` 배열을 동시에 정합성 있게 생성합니다.
+ */
+export const applyEmergencyJudgeSeatSwap = ({
+  judges = [],
+  categories = [],
+  grades = [],
+  stages = [],
+  currentStage = null,
+  seatIndex,
+  replacementJudge,
+  scope = "current_stage",
+  swapMode = "replace",
+  partnerSeatIndex = null,
+  currentRealtimeJudges = [],
+  contestId = "",
+  timestamp = Date.now(),
+  generateUUID = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+}) => {
+  const targetSeat = Number(seatIndex);
+  if (!Number.isFinite(targetSeat) || targetSeat < 1) {
+    throw new Error("유효한 심판석 번호(seatIndex)가 필요합니다.");
+  }
+  if (!replacementJudge?.judgeUid) {
+    throw new Error("교체할 심판 정보(judgeUid)가 필요합니다.");
+  }
+
+  const categoryById = {};
+  (Array.isArray(categories) ? categories : []).forEach((c) => {
+    if (c?.contestCategoryId) {
+      categoryById[c.contestCategoryId] = c;
+    }
+  });
+
+  const gradeById = {};
+  (Array.isArray(grades) ? grades : []).forEach((g) => {
+    if (g?.contestGradeId) {
+      gradeById[g.contestGradeId] = g;
+    }
+  });
+
+  const sortedStages = [...(Array.isArray(stages) ? stages : [])].sort(
+    (a, b) => Number(a?.stageNumber || 0) - Number(b?.stageNumber || 0)
+  );
+
+  const matchedCurrentStage =
+    (currentStage?.stageId &&
+      sortedStages.find((s) => s?.stageId === currentStage.stageId)) ||
+    currentStage ||
+    null;
+
+  const extractStageGradeEntries = (stageObj) => {
+    if (!stageObj) return [];
+    if (Array.isArray(stageObj.grades) && stageObj.grades.length > 0) {
+      return stageObj.grades
+        .map((g) => ({
+          gradeId: g?.gradeId || g?.contestGradeId || "",
+          gradeTitle: g?.gradeTitle || g?.contestGradeTitle || "",
+          categoryId:
+            g?.categoryId || g?.refCategoryId || stageObj?.categoryId || "",
+          categoryTitle: stageObj?.categoryTitle || "",
+          categorySection: stageObj?.categorySection || "",
+          categoryJudgeCount: Number(stageObj?.categoryJudgeCount || 0),
+        }))
+        .filter((g) => Boolean(g.gradeId));
+    }
+    if (stageObj.gradeId) {
+      return [
+        {
+          gradeId: stageObj.gradeId,
+          gradeTitle: stageObj.gradeTitle || "",
+          categoryId: stageObj.categoryId || "",
+          categoryTitle: stageObj.categoryTitle || "",
+          categorySection: stageObj.categorySection || "",
+          categoryJudgeCount: Number(stageObj.categoryJudgeCount || 0),
+        },
+      ];
+    }
+    return [];
+  };
+
+  const currentStageGradeEntries = extractStageGradeEntries(matchedCurrentStage);
+  const currentStageGradeIds = Array.from(
+    new Set(currentStageGradeEntries.map((g) => g.gradeId).filter(Boolean))
+  );
+
+  let targetStages = matchedCurrentStage ? [matchedCurrentStage] : [];
+  if (scope === "section_remaining" && matchedCurrentStage) {
+    const activeCat = categoryById[matchedCurrentStage.categoryId];
+    const activeSection = normalizeSectionName(
+      matchedCurrentStage.categorySection || activeCat?.contestCategorySection
+    );
+    const currentStageNum = Number(matchedCurrentStage.stageNumber || 0);
+
+    const remainingInSection = sortedStages.filter((st) => {
+      if (!st || st.stageId === matchedCurrentStage.stageId) return false;
+      if (Number(st.stageNumber || 0) <= currentStageNum) return false;
+      const stCat = categoryById[st.categoryId];
+      const stSection = normalizeSectionName(
+        st.categorySection || stCat?.contestCategorySection
+      );
+      return stSection === activeSection;
+    });
+
+    targetStages = [matchedCurrentStage, ...remainingInSection];
+  }
+
+  const realtimeList = Array.isArray(currentRealtimeJudges)
+    ? currentRealtimeJudges.map((j) => (j ? { ...j } : j))
+    : [];
+
+  const findRealtimeSlotIndex = (sIdx) => {
+    const byField = realtimeList.findIndex(
+      (j) => Number(j?.seatIndex) === Number(sIdx)
+    );
+    if (byField !== -1) return byField;
+    if (sIdx - 1 >= 0 && sIdx - 1 < realtimeList.length) return sIdx - 1;
+    return -1;
+  };
+
+  const targetSlotIdx = findRealtimeSlotIndex(targetSeat);
+  const existingTargetSlot =
+    targetSlotIdx !== -1 ? realtimeList[targetSlotIdx] : null;
+
+  const primaryGradeId = currentStageGradeIds[0] || "";
+  const fallbackAssignedTarget = (Array.isArray(judges) ? judges : []).find(
+    (r) =>
+      Number(r?.seatIndex) === targetSeat &&
+      (r?.contestGradeId === primaryGradeId || r?.gradeId === primaryGradeId)
+  );
+
+  const outgoingJudge =
+    existingTargetSlot?.judgeUid
+      ? {
+          judgeUid: existingTargetSlot.judgeUid,
+          judgeName: existingTargetSlot.judgeName || "",
+          onedayPassword: existingTargetSlot.onedayPassword ?? null,
+          isHead: Boolean(
+            existingTargetSlot.isHead ?? fallbackAssignedTarget?.isHead
+          ),
+        }
+      : fallbackAssignedTarget?.judgeUid
+      ? {
+          judgeUid: fallbackAssignedTarget.judgeUid,
+          judgeName: fallbackAssignedTarget.judgeName || "",
+          onedayPassword: fallbackAssignedTarget.onedayPassword ?? null,
+          isHead: Boolean(fallbackAssignedTarget.isHead),
+        }
+      : null;
+
+  const numericPartnerSeat = Number(partnerSeatIndex);
+  const isSeatExchange =
+    swapMode === "exchange" &&
+    Number.isFinite(numericPartnerSeat) &&
+    numericPartnerSeat >= 1 &&
+    numericPartnerSeat !== targetSeat;
+
+  // 대상 체급 목록 추출 (좌석 수가 해당 좌석 이상인 체급만 적용)
+  const targetGradeMetaMap = new Map();
+  targetStages.forEach((st) => {
+    extractStageGradeEntries(st).forEach((entry) => {
+      const cat = categoryById[entry.categoryId];
+      const maxSeats = Number(
+        cat?.contestCategoryJudgeCount || entry.categoryJudgeCount || 0
+      );
+      if (maxSeats > 0 && targetSeat > maxSeats) {
+        return;
+      }
+      if (!targetGradeMetaMap.has(entry.gradeId)) {
+        targetGradeMetaMap.set(entry.gradeId, {
+          ...entry,
+          maxSeats,
+        });
+      }
+    });
+  });
+
+  const buildSafeAssignRow = ({ gradeMeta, seatNum, judgeObj, prevRow }) => {
+    const gradeObj = gradeById[gradeMeta.gradeId] || {
+      contestGradeId: gradeMeta.gradeId,
+      contestGradeTitle:
+        gradeMeta.gradeTitle || prevRow?.contestGradeTitle || "",
+      contestGradeIndex: prevRow?.contestGradeIndex ?? 0,
+      refCategoryId:
+        gradeMeta.categoryId || prevRow?.refCategoryId || prevRow?.categoryId || null,
+      isCompared: Boolean(prevRow?.isCompared),
+    };
+    const catObj =
+      categoryById[
+        gradeObj.refCategoryId || gradeMeta.categoryId || prevRow?.categoryId
+      ] || {
+        contestCategoryId:
+          gradeMeta.categoryId || prevRow?.categoryId || gradeObj.refCategoryId || null,
+        contestCategoryTitle:
+          gradeMeta.categoryTitle || prevRow?.categoryTitle || null,
+        contestCategorySection:
+          gradeMeta.categorySection || prevRow?.sectionName || "미지정",
+      };
+
+    return buildJudgeAssignRecord({
+      category: catObj,
+      grade: gradeObj,
+      judge: judgeObj,
+      seatIndex: seatNum,
+      contestId: contestId || prevRow?.contestId || "",
+      generateUUID,
+      existingAssignId: prevRow?.judgesAssignId,
+    });
+  };
+
+  const updatedRows = [...(Array.isArray(judges) ? judges : [])];
+
+  const upsertGradeSeat = (gradeMeta, seatNum, judgeObj) => {
+    const gId = gradeMeta.gradeId;
+    let prevRow = null;
+    for (let i = updatedRows.length - 1; i >= 0; i--) {
+      const r = updatedRows[i];
+      const rGradeId = r?.contestGradeId || r?.gradeId;
+      if (rGradeId === gId && Number(r?.seatIndex) === Number(seatNum)) {
+        if (!prevRow) prevRow = r;
+        updatedRows.splice(i, 1);
+      }
+    }
+
+    if (judgeObj?.judgeUid) {
+      updatedRows.push(
+        buildSafeAssignRow({
+          gradeMeta,
+          seatNum,
+          judgeObj,
+          prevRow,
+        })
+      );
+    }
+  };
+
+  targetGradeMetaMap.forEach((gradeMeta) => {
+    upsertGradeSeat(gradeMeta, targetSeat, replacementJudge);
+
+    if (isSeatExchange) {
+      const canApplyPartner =
+        gradeMeta.maxSeats <= 0 || numericPartnerSeat <= gradeMeta.maxSeats;
+      if (canApplyPartner) {
+        // 맞교체 시 기존 targetSeat에 심판이 있었다면 partnerSeat로 이동, 없었다면(미배정 좌석) partnerSeat를 비움
+        upsertGradeSeat(gradeMeta, numericPartnerSeat, outgoingJudge);
+      }
+    }
+  });
+
+  // RTDB currentStage.judges 갱신
+  const buildSwappedSlot = (existingSlot, seatNum, judgeObj) => ({
+    ...(existingSlot || {}),
+    seatIndex: Number(seatNum),
+    judgeUid: judgeObj?.judgeUid ?? null,
+    judgeName: judgeObj?.judgeName ?? null,
+    onedayPassword: judgeObj?.onedayPassword ?? null,
+    isHead: Boolean(judgeObj?.isHead),
+    isLogined: false,
+    isEnd: false,
+    errors: "",
+    forceRestartAt: timestamp,
+    judgeSwappedAt: timestamp,
+  });
+
+  if (targetSlotIdx !== -1) {
+    realtimeList[targetSlotIdx] = buildSwappedSlot(
+      realtimeList[targetSlotIdx],
+      targetSeat,
+      replacementJudge
+    );
+  } else if (targetSeat >= 1) {
+    realtimeList[targetSeat - 1] = buildSwappedSlot(
+      null,
+      targetSeat,
+      replacementJudge
+    );
+  }
+
+  const affectedSeats = [targetSeat];
+
+  if (isSeatExchange) {
+    const partnerSlotIdx = findRealtimeSlotIndex(numericPartnerSeat);
+    if (partnerSlotIdx !== -1) {
+      realtimeList[partnerSlotIdx] = buildSwappedSlot(
+        realtimeList[partnerSlotIdx],
+        numericPartnerSeat,
+        outgoingJudge
+      );
+      affectedSeats.push(numericPartnerSeat);
+    }
+  }
+
+  return {
+    nextJudgesAssign: updatedRows,
+    nextRealtimeJudges: realtimeList,
+    affectedSeats,
+    isSeatExchange,
+    outgoingJudge,
+    targetGradeIds: Array.from(targetGradeMetaMap.keys()),
+    currentStageGradeIds,
+    affectedStagesCount: targetStages.length,
+  };
+};

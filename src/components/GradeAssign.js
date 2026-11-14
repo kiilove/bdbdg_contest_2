@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Select, Tabs } from "antd";
+import React, { useEffect, useMemo, useState } from "react";
+import { Select } from "antd";
 import {
-  User,
-  Phone,
   Users,
   RotateCcw,
   Shuffle,
   Trash2,
-  AlertTriangle,
-  LayoutGrid,
-  Layers,
   GitBranch,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import {
   normalizeSectionName,
@@ -20,6 +17,10 @@ import {
   buildJudgeAssignRecord,
   pickFairRandomJudges,
 } from "../utils/judgeAssignUtils";
+import {
+  JudgeSeatSlotCard,
+  SectionFilterBar,
+} from "./judges/JudgeSeatSlotCard";
 
 const GradeAssign = ({
   judgesAssignInfo,
@@ -33,23 +34,18 @@ const GradeAssign = ({
   balanceWorkload = true,
   focusCategoryId = null,
   onClearFocusCategory,
+  workloadByUid = {},
 }) => {
-  const [isMobile, setIsMobile] = useState(false);
   const [activeSection, setActiveSection] = useState("__ALL__");
   const [selectedCategoryId, setSelectedCategoryId] = useState("__ALL_CAT__");
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  const [onlyMissingGrades, setOnlyMissingGrades] = useState(false);
 
   /** 상단 누락 검증 패널에서 특정 종목 클릭 시 즉시 포커스 */
   useEffect(() => {
     if (focusCategoryId) {
       setActiveSection("__ALL__");
       setSelectedCategoryId(focusCategoryId);
+      setOnlyMissingGrades(false);
       onClearFocusCategory?.();
     }
   }, [focusCategoryId, onClearFocusCategory]);
@@ -228,21 +224,31 @@ const GradeAssign = ({
     }));
   };
 
-  const commonSelectProps = {
-    showSearch: true,
-    allowClear: false,
-    optionFilterProp: "data-search",
-    filterOption: (input, option) => {
-      const hay = (option?.props?.["data-search"] || "")
-        .toString()
-        .toLowerCase();
-      return hay.includes((input || "").toLowerCase());
-    },
-    placeholder: "심판 선택",
-  };
+  // 체급별 배정 완료 여부 사전 계산
+  const gradeStatsById = useMemo(() => {
+    const stats = {};
+    (gradesArray || []).forEach((g) => {
+      const gid = g?.contestGradeId;
+      if (!gid) return;
+      const cat = categoryById[g?.refCategoryId];
+      const expected = Number(cat?.contestCategoryJudgeCount || 0);
+      const assigned = (judgesAssignInfo?.judges || []).filter(
+        (a) =>
+          a.contestGradeId === gid &&
+          Number(a.seatIndex) >= 1 &&
+          Number(a.seatIndex) <= expected &&
+          Boolean(a.judgeUid)
+      ).length;
+      stats[gid] = {
+        expected,
+        assigned,
+        hasGap: expected > 0 && assigned < expected,
+      };
+    });
+    return stats;
+  }, [gradesArray, categoryById, judgesAssignInfo?.judges]);
 
-  /** 섹션 탭 구성 */
-  const { sectionTabs } = useMemo(() => {
+  const sectionItems = useMemo(() => {
     const namesSet = new Set(
       (categoriesArray || []).map((c) =>
         normalizeSectionName(c?.contestCategorySection)
@@ -251,34 +257,36 @@ const GradeAssign = ({
     const names = Array.from(namesSet).sort((a, b) =>
       a.localeCompare(b, "ko", { sensitivity: "base", numeric: true })
     );
-    const items = [
+
+    const anyGapAll = (gradesArray || []).some(
+      (g) => gradeStatsById[g?.contestGradeId]?.hasGap
+    );
+
+    return [
       {
         key: "__ALL__",
-        label: (
-          <span className="inline-flex items-center gap-1.5">
-            <LayoutGrid
-              size={14}
-              strokeWidth={1.5}
-              className="text-[#737373]"
-            />
-            <span>전체</span>
-          </span>
-        ),
+        label: "전체 부",
+        count: (gradesArray || []).length,
+        hasGap: anyGapAll,
       },
-      ...names.map((name) => ({
-        key: name,
-        label: (
-          <span className="inline-flex items-center gap-1.5">
-            <Layers size={14} strokeWidth={1.5} className="text-[#737373]" />
-            <span>{name}</span>
-          </span>
-        ),
-      })),
+      ...names.map((name) => {
+        const inSec = (gradesArray || []).filter((g) => {
+          const cat = categoryById[g?.refCategoryId];
+          return normalizeSectionName(cat?.contestCategorySection) === name;
+        });
+        const hasGap = inSec.some(
+          (g) => gradeStatsById[g?.contestGradeId]?.hasGap
+        );
+        return {
+          key: name,
+          label: name,
+          count: inSec.length,
+          hasGap,
+        };
+      }),
     ];
-    return { sectionNames: names, sectionTabs: items };
-  }, [categoriesArray]);
+  }, [categoriesArray, gradesArray, categoryById, gradeStatsById]);
 
-  /** 현재 섹션에 속한 카테고리 목록 (진행 순서 기준 정렬) */
   const categoriesInActiveSection = useMemo(() => {
     const list = (categoriesArray || []).filter((c) => {
       const sec = normalizeSectionName(c?.contestCategorySection);
@@ -291,7 +299,6 @@ const GradeAssign = ({
     );
   }, [categoriesArray, activeSection]);
 
-  /** 섹션/카테고리 필터링된 그레이드 목록 */
   const filteredGrades = useMemo(() => {
     let list = gradesArray || [];
     if (activeSection !== "__ALL__") {
@@ -303,6 +310,9 @@ const GradeAssign = ({
     }
     if (selectedCategoryId !== "__ALL_CAT__") {
       list = list.filter((g) => g?.refCategoryId === selectedCategoryId);
+    }
+    if (onlyMissingGrades) {
+      list = list.filter((g) => gradeStatsById[g?.contestGradeId]?.hasGap);
     }
     return [...list].sort((a, b) => {
       const ca = Number(
@@ -317,7 +327,14 @@ const GradeAssign = ({
         Number(b?.contestGradeIndex ?? 9999)
       );
     });
-  }, [gradesArray, activeSection, selectedCategoryId, categoryById]);
+  }, [
+    gradesArray,
+    activeSection,
+    selectedCategoryId,
+    onlyMissingGrades,
+    categoryById,
+    gradeStatsById,
+  ]);
 
   const handleSectionChange = (nextSec) => {
     setActiveSection(nextSec);
@@ -325,351 +342,207 @@ const GradeAssign = ({
   };
 
   return (
-    <div className="flex w-full flex-col gap-4 pt-2">
-      <Tabs
-        activeKey={activeSection}
-        onChange={handleSectionChange}
-        items={sectionTabs.map((tab) => {
-          const count =
-            tab.key === "__ALL__"
-              ? (gradesArray || []).length
-              : (gradesArray || []).filter((g) => {
-                  const cat = categoryById[g?.refCategoryId];
-                  const sec = normalizeSectionName(cat?.contestCategorySection);
-                  return sec === tab.key;
-                }).length;
-
-          return {
-            ...tab,
-            label: (
-              <span className="inline-flex items-center gap-2 text-sm">
-                {tab.label}
-                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#f4f4f5] px-1.5 py-0.5 rounded-[4px]">
-                  {count}
-                </span>
-              </span>
-            ),
-          };
-        })}
-      />
-
-      {/* 상단: 카테고리 선택 필터 */}
-      <div className="bg-[#fafafa] border border-[#171717]/[0.08] rounded-[8px] px-3.5 py-2.5 flex items-center gap-3">
-        <GitBranch
-          size={16}
-          strokeWidth={1.5}
-          className="text-[#737373] shrink-0"
+    <div className="flex w-full flex-col gap-4">
+      {/* 섹션 + 종목 드롭다운 + 미배정 필터 통합 바 */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <SectionFilterBar
+          items={sectionItems}
+          activeKey={activeSection}
+          onChange={handleSectionChange}
         />
-        <span className="text-xs font-medium text-[#525252] shrink-0">
-          종목 필터
-        </span>
-        <div className="flex-1 max-w-md">
-          <Select
-            className="w-full"
-            value={selectedCategoryId}
-            onChange={setSelectedCategoryId}
-            showSearch
-            optionFilterProp="children"
-            filterOption={(input, option) =>
-              (option?.children || "")
-                .toString()
-                .toLowerCase()
-                .includes((input || "").toLowerCase())
-            }
+
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={() => setOnlyMissingGrades((v) => !v)}
+            className={`h-8 px-3 rounded-[8px] text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border shrink-0 ${
+              onlyMissingGrades
+                ? "bg-[#dc2626]/[0.08] text-[#dc2626] border-[#dc2626]/25"
+                : "bg-white text-[#525252] border-[#171717]/[0.10] hover:bg-[#f4f4f5]"
+            }`}
           >
-            <Select.Option value="__ALL_CAT__">전체 종목</Select.Option>
-            {categoriesInActiveSection.map((c) => (
-              <Select.Option
-                key={c.contestCategoryId}
-                value={c.contestCategoryId}
-              >
-                {c.contestCategoryTitle ||
-                  c.contestCategoryName ||
-                  c.contestCategoryInfo?.name ||
-                  "이름 없는 카테고리"}
-              </Select.Option>
-            ))}
-          </Select>
+            <AlertTriangle size={13} strokeWidth={1.6} />
+            <span>미배정 체급만</span>
+          </button>
+
+          <div className="flex items-center gap-2 flex-1 sm:w-72">
+            <GitBranch
+              size={14}
+              strokeWidth={1.5}
+              className="text-[#737373] shrink-0"
+            />
+            <Select
+              className="w-full"
+              value={selectedCategoryId}
+              onChange={setSelectedCategoryId}
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.children || "")
+                  .toString()
+                  .toLowerCase()
+                  .includes((input || "").toLowerCase())
+              }
+            >
+              <Select.Option value="__ALL_CAT__">전체 종목 보기</Select.Option>
+              {categoriesInActiveSection.map((c) => (
+                <Select.Option
+                  key={c.contestCategoryId}
+                  value={c.contestCategoryId}
+                >
+                  {c.contestCategoryTitle ||
+                    c.contestCategoryName ||
+                    c.contestCategoryInfo?.name ||
+                    "이름 없는 종목"}
+                </Select.Option>
+              ))}
+            </Select>
+          </div>
         </div>
       </div>
 
-      {(filteredGrades || []).map((grade, idx) => {
-        const cat = categoryById[grade.refCategoryId] || {};
-        const judgeCount = Number(cat.contestCategoryJudgeCount || 0);
+      {filteredGrades.length === 0 ? (
+        <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] py-12 text-center text-sm text-[#737373]">
+          해당 조건의 체급이 없습니다
+        </div>
+      ) : (
+        filteredGrades.map((grade, idx) => {
+          const cat = categoryById[grade.refCategoryId] || {};
+          const judgeCount = Number(cat.contestCategoryJudgeCount || 0);
+          const allSeats = Array.from({ length: judgeCount }, (_, i) => i + 1);
+          const assignedJudges = getAssignedJudgesForGrade(
+            grade.contestGradeId,
+            judgesAssignInfo.judges
+          );
+          const gStat = gradeStatsById[grade.contestGradeId] || {
+            expected: judgeCount,
+            assigned: 0,
+            hasGap: false,
+          };
+          const isComplete = gStat.expected > 0 && !gStat.hasGap;
 
-        const allSeats = Array.from({ length: judgeCount }, (_, i) => i + 1);
-        const assignedJudges = getAssignedJudgesForGrade(
-          grade.contestGradeId,
-          judgesAssignInfo.judges
-        );
-        const filledCount = allSeats.filter((s) =>
-          (judgesAssignInfo.judges || []).some(
-            (a) =>
-              a.contestGradeId === grade.contestGradeId &&
-              Number(a.seatIndex) === s &&
-              Boolean(a.judgeUid)
-          )
-        ).length;
-
-        return (
-          <div
-            key={grade.contestGradeId || idx}
-            className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
-          >
-            <div className="px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users size={16} strokeWidth={1.5} className="text-[#525252]" />
-                <span className="text-[15px] font-semibold text-[#171717]">
-                  {(cat.contestCategoryTitle ||
-                    cat.contestCategoryName ||
-                    cat.contestCategoryInfo?.name ||
-                    "이름 없는 카테고리") +
-                    " · " +
-                    (grade.contestGradeTitle || "(이름 없는 체급)")}
-                </span>
-                <span className="px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs text-[#525252]">
-                  {normalizeSectionName(cat.contestCategorySection)}
-                </span>
-                <span
-                  className={`font-mono text-xs tabular-nums px-2 py-0.5 rounded-[4px] border ${
-                    filledCount === allSeats.length
-                      ? "bg-[#ffffff] border-[#171717]/[0.08] text-[#737373]"
-                      : "bg-[#dc2626]/[0.08] border-[#dc2626]/20 text-[#dc2626] font-medium"
-                  }`}
-                >
-                  {filledCount}/{allSeats.length}석
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => handleRandomAssign(grade, allSeats)}
-                  className="h-9 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <RotateCcw size={14} strokeWidth={1.5} />
-                  <span>{isMobile ? "랜덤" : "빈 좌석 랜덤"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAllRandomAssign(grade, allSeats)}
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#eaeaea] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <Shuffle
-                    size={14}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
-                  />
-                  <span>{isMobile ? "전체" : "모두 재배정"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleResetAssign(grade)}
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <Trash2 size={14} strokeWidth={1.5} />
-                  <span>초기화</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 flex flex-col gap-2">
-              {allSeats.map((seatNumber) => {
-                const selectedJudge = (judgesAssignInfo.judges || []).find(
-                  (assign) =>
-                    assign.contestGradeId === grade.contestGradeId &&
-                    Number(assign.seatIndex) === seatNumber
-                ) || { judgeUid: undefined };
-
-                const selectedJudgeInfo = selectedJudge.judgeUid
-                  ? poolByUid[selectedJudge.judgeUid]
-                  : null;
-                const isRemovedFromPool =
-                  Boolean(selectedJudge.judgeUid) && !selectedJudgeInfo;
-
-                const selectableSorted = sortJudgesByName(
-                  judgesPoolArray.filter(
-                    (judge) =>
-                      !assignedJudges.includes(judge.judgeUid) ||
-                      judge.judgeUid === selectedJudge.judgeUid
-                  )
-                );
-
-                if (isMobile) {
-                  return (
-                    <div
-                      key={seatNumber}
-                      className={`p-3 border rounded-[8px] space-y-2.5 ${
-                        isRemovedFromPool
-                          ? "bg-[#dc2626]/[0.03] border-[#dc2626]/25"
-                          : "bg-[#fafafa] border-[#171717]/[0.08]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-sm font-medium tabular-nums text-[#171717]">
-                          좌석 {seatNumber}
-                        </span>
-                        {isRemovedFromPool && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-xs font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
-                            <AlertTriangle size={12} strokeWidth={1.5} />
-                            <span>선발 해제됨</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {selectedJudgeInfo && (
-                        <div className="p-2.5 bg-[#ffffff] border border-[#171717]/[0.08] rounded-[8px] space-y-1">
-                          <div className="flex items-center gap-2">
-                            <User
-                              size={14}
-                              strokeWidth={1.5}
-                              className="text-[#525252]"
-                            />
-                            <span className="text-sm font-medium text-[#171717]">
-                              {selectedJudgeInfo.judgeName}
-                            </span>
-                            {selectedJudgeInfo.isHead && (
-                              <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.08] text-[#b45309]">
-                                위원장
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[#525252] tabular-nums">
-                            <Phone
-                              size={12}
-                              strokeWidth={1.5}
-                              className="text-[#737373]"
-                            />
-                            <span>{selectedJudgeInfo.judgeTel}</span>
-                          </div>
-                          <div className="text-xs text-[#737373]">
-                            {selectedJudgeInfo.judgePromoter}
-                          </div>
-                        </div>
-                      )}
-
-                      <Select
-                        {...commonSelectProps}
-                        className="w-full"
-                        value={selectedJudge.judgeUid || "unselect"}
-                        onChange={(val) => {
-                          if (val === "unselect") {
-                            handleRemoveAssign(grade, seatNumber);
-                          } else {
-                            handleSelectJudge(grade, seatNumber, val);
-                          }
-                        }}
-                      >
-                        <Select.Option value="unselect" data-search="">
-                          선택 안함
-                        </Select.Option>
-                        {isRemovedFromPool && (
-                          <Select.Option
-                            value={selectedJudge.judgeUid}
-                            data-search=""
-                          >
-                            [선발 해제됨]{" "}
-                            {selectedJudge.judgeName || selectedJudge.judgeUid}
-                          </Select.Option>
-                        )}
-                        {selectableSorted.map((judge) => {
-                          const label = `${judge.isHead ? "위원장 / " : ""}${
-                            judge.judgeName
-                          } (${judge.judgePromoter || "-"} / ${
-                            judge.judgeTel || "-"
-                          })`;
-                          const searchBlob = `${judge.judgeName || ""} ${
-                            judge.judgePromoter || ""
-                          } ${judge.judgeTel || ""}`;
-                          return (
-                            <Select.Option
-                              key={judge.judgeUid}
-                              value={judge.judgeUid}
-                              data-search={searchBlob}
-                            >
-                              {label}
-                            </Select.Option>
-                          );
-                        })}
-                      </Select>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={seatNumber}
-                    className={`flex items-center gap-4 px-3.5 py-2 border rounded-[8px] transition-colors duration-150 ${
-                      isRemovedFromPool
-                        ? "bg-[#dc2626]/[0.03] border-[#dc2626]/25"
-                        : "bg-[#fafafa] border-[#171717]/[0.06] hover:bg-[#f4f4f5]"
+          return (
+            <div
+              key={grade.contestGradeId || idx}
+              className="bg-white rounded-[12px] border border-[#171717]/[0.08] overflow-hidden"
+            >
+              <div className="px-5 py-3.5 bg-[#fafafa] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="w-7 h-7 rounded-[6px] bg-white border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
+                    <Users
+                      size={14}
+                      strokeWidth={1.6}
+                      className="text-[#525252]"
+                    />
+                  </div>
+                  <span className="text-base font-semibold text-[#171717]">
+                    {(cat.contestCategoryTitle ||
+                      cat.contestCategoryName ||
+                      cat.contestCategoryInfo?.name ||
+                      "이름 없는 종목") +
+                      " · " +
+                      (grade.contestGradeTitle || "(이름 없는 체급)")}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-[5px] bg-white border border-[#171717]/[0.08] text-xs text-[#525252]">
+                    {normalizeSectionName(cat.contestCategorySection)}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 font-mono text-xs tabular-nums px-2 py-0.5 rounded-[5px] border ${
+                      isComplete
+                        ? "bg-[#16a34a]/[0.08] border-[#16a34a]/20 text-[#16a34a] font-medium"
+                        : "bg-[#dc2626]/[0.06] border-[#dc2626]/20 text-[#dc2626] font-medium"
                     }`}
                   >
-                    <div className="flex items-center gap-2 w-44 shrink-0">
-                      <span className="font-mono text-sm font-medium tabular-nums text-[#525252]">
-                        좌석 {seatNumber}
-                      </span>
-                      {isRemovedFromPool && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.08] text-[#dc2626]">
-                          <AlertTriangle size={12} strokeWidth={1.5} />
-                          <span>선발 해제됨</span>
-                        </span>
-                      )}
-                    </div>
+                    {isComplete && <CheckCircle2 size={12} strokeWidth={1.8} />}
+                    <span>
+                      {gStat.assigned}/{allSeats.length}석
+                    </span>
+                  </span>
+                </div>
 
-                    <div className="flex-1">
-                      <Select
-                        {...commonSelectProps}
-                        className="w-full"
-                        value={selectedJudge.judgeUid || "unselect"}
-                        onChange={(val) => {
-                          if (val === "unselect") {
-                            handleRemoveAssign(grade, seatNumber);
-                          } else {
-                            handleSelectJudge(grade, seatNumber, val);
-                          }
-                        }}
-                      >
-                        <Select.Option value="unselect" data-search="">
-                          선택 안함
-                        </Select.Option>
-                        {isRemovedFromPool && (
-                          <Select.Option
-                            value={selectedJudge.judgeUid}
-                            data-search=""
-                          >
-                            [선발 해제됨]{" "}
-                            {selectedJudge.judgeName || selectedJudge.judgeUid}
-                          </Select.Option>
-                        )}
-                        {selectableSorted.map((judge) => {
-                          const label = `${judge.isHead ? "위원장 / " : ""}${
-                            judge.judgeName
-                          } (${judge.judgePromoter || "-"} / ${
-                            judge.judgeTel || "-"
-                          })`;
-                          const searchBlob = `${judge.judgeName || ""} ${
-                            judge.judgePromoter || ""
-                          } ${judge.judgeTel || ""}`;
-                          return (
-                            <Select.Option
-                              key={judge.judgeUid}
-                              value={judge.judgeUid}
-                              data-search={searchBlob}
-                            >
-                              {label}
-                            </Select.Option>
-                          );
-                        })}
-                      </Select>
-                    </div>
-                  </div>
-                );
-              })}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleRandomAssign(grade, allSeats)}
+                    className="h-8 px-3 rounded-[7px] bg-[#2563eb] hover:bg-[#1d4ed8] text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border-0"
+                  >
+                    <RotateCcw size={13} strokeWidth={1.6} />
+                    <span>빈 좌석 랜덤</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAllRandomAssign(grade, allSeats)}
+                    className="h-8 px-3 rounded-[7px] bg-white hover:bg-[#f4f4f5] border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+                  >
+                    <Shuffle
+                      size={13}
+                      strokeWidth={1.6}
+                      className="text-[#525252]"
+                    />
+                    <span>모두 재배정</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResetAssign(grade)}
+                    className="h-8 px-2.5 rounded-[7px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer"
+                  >
+                    <Trash2 size={13} strokeWidth={1.6} />
+                    <span>초기화</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {allSeats.map((seatNumber) => {
+                  const selectedJudge = (judgesAssignInfo.judges || []).find(
+                    (assign) =>
+                      assign.contestGradeId === grade.contestGradeId &&
+                      Number(assign.seatIndex) === seatNumber
+                  ) || { judgeUid: undefined };
+
+                  const selectedJudgeInfo = selectedJudge.judgeUid
+                    ? poolByUid[selectedJudge.judgeUid]
+                    : null;
+                  const isRemovedFromPool =
+                    Boolean(selectedJudge.judgeUid) && !selectedJudgeInfo;
+
+                  const selectableSorted = sortJudgesByName(
+                    judgesPoolArray.filter(
+                      (judge) =>
+                        !assignedJudges.includes(judge.judgeUid) ||
+                        judge.judgeUid === selectedJudge.judgeUid
+                    )
+                  );
+
+                  return (
+                    <JudgeSeatSlotCard
+                      key={seatNumber}
+                      seatNumber={seatNumber}
+                      status={selectedJudge.judgeUid ? "complete" : "empty"}
+                      selectValue={selectedJudge.judgeUid || "unselect"}
+                      selectedJudgeInfo={selectedJudgeInfo}
+                      fallbackJudgeName={
+                        selectedJudge.judgeName || selectedJudge.judgeUid
+                      }
+                      isRemovedFromPool={isRemovedFromPool}
+                      selectableJudges={selectableSorted}
+                      workloadByUid={workloadByUid}
+                      onSelectChange={(val) => {
+                        if (val === "unselect") {
+                          handleRemoveAssign(grade, seatNumber);
+                        } else {
+                          handleSelectJudge(grade, seatNumber, val);
+                        }
+                      }}
+                      onClearSeat={() => handleRemoveAssign(grade, seatNumber)}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })
+      )}
     </div>
   );
 };

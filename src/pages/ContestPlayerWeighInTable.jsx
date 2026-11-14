@@ -16,7 +16,7 @@ import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { useNavigate } from "react-router-dom";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import WeighInNumberEditDrawer from "../components/weighIn/WeighInNumberEditDrawer";
+import LayerPlayerEditDrawer from "../components/player/LayerPlayerEditDrawer";
 import WeighInStagePhotoDrawer from "../components/weighIn/WeighInStagePhotoDrawer";
 import WeighInStatsHeader from "../components/weighIn/WeighInStatsHeader";
 import WeighInFilterToolbar from "../components/weighIn/WeighInFilterToolbar";
@@ -25,13 +25,17 @@ import { getStagePlayerSortIndex } from "../functions/functions";
 import { sanitizeForFirestore as sanitizeDataForFirestore } from "../utils/firestoreSanitize";
 import {
   getPlayerEntryKey,
-  getPlayerTupleKey,
   isGrandPrixEntryLike,
   isAutoGrandPrixEntry,
-  mergePreservingUnmatchedFinalEntries,
   parseHeightWeightValue as parseHeightWeight,
   formatHeightWeightValue as formatHeightWeight,
 } from "../utils/playerEntryUtils";
+import {
+  buildPatchedLayerPlayer,
+  forwardWeighInToFinalPlayers,
+  hydrateWeighInLayerPlayers,
+  isSameLayerPlayerEntry,
+} from "../utils/layerPlayerEditUtils";
 import {
   isNonPlayerUrl,
   extractPlayerPhotos,
@@ -66,16 +70,11 @@ const ContestPlayerWeighInTable = () => {
   const [photoModalPlayer, setPhotoModalPlayer] = useState(null);
   const [isSyncingPhotos, setIsSyncingPhotos] = useState(false);
 
-  // ✅ 번호/인덱스/신장체중 수정 모달 상태
+  // ✅ 선수 정보 직접 수정 드로어 상태
   const [numModalOpen, setNumModalOpen] = useState(false);
   const [editTargetKey, setEditTargetKey] = useState(null);
-  const [editValues, setEditValues] = useState({
-    playerNumber: null,
-    playerIndex: null,
-    playerName: "",
-    height: "",
-    weight: "",
-  });
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [isDirectSaving, setIsDirectSaving] = useState(false);
 
   // 🛡️ 다중 계측대 입력 보호용 포커스 / 로컬 미저장 행 추적 Ref
   const focusedPlayerKeyRef = useRef(null);
@@ -155,36 +154,46 @@ const ContestPlayerWeighInTable = () => {
         }
       }
 
+      let finalDocData = null;
       let finalPlayers = [];
       if (currentContest?.contests?.contestPlayersFinalId) {
         const returnPlayersFinal = await fetchPlayersFinalDocument.getDocument(
           currentContest.contests.contestPlayersFinalId
         );
+        finalDocData = returnPlayersFinal || null;
         finalPlayers = returnPlayersFinal?.players || [];
       }
 
+      const weighInSavedPlayers = Array.isArray(finalDocData?.weighInPlayers)
+        ? finalDocData.weighInPlayers
+        : [];
+
       // 📸 다종목 선수 사진 playerUid 기반 글로벌 매핑
       const uidPhotoMap = new Map();
-      [...assignPlayers, ...finalPlayers].forEach((p) => {
+      [...assignPlayers, ...weighInSavedPlayers, ...finalPlayers].forEach((p) => {
         if (p?.playerUid) {
           const photos = extractPlayerPhotos(p);
           const fromInv = invoicePhotosMap.get(p.playerUid) || [];
           const allFound = Array.from(new Set([...photos, ...fromInv]));
           if (allFound.length > 0) {
             const existing = uidPhotoMap.get(p.playerUid) || [];
-            uidPhotoMap.set(p.playerUid, Array.from(new Set([...existing, ...allFound])));
+            uidPhotoMap.set(
+              p.playerUid,
+              Array.from(new Set([...existing, ...allFound]))
+            );
           }
         }
       });
 
-      // 🔑 복합 키(getPlayerEntryKey)를 사용하여 다종목 출전 선수의 체급 정보가 덮어써지지 않도록 안전 병합
-      const finalMap = new Map();
-      finalPlayers.forEach((p) => {
-        const key = getPlayerEntryKey(p);
-        if (key) finalMap.set(key, p);
+      // 🛡️ 2단계 레이어 하이드레이션:
+      // - 2단계 저장본(weighInPlayers)이 없으면 1단계(assignPlayers) 수정값을 그대로 승계!
+      // - 이미 2단계 저장본이 있으면 2단계의 선수번호·이름·소속·체급·계측값을 보존하고 1단계 사후 수정으로 덮어쓰지 않음!
+      const rawLayer2Players = hydrateWeighInLayerPlayers({
+        assignPlayers,
+        finalDocData,
       });
 
-      const mergedLoadedPlayers = assignPlayers.map((p) => {
+      const mergedLoadedPlayers = rawLayer2Players.map((p) => {
         const trimmedName = (p.playerName || "").trim();
         const catId = p.contestCategoryId || "";
         const telPart = (p.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
@@ -192,20 +201,19 @@ const ContestPlayerWeighInTable = () => {
         const entryKeyUid = p.playerUid ? `${p.playerUid}_${catId}` : "";
         const entryKeyName = trimmedName ? `${trimmedName}_${catId}` : "";
 
-        // 🌟 참가신청서 원본(contest_entrys_list)에서 선수의 '진짜 원래 배정 체급' 확정
-        const entryOriginal = (entryKeyUid && entryOriginalGradeMap.get(entryKeyUid)) ||
-                              (entryKeyName && entryOriginalGradeMap.get(entryKeyName));
+        const entryOriginal =
+          (entryKeyUid && entryOriginalGradeMap.get(entryKeyUid)) ||
+          (entryKeyName && entryOriginalGradeMap.get(entryKeyName));
 
-        const origGradeId = entryOriginal?.contestGradeId || p.originalGradeId || p.contestGradeId;
-        const origGradeTitle = entryOriginal?.contestGradeTitle || p.originalGradeTitle || p.contestGradeTitle;
+        const origGradeId =
+          p.originalGradeId ||
+          entryOriginal?.contestGradeId ||
+          p.contestGradeId;
+        const origGradeTitle =
+          p.originalGradeTitle ||
+          entryOriginal?.contestGradeTitle ||
+          p.contestGradeTitle;
 
-        // 원본 체급 기반 엔트리 키 생성하여 final 데이터 검색
-        const keyWithOrig = getPlayerEntryKey({ ...p, originalGradeId: origGradeId });
-        const keyCurrent = getPlayerEntryKey(p);
-        const fp = finalMap.get(keyWithOrig) || finalMap.get(keyCurrent) || null;
-        const fpPhotos = fp ? extractPlayerPhotos(fp) : [];
-
-        // 🌟 모든 소스(신청서 풀, UID맵, 전화번호/이름맵, 배정/최종문서)에서 등록된 '모든 사진'을 빠짐없이 통합 병합
         const allPlayerPhotos = Array.from(
           new Set([
             ...((p.playerUid && uidPhotoMap.get(p.playerUid)) || []),
@@ -213,11 +221,9 @@ const ContestPlayerWeighInTable = () => {
             ...(namePhonePhotoMap.get(nameKey) || []),
             ...((trimmedName && nameOnlyPhotoMap.get(trimmedName)) || []),
             ...extractPlayerPhotos(p),
-            ...fpPhotos,
           ])
         );
 
-        // 🌟 사용자가 계측 명단에서 명시적으로 선택한 '무대 전광판 송출용 사진' (fp > p > 신청서 원본 순으로 절대 우선, 명시적 초기화("") 존중)
         const invoiceFallbackPhotos = {
           stagePhoto1:
             (p.playerUid && invoiceStage1Map.get(p.playerUid)) ||
@@ -231,114 +237,30 @@ const ContestPlayerWeighInTable = () => {
             "",
           stagePhotoUrl: allPlayerPhotos[0] || "",
         };
-        const assignResolvedPhotos = resolveEffectiveStagePhotoFields(
+        const effectiveStagePhotos = resolveEffectiveStagePhotoFields(
           p,
           invoiceFallbackPhotos
         );
-        const effectiveStagePhotos = fp
-          ? resolveEffectiveStagePhotoFields(fp, assignResolvedPhotos)
-          : assignResolvedPhotos;
 
-        const isGradeChanged = fp ? !!fp.isGradeChanged : !!p.isGradeChanged;
+        const isGradeChanged = Boolean(p.isGradeChanged);
 
-        let baseObj = {
+        return {
           ...p,
           originalGradeId: origGradeId,
           originalGradeTitle: origGradeTitle,
-          isGradeChanged: isGradeChanged,
-          // 🌟 월체(isGradeChanged === true)일 때만 변경 체급 유지, 월체 취소(false)면 무조건 원래 체급(origGradeId)으로 복귀!
-          contestGradeId: isGradeChanged ? (fp?.contestGradeId || p.contestGradeId || origGradeId) : origGradeId,
-          contestGradeTitle: isGradeChanged ? (fp?.contestGradeTitle || p.contestGradeTitle || origGradeTitle) : origGradeTitle,
+          isGradeChanged,
+          contestGradeId: isGradeChanged
+            ? p.contestGradeId || origGradeId
+            : p.contestGradeId || origGradeId,
+          contestGradeTitle: isGradeChanged
+            ? p.contestGradeTitle || origGradeTitle
+            : p.contestGradeTitle || origGradeTitle,
+          heightWeight: p.heightWeight || "",
+          playerNoShow: Boolean(p.playerNoShow),
+          isWeighedIn: Boolean(p.isWeighedIn),
           ...effectiveStagePhotos,
           photos: allPlayerPhotos,
         };
-
-        if (fp) {
-          baseObj = {
-            ...baseObj,
-            ...fp,
-            // 🌟 1단계 신청서/배정의 원래 체급을 항상 originalGradeId로 절대 보존!
-            originalGradeId: origGradeId,
-            originalGradeTitle: origGradeTitle,
-            isGradeChanged: isGradeChanged,
-            contestGradeId: isGradeChanged ? (fp.contestGradeId || origGradeId) : origGradeId,
-            contestGradeTitle: isGradeChanged ? (fp.contestGradeTitle || origGradeTitle) : origGradeTitle,
-            // 🌟 [비즈니스 로직 핵심]: 선수 번호 및 표시 순서는 1단계 선수 번호 배정(assign: p)이 무조건 절대 우선!
-            playerNumber: p.playerNumber !== undefined ? p.playerNumber : fp.playerNumber,
-            playerIndex: p.playerIndex !== undefined ? p.playerIndex : fp.playerIndex,
-            // 계측 현장에서 측정한 신장/체중/통과/불참 데이터는 안전하게 보존
-            heightWeight: fp.heightWeight || p.heightWeight || "",
-            playerNoShow: fp.playerNoShow !== undefined ? fp.playerNoShow : p.playerNoShow,
-            isWeighedIn: fp.isWeighedIn !== undefined ? fp.isWeighedIn : p.isWeighedIn,
-            ...effectiveStagePhotos,
-            photos: allPlayerPhotos,
-          };
-        }
-        return baseObj;
-      });
-
-      // 🛡️ contest_players_final에만 존재하는 선수(강제등록 createdBy === 'force' 및 그랑프리 선수 등) 누락 없이 병합 보존
-      const hydratedEntryKeys = new Set(
-        mergedLoadedPlayers.map((p) => getPlayerEntryKey(p)).filter(Boolean)
-      );
-      const hydratedTupleKeys = new Set(
-        mergedLoadedPlayers.map((p) => getPlayerTupleKey(p)).filter(Boolean)
-      );
-
-      finalPlayers.forEach((fp) => {
-        if (!fp) return;
-        const eKey = getPlayerEntryKey(fp);
-        const tKey = getPlayerTupleKey(fp);
-        if (
-          (eKey && hydratedEntryKeys.has(eKey)) ||
-          (tKey && hydratedTupleKeys.has(tKey))
-        ) {
-          return;
-        }
-        const trimmedName = (fp.playerName || "").trim();
-        const telPart = (fp.playerTel || "").replace(/[^0-9]/g, "").slice(-4);
-        const nameKey = `${trimmedName}_${telPart}`;
-        const allPlayerPhotos = Array.from(
-          new Set([
-            ...((fp.playerUid && uidPhotoMap.get(fp.playerUid)) || []),
-            ...((fp.playerUid && invoicePhotosMap.get(fp.playerUid)) || []),
-            ...(namePhonePhotoMap.get(nameKey) || []),
-            ...((trimmedName && nameOnlyPhotoMap.get(trimmedName)) || []),
-            ...extractPlayerPhotos(fp),
-          ])
-        );
-        const fpFallbackPhotos = {
-          stagePhoto1:
-            (fp.playerUid && invoiceStage1Map.get(fp.playerUid)) ||
-            invoiceStage1Map.get(nameKey) ||
-            (trimmedName && invoiceStage1Map.get(trimmedName)) ||
-            "",
-          stagePhoto2:
-            (fp.playerUid && invoiceStage2Map.get(fp.playerUid)) ||
-            invoiceStage2Map.get(nameKey) ||
-            (trimmedName && invoiceStage2Map.get(trimmedName)) ||
-            "",
-          stagePhotoUrl: allPlayerPhotos[0] || "",
-        };
-        const resolvedFpPhotos = resolveEffectiveStagePhotoFields(
-          fp,
-          fpFallbackPhotos
-        );
-
-        if (eKey) hydratedEntryKeys.add(eKey);
-        if (tKey) hydratedTupleKeys.add(tKey);
-
-        mergedLoadedPlayers.push({
-          ...fp,
-          originalGradeId: fp.originalGradeId || fp.contestGradeId,
-          originalGradeTitle: fp.originalGradeTitle || fp.contestGradeTitle,
-          isGradeChanged: !!fp.isGradeChanged,
-          playerNoShow: !!fp.playerNoShow,
-          isWeighedIn: !!fp.isWeighedIn,
-          heightWeight: fp.heightWeight || "",
-          ...resolvedFpPhotos,
-          photos: allPlayerPhotos,
-        });
       });
 
       dirtyPlayerKeysRef.current.clear();
@@ -351,23 +273,22 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  // 📡 [다중 계측대 실시간 Live-Sync 리스너]
-  // 계측대 1에서 저장 시, 계측대 2 및 모든 화면에서 자동으로 신장/체중/월체/불참/무대사진이 실시간 자동 업데이트!
-  // 단, 현재 운영자가 직접 포커스하거나 타이핑 중인 행(focusedPlayerKeyRef / dirtyPlayerKeysRef / editTargetKeyRef)은 덮어쓰지 않음!
+  // 📡 [다중 계측대 실시간 Live-Sync 리스너 — 2단계 계측 레이어(weighInPlayers) 구독]
   useEffect(() => {
-    const assignDocId = currentContest?.contests?.contestPlayersAssignId;
-    if (!assignDocId) return;
+    const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+    if (!finalDocId) return;
 
     const unsub = onSnapshot(
-      doc(db, "contest_players_assign", assignDocId),
+      doc(db, "contest_players_final", finalDocId),
       (docSnap) => {
         if (!isInitialHydratedRef.current) return;
         if (docSnap.exists()) {
           const remoteData = docSnap.data();
-          const remotePlayers = remoteData?.players || [];
+          const remotePlayers = Array.isArray(remoteData?.weighInPlayers)
+            ? remoteData.weighInPlayers
+            : (remoteData?.players || []).filter((p) => !isAutoGrandPrixEntry(p));
 
           if (remotePlayers.length > 0) {
-            setPlayersAssign(remoteData);
             setPlayersArray((prevLocal) => {
               if (!prevLocal || prevLocal.length === 0) {
                 return remotePlayers.map((rp) => ({
@@ -389,67 +310,59 @@ const ContestPlayerWeighInTable = () => {
                 const k = getPlayerEntryKey(localP);
                 if (k) seenKeys.add(k);
 
-                if (remoteMap.has(k)) {
-                  const rp = remoteMap.get(k);
+                const matchedRemote =
+                  remoteMap.get(k) ||
+                  remotePlayers.find((rp) => isSameLayerPlayerEntry(rp, localP));
+
+                if (matchedRemote) {
+                  const matchedKey = getPlayerEntryKey(matchedRemote);
+                  if (matchedKey) seenKeys.add(matchedKey);
+
                   const isProtectedRow =
                     k === editTargetKeyRef.current ||
                     k === focusedPlayerKeyRef.current ||
                     dirtyPlayerKeysRef.current.has(k);
 
-                  // 현재 모달/인라인 입력 포커스 또는 미저장 타이핑 중인 행은 입력값을 절대 덮어쓰지 않음!
                   if (isProtectedRow) {
                     return {
                       ...localP,
                       ...(dirtyPhotoKeysRef.current.has(k)
                         ? {}
-                        : resolveEffectiveStagePhotoFields(rp, localP)),
+                        : resolveEffectiveStagePhotoFields(matchedRemote, localP)),
                       photos:
                         localP.photos && localP.photos.length > 0
                           ? localP.photos
-                          : rp.photos || [],
+                          : matchedRemote.photos || [],
                     };
                   }
 
                   const resolvedPhotoFields = dirtyPhotoKeysRef.current.has(k)
-                    ? resolveEffectiveStagePhotoFields(localP, rp)
-                    : resolveEffectiveStagePhotoFields(rp, localP);
+                    ? resolveEffectiveStagePhotoFields(localP, matchedRemote)
+                    : resolveEffectiveStagePhotoFields(matchedRemote, localP);
 
                   return {
                     ...localP,
-                    heightWeight: rp.heightWeight || "",
-                    playerHeight: rp.playerHeight ?? localP.playerHeight,
-                    playerWeight: rp.playerWeight ?? localP.playerWeight,
-                    height: rp.height ?? localP.height,
-                    weight: rp.weight ?? localP.weight,
-                    playerNoShow: !!rp.playerNoShow,
-                    isGradeChanged: !!rp.isGradeChanged,
-                    isWeighedIn: !!rp.isWeighedIn,
-                    originalGradeId:
-                      rp.originalGradeId || localP.originalGradeId,
-                    originalGradeTitle:
-                      rp.originalGradeTitle || localP.originalGradeTitle,
-                    contestGradeId:
-                      rp.contestGradeId || localP.contestGradeId,
-                    contestGradeTitle:
-                      rp.contestGradeTitle || localP.contestGradeTitle,
-                    playerNumber:
-                      Number(rp.playerNumber) || localP.playerNumber,
-                    playerIndex: Number(rp.playerIndex) || localP.playerIndex,
+                    ...matchedRemote,
+                    playerNoShow: Boolean(matchedRemote.playerNoShow),
+                    isGradeChanged: Boolean(matchedRemote.isGradeChanged),
+                    isWeighedIn: Boolean(matchedRemote.isWeighedIn),
                     ...resolvedPhotoFields,
                     photos:
-                      rp.photos && rp.photos.length > 0
-                        ? rp.photos
+                      matchedRemote.photos && matchedRemote.photos.length > 0
+                        ? matchedRemote.photos
                         : localP.photos,
                   };
                 }
                 return localP;
               });
 
-              // 타 계측대/강제등록에서 새로 추가된 선수가 있으면 추가 반영
               remotePlayers.forEach((rp) => {
                 const k = getPlayerEntryKey(rp);
-                if (k && !seenKeys.has(k)) {
-                  seenKeys.add(k);
+                const alreadyInLocal =
+                  (k && seenKeys.has(k)) ||
+                  updatedLocal.some((lp) => isSameLayerPlayerEntry(lp, rp));
+                if (!alreadyInLocal) {
+                  if (k) seenKeys.add(k);
                   updatedLocal.push({
                     ...rp,
                     originalGradeId: rp.originalGradeId || rp.contestGradeId,
@@ -470,7 +383,7 @@ const ContestPlayerWeighInTable = () => {
     );
 
     return () => unsub();
-  }, [currentContest?.contests?.contestPlayersAssignId]);
+  }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const initEntryList = () => {
     const dummy = [];
@@ -573,11 +486,18 @@ const ContestPlayerWeighInTable = () => {
         const latestAssignPlayers = latestAssignDoc?.players || [];
         const latestFinalDoc = finalSnap?.exists() ? finalSnap.data() : {};
         const latestFinalPlayers = latestFinalDoc?.players || [];
+        const latestWeighInPlayers = Array.isArray(latestFinalDoc?.weighInPlayers)
+          ? latestFinalDoc.weighInPlayers
+          : hydrateWeighInLayerPlayers({
+              assignPlayers: latestAssignPlayers,
+              finalDocData: latestFinalDoc,
+            });
 
         // 📸 playerUid 기반 사진 통합 맵 (다종목 출전 시 모든 체급에 동일 선수의 사진 100% 물림 보장)
         const saveUidPhotoMap = new Map();
         [
           ...latestAssignPlayers,
+          ...latestWeighInPlayers,
           ...latestFinalPlayers,
           ...(currentLocalPlayers || []),
         ].forEach((p) => {
@@ -593,8 +513,8 @@ const ContestPlayerWeighInTable = () => {
           }
         });
 
-        // 3. 최신 DB 선수 목록에 로컬 변경사항을 복합키로 안전 병합 (수정하지 않은 행은 타 데스크 원격 저장값 우선 보존)
-        const mergedAssignPlayers = latestAssignPlayers.map((dbPlayer) => {
+        // 2단계 기준 목록(latestWeighInPlayers)에 로컬 변경사항을 안전 병합 (1단계 assign 문서는 절대 역수정하지 않음!)
+        const mergedWeighInPlayers = latestWeighInPlayers.map((dbPlayer) => {
           const key = getPlayerEntryKey(dbPlayer);
           const pUidPhotos =
             (dbPlayer.playerUid && saveUidPhotoMap.get(dbPlayer.playerUid)) ||
@@ -606,10 +526,19 @@ const ContestPlayerWeighInTable = () => {
             dbPlayer.playerPhoto ||
             "";
 
-          if (localPlayersMap.has(key)) {
-            const lp = localPlayersMap.get(key);
-            const isLocalDirty = dirtySet.has(key);
-            const isPhotoDirty = dirtyPhotoKeysRef.current.has(key);
+          const matchedLocal =
+            localPlayersMap.get(key) ||
+            (currentLocalPlayers || []).find((lp) =>
+              isSameLayerPlayerEntry(lp, dbPlayer)
+            );
+
+          if (matchedLocal) {
+            const lp = matchedLocal;
+            const lpKey = getPlayerEntryKey(lp);
+            const isLocalDirty = dirtySet.has(key) || dirtySet.has(lpKey);
+            const isPhotoDirty =
+              dirtyPhotoKeysRef.current.has(key) ||
+              dirtyPhotoKeysRef.current.has(lpKey);
             const lpPhotos = extractPlayerPhotos(lp);
             const combinedPhotos = Array.from(
               new Set([...pUidPhotos, ...lpPhotos])
@@ -664,6 +593,7 @@ const ContestPlayerWeighInTable = () => {
 
             return {
               ...dbPlayer,
+              ...lp,
               heightWeight: safeHW,
               playerHeight: safeHeight,
               playerWeight: safeWeight,
@@ -679,35 +609,23 @@ const ContestPlayerWeighInTable = () => {
                 : Boolean(dbPlayer.isWeighedIn || lp.isWeighedIn),
               isGradeChanged: resolvedGradeChanged,
               originalGradeId:
-                dbPlayer.originalGradeId ||
                 lp.originalGradeId ||
+                dbPlayer.originalGradeId ||
                 dbPlayer.contestGradeId,
               originalGradeTitle:
-                dbPlayer.originalGradeTitle ||
                 lp.originalGradeTitle ||
+                dbPlayer.originalGradeTitle ||
                 dbPlayer.contestGradeTitle,
               contestGradeId: resolvedGradeChanged
                 ? lp.contestGradeId || dbPlayer.contestGradeId
-                : dbPlayer.originalGradeId || dbPlayer.contestGradeId,
+                : lp.contestGradeId || dbPlayer.originalGradeId || dbPlayer.contestGradeId,
               contestGradeTitle: resolvedGradeChanged
                 ? lp.contestGradeTitle || dbPlayer.contestGradeTitle
-                : dbPlayer.originalGradeTitle || dbPlayer.contestGradeTitle,
+                : lp.contestGradeTitle || dbPlayer.originalGradeTitle || dbPlayer.contestGradeTitle,
               playerNumber:
-                lp.playerNumber !== undefined &&
-                lp.playerNumber !== null &&
-                Number(lp.playerNumber) > 0
-                  ? Number(lp.playerNumber)
-                  : dbPlayer.playerNumber !== undefined
-                  ? dbPlayer.playerNumber
-                  : Number(lp.playerNumber) || 0,
+                Number(lp.playerNumber) || Number(dbPlayer.playerNumber) || 0,
               playerIndex:
-                lp.playerIndex !== undefined &&
-                lp.playerIndex !== null &&
-                Number(lp.playerIndex) > 0
-                  ? Number(lp.playerIndex)
-                  : dbPlayer.playerIndex !== undefined
-                  ? dbPlayer.playerIndex
-                  : Number(lp.playerIndex) || 0,
+                Number(lp.playerIndex) || Number(dbPlayer.playerIndex) || 0,
               ...resolvedPhotoFields,
               photos: combinedPhotos,
             };
@@ -739,10 +657,11 @@ const ContestPlayerWeighInTable = () => {
           };
         });
 
-        // 로컬에 새로 추가된 엔트리 병합 (자동 생성된 그랑프리 엔트리는 assign에서 제외하되 final에는 포함)
-        const extraFinalFromLocal = [];
-        localPlayersMap.forEach((localPlayer, key) => {
-          if (!mergedAssignPlayers.some((p) => getPlayerEntryKey(p) === key)) {
+        localPlayersMap.forEach((localPlayer) => {
+          if (
+            !isAutoGrandPrixEntry(localPlayer) &&
+            !mergedWeighInPlayers.some((p) => isSameLayerPlayerEntry(p, localPlayer))
+          ) {
             const pUidPhotos =
               (localPlayer.playerUid &&
                 saveUidPhotoMap.get(localPlayer.playerUid)) ||
@@ -759,7 +678,7 @@ const ContestPlayerWeighInTable = () => {
             const safeLW =
               lW || localPlayer.playerWeight || localPlayer.weight || "";
 
-            const normalizedLocal = {
+            mergedWeighInPlayers.push({
               ...localPlayer,
               heightWeight:
                 localPlayer.heightWeight ||
@@ -771,21 +690,11 @@ const ContestPlayerWeighInTable = () => {
               weight: safeLW,
               ...resolvedLocalPhotoFields,
               photos: pUidPhotos,
-            };
-
-            if (isAutoGrandPrixEntry(normalizedLocal)) {
-              extraFinalFromLocal.push(normalizedLocal);
-            } else {
-              mergedAssignPlayers.push(normalizedLocal);
-            }
+            });
           }
         });
 
-        // 4. 최종 명단 (Final) 데이터 구성 + 기존 contest_players_final의 그랑프리/강제등록 선수 100% 보존
-        const baseFinalPlayers = [
-          ...mergedAssignPlayers,
-          ...extraFinalFromLocal,
-        ].map((player) => {
+        const normalizedWeighInPlayers = mergedWeighInPlayers.map((player) => {
           const pUidPhotos =
             (player.playerUid && saveUidPhotoMap.get(player.playerUid)) ||
             extractPlayerPhotos(player);
@@ -825,46 +734,36 @@ const ContestPlayerWeighInTable = () => {
           };
         });
 
-        const mergedFinalPlayers = mergePreservingUnmatchedFinalEntries(
-          baseFinalPlayers,
-          latestFinalPlayers
-        );
+        // 🛡️ 3단계에서 이미 직접 수정·저장한 항목(layer3Edited) 및 그랑프리 항목은 덮어쓰지 않고 보존!
+        const mergedFinalPlayers = forwardWeighInToFinalPlayers({
+          nextWeighInPlayers: normalizedWeighInPlayers,
+          existingFinalPlayers: latestFinalPlayers,
+        });
 
         const nowIso = new Date().toISOString();
-        const sanitizedAssign = sanitizeDataForFirestore(mergedAssignPlayers);
+        const sanitizedWeighIn = sanitizeDataForFirestore(
+          normalizedWeighInPlayers
+        );
         const sanitizedFinal = sanitizeDataForFirestore(mergedFinalPlayers);
-
-        if (assignRef && assignSnap?.exists()) {
-          transaction.update(assignRef, {
-            ...latestAssignDoc,
-            players: sanitizedAssign,
-            updatedAt: nowIso,
-          });
-        } else if (assignRef) {
-          transaction.set(assignRef, {
-            ...latestAssignDoc,
-            contestId,
-            players: sanitizedAssign,
-            updatedAt: nowIso,
-          });
-        }
 
         if (finalRef && finalSnap?.exists()) {
           transaction.update(finalRef, {
             ...latestFinalDoc,
             contestId: latestFinalDoc.contestId || contestId,
+            weighInPlayers: sanitizedWeighIn,
             players: sanitizedFinal,
             updatedAt: nowIso,
           });
         } else if (finalRef) {
           transaction.set(finalRef, {
             contestId,
+            weighInPlayers: sanitizedWeighIn,
             players: sanitizedFinal,
             updatedAt: nowIso,
           });
         }
 
-        committedPlayersForState = mergedFinalPlayers;
+        committedPlayersForState = normalizedWeighInPlayers;
       });
 
       dirtyPlayerKeysRef.current.clear();
@@ -961,57 +860,55 @@ const ContestPlayerWeighInTable = () => {
       const assignId = currentContest?.contests?.contestPlayersAssignId;
       const finalId = currentContest?.contests?.contestPlayersFinalId;
 
-      if (assignId || finalId) {
+      if (finalId) {
         await runTransaction(db, async (transaction) => {
           const assignRef = assignId
             ? doc(db, "contest_players_assign", assignId)
             : null;
-          const finalRef = finalId
-            ? doc(db, "contest_players_final", finalId)
-            : null;
+          const finalRef = doc(db, "contest_players_final", finalId);
 
           const assignSnap = assignRef
             ? await transaction.get(assignRef)
             : null;
-          const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+          const finalSnap = await transaction.get(finalRef);
 
           const nowIso = new Date().toISOString();
           const remoteAssignPlayers = assignSnap?.exists()
             ? assignSnap.data()?.players || []
             : [];
-          const nextAssignPlayers = remoteAssignPlayers.map((p) =>
+          const remoteFinalData = finalSnap.exists() ? finalSnap.data() : {};
+          const remoteFinalPlayers = remoteFinalData?.players || [];
+          const remoteWeighInPlayers = Array.isArray(
+            remoteFinalData?.weighInPlayers
+          )
+            ? remoteFinalData.weighInPlayers
+            : hydrateWeighInLayerPlayers({
+                assignPlayers: remoteAssignPlayers,
+                finalDocData: remoteFinalData,
+              });
+
+          const nextWeighInPlayers = remoteWeighInPlayers.map((p) =>
             isSamePhotoOwner(p) ? applyStageSlotsToPlayer(p) : p
           );
 
-          const remoteFinalPlayers = finalSnap?.exists()
-            ? finalSnap.data()?.players || []
-            : [];
           const baseFinalSource =
             remoteFinalPlayers.length > 0
               ? remoteFinalPlayers
-              : nextAssignPlayers;
-          const patchedFinalPlayers = baseFinalSource.map((p) =>
+              : nextWeighInPlayers;
+          const nextFinalPlayers = baseFinalSource.map((p) =>
             isSamePhotoOwner(p) ? applyStageSlotsToPlayer(p) : p
           );
-          const nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
-            patchedFinalPlayers,
-            remoteFinalPlayers
-          );
 
-          if (assignRef && assignSnap?.exists()) {
-            transaction.update(assignRef, {
-              players: sanitizeDataForFirestore(nextAssignPlayers),
-              updatedAt: nowIso,
-            });
-          }
-          if (finalRef && finalSnap?.exists()) {
+          if (finalSnap.exists()) {
             transaction.update(finalRef, {
+              weighInPlayers: sanitizeDataForFirestore(nextWeighInPlayers),
               players: sanitizeDataForFirestore(nextFinalPlayers),
               updatedAt: nowIso,
             });
-          } else if (finalRef && nextFinalPlayers.length > 0) {
+          } else if (nextWeighInPlayers.length > 0) {
             transaction.set(finalRef, {
               contestId,
+              weighInPlayers: sanitizeDataForFirestore(nextWeighInPlayers),
               players: sanitizeDataForFirestore(nextFinalPlayers),
               updatedAt: nowIso,
             });
@@ -1350,44 +1247,37 @@ const ContestPlayerWeighInTable = () => {
       // 4. 로컬 상태 업데이트
       setPlayersArray(cleanedPlayers);
 
-      // 5. Firestore 트랜잭션으로 그랑프리/강제등록 선수 손실 없이 안전 저장
+      // 5. Firestore 트랜잭션으로 2단계(weighInPlayers) 및 미수정 3단계(players)에 사진 동기화 (1단계 assign 원본 보존)
       await runTransaction(db, async (transaction) => {
-        const assignRef = assignId
-          ? doc(db, "contest_players_assign", assignId)
-          : null;
         const finalRef = finalId
           ? doc(db, "contest_players_final", finalId)
           : null;
-        const assignSnap = assignRef ? await transaction.get(assignRef) : null;
-        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+        if (!finalRef) return;
+        const finalSnap = await transaction.get(finalRef);
 
         const nowIso = new Date().toISOString();
-        const assignCleanList = cleanedPlayers.filter(
+        const weighInCleanList = cleanedPlayers.filter(
           (p) => !isAutoGrandPrixEntry(p)
         );
         const existingFinalPlayers = finalSnap?.exists()
           ? finalSnap.data()?.players || []
           : [];
-        const finalCleanList = mergePreservingUnmatchedFinalEntries(
-          cleanedPlayers,
-          existingFinalPlayers
-        );
+        const finalCleanList = forwardWeighInToFinalPlayers({
+          nextWeighInPlayers: weighInCleanList,
+          existingFinalPlayers,
+        });
 
-        if (assignRef && assignSnap?.exists()) {
-          transaction.update(assignRef, {
-            players: sanitizeDataForFirestore(assignCleanList),
-            updatedAt: nowIso,
-          });
-        }
-        if (finalRef && finalSnap?.exists()) {
+        if (finalSnap?.exists()) {
           transaction.update(finalRef, {
             contestId,
+            weighInPlayers: sanitizeDataForFirestore(weighInCleanList),
             players: sanitizeDataForFirestore(finalCleanList),
             updatedAt: nowIso,
           });
-        } else if (finalRef) {
+        } else {
           transaction.set(finalRef, {
             contestId,
+            weighInPlayers: sanitizeDataForFirestore(weighInCleanList),
             players: sanitizeDataForFirestore(finalCleanList),
             updatedAt: nowIso,
           });
@@ -1546,56 +1436,39 @@ const ContestPlayerWeighInTable = () => {
         };
       });
 
-      const sanitizedAssignList = sanitizeDataForFirestore(cleanResetPlayers);
-
-      // 3. assign 문서 및 final 문서를 순수 원본 배정본으로 덮어쓰되, final 전용 그랑프리/강제등록 선수는 안전 보존!
+      // 3. 1단계 assign 원본 문서는 건드리지 않고, 2단계(weighInPlayers) 및 미수정 3단계 항목만 1단계 배정본으로 초기화!
       await runTransaction(db, async (transaction) => {
-        const assignRef = doc(db, "contest_players_assign", assignId);
         const finalRef = finalId
           ? doc(db, "contest_players_final", finalId)
           : null;
-        const assignSnap = await transaction.get(assignRef);
-        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+        if (!finalRef) return;
+        const finalSnap = await transaction.get(finalRef);
         const nowIso = new Date().toISOString();
 
-        if (assignSnap.exists()) {
-          transaction.update(assignRef, {
-            players: sanitizedAssignList,
+        const existingFinalPlayers = finalSnap?.exists()
+          ? finalSnap.data()?.players || []
+          : [];
+        const nextFinalPlayers = forwardWeighInToFinalPlayers({
+          nextWeighInPlayers: cleanResetPlayers,
+          existingFinalPlayers,
+        });
+        const sanitizedWeighInList = sanitizeDataForFirestore(cleanResetPlayers);
+        const sanitizedFinalList = sanitizeDataForFirestore(nextFinalPlayers);
+
+        if (finalSnap?.exists()) {
+          transaction.update(finalRef, {
+            contestId,
+            weighInPlayers: sanitizedWeighInList,
+            players: sanitizedFinalList,
             updatedAt: nowIso,
           });
-        }
-
-        if (finalRef) {
-          const existingFinalPlayers = finalSnap?.exists()
-            ? finalSnap.data()?.players || []
-            : [];
-          const preservedSpecialFinal = existingFinalPlayers.filter(
-            (fp) =>
-              fp &&
-              (fp.createdBy === "force" ||
-                fp.createBy === "force" ||
-                isGrandPrixEntryLike(fp))
-          );
-          const nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
-            cleanResetPlayers,
-            preservedSpecialFinal
-          );
-          const sanitizedFinalList =
-            sanitizeDataForFirestore(nextFinalPlayers);
-
-          if (finalSnap?.exists()) {
-            transaction.update(finalRef, {
-              contestId,
-              players: sanitizedFinalList,
-              updatedAt: nowIso,
-            });
-          } else {
-            transaction.set(finalRef, {
-              contestId,
-              players: sanitizedFinalList,
-              updatedAt: nowIso,
-            });
-          }
+        } else {
+          transaction.set(finalRef, {
+            contestId,
+            weighInPlayers: sanitizedWeighInList,
+            players: sanitizedFinalList,
+            updatedAt: nowIso,
+          });
         }
       });
 
@@ -1626,8 +1499,15 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 🎯 핀셋 개별 선수 계측 확인 및 DB 트랜잭션 즉시 저장 함수 (다중 데스크 동시성 및 그랑프리/강제등록 보존) */
-  const persistSinglePlayerWeighIn = async (targetEntryKey, updatedFields) => {
+  /** 🎯 2단계 핀셋 개별 선수 계측/정보 수정 및 DB 트랜잭션 즉시 저장
+   * - 1단계(contest_players_assign)는 절대 역수정하지 않음
+   * - 2단계(weighInPlayers)를 즉시 갱신하고, 3단계에서 직접 수정되지 않은 항목(layer3Edited !== true)만 3단계로 단방향 승계
+   */
+  const persistSinglePlayerWeighIn = async (
+    targetEntryKey,
+    updatedFields,
+    explicitBeforeSnapshot = null
+  ) => {
     const assignId = currentContest?.contests?.contestPlayersAssignId;
     const finalId = currentContest?.contests?.contestPlayersFinalId;
     const contestId =
@@ -1636,17 +1516,18 @@ const ContestPlayerWeighInTable = () => {
       currentContest?.id ||
       "";
 
+    const beforeSnapshot =
+      explicitBeforeSnapshot ||
+      playersArray.find((p) => getPlayerEntryKey(p) === targetEntryKey) ||
+      null;
+
     const isTargetMatch = (p) => {
       if (!p) return false;
+      if (beforeSnapshot && isSameLayerPlayerEntry(p, beforeSnapshot)) {
+        return true;
+      }
       const pKey = getPlayerEntryKey(p);
-      if (pKey === targetEntryKey) return true;
-      return Boolean(
-        p.playerUid &&
-          updatedFields.playerUid &&
-          p.playerUid === updatedFields.playerUid &&
-          p.contestCategoryId ===
-            (updatedFields.contestCategoryId || p.contestCategoryId)
-      );
+      return Boolean(targetEntryKey && pKey === targetEntryKey);
     };
 
     const applyPatchToPlayer = (p) => {
@@ -1656,7 +1537,9 @@ const ContestPlayerWeighInTable = () => {
           : p.heightWeight;
       const { height, weight } = parseHeightWeight(hwCandidate);
       const safeH =
-        updatedFields.heightWeight !== undefined
+        updatedFields.height !== undefined
+          ? String(updatedFields.height).trim()
+          : updatedFields.heightWeight !== undefined
           ? height
           : height ||
             updatedFields.playerHeight ||
@@ -1664,25 +1547,37 @@ const ContestPlayerWeighInTable = () => {
             p.height ||
             "";
       const safeW =
-        updatedFields.heightWeight !== undefined
+        updatedFields.weight !== undefined
+          ? String(updatedFields.weight).trim()
+          : updatedFields.heightWeight !== undefined
           ? weight
           : weight ||
             updatedFields.playerWeight ||
             p.playerWeight ||
             p.weight ||
             "";
-      const origGId =
-        updatedFields.originalGradeId || p.originalGradeId || p.contestGradeId;
-      const origGTitle =
-        updatedFields.originalGradeTitle ||
-        p.originalGradeTitle ||
-        p.contestGradeTitle;
       const isGpEntry = isGrandPrixEntryLike(p);
       const isGradeChanged = isGpEntry
         ? false
         : updatedFields.isGradeChanged !== undefined
         ? !!updatedFields.isGradeChanged
         : !!p.isGradeChanged;
+
+      // 직접 체급 변경 시(월체 해제 상태) 새로운 체급을 기준 체급으로도 반영
+      const origGId = isGradeChanged
+        ? updatedFields.originalGradeId || p.originalGradeId || p.contestGradeId
+        : updatedFields.contestGradeId ||
+          updatedFields.originalGradeId ||
+          p.originalGradeId ||
+          p.contestGradeId;
+      const origGTitle = isGradeChanged
+        ? updatedFields.originalGradeTitle ||
+          p.originalGradeTitle ||
+          p.contestGradeTitle
+        : updatedFields.contestGradeTitle ||
+          updatedFields.originalGradeTitle ||
+          p.originalGradeTitle ||
+          p.contestGradeTitle;
 
       const gpIndexPatch =
         isGpEntry && updatedFields.playerIndex !== undefined
@@ -1705,17 +1600,17 @@ const ContestPlayerWeighInTable = () => {
         ...gpIndexPatch,
         originalGradeId: origGId,
         originalGradeTitle: origGTitle,
-        isGradeChanged: isGradeChanged,
+        isGradeChanged,
         contestGradeId: isGpEntry
           ? updatedFields.contestGradeId || p.contestGradeId
           : isGradeChanged
           ? updatedFields.contestGradeId || p.contestGradeId || origGId
-          : origGId,
+          : updatedFields.contestGradeId || origGId,
         contestGradeTitle: isGpEntry
           ? updatedFields.contestGradeTitle || p.contestGradeTitle
           : isGradeChanged
           ? updatedFields.contestGradeTitle || p.contestGradeTitle || origGTitle
-          : origGTitle,
+          : updatedFields.contestGradeTitle || origGTitle,
         playerHeight: safeH,
         playerWeight: safeW,
         height: safeH,
@@ -1724,6 +1619,7 @@ const ContestPlayerWeighInTable = () => {
           updatedFields.heightWeight !== undefined
             ? updatedFields.heightWeight
             : formatHeightWeight(safeH, safeW) || p.heightWeight || "",
+        weighInEditedAt: new Date().toISOString(),
       };
     };
 
@@ -1743,87 +1639,61 @@ const ContestPlayerWeighInTable = () => {
       })
     );
 
-    if (!updatedTargetPlayer) return;
+    if (!updatedTargetPlayer || !finalId) return;
 
-    // Firestore runTransaction으로 해당 선수 엔트리만 원자적(Atomic)으로 핀셋 갱신!
     try {
       await runTransaction(db, async (transaction) => {
         const assignRef = assignId
           ? doc(db, "contest_players_assign", assignId)
           : null;
-        const finalRef = finalId
-          ? doc(db, "contest_players_final", finalId)
-          : null;
+        const finalRef = doc(db, "contest_players_final", finalId);
 
         const assignSnap = assignRef ? await transaction.get(assignRef) : null;
-        const finalSnap = finalRef ? await transaction.get(finalRef) : null;
+        const finalSnap = await transaction.get(finalRef);
         const nowIso = new Date().toISOString();
 
         const remoteAssignPlayers = assignSnap?.exists()
           ? assignSnap.data()?.players || []
           : [];
-        let matchedInAssign = false;
-        const nextAssignPlayers = remoteAssignPlayers.map((rp) => {
-          if (isTargetMatch(rp)) {
-            matchedInAssign = true;
-            return applyPatchToPlayer(rp);
+        const remoteFinalData = finalSnap.exists() ? finalSnap.data() : {};
+        const remoteFinalPlayers = remoteFinalData?.players || [];
+        const remoteWeighInBase = Array.isArray(remoteFinalData?.weighInPlayers)
+          ? remoteFinalData.weighInPlayers
+          : hydrateWeighInLayerPlayers({
+              assignPlayers: remoteAssignPlayers,
+              finalDocData: remoteFinalData,
+            });
+
+        let matchedInWeighIn = false;
+        const nextWeighInPlayers = remoteWeighInBase.map((wp) => {
+          if (!matchedInWeighIn && isTargetMatch(wp)) {
+            matchedInWeighIn = true;
+            return applyPatchToPlayer(wp);
           }
-          return rp;
+          return wp;
         });
 
-        if (!matchedInAssign && !isAutoGrandPrixEntry(updatedTargetPlayer)) {
-          nextAssignPlayers.push(updatedTargetPlayer);
+        if (!matchedInWeighIn && !isAutoGrandPrixEntry(updatedTargetPlayer)) {
+          nextWeighInPlayers.push(updatedTargetPlayer);
         }
 
-        const remoteFinalPlayers = finalSnap?.exists()
-          ? finalSnap.data()?.players || []
-          : [];
+        const nextFinalPlayers = forwardWeighInToFinalPlayers({
+          nextWeighInPlayers,
+          existingFinalPlayers: remoteFinalPlayers,
+          beforeSnapshot: beforeSnapshot || currentMatchedLocal,
+        });
 
-        let nextFinalPlayers = [];
-        if (remoteFinalPlayers.length > 0) {
-          let matchedInFinal = false;
-          const patchedFinal = remoteFinalPlayers.map((fp) => {
-            if (isTargetMatch(fp)) {
-              matchedInFinal = true;
-              return applyPatchToPlayer(fp);
-            }
-            return fp;
-          });
-          if (!matchedInFinal) {
-            patchedFinal.push(updatedTargetPlayer);
-          }
-          // assign에만 있고 final에 없던 선수도 누락 없이 병합하며, final 전용(그랑프리/강제등록) 선수는 100% 유지
-          nextFinalPlayers = mergePreservingUnmatchedFinalEntries(
-            patchedFinal,
-            nextAssignPlayers
-          );
-        } else {
-          const seedFinal = [...nextAssignPlayers];
-          if (
-            !seedFinal.some((p) => isTargetMatch(p)) &&
-            updatedTargetPlayer
-          ) {
-            seedFinal.push(updatedTargetPlayer);
-          }
-          nextFinalPlayers = seedFinal;
-        }
-
-        if (assignRef && assignSnap?.exists()) {
-          transaction.update(assignRef, {
-            players: sanitizeDataForFirestore(nextAssignPlayers),
-            updatedAt: nowIso,
-          });
-        }
-
-        if (finalRef && finalSnap?.exists()) {
+        if (finalSnap.exists()) {
           transaction.update(finalRef, {
             contestId,
+            weighInPlayers: sanitizeDataForFirestore(nextWeighInPlayers),
             players: sanitizeDataForFirestore(nextFinalPlayers),
             updatedAt: nowIso,
           });
-        } else if (finalRef) {
+        } else {
           transaction.set(finalRef, {
             contestId,
+            weighInPlayers: sanitizeDataForFirestore(nextWeighInPlayers),
             players: sanitizeDataForFirestore(nextFinalPlayers),
             updatedAt: nowIso,
           });
@@ -2030,50 +1900,86 @@ const ContestPlayerWeighInTable = () => {
     );
   };
 
-  // ✅ 번호/인덱스/신장체중 수정 모달 열기
+  // ✅ 2단계 선수 정보 직접 수정 드로어 열기
   const openNumberModal = (player) => {
     const key = getPlayerEntryKey(player);
-    const { height, weight } = parseHeightWeight(player.heightWeight);
     setEditTargetKey(key);
-    setEditValues({
-      playerNumber: Number(player.playerNumber) || 0,
-      playerIndex:
-        Number(
-          isGrandPrixEntryLike(player)
-            ? player.grandPrixIndex ?? player.playerIndex
-            : player.playerIndex
-        ) ||
-        Number(player.playerNumber) ||
-        0,
-      playerName: player.playerName || "",
-      height: height || "",
-      weight: weight || "",
-    });
+    setEditingPlayer(player);
     setNumModalOpen(true);
   };
 
-  // ✅ 번호/인덱스/신장체중 수정 적용 (DB 즉시 영구 저장)
-  const applyNumberChange = async () => {
-    const { playerNumber, playerIndex, height, weight } = editValues;
-    if (!editTargetKey || playerNumber <= 0 || playerIndex <= 0) return;
+  // ✅ 2단계 선수 정보 직접 수정 적용 (2단계 계측 레이어 즉시 저장 + 미수정 3단계 단방향 승계)
+  const handleDirectWeighInEditSave = async (beforePlayer, patchFields) => {
+    const targetKey = editTargetKey || getPlayerEntryKey(beforePlayer);
+    if (!beforePlayer) return;
 
-    const targetKey = editTargetKey;
-    const num = Number(playerNumber);
-    const pIdx = Number(playerIndex);
-    const combinedHW = formatHeightWeight(height, weight);
+    try {
+      setIsDirectSaving(true);
+      const patchedPreview = buildPatchedLayerPlayer(beforePlayer, patchFields, {
+        layer: "weighin",
+      });
+      const {
+        _entryId,
+        playerNumber,
+        playerIndex,
+        playerName,
+        playerGym,
+        playerTel,
+        playerBirth,
+        playerText,
+        contestCategoryId,
+        contestCategoryTitle,
+        contestCategorySection,
+        contestGradeId,
+        contestGradeTitle,
+        originalGradeId,
+        originalGradeTitle,
+        isGradeChanged,
+        heightWeight,
+        playerHeight,
+        playerWeight,
+        height,
+        weight,
+        playerNoShow,
+        isWeighedIn,
+      } = patchedPreview;
 
-    setNumModalOpen(false);
-    setEditTargetKey(null);
+      await persistSinglePlayerWeighIn(
+        targetKey,
+        {
+          _entryId,
+          playerNumber,
+          playerIndex,
+          playerName,
+          playerGym,
+          playerTel,
+          playerBirth,
+          playerText,
+          contestCategoryId,
+          contestCategoryTitle,
+          ...(contestCategorySection ? { contestCategorySection } : {}),
+          contestGradeId,
+          contestGradeTitle,
+          originalGradeId,
+          originalGradeTitle,
+          isGradeChanged,
+          heightWeight,
+          playerHeight,
+          playerWeight,
+          height,
+          weight,
+          playerNoShow,
+          ...(isWeighedIn !== undefined ? { isWeighedIn } : {}),
+        },
+        beforePlayer
+      );
 
-    await persistSinglePlayerWeighIn(targetKey, {
-      playerNumber: num,
-      playerIndex: pIdx,
-      heightWeight: combinedHW,
-      playerHeight: height || "",
-      playerWeight: weight || "",
-      height: height || "",
-      weight: weight || "",
-    });
+      setNumModalOpen(false);
+      setEditTargetKey(null);
+      setEditingPlayer(null);
+    } finally {
+      setIsDirectSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -2161,16 +2067,23 @@ const ContestPlayerWeighInTable = () => {
             message={message}
           />
 
-          {/* 선수 번호/인덱스/신장·체중 수정 드로어 */}
-          <WeighInNumberEditDrawer
+          {/* 2단계 선수 정보 직접 수정 드로어 */}
+          <LayerPlayerEditDrawer
             open={numModalOpen}
             onClose={() => {
-              setNumModalOpen(false);
-              setEditTargetKey(null);
+              if (!isDirectSaving) {
+                setNumModalOpen(false);
+                setEditTargetKey(null);
+                setEditingPlayer(null);
+              }
             }}
-            editValues={editValues}
-            setEditValues={setEditValues}
-            onApply={applyNumberChange}
+            layer="weighin"
+            player={editingPlayer}
+            categoriesArray={categorysArray}
+            gradesArray={gradesArray}
+            allLayerPlayers={playersArray}
+            onSave={handleDirectWeighInEditSave}
+            isSaving={isDirectSaving}
           />
 
           {/* 선수 사진 확인 및 무대용 사진 1, 2 지정 드로어 */}

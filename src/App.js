@@ -11,6 +11,7 @@ import { CurrentContestProvider } from "./contexts/CurrentContestContext";
 import { DeviceProvider } from "./contexts/DeviceContext";
 import SelectDatabase from "./pages/SelectDatabase";
 import Logout from "./pages/Logout";
+import LiveIntercomDock from "./components/intercom/LiveIntercomDock";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ContestRankSummary = lazy(() => import("./pages/ContestRankSummary"));
@@ -164,6 +165,7 @@ function App() {
         <DeviceProvider>
           <BrowserRouter>
             <UiScaleController />
+            <LiveIntercomDock />
             <Suspense fallback={<LoadingPage />}>
               <Routes>
               {/* 대시보드 & 인증 */}

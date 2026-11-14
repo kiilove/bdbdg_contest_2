@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import LoadingPage from "../pages/LoadingPage";
 import {
   useFirebaseRealtimeGetDocument,
@@ -15,12 +15,16 @@ import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import {
   removeStageCompareByLocalIndex,
   buildRealtimeCompareAfterCancel,
+  getComparePlayerKey,
+  buildAuthorityComparePlayers,
 } from "../utils/compareVoteUtils";
 import { Card, Button, Space, Tag, InputNumber, Progress, Badge } from "antd";
 import {
   TrophyOutlined,
   InfoCircleOutlined,
   CloseOutlined,
+  SafetyCertificateOutlined,
+  CheckCircleFilled,
 } from "@ant-design/icons";
 
 const CompareSetting = ({
@@ -59,6 +63,16 @@ const CompareSetting = ({
   const [votedResult, setVotedResult] = useState([]);
   const [topResult, setTopResult] = useState([]);
   const [votedValidate, setVotedValidate] = useState(true);
+
+  // 심판위원장 직권확정 전용 상태 (기존 투표 플로우와 독립·상호 호환)
+  const [authoritySelectedKeys, setAuthoritySelectedKeys] = useState([]);
+  const [authorityTouched, setAuthorityTouched] = useState(false);
+  const [authorityScoreMode, setAuthorityScoreMode] = useState(undefined);
+  const [authorityConfirmOpen, setAuthorityConfirmOpen] = useState(false);
+  const [warnModalOpen, setWarnModalOpen] = useState(false);
+  const [warnMessage, setWarnMessage] = useState({});
+  const [isConfirmSubmitting, setIsConfirmSubmitting] = useState(false);
+  const authorityCardRef = useRef(null);
 
   // 롤백용: 오픈 시점의 compares 스냅샷 + 세션내 시작 여부
   const initialComparesRef = useRef(null);
@@ -131,7 +145,7 @@ const CompareSetting = ({
     }
   };
 
-  // 현재 스테이지/체급의 마지막 compare만 제거 (다른 무대 이력 100% 보존)
+  // 현재 스테이지/체급의 마지막 compare만 제거 (다른 무대 이력 100% 보존 + 미확정 투표중 취소 대응)
   const handleCompareCancel = async (contestId) => {
     const collectionInfoByCompares = `currentStage/${contestId}/compares`;
 
@@ -139,50 +153,54 @@ const CompareSetting = ({
     const currentCategoryId = stageInfo?.categoryId;
     const currentGradeId = stageInfo?.grades?.[0]?.gradeId;
 
+    const wasCompareIng = Boolean(realtimeData?.compares?.status?.compareIng);
+    const isVotingUnconfirmed = Boolean(
+      realtimeData?.compares?.status?.compareStart && !wasCompareIng
+    );
+
     const all = Array.isArray(compareList?.compares)
       ? compareList.compares
       : Array.isArray(compareArray)
       ? compareArray
       : [];
 
-    let newCompares = [];
+    let newCompares = [...all];
     let remainingStageCompares = [];
 
-    if (currentStageId && all.some((c) => c?.stageId === currentStageId)) {
-      const stageItems = all.filter((c) => c?.stageId === currentStageId);
-      if (stageItems.length === 0) {
-        setRefresh(true);
-        setClose(false);
-        return;
-      }
-      const removed = removeStageCompareByLocalIndex(
-        all,
-        currentStageId,
-        stageItems.length - 1
-      );
-      newCompares = removed.nextAllCompares;
-      remainingStageCompares = removed.nextStageCompares;
-    } else {
-      const isCurrentGroup = (c) =>
-        c?.stageId === currentStageId ||
-        (c?.categoryId === currentCategoryId && c?.gradeId === currentGradeId);
+    const isCurrentGroup = (c) =>
+      (currentStageId && c?.stageId === currentStageId) ||
+      (!c?.stageId &&
+        c?.categoryId === currentCategoryId &&
+        c?.gradeId === currentGradeId);
 
+    if (isVotingUnconfirmed) {
+      // 아직 명단 확정 전(투표 진행 중) 취소: Firestore 직전 차수 이력은 그대로 보존하고 RTDB 투표 상태만 회수
+      remainingStageCompares = all.filter(isCurrentGroup);
+      newCompares = [...all];
+    } else if (currentStageId && all.some((c) => c?.stageId === currentStageId)) {
+      const stageItems = all.filter((c) => c?.stageId === currentStageId);
+      if (stageItems.length > 0) {
+        const removed = removeStageCompareByLocalIndex(
+          all,
+          currentStageId,
+          stageItems.length - 1
+        );
+        newCompares = removed.nextAllCompares;
+        remainingStageCompares = removed.nextStageCompares;
+      }
+    } else {
       const currentGroup = all.filter(isCurrentGroup);
       const others = all.filter((c) => !isCurrentGroup(c));
 
-      if (currentGroup.length === 0) {
-        setRefresh(true);
-        setClose(false);
-        return;
+      if (currentGroup.length > 0) {
+        const maxIdx = Math.max(
+          ...currentGroup.map((c) => Number(c.compareIndex || 0))
+        );
+        remainingStageCompares = currentGroup.filter(
+          (c) => Number(c.compareIndex) !== maxIdx
+        );
+        newCompares = [...others, ...remainingStageCompares];
       }
-
-      const maxIdx = Math.max(
-        ...currentGroup.map((c) => Number(c.compareIndex || 0))
-      );
-      remainingStageCompares = currentGroup.filter(
-        (c) => Number(c.compareIndex) !== maxIdx
-      );
-      newCompares = [...others, ...remainingStageCompares];
     }
 
     const nextRealtimePayload = buildRealtimeCompareAfterCancel(
@@ -190,17 +208,39 @@ const CompareSetting = ({
     );
 
     try {
-      // 1) 실시간 DB 상태 리셋 / 직전 차수 복원
+      // 1) 실시간 DB 상태 리셋 / 직전 차수 복원 (취소 시그널 명시)
       await updateRealtimeCompare.updateData(collectionInfoByCompares, {
         ...nextRealtimePayload,
+        status: {
+          ...nextRealtimePayload.status,
+          compareCancel: true,
+        },
+        canceledAt: Date.now(),
         judges: (realtimeData?.compares?.judges || []).map((j) => ({
           ...j,
           messageStatus: "확인전",
         })),
       });
 
-      // 2) Firestore(compare 이력) 업데이트
-      if (compareList?.id) {
+      // 1-2) 이미 확정된 비교심사 채점 도중 취소한 경우, 먼저 제출한 심판석(isEnd: true) 잠금을 즉시 해제
+      if (
+        wasCompareIng &&
+        Array.isArray(realtimeData?.judges) &&
+        realtimeData.judges.length > 0
+      ) {
+        const unlockedJudges = realtimeData.judges.map((j, idx) => ({
+          ...j,
+          seatIndex: j?.seatIndex ?? idx + 1,
+          isEnd: false,
+          errors: "",
+        }));
+        await updateRealtimeCompare.updateData(`currentStage/${contestId}`, {
+          judges: unlockedJudges,
+        });
+      }
+
+      // 2) 확정 이력 변경 시에만 Firestore(compare 이력) 업데이트
+      if (!isVotingUnconfirmed && compareList?.id) {
         await updateCompare.updateData(compareList.id, {
           ...compareList,
           compares: newCompares,
@@ -267,22 +307,91 @@ const CompareSetting = ({
     playerTopResult,
     playerVoteResult,
     contestId,
-    compareListId
+    compareListId,
+    options = {}
   ) => {
+    if (isConfirmSubmitting) return;
+
+    const isAuthority = Boolean(options.isAuthority);
+    const resolvedScoreMode =
+      options.scoreMode ||
+      votedInfo.scoreMode ||
+      realtimeData?.compares?.scoreMode;
+
+    const sanitizedPlayers = (Array.isArray(playerTopResult)
+      ? playerTopResult
+      : []
+    )
+      .filter(
+        (p) => p && p.playerNumber !== undefined && p.playerNumber !== null
+      )
+      .map((p) => {
+        const entry = {
+          playerNumber: p.playerNumber,
+          playerUid: p.playerUid || "",
+          votedCount: Number(p.votedCount || 0),
+        };
+        if (p.playerName) entry.playerName = String(p.playerName);
+        if (p.playerGym) entry.playerGym = String(p.playerGym);
+        return entry;
+      });
+
+    if (sanitizedPlayers.length === 0) {
+      setWarnMessage({
+        variant: "warning",
+        title: "확정 대상 선수 미선택",
+        body: "비교심사 대상 선수가 선택되지 않았습니다.",
+        body2: isAuthority
+          ? "심판위원장 직권확정 카드에서 호명할 선수번호를 1명 이상 선택해 주세요."
+          : "심판 득표 집계 결과가 없거나 대상 선수가 비어 있습니다. 직권확정에서 선수번호를 직접 선택할 수 있습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setWarnModalOpen(true);
+      return;
+    }
+
+    if (!resolvedScoreMode) {
+      setWarnMessage({
+        variant: "warning",
+        title: "채점모드 선택 필요",
+        body: "채점모드(대상자 / 전체)가 선택되지 않았습니다.",
+        body2: "채점모드를 먼저 선택한 뒤 확정을 진행해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setWarnModalOpen(true);
+      return;
+    }
+
+    const parsedVotedLen = Number.parseInt(
+      votedInfo.playerLength ?? realtimeData?.compares?.playerLength,
+      10
+    );
+    const resolvedPlayerLength = isAuthority
+      ? sanitizedPlayers.length
+      : Number.isFinite(parsedVotedLen) && parsedVotedLen > 0
+      ? parsedVotedLen
+      : sanitizedPlayers.length;
+
     const compareInfo = {
       contestId,
-      stageId: stageInfo?.stageId,
-      categoryId: stageInfo?.categoryId,
-      gradeId: stageInfo?.grades?.[0]?.gradeId,
-      categoryTitle: stageInfo?.categoryTitle,
+      stageId: stageInfo?.stageId || realtimeData?.stageId || "",
+      categoryId: stageInfo?.categoryId || realtimeData?.categoryId || "",
+      gradeId:
+        stageInfo?.grades?.[0]?.gradeId || realtimeData?.gradeId || "",
+      categoryTitle:
+        stageInfo?.categoryTitle || realtimeData?.categoryTitle || "",
       gradeTitle: stageGradeLabel,
       compareIndex: propCompareIndex,
-      comparePlayerLength: Number.parseInt(votedInfo.playerLength, 10),
-      compareScoreMode: votedInfo.scoreMode,
-      players: [...(playerTopResult || [])],
+      comparePlayerLength: resolvedPlayerLength,
+      compareScoreMode: resolvedScoreMode,
+      confirmedBy: isAuthority ? "head_authority" : "judge_vote",
+      players: sanitizedPlayers,
       votedResult: [...(playerVoteResult || [])],
     };
 
+    setIsConfirmSubmitting(true);
     try {
       const collectionInfoCompares = `currentStage/${contestId}/compares`;
 
@@ -296,38 +405,79 @@ const CompareSetting = ({
       const baseAllCompares = Array.isArray(compareList?.compares)
         ? compareList.compares
         : compareArray;
+      const targetStageIdForPrev =
+        stageInfo?.stageId || realtimeData?.stageId || "";
+      const prevStageCompares = baseAllCompares.filter((c) =>
+        targetStageIdForPrev ? c?.stageId === targetStageIdForPrev : true
+      );
+      const prevRoundPlayers =
+        prevStageCompares.length > 0 &&
+        Array.isArray(prevStageCompares[prevStageCompares.length - 1]?.players)
+          ? [...prevStageCompares[prevStageCompares.length - 1].players]
+          : [];
       const newCompares = [...baseAllCompares, compareInfo];
 
-      const confirmedNumbers = (playerTopResult || [])
+      const confirmedNumbers = sanitizedPlayers
         .map((p) => Number(p.playerNumber))
         .filter((n) => Number.isFinite(n))
         .sort((a, b) => a - b);
 
       await updateRealtimeCompare.updateData(collectionInfoCompares, {
-        ...realtimeData?.compares,
-        status: { ...newStatus },
-        players: [...(playerTopResult || [])],
+        ...(realtimeData?.compares || {}),
+        stageId: stageInfo?.stageId || realtimeData?.stageId || "",
+        compareIndex: propCompareIndex,
+        playerLength: resolvedPlayerLength,
+        scoreMode: resolvedScoreMode,
+        voteRange:
+          votedInfo?.voteRange || realtimeData?.compares?.voteRange || "all",
+        confirmedBy: isAuthority ? "head_authority" : "judge_vote",
+        tieBreakGradeId: null,
+        tieBreakGradeTitle: null,
+        tieBreakStartRank: null,
+        tieBreakEndRank: null,
+        lockedPlayers: [],
+        status: { ...newStatus, isTieBreak: false },
+        players: sanitizedPlayers,
+        prevPlayers: prevRoundPlayers,
         confirmed: {
           count: confirmedNumbers.length,
           numbers: confirmedNumbers,
         },
       });
 
-      await updateCompare.updateData(compareListId, {
-        ...compareList,
-        compares: [...newCompares],
-      });
+      // 비교심사 확정 시 기존 채점 종료(isEnd: true) 좌석을 재채점 가능 상태(isEnd: false)로 동기화
+      if (Array.isArray(realtimeData?.judges) && realtimeData.judges.length > 0) {
+        const resetJudges = realtimeData.judges.map((j, idx) => ({
+          ...j,
+          seatIndex: j?.seatIndex ?? idx + 1,
+          isEnd: false,
+          errors: "",
+        }));
+        await updateRealtimeCompare.updateData(`currentStage/${contestId}`, {
+          judges: resetJudges,
+        });
+      }
+
+      if (compareListId) {
+        await updateCompare.updateData(compareListId, {
+          ...compareList,
+          compares: [...newCompares],
+        });
+      }
 
       setCompareArray(newCompares);
       setCompareList((prev) => ({ ...(prev || {}), compares: newCompares }));
 
       // 명단확정까지 완료했으므로 롤백 대상 아님
       setStartedInThisSession(false);
+      setAuthorityConfirmOpen(false);
 
       setRefresh(true);
       setClose(false);
     } catch (error) {
       console.error("Error updating compare players:", error);
+    } finally {
+      setIsConfirmSubmitting(false);
     }
   };
 
@@ -506,6 +656,198 @@ const CompareSetting = ({
       ? Math.max(...votedResult.map((v) => v.votedCount))
       : 0;
 
+  // 출전 선수 오름차순 목록 및 직전 차수 선발 명단 (직권확정용)
+  const sortedStagePlayers = useMemo(() => {
+    const list = Array.isArray(matchedOriginalPlayers)
+      ? [...matchedOriginalPlayers]
+      : [];
+    return list.sort(
+      (a, b) => Number(a?.playerNumber || 0) - Number(b?.playerNumber || 0)
+    );
+  }, [matchedOriginalPlayers]);
+
+  const prevRoundPlayers = useMemo(() => {
+    if (!Array.isArray(currentCompareArray) || currentCompareArray.length === 0) {
+      return [];
+    }
+    const lastRound = currentCompareArray[currentCompareArray.length - 1];
+    return Array.isArray(lastRound?.players) ? lastRound.players : [];
+  }, [currentCompareArray]);
+
+  const prevRoundNumberSet = useMemo(
+    () =>
+      new Set(
+        prevRoundPlayers
+          .map((p) =>
+            p?.playerNumber !== undefined && p?.playerNumber !== null
+              ? String(p.playerNumber)
+              : ""
+          )
+          .filter(Boolean)
+      ),
+    [prevRoundPlayers]
+  );
+
+  // 상단 채점모드 설정과 직권확정 채점모드 동기화
+  useEffect(() => {
+    const syncedMode =
+      realtimeData?.compares?.status?.compareStart
+        ? realtimeData?.compares?.scoreMode || votedInfo.scoreMode
+        : votedInfo.scoreMode;
+    if (syncedMode) {
+      setAuthorityScoreMode(syncedMode);
+    }
+  }, [
+    votedInfo.scoreMode,
+    realtimeData?.compares?.status?.compareStart,
+    realtimeData?.compares?.scoreMode,
+  ]);
+
+  // 투표 진행 중 득표 집계(topResult)가 갱신되면 수동 조작 전에는 자동으로 직권 후보에 반영
+  useEffect(() => {
+    if (
+      realtimeData?.compares?.status?.compareStart &&
+      !authorityTouched &&
+      Array.isArray(topResult) &&
+      topResult.length > 0
+    ) {
+      const matchedKeys = sortedStagePlayers
+        .filter((stagePlayer) =>
+          topResult.some((top) =>
+            stagePlayer?.playerUid && top?.playerUid
+              ? top.playerUid === stagePlayer.playerUid &&
+                String(top.playerNumber) === String(stagePlayer.playerNumber)
+              : String(top?.playerNumber) === String(stagePlayer?.playerNumber)
+          )
+        )
+        .map((p) => getComparePlayerKey(p))
+        .filter(Boolean);
+      setAuthoritySelectedKeys(matchedKeys);
+    }
+  }, [
+    realtimeData?.compares?.status?.compareStart,
+    authorityTouched,
+    topResult,
+    sortedStagePlayers,
+  ]);
+
+  const effectiveAuthorityScoreMode =
+    authorityScoreMode ||
+    votedInfo.scoreMode ||
+    realtimeData?.compares?.scoreMode;
+
+  const authoritySelectedPlayers = useMemo(
+    () =>
+      buildAuthorityComparePlayers(
+        sortedStagePlayers,
+        authoritySelectedKeys,
+        votedResult
+      ),
+    [sortedStagePlayers, authoritySelectedKeys, votedResult]
+  );
+
+  const authoritySelectedKeySet = useMemo(
+    () => new Set(authoritySelectedKeys),
+    [authoritySelectedKeys]
+  );
+
+  const getScoreModeLabel = (mode) => {
+    if (mode === "all") return "전체 (출전선수 전원 채점)";
+    if (mode === "topOnly") return "대상자 (비교심사 대상자만 채점)";
+    if (mode === "topWithSub")
+      return `${propCompareIndex - 1}차 전체 (이전 차수 대상 전체 채점)`;
+    return "미선택";
+  };
+
+  const handleToggleAuthorityPlayer = (player) => {
+    const key = getComparePlayerKey(player);
+    if (!key) return;
+    setAuthorityTouched(true);
+    setAuthoritySelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleLoadCurrentTopToAuthority = () => {
+    const matchedKeys = sortedStagePlayers
+      .filter((stagePlayer) =>
+        (topResult || []).some((top) =>
+          stagePlayer?.playerUid && top?.playerUid
+            ? top.playerUid === stagePlayer.playerUid &&
+              String(top.playerNumber) === String(stagePlayer.playerNumber)
+            : String(top?.playerNumber) === String(stagePlayer?.playerNumber)
+        )
+      )
+      .map((p) => getComparePlayerKey(p))
+      .filter(Boolean);
+    setAuthorityTouched(true);
+    setAuthoritySelectedKeys(matchedKeys);
+  };
+
+  const handleLoadPrevRoundToAuthority = () => {
+    const matchedKeys = sortedStagePlayers
+      .filter((stagePlayer) =>
+        prevRoundNumberSet.has(String(stagePlayer?.playerNumber))
+      )
+      .map((p) => getComparePlayerKey(p))
+      .filter(Boolean);
+    setAuthorityTouched(true);
+    setAuthoritySelectedKeys(matchedKeys);
+  };
+
+  const handleClearAuthorityPlayers = () => {
+    setAuthorityTouched(true);
+    setAuthoritySelectedKeys([]);
+  };
+
+  const handleSelectAuthorityScoreMode = (mode) => {
+    setAuthorityScoreMode(mode);
+    if (!realtimeData?.compares?.status?.compareStart) {
+      setVotedInfo((prev) => ({
+        ...prev,
+        scoreMode: mode,
+      }));
+    }
+  };
+
+  const handleRequestAuthorityConfirm = () => {
+    if (authoritySelectedPlayers.length === 0) {
+      authorityCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      setWarnMessage({
+        variant: "warning",
+        title: "직권 선발 선수 선택 필요",
+        body: "심판위원장 직권으로 호명할 선수번호를 먼저 선택해 주세요.",
+        body2:
+          "심판위원장 직권확정 영역(또는 득표표의 선수번호)을 클릭해 대상 선수를 지정할 수 있습니다.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setWarnModalOpen(true);
+      return;
+    }
+
+    if (!effectiveAuthorityScoreMode) {
+      authorityCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      setWarnMessage({
+        variant: "warning",
+        title: "채점모드 선택 필요",
+        body: "직권확정에 적용할 채점모드(대상자 / 전체)를 선택해 주세요.",
+        isButton: true,
+        confirmButtonText: "확인",
+      });
+      setWarnModalOpen(true);
+      return;
+    }
+
+    setAuthorityConfirmOpen(true);
+  };
+
   // 닫기 시 롤백 처리 (main 원본 유지)
   const handleCloseWithRollback = async () => {
     try {
@@ -563,6 +905,265 @@ const CompareSetting = ({
     }
   };
 
+  const renderAuthorityCard = () => {
+    const isVoteRunning = Boolean(realtimeData?.compares?.status?.compareStart);
+    const targetLenHint = Number(
+      votedInfo?.playerLength || realtimeData?.compares?.playerLength || 0
+    );
+    const selectedNumbersText = authoritySelectedPlayers
+      .map((p) => `${p.playerNumber}번`)
+      .join(", ");
+
+    return (
+      <div ref={authorityCardRef} className="w-full">
+        <Card
+          className="w-full border border-[#f59e0b]/60 bg-white shadow-xs"
+          title={
+            <div className="flex flex-wrap items-center justify-between gap-2 py-0.5">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#fffbeb] border border-[#fde68a]">
+                  <SafetyCertificateOutlined className="text-[#d97706] text-base" />
+                </div>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-base text-[#171717]">
+                      심판위원장 직권확정
+                    </span>
+                    <Tag color="gold" className="m-0 font-bold">
+                      위원장 권한
+                    </Tag>
+                  </div>
+                </div>
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-[#b45309] bg-[#fffbeb] border border-[#fde68a] px-2.5 py-1 rounded-md tabular-nums">
+                직권 선택 {authoritySelectedPlayers.length}명
+                {targetLenHint > 0 ? ` (참고 TOP ${targetLenHint})` : ""}
+              </span>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <div className="text-xs sm:text-sm text-[#525252] bg-[#fafafa] border border-[#e4e4e7] rounded-lg px-3.5 py-2.5 leading-relaxed">
+              {isVoteRunning
+                ? "심판 투표 미완료(0표 포함) 또는 동점자 발생 시에도 심판위원장 직권으로 호명 선수를 직접 선택·조정하여 즉시 명단을 확정할 수 있습니다."
+                : "심판 태블릿 투표를 거치지 않고 심판위원장 직권으로 비교심사 대상 선수를 직접 지명하여 즉시 확정할 수 있습니다."}
+            </div>
+
+            {/* 1. 직권확정 채점모드 확인/선택 */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-[#0f172a]">
+                  직권확정 적용 채점모드
+                </span>
+                {effectiveAuthorityScoreMode && (
+                  <span className="text-xs font-semibold text-[#2563eb]">
+                    선택됨: {getScoreModeLabel(effectiveAuthorityScoreMode)}
+                  </span>
+                )}
+              </div>
+              <Space wrap>
+                <Button
+                  size="middle"
+                  type={
+                    effectiveAuthorityScoreMode === "all"
+                      ? "primary"
+                      : "default"
+                  }
+                  onClick={() => handleSelectAuthorityScoreMode("all")}
+                  className="min-w-[105px] font-semibold"
+                >
+                  전체
+                </Button>
+                {propCompareIndex > 1 && (
+                  <Button
+                    size="middle"
+                    type={
+                      effectiveAuthorityScoreMode === "topWithSub"
+                        ? "primary"
+                        : "default"
+                    }
+                    onClick={() => handleSelectAuthorityScoreMode("topWithSub")}
+                    className="min-w-[105px] font-semibold"
+                  >
+                    {propCompareIndex - 1}차 전체
+                  </Button>
+                )}
+                <Button
+                  size="middle"
+                  type={
+                    effectiveAuthorityScoreMode === "topOnly"
+                      ? "primary"
+                      : "default"
+                  }
+                  onClick={() => handleSelectAuthorityScoreMode("topOnly")}
+                  className="min-w-[105px] font-semibold"
+                >
+                  대상자
+                </Button>
+              </Space>
+            </div>
+
+            {/* 2. 직권 선발 선수 번호 원터치 선택 */}
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold text-[#0f172a]">
+                  호명 대상 선수 직접 선택 (번호 터치)
+                </span>
+                <Space size="small" wrap>
+                  {topResult?.length > 0 && (
+                    <Button
+                      size="small"
+                      onClick={handleLoadCurrentTopToAuthority}
+                      className="font-semibold"
+                    >
+                      현재 TOP ({topResult.length}명) 불러오기
+                    </Button>
+                  )}
+                  {propCompareIndex > 1 && prevRoundPlayers.length > 0 && (
+                    <Button
+                      size="small"
+                      onClick={handleLoadPrevRoundToAuthority}
+                      className="font-semibold"
+                    >
+                      {propCompareIndex - 1}차 명단 ({prevRoundPlayers.length}명)
+                      불러오기
+                    </Button>
+                  )}
+                  {authoritySelectedKeys.length > 0 && (
+                    <Button
+                      size="small"
+                      danger
+                      onClick={handleClearAuthorityPlayers}
+                      className="font-semibold"
+                    >
+                      선택 초기화
+                    </Button>
+                  )}
+                </Space>
+              </div>
+
+              {sortedStagePlayers.length === 0 ? (
+                <div className="text-sm text-[#737373] py-3 px-3.5 rounded-lg bg-[#fafafa] border border-[#e4e4e7]">
+                  현재 무대의 출전 선수 명단을 불러오는 중이거나 등록된 선수가 없습니다.
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                  {sortedStagePlayers.map((player, idx) => {
+                    const pKey = getComparePlayerKey(player);
+                    const isSelected = authoritySelectedKeySet.has(pKey);
+                    const isPrevTop =
+                      propCompareIndex > 1 &&
+                      prevRoundNumberSet.has(String(player.playerNumber));
+                    const votes =
+                      votedResult
+                        ?.filter((f) =>
+                          player.playerUid && f.playerUid
+                            ? f.playerUid === player.playerUid &&
+                              String(f.playerNumber) ===
+                                String(player.playerNumber)
+                            : String(f.playerNumber) ===
+                              String(player.playerNumber)
+                        )
+                        .reduce((sum, item) => sum + (item.votedCount || 0), 0) ||
+                      0;
+
+                    return (
+                      <button
+                        key={pKey || idx}
+                        type="button"
+                        onClick={() => handleToggleAuthorityPlayer(player)}
+                        className={`relative flex flex-col items-center justify-center rounded-[10px] px-2.5 py-2.5 border transition-all cursor-pointer select-none ${
+                          isSelected
+                            ? "bg-[#fffbeb] border-2 border-[#d97706] text-[#92400e] shadow-xs"
+                            : "bg-white hover:bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a]"
+                        }`}
+                      >
+                        {isSelected && (
+                          <CheckCircleFilled className="absolute top-1.5 right-1.5 text-[#d97706] text-sm" />
+                        )}
+                        {isPrevTop && !isSelected && (
+                          <span className="absolute top-1 left-1.5 text-[10px] font-bold text-[#2563eb]">
+                            {propCompareIndex - 1}차
+                          </span>
+                        )}
+                        <span className="text-lg font-extrabold font-mono tabular-nums leading-tight">
+                          {player.playerNumber}번
+                        </span>
+                        {player.playerName && (
+                          <span className="text-[11px] font-medium text-[#525252] truncate max-w-full mt-0.5">
+                            {player.playerName}
+                          </span>
+                        )}
+                        {isVoteRunning && (
+                          <span
+                            className={`mt-1 px-1.5 py-0.2 rounded text-[11px] font-bold tabular-nums ${
+                              votes > 0
+                                ? "bg-[#eff6ff] text-[#1d4ed8]"
+                                : "bg-[#f1f5f9] text-[#64748b]"
+                            }`}
+                          >
+                            {votes}표
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 3. 선택 요약 및 직권확정 실행 버튼 */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-[#e4e4e7]">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-[#64748b]">
+                  직권 확정 예정 명단
+                </span>
+                {authoritySelectedPlayers.length > 0 ? (
+                  <span className="text-sm sm:text-base font-extrabold text-[#171717] tabular-nums">
+                    {selectedNumbersText} (총 {authoritySelectedPlayers.length}명)
+                  </span>
+                ) : (
+                  <span className="text-sm font-medium text-[#94a3b8]">
+                    위 번호 버튼을 눌러 직권 선발할 선수를 선택해 주세요
+                  </span>
+                )}
+              </div>
+
+              <Button
+                type="primary"
+                size="large"
+                disabled={
+                  isConfirmSubmitting ||
+                  authoritySelectedPlayers.length === 0 ||
+                  !effectiveAuthorityScoreMode
+                }
+                loading={isConfirmSubmitting}
+                icon={<SafetyCertificateOutlined />}
+                onClick={handleRequestAuthorityConfirm}
+                style={
+                  authoritySelectedPlayers.length > 0 &&
+                  effectiveAuthorityScoreMode
+                    ? {
+                        backgroundColor: "#d97706",
+                        borderColor: "#d97706",
+                        color: "#ffffff",
+                      }
+                    : undefined
+                }
+                className="w-full sm:w-auto min-w-[230px] h-12 font-bold text-base"
+              >
+                심판위원장 직권확정
+                {authoritySelectedPlayers.length > 0
+                  ? ` (${authoritySelectedPlayers.length}명)`
+                  : ""}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
   return (
     <div className="flex w-full h-full flex-col bg-[#fafafa] overflow-y-auto">
       {/* 드로어 상단 고정 헤더 */}
@@ -614,6 +1215,41 @@ const CompareSetting = ({
               onConfirm={() => {
                 handleCompareCancel(currentContest?.contests?.id);
               }}
+            />
+            <ConfirmationModal
+              isOpen={warnModalOpen}
+              message={warnMessage}
+              onCancel={() => setWarnModalOpen(false)}
+              onConfirm={() => setWarnModalOpen(false)}
+            />
+            <ConfirmationModal
+              isOpen={authorityConfirmOpen}
+              message={{
+                variant: "warning",
+                title: "심판위원장 직권확정 확인",
+                body: `${propCompareIndex}차 비교심사 직권 선발: ${authoritySelectedPlayers
+                  .map((p) => `${p.playerNumber}번`)
+                  .join(", ")} (총 ${authoritySelectedPlayers.length}명)`,
+                body2: `적용 채점모드: ${getScoreModeLabel(
+                  effectiveAuthorityScoreMode
+                )} — 심판위원장 직권으로 비교심사 명단을 즉시 확정하시겠습니까?`,
+                isButton: true,
+                cancelButtonText: "취소",
+                confirmButtonText: "직권확정 실행",
+              }}
+              onCancel={() => setAuthorityConfirmOpen(false)}
+              onConfirm={() =>
+                handleUpdateComparePlayers(
+                  authoritySelectedPlayers,
+                  votedResult,
+                  currentContest?.contests?.id,
+                  currentContest?.contests?.contestComparesListId,
+                  {
+                    isAuthority: true,
+                    scoreMode: effectiveAuthorityScoreMode,
+                  }
+                )
+              }
             />
 
             <Card className="w-full border border-[#cbd5e1] shadow-xs">
@@ -929,18 +1565,27 @@ const CompareSetting = ({
               </Space>
             </Card>
 
+            {/* 투표 개시 전에도 심판 투표 없이 바로 위원장 직권확정 가능 */}
+            {!realtimeData?.compares?.status?.compareStart &&
+              renderAuthorityCard()}
+
             {realtimeData?.compares?.status?.compareStart && (
               <div className="flex w-full h-auto flex-col gap-y-4">
                 {/* 득표 현황 */}
                 <Card
                   className="border border-[#cbd5e1] shadow-xs"
                   title={
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#eff6ff] border border-[#bfdbfe]">
-                        <TrophyOutlined className="text-[#2563eb]" />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#eff6ff] border border-[#bfdbfe]">
+                          <TrophyOutlined className="text-[#2563eb]" />
+                        </div>
+                        <span className="font-bold text-base text-[#171717]">
+                          비교심사 득표 및 투표현황
+                        </span>
                       </div>
-                      <span className="font-bold text-base text-[#171717]">
-                        비교심사 득표 및 투표현황
+                      <span className="text-xs font-medium text-[#64748b]">
+                        선수번호 클릭 시 직권확정 명단에 반영됩니다
                       </span>
                     </div>
                   }
@@ -954,22 +1599,33 @@ const CompareSetting = ({
                               선수번호
                             </th>
                             {(matchedOriginalPlayers || []).map(
-                              (player, pIdx) => (
-                                <th
-                                  key={
-                                    player.playerUid ||
-                                    `${player.contestGradeId || ""}-${player.playerNumber}-${pIdx}`
-                                  }
-                                  className="border border-gray-300 p-3 text-center font-bold"
-                                >
-                                  <Tag
-                                    color="blue"
-                                    className="text-base font-bold px-2.5 py-0.5 m-0"
+                              (player, pIdx) => {
+                                const isAuthSelected =
+                                  authoritySelectedKeySet.has(
+                                    getComparePlayerKey(player)
+                                  );
+                                return (
+                                  <th
+                                    key={
+                                      player.playerUid ||
+                                      `${player.contestGradeId || ""}-${player.playerNumber}-${pIdx}`
+                                    }
+                                    onClick={() =>
+                                      handleToggleAuthorityPlayer(player)
+                                    }
+                                    title="클릭하여 심판위원장 직권확정 대상 선택/해제"
+                                    className="border border-gray-300 p-3 text-center font-bold cursor-pointer hover:bg-[#eff6ff] transition-colors"
                                   >
-                                    {player.playerNumber}
-                                  </Tag>
-                                </th>
-                              )
+                                    <Tag
+                                      color={isAuthSelected ? "gold" : "blue"}
+                                      className="text-base font-bold px-2.5 py-0.5 m-0 cursor-pointer select-none"
+                                    >
+                                      {player.playerNumber}
+                                      {isAuthSelected ? " ✓" : ""}
+                                    </Tag>
+                                  </th>
+                                );
+                              }
                             )}
                           </tr>
                         </thead>
@@ -1126,8 +1782,8 @@ const CompareSetting = ({
                     </div>
 
                     <Space wrap>
-                      {topResult?.length > 0 &&
-                        topResult?.map((top, tIdx) => (
+                      {topResult?.length > 0 ? (
+                        topResult.map((top, tIdx) => (
                           <Badge
                             key={tIdx}
                             count={top.playerNumber}
@@ -1145,10 +1801,22 @@ const CompareSetting = ({
                               justifyContent: "center",
                             }}
                           />
-                        ))}
+                        ))
+                      ) : (
+                        <span className="text-sm font-medium text-[#15803d]/80">
+                          아직 집계된 심판 득표가 없습니다. 심판 투표를 대기하거나 아래{" "}
+                          <strong className="font-bold text-[#14532d]">
+                            심판위원장 직권확정
+                          </strong>
+                          에서 호명 선수를 직접 선택해 확정할 수 있습니다.
+                        </span>
+                      )}
                     </Space>
                   </div>
                 </Card>
+
+                {/* 투표 진행 중에도 즉시 직권 지명·조정 가능한 위원장 직권확정 카드 */}
+                {renderAuthorityCard()}
 
                 {/* 심판 투표 상황 */}
                 <Card
@@ -1273,21 +1941,25 @@ const CompareSetting = ({
                         </Button>
                       )}
 
-                      {/* 서브 버튼: 직권확정 */}
+                      {/* 서브 버튼: 심판위원장 직권확정 */}
                       <Button
-                        type="link"
-                        size="small"
-                        onClick={() =>
-                          handleUpdateComparePlayers(
-                            topResult,
-                            votedResult,
-                            currentContest.contests.id,
-                            currentContest.contests.contestComparesListId
-                          )
-                        }
-                        className="text-gray-500 hover:text-gray-800 font-medium"
+                        type="default"
+                        size="large"
+                        icon={<SafetyCertificateOutlined />}
+                        disabled={isConfirmSubmitting}
+                        loading={isConfirmSubmitting}
+                        onClick={handleRequestAuthorityConfirm}
+                        style={{
+                          borderColor: "#d97706",
+                          color: "#b45309",
+                          backgroundColor: "#fffbeb",
+                        }}
+                        className="w-full md:w-auto min-w-[220px] h-11 font-bold"
                       >
-                        직권확정
+                        심판위원장 직권확정
+                        {authoritySelectedPlayers.length > 0
+                          ? ` (${authoritySelectedPlayers.length}명)`
+                          : ""}
                       </Button>
                     </Space>
                   </div>

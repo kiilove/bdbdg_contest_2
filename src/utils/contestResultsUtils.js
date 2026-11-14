@@ -1,11 +1,14 @@
 import {
   collection,
+  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
   writeBatch,
 } from "firebase/firestore";
+import { get as rtdbGet, ref as rtdbRef, update as rtdbUpdate } from "firebase/database";
 import { sanitizeForFirestore } from "./firestoreSanitize.js";
 
 /**
@@ -167,4 +170,181 @@ export const saveGradeResultsAtomically = async ({
 
   await batch.commit();
   return savedDocs;
+};
+
+export const formatResultDocTimestamp = (item) => {
+  const ts = extractResultDocTimestamp(item);
+  if (!ts) return "";
+  try {
+    return new Date(ts).toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch (e) {
+    return "";
+  }
+};
+
+const syncRealtimeResultSavedAfterDelete = async ({
+  db,
+  database,
+  contestId,
+  gradeIds = [],
+}) => {
+  const effectiveContestId = String(contestId || "").trim();
+  const uniqueGradeIds = Array.from(
+    new Set(
+      (gradeIds || [])
+        .map((gid) => String(gid || "").trim())
+        .filter(Boolean)
+    )
+  );
+  if (!db || !database || !effectiveContestId || uniqueGradeIds.length === 0) {
+    return;
+  }
+
+  try {
+    const emptyGradeIds = [];
+    for (const gid of uniqueGradeIds) {
+      const remainSnap = await getDocs(
+        query(
+          collection(db, "contest_results_list"),
+          where("contestId", "==", effectiveContestId),
+          where("gradeId", "==", gid)
+        )
+      );
+      if (remainSnap.empty) {
+        emptyGradeIds.push(gid);
+      }
+    }
+    if (emptyGradeIds.length === 0) return;
+
+    const stageSnap = await rtdbGet(
+      rtdbRef(database, `currentStage/${effectiveContestId}/resultSaved`)
+    );
+    if (!stageSnap.exists()) return;
+    const currentSaved = stageSnap.val();
+    if (!Array.isArray(currentSaved)) return;
+
+    const emptySet = new Set(emptyGradeIds);
+    const nextSaved = currentSaved.filter((gid) => !emptySet.has(gid));
+    if (nextSaved.length !== currentSaved.length) {
+      await rtdbUpdate(rtdbRef(database, `currentStage/${effectiveContestId}`), {
+        resultSaved: nextSaved,
+      });
+    }
+  } catch (err) {
+    console.warn("RTDB resultSaved 동기화 건너뜀:", err);
+  }
+};
+
+/**
+ * contest_results_list 단일 문서를 정확한 문서 ID(docId)로만 삭제
+ */
+export const deleteContestResultDocumentById = async ({
+  db,
+  database = null,
+  docId,
+  contestId = "",
+  gradeId = "",
+}) => {
+  const exactDocId = String(docId || "").trim();
+  if (!db || !exactDocId) {
+    throw new Error("삭제할 채점표(집계) 문서 ID가 지정되지 않았습니다.");
+  }
+
+  const targetRef = doc(db, "contest_results_list", exactDocId);
+  let resolvedContestId = String(contestId || "").trim();
+  let resolvedGradeId = String(gradeId || "").trim();
+
+  if (!resolvedContestId || !resolvedGradeId) {
+    try {
+      const snap = await getDoc(targetRef);
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        resolvedContestId = resolvedContestId || String(data.contestId || "").trim();
+        resolvedGradeId = resolvedGradeId || String(data.gradeId || "").trim();
+      }
+    } catch (e) {
+      // 사전 메타 조회 실패 시에도 정확히 targetRef 삭제는 진행
+    }
+  }
+
+  await deleteDoc(targetRef);
+
+  if (database && resolvedContestId && resolvedGradeId) {
+    await syncRealtimeResultSavedAfterDelete({
+      db,
+      database,
+      contestId: resolvedContestId,
+      gradeIds: [resolvedGradeId],
+    });
+  }
+
+  return exactDocId;
+};
+
+/**
+ * contest_results_list 명시된 문서 ID 배열만 원자적(chunked writeBatch) 삭제
+ */
+export const deleteContestResultDocumentsByIds = async ({
+  db,
+  database = null,
+  docs = [],
+  contestId = "",
+}) => {
+  if (!db) {
+    throw new Error("데이터베이스 연결이 유효하지 않습니다.");
+  }
+
+  const normalized = [];
+  const seen = new Set();
+  (docs || []).forEach((entry) => {
+    const id = String(typeof entry === "string" ? entry : entry?.id || "").trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    normalized.push({
+      id,
+      contestId:
+        typeof entry === "object" && entry
+          ? String(entry.contestId || contestId || "").trim()
+          : String(contestId || "").trim(),
+      gradeId:
+        typeof entry === "object" && entry
+          ? String(entry.gradeId || "").trim()
+          : "",
+    });
+  });
+
+  if (normalized.length === 0) return [];
+
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < normalized.length; i += CHUNK_SIZE) {
+    const chunk = normalized.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((item) => {
+      batch.delete(doc(db, "contest_results_list", item.id));
+    });
+    await batch.commit();
+  }
+
+  const effectiveContestId =
+    String(contestId || "").trim() || normalized[0]?.contestId || "";
+  const affectedGradeIds = normalized.map((item) => item.gradeId).filter(Boolean);
+
+  if (database && effectiveContestId && affectedGradeIds.length > 0) {
+    await syncRealtimeResultSavedAfterDelete({
+      db,
+      database,
+      contestId: effectiveContestId,
+      gradeIds: affectedGradeIds,
+    });
+  }
+
+  return normalized.map((item) => item.id);
 };

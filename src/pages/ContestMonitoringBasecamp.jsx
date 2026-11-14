@@ -26,7 +26,7 @@ import {
   onSnapshot,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, database } from "../firebase";
 import {
   getStagePlayerSortIndex,
   isGrandPrixPlayerEntry,
@@ -48,6 +48,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  Users,
+  UserCheck,
 } from "lucide-react";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
 import {
@@ -58,6 +60,14 @@ import {
 import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
+import {
+  buildLiveStageRealtimeSnapshot,
+  isLiveStageOverrideActive,
+  resolveEffectiveStagePlayers,
+  rollbackLiveStageToOriginal,
+} from "../utils/liveStageSnapshotUtils";
+import LiveStagePlayersPushModal from "../modals/LiveStagePlayersPushModal";
+import LiveJudgeSwapModal from "../modals/LiveJudgeSwapModal";
 
 // 본부석 실시간 렌더링 에러 바운더리
 class BasecampErrorBoundary extends React.Component {
@@ -122,6 +132,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const [msgOpen, setMsgOpen] = useState(false);
   const [message, setMessage] = useState({});
+  const [livePlayersModalOpen, setLivePlayersModalOpen] = useState(false);
+  const [judgeSwapTarget, setJudgeSwapTarget] = useState(null);
+  const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+  const [rollingBackStagePlayers, setRollingBackStagePlayers] = useState(false);
 
   const [summaryPrintPreviewOpen, setSummaryPrintPreviewOpen] = useState(false);
   const [awardPrintPreviewOpen, setAwardPrintPreviewOpen] = useState(false);
@@ -579,9 +593,20 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       seatIndex: judgeIndex + 1,
       isLogined: false,
       isEnd: false,
+      forceRestartAt: Date.now(),
     };
     try {
       await updateCurrentStage.updateData(collectionInfo, { ...newStatus });
+      if (realtimeData?.compares?.status?.compareStart) {
+        await updateCurrentStage.updateData(
+          `currentStage/${contestId}/compares/judges/${judgeIndex}`,
+          {
+            seatIndex: judgeIndex + 1,
+            messageStatus: "확인전",
+            votedPlayerNumber: [],
+          }
+        );
+      }
     } catch (error) {
       console.log(error);
     }
@@ -618,7 +643,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       stageId,
       stageNumber,
       categoryJudgeCount,
-      categoryJudgeType,
       categoryId,
       categoryTitle,
       grades,
@@ -720,7 +744,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       stageNumber: stageNumber || currentStageId + 1,
       categoryId: categoryId || "",
       categoryTitle: categoryTitle || "",
-      categoryJudgeType: categoryJudgeType || "point",
+      categoryJudgeType: "ranking",
       gradeId: gradeId || "",
       gradeTitle: gradeTitle || "",
       stageJudgeCount: targetJudgeCount,
@@ -812,17 +836,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
       const effectivePool = Array.isArray(syncedPlayersPool)
         ? syncedPlayersPool
         : playersArray;
+      const liveStageSnapshot = buildLiveStageRealtimeSnapshot({
+        targetStage,
+        playersPool: effectivePool,
+        pushIdPrefix: "stage",
+      });
       const liveStagePlayerCount =
         stageGradeIdSet.size > 0 && Array.isArray(effectivePool) && effectivePool.length > 0
-          ? effectivePool.filter(
-              (p) =>
-                stageGradeIdSet.has(p?.contestGradeId) &&
-                isActiveStagePlayer(p)
-            ).length
+          ? liveStageSnapshot.stagePlayerCount
           : targetStage?.players?.length || 0;
 
       const res = await updateCurrentStage.updateData(collectionInfo, {
         ...newCurrentStateInfo,
+        ...liveStageSnapshot,
       });
 
       // 종목/체급 변경 시 전광판 스크린 화면을 대기 및 종목/체급 안내(STANDBY)로 전환
@@ -1135,20 +1161,90 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
     }
   }, [sectionsWithOrder, currentSectionKey, selectedSectionTab]);
 
-  const currentStageIdx = useMemo(
-    () => stagesArray.findIndex((s) => s.stageId === realtimeData?.stageId),
-    [stagesArray, realtimeData?.stageId]
-  );
+  const currentStageIdx = useMemo(() => {
+    const byId = stagesArray.findIndex(
+      (s) => s.stageId && s.stageId === realtimeData?.stageId
+    );
+    if (byId !== -1) return byId;
+    if (realtimeData?.stageNumber !== undefined && realtimeData?.stageNumber !== null) {
+      return stagesArray.findIndex(
+        (s) => Number(s.stageNumber) === Number(realtimeData.stageNumber)
+      );
+    }
+    return -1;
+  }, [stagesArray, realtimeData?.stageId, realtimeData?.stageNumber]);
 
   const hasNextStage =
     currentStageIdx !== -1 && currentStageIdx + 1 < stagesArray.length;
+  const nextStageInfo = hasNextStage ? stagesArray[currentStageIdx + 1] : null;
 
-  const currentStageJudgeType =
-    (currentStageIdx !== -1
-      ? stagesArray[currentStageIdx]?.categoryJudgeType
-      : null) ||
-    currentStageInfo?.categoryJudgeType ||
-    realtimeData?.categoryJudgeType;
+  const allStageGradesSaved = useMemo(() => {
+    const savedSet = new Set(
+      Array.isArray(realtimeData?.resultSaved) ? realtimeData.resultSaved : []
+    );
+    if (savedSet.size === 0) return false;
+    const targetGradeIds =
+      currentStageInfo?.grades?.length > 0
+        ? currentStageInfo.grades.map((g) => g?.gradeId).filter(Boolean)
+        : Array.isArray(realtimeData?.stageGrades) &&
+          realtimeData.stageGrades.length > 0
+        ? realtimeData.stageGrades.map((g) => g?.gradeId).filter(Boolean)
+        : realtimeData?.gradeId
+        ? [realtimeData.gradeId]
+        : [];
+    return (
+      targetGradeIds.length > 0 &&
+      targetGradeIds.every((gid) => savedSet.has(gid))
+    );
+  }, [
+    realtimeData?.resultSaved,
+    realtimeData?.stageGrades,
+    realtimeData?.gradeId,
+    currentStageInfo?.grades,
+  ]);
+
+  const isAllStageScoresEntered = useMemo(() => {
+    const grades = currentStageInfo?.grades || [];
+    const judges = realtimeData?.judges || [];
+    if (grades.length === 0 || judges.length === 0 || normalScoreData.length === 0) {
+      return false;
+    }
+    return grades.every((grade) => {
+      if (!grade?.gradeId) return false;
+      const gradePlayers = resolveEffectiveStagePlayers({
+        realtimeData,
+        fallbackPlayers: playersArray,
+        gradeIds: grade.gradeId,
+        stageInfo: currentStageInfo,
+      });
+      if (gradePlayers.length === 0) return false;
+      return gradePlayers.every((player) =>
+        judges.every((judge) => {
+          const entry = normalScoreData.find(
+            (f) =>
+              (!f.gradeId || f.gradeId === grade.gradeId) &&
+              f.playerNumber === player.playerNumber &&
+              f.seatIndex === judge.seatIndex
+          );
+          return (
+            entry &&
+            entry.playerScore !== 0 &&
+            entry.playerScore !== undefined &&
+            entry.playerScore !== null
+          );
+        })
+      );
+    });
+  }, [
+    currentStageInfo,
+    realtimeData,
+    playersArray,
+    normalScoreData,
+  ]);
+
+  const canProceedNextStage =
+    hasNextStage &&
+    (!judgesIsEndValidated || allStageGradesSaved || isAllStageScoresEntered);
 
   const scrollToSectionTable = (section) => {
     const el = document.querySelector(`[data-section-anchor="${section}"]`);
@@ -1216,16 +1312,32 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                handleForceReStart(index, currentContest.contests.id)
-              }
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium shrink-0 cursor-pointer"
-            >
-              <RotateCcw size={13} strokeWidth={1.5} />
-              <span>재시작</span>
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  setJudgeSwapTarget({
+                    seatIndex: Number(seatIndex || index + 1),
+                    judgeIndex: index,
+                    judge,
+                  })
+                }
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#2563eb]/30 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1d4ed8] text-xs font-semibold shrink-0 cursor-pointer transition-colors"
+              >
+                <UserCheck size={13} strokeWidth={1.8} />
+                <span>심판 변경</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleForceReStart(index, currentContest.contests.id)
+                }
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium shrink-0 cursor-pointer transition-colors"
+              >
+                <RotateCcw size={13} strokeWidth={1.5} />
+                <span>재시작</span>
+              </button>
+            </div>
           </div>
         );
       })}
@@ -1238,7 +1350,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
         const {
           categoryTitle,
           grades,
-          categoryJudgeType,
           categoryJudgeCount,
           stageId,
           stageNumber,
@@ -1269,9 +1380,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                 />
                 <span className="text-sm font-semibold text-[#171717]">
                   {categoryTitle}
-                </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
-                  {categoryJudgeType === "point" ? "P" : "R"}
                 </span>
                 {hasMissingSeat && (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/35 text-[11px] font-semibold text-[#92400e]">
@@ -1414,7 +1522,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             const {
               categoryTitle,
               grades,
-              categoryJudgeType,
               categoryJudgeCount,
               stageId,
             } = record;
@@ -1449,9 +1556,6 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-[#171717]">
                         {categoryTitle} ({info.gradeTitle})
-                      </span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
-                        {categoryJudgeType === "point" ? "P" : "R"}
                       </span>
                       {hasMissingSeat && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/35 text-[11px] font-semibold text-[#92400e]">
@@ -1521,12 +1625,19 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   // 현재 무대(또는 개시 예정 1번 무대) 출전선수 및 미배정 심판석 진단 계산
   const activeStageMatchedPlayersCount = useMemo(() => {
     if (!realtimeData?.stageId) return undefined;
-    const grades = currentStageInfo?.grades || [];
+    const grades =
+      currentStageInfo?.grades?.length > 0
+        ? currentStageInfo.grades
+        : realtimeData?.stageGrades || [];
     if (!grades.length) return 0;
-    const gradeSet = new Set(grades.map((g) => g?.gradeId).filter(Boolean));
-    return (playersArray || []).filter((p) => gradeSet.has(p.contestGradeId))
-      .length;
-  }, [realtimeData?.stageId, currentStageInfo?.grades, playersArray]);
+    const gradeIds = grades.map((g) => g?.gradeId).filter(Boolean);
+    return resolveEffectiveStagePlayers({
+      realtimeData,
+      fallbackPlayers: playersArray,
+      gradeIds,
+      stageInfo: currentStageInfo,
+    }).length;
+  }, [realtimeData, currentStageInfo, playersArray]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
     const realtimeJudges = Array.isArray(realtimeData?.judges)
@@ -1591,6 +1702,171 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             message={message}
             onCancel={() => setMsgOpen(false)}
             onConfirm={() => setMsgOpen(false)}
+          />
+
+          <ConfirmationModal
+            isOpen={rollbackConfirmOpen}
+            message={{
+              variant: "warning",
+              title: "원래 출전선수 명단으로 롤백",
+              body: "현장 선수 재설정(밀어넣기)으로 변경된 내역을 해제하고 원래 배정 명단으로 복원하시겠습니까?",
+              body2:
+                "확인 시 현장 임시 추가·순서·출전 변경 사항이 원래 상태로 되돌아가며, 전 심판 태블릿 채점판에도 즉시 원복됩니다.",
+              isButton: !rollingBackStagePlayers,
+              cancelButtonText: "취소",
+              confirmButtonText: "원래 명단으로 즉시 롤백",
+            }}
+            onCancel={() => {
+              if (!rollingBackStagePlayers) setRollbackConfirmOpen(false);
+            }}
+            onConfirm={async () => {
+              if (rollingBackStagePlayers) return;
+              const targetContestId =
+                currentContest?.contests?.id || currentContest?.id || "";
+              const targetFinalDocId =
+                currentContest?.contests?.contestPlayersFinalId ||
+                currentContest?.contestPlayersFinalId ||
+                "";
+              setRollingBackStagePlayers(true);
+              try {
+                const res = await rollbackLiveStageToOriginal({
+                  db,
+                  database,
+                  contestId: targetContestId,
+                  finalPlayersDocId: targetFinalDocId,
+                  currentStageInfo,
+                  realtimeData,
+                });
+                setRollbackConfirmOpen(false);
+                setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+                const bibSummary =
+                  Array.isArray(res?.restoredBibs) && res.restoredBibs.length > 0
+                    ? ` (${res.restoredBibs.map((b) => `${b}번`).join(", ")})`
+                    : "";
+                setMessage({
+                  variant: "success",
+                  title: "원래 출전선수 명단 복원 완료",
+                  body: `총 ${
+                    res?.restoredCount ?? 0
+                  }명${bibSummary}의 원래 배정 명단으로 복원되어 전 심판 태블릿 채점판에 즉시 반영되었습니다.`,
+                  isButton: true,
+                  confirmButtonText: "확인",
+                });
+                setMsgOpen(true);
+              } catch (err) {
+                console.error("[Basecamp] 원래 명단 롤백 실패:", err);
+                setRollbackConfirmOpen(false);
+                setMessage({
+                  variant: "error",
+                  title: "원래 명단 롤백 실패",
+                  body:
+                    err?.message ||
+                    "원래 출전선수 명단으로 복원하는 중 오류가 발생했습니다.",
+                  isButton: true,
+                  confirmButtonText: "확인",
+                });
+                setMsgOpen(true);
+              } finally {
+                setRollingBackStagePlayers(false);
+              }
+            }}
+          />
+
+          <LiveJudgeSwapModal
+            isOpen={Boolean(judgeSwapTarget)}
+            onClose={() => setJudgeSwapTarget(null)}
+            targetSeat={judgeSwapTarget}
+            contestId={currentContest?.contests?.id || currentContest?.id || ""}
+            judgesAssignDocId={
+              currentContest?.contests?.contestJudgesAssignId ||
+              currentContest?.contestJudgesAssignId ||
+              ""
+            }
+            effectiveCollectionName={effectiveCollectionName}
+            currentStageInfo={currentStageInfo}
+            realtimeData={realtimeData}
+            judgesPoolMap={judgesPoolMap}
+            judgesArray={judgesArray}
+            stagesArray={stagesArray}
+            categoriesArray={categoriesArray}
+            gradesArray={gradesArray}
+            normalScoreData={normalScoreData}
+            onSwapSuccess={(info) => {
+              setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+              const pinText = info?.replacementJudge?.onedayPassword
+                ? `인증번호: ${info.replacementJudge.onedayPassword}`
+                : "인증번호 미발급";
+              const scopeText =
+                info?.scope === "section_remaining"
+                  ? `현재 섹션 남은 무대 포함 총 ${info.affectedStagesCount}개 무대에 반영되었습니다.`
+                  : "현재 진행 무대에 즉시 반영되었습니다.";
+              const exchangeText = info?.isSeatExchange
+                ? `${info.seatIndex}번 심판석(${info.replacementJudge?.judgeName} 심판) ↔ ${
+                    info.partnerSeatIndex
+                  }번 심판석(${
+                    info.outgoingJudge?.judgeName
+                      ? `${info.outgoingJudge.judgeName} 심판`
+                      : "공석"
+                  }) 1:1 좌석 맞교체가 완료되었습니다.`
+                : `${info.seatIndex}번 심판석이 [${info.replacementJudge?.judgeName} 심판]으로 변경되었습니다. (${pinText})`;
+              const clearText =
+                info?.clearedScoreDocsCount > 0
+                  ? `기존 제출 점수 ${info.clearedScoreDocsCount}건이 정리되었으며, 해당 태블릿에서 새로 로그인 후 채점해 주세요.`
+                  : "해당 심판석 태블릿이 대기화면으로 전환되었으니 새 인증번호로 로그인해 주세요.";
+
+              setMessage({
+                variant: "success",
+                title: "심판 긴급 변경 완료",
+                body: exchangeText,
+                body2: `${scopeText} ${clearText}`,
+                isButton: true,
+                confirmButtonText: "확인",
+              });
+              setMsgOpen(true);
+            }}
+          />
+
+          <LiveStagePlayersPushModal
+            isOpen={livePlayersModalOpen}
+            onClose={() => setLivePlayersModalOpen(false)}
+            contestId={currentContest?.contests?.id || currentContest?.id || ""}
+            finalPlayersDocId={
+              currentContest?.contests?.contestPlayersFinalId ||
+              currentContest?.contestPlayersFinalId ||
+              ""
+            }
+            currentStageInfo={currentStageInfo}
+            realtimeData={realtimeData}
+            onAfterPush={(count) => {
+              setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+              setMessage({
+                variant: "info",
+                title: "현장 무대 선수 재송출 완료",
+                body: `총 ${count}명의 최신 출전선수 구성이 전 심판 태블릿 채점판에 즉시 반영되었습니다.`,
+                body2:
+                  "원래 배정 정보로 되돌리려면 상단 [원래 명단으로 롤백] 버튼을 눌러 언제든 복원할 수 있습니다.",
+                isButton: true,
+                confirmButtonText: "확인",
+              });
+              setMsgOpen(true);
+            }}
+            onAfterRollback={(res) => {
+              setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+              const bibSummary =
+                Array.isArray(res?.restoredBibs) && res.restoredBibs.length > 0
+                  ? ` (${res.restoredBibs.map((b) => `${b}번`).join(", ")})`
+                  : "";
+              setMessage({
+                variant: "success",
+                title: "원래 출전선수 명단 복원 완료",
+                body: `총 ${
+                  res?.restoredCount ?? 0
+                }명${bibSummary}의 원래 배정 명단으로 복원되어 전 심판 태블릿 채점판에 즉시 반영되었습니다.`,
+                isButton: true,
+                confirmButtonText: "확인",
+              });
+              setMsgOpen(true);
+            }}
           />
 
           <Drawer
@@ -1820,23 +2096,59 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                               {realtimeData?.categoryTitle} (
                               {realtimeData?.gradeTitle})
                             </span>
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-white border border-[#171717]/10 text-[11px] font-mono font-medium text-[#525252]">
-                              {currentStageJudgeType === "point" ? "P" : "R"}
-                            </span>
                           </div>
 
-                          {!judgesIsEndValidated && hasNextStage && (
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
-                              onClick={() =>
-                                handleUpdateCurrentStage(currentStageIdx + 1)
-                              }
-                              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[6px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors cursor-pointer"
+                              onClick={() => setLivePlayersModalOpen(true)}
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#2563eb]/35 bg-white hover:bg-[#eff6ff] text-[#2563eb] text-xs font-bold transition-colors cursor-pointer"
                             >
-                              <SkipForward size={14} strokeWidth={1.5} />
-                              <span>다음 무대 진행</span>
+                              <Users size={13} strokeWidth={2} />
+                              <span>현장 선수 재설정 · 밀어넣기</span>
                             </button>
-                          )}
+
+                            {isLiveStageOverrideActive(realtimeData) && (
+                              <button
+                                type="button"
+                                disabled={rollingBackStagePlayers}
+                                onClick={() => setRollbackConfirmOpen(true)}
+                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#d97706]/45 bg-[#fffbeb] hover:bg-[#fef3c7] text-[#92400e] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                <RotateCcw size={13} strokeWidth={2.2} />
+                                <span>원래 명단으로 롤백</span>
+                              </button>
+                            )}
+
+                            {canProceedNextStage && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateCurrentStage(currentStageIdx + 1)
+                                }
+                                className={`inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[6px] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer whitespace-nowrap ${
+                                  allStageGradesSaved
+                                    ? "bg-[#16a34a] hover:bg-[#15803d]"
+                                    : "bg-[#2563eb] hover:bg-[#1d4ed8]"
+                                }`}
+                              >
+                                <SkipForward size={14} strokeWidth={2} />
+                                <span>
+                                  {allStageGradesSaved
+                                    ? `순위확정 완료 · 다음 무대 열기${
+                                        nextStageInfo?.stageNumber
+                                          ? ` (#${nextStageInfo.stageNumber})`
+                                          : ""
+                                      }`
+                                    : `다음 무대 진행${
+                                        nextStageInfo?.stageNumber
+                                          ? ` (#${nextStageInfo.stageNumber})`
+                                          : ""
+                                      }`}
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="p-4 bg-white">
@@ -1856,7 +2168,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                     <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[140px]">
                                       상태
                                     </th>
-                                    <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[140px]">
+                                    <th className="px-4 py-2.5 text-center text-xs font-medium text-[#525252] w-[224px]">
                                       관리
                                     </th>
                                   </tr>
@@ -1917,22 +2229,43 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                             </span>
                                           </td>
                                           <td className="px-4 py-2.5 text-center">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                handleForceReStart(
-                                                  idx,
-                                                  currentContest.contests.id
-                                                )
-                                              }
-                                              className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
-                                            >
-                                              <RotateCcw
-                                                size={12}
-                                                strokeWidth={1.5}
-                                              />
-                                              <span>강제 재시작</span>
-                                            </button>
+                                            <div className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setJudgeSwapTarget({
+                                                    seatIndex: Number(
+                                                      judge.seatIndex || idx + 1
+                                                    ),
+                                                    judgeIndex: idx,
+                                                    judge,
+                                                  })
+                                                }
+                                                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px] border border-[#2563eb]/30 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1d4ed8] text-xs font-semibold transition-colors cursor-pointer"
+                                              >
+                                                <UserCheck
+                                                  size={12}
+                                                  strokeWidth={1.8}
+                                                />
+                                                <span>심판 변경</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleForceReStart(
+                                                    idx,
+                                                    currentContest.contests.id
+                                                  )
+                                                }
+                                                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
+                                              >
+                                                <RotateCcw
+                                                  size={12}
+                                                  strokeWidth={1.5}
+                                                />
+                                                <span>강제 재시작</span>
+                                              </button>
+                                            </div>
                                           </td>
                                         </tr>
                                       );
@@ -1948,21 +2281,55 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                       {/* 집계상황 매트릭스 */}
                       <div className="rounded-[10px] border border-[#171717]/[0.08] overflow-hidden">
                         <div className="flex justify-between items-center flex-wrap gap-2 px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08]">
-                          <span className="text-sm font-semibold text-[#171717]">
-                            집계상황
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleForceScoreTableRefresh(
-                                currentStageInfo.grades
-                              )
-                            }
-                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer"
-                          >
-                            <RefreshCw size={14} strokeWidth={1.5} />
-                            <span>새로고침</span>
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-[#171717]">
+                              집계상황
+                            </span>
+                            {allStageGradesSaved && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-[#dcfce7] border border-[#86efac] text-[#15803d] text-xs font-bold">
+                                <Check size={12} strokeWidth={2.2} />
+                                <span>심판위원장 순위확정 완료</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleForceScoreTableRefresh(
+                                  currentStageInfo.grades
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#fafafa] text-[#171717] text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              <RefreshCw size={14} strokeWidth={1.5} />
+                              <span>새로고침</span>
+                            </button>
+
+                            {canProceedNextStage && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateCurrentStage(currentStageIdx + 1)
+                                }
+                                className={`inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[6px] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer whitespace-nowrap ${
+                                  allStageGradesSaved
+                                    ? "bg-[#16a34a] hover:bg-[#15803d]"
+                                    : "bg-[#2563eb] hover:bg-[#1d4ed8]"
+                                }`}
+                              >
+                                <SkipForward size={14} strokeWidth={2} />
+                                <span>
+                                  다음 무대 열기
+                                  {nextStageInfo?.stageNumber
+                                    ? ` (#${nextStageInfo.stageNumber} ${
+                                        nextStageInfo.categoryTitle || ""
+                                      })`
+                                    : ""}
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="p-4 space-y-6 bg-white">
@@ -1970,23 +2337,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                             currentStageInfo.grades.map((grade, gIdx) => {
                               const { categoryTitle, gradeTitle, gradeId } =
                                 grade;
-                              const filterdPlayers = playersArray
-                                .filter(
-                                  (f) =>
-                                    f.contestGradeId === gradeId &&
-                                    isActiveStagePlayer(f)
-                                )
-                                .sort(
-                                  (a, b) =>
-                                    getStagePlayerSortIndex(
-                                      a,
-                                      currentStageInfo
-                                    ) -
-                                    getStagePlayerSortIndex(
-                                      b,
-                                      currentStageInfo
-                                    )
-                                );
+                              const filterdPlayers =
+                                resolveEffectiveStagePlayers({
+                                  realtimeData,
+                                  fallbackPlayers: playersArray,
+                                  gradeIds: gradeId,
+                                  stageInfo: currentStageInfo,
+                                });
 
                               const judges = realtimeData?.judges || [];
                               const isGradeSaved =

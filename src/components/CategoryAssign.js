@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Select, Tabs } from "antd";
+import React, { useMemo, useState } from "react";
 import {
-  User,
-  Phone,
   Users,
   RotateCcw,
   Shuffle,
   Trash2,
+  Search,
+  X,
+  CheckCircle2,
   AlertTriangle,
-  LayoutGrid,
-  Layers,
-  Check,
 } from "lucide-react";
 import {
   normalizeSectionName,
@@ -21,6 +18,10 @@ import {
   pickFairRandomJudges,
   inspectScopeSeat,
 } from "../utils/judgeAssignUtils";
+import {
+  JudgeSeatSlotCard,
+  SectionFilterBar,
+} from "./judges/JudgeSeatSlotCard";
 
 const CategoryAssign = ({
   judgesAssignInfo,
@@ -34,16 +35,11 @@ const CategoryAssign = ({
   setMsgOpen,
   excludeHeadInRandom = true,
   balanceWorkload = true,
+  workloadByUid = {},
 }) => {
-  const [isMobile, setIsMobile] = useState(false);
   const [activeSection, setActiveSection] = useState("__ALL__");
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  const [categoryKeyword, setCategoryKeyword] = useState("");
+  const [onlyMissing, setOnlyMissing] = useState(false);
 
   const categoryById = useMemo(() => {
     const map = {};
@@ -217,7 +213,6 @@ const CategoryAssign = ({
     setJudgesAssignInfo((prev) => {
       let workingJudges = [...(prev?.judges || [])];
 
-      // 1단계: 일부 체급만 배정된(partial) 좌석 동기화
       allSeats.forEach((seatNum) => {
         const info = inspectScopeSeat({
           judges: workingJudges,
@@ -267,7 +262,6 @@ const CategoryAssign = ({
         }
       });
 
-      // 2단계: 완전히 빈 좌석 공정 랜덤 배정
       const emptySeats = allSeats.filter((seatNum) => {
         const info = inspectScopeSeat({
           judges: workingJudges,
@@ -371,21 +365,31 @@ const CategoryAssign = ({
     }));
   };
 
-  const commonSelectProps = {
-    showSearch: true,
-    allowClear: false,
-    optionFilterProp: "data-search",
-    filterOption: (input, option) => {
-      const hay = (option?.props?.["data-search"] || "")
-        .toString()
-        .toLowerCase();
-      return hay.includes((input || "").toLowerCase());
-    },
-    placeholder: "심판 선택",
-  };
+  // 종목별 배정 충족도 사전 계산
+  const categoryStatsById = useMemo(() => {
+    const stats = {};
+    (categoriesArray || []).forEach((c) => {
+      const cid = c?.contestCategoryId;
+      if (!cid) return;
+      const seatCnt = Number(c?.contestCategoryJudgeCount || 0);
+      const catGrades = (gradesArray || []).filter(
+        (g) => g.refCategoryId === cid
+      );
+      const gIds = new Set(catGrades.map((g) => g.contestGradeId).filter(Boolean));
+      const expected = seatCnt * catGrades.length;
+      const assigned = (judgesAssignInfo?.judges || []).filter(
+        (r) => gIds.has(r.contestGradeId) && Boolean(r.judgeUid)
+      ).length;
+      stats[cid] = {
+        expected,
+        assigned,
+        hasGap: expected > 0 && assigned < expected,
+      };
+    });
+    return stats;
+  }, [categoriesArray, gradesArray, judgesAssignInfo?.judges]);
 
-  /** 섹션 목록 + 탭 아이템 생성 */
-  const { sectionTabs } = useMemo(() => {
+  const sectionItems = useMemo(() => {
     const namesSet = new Set(
       (categoriesArray || []).map((c) =>
         normalizeSectionName(c?.contestCategorySection)
@@ -395,395 +399,331 @@ const CategoryAssign = ({
       a.localeCompare(b, "ko", { sensitivity: "base", numeric: true })
     );
 
-    const items = [
+    const anyGapAll = (categoriesArray || []).some(
+      (c) => categoryStatsById[c?.contestCategoryId]?.hasGap
+    );
+
+    return [
       {
         key: "__ALL__",
-        label: (
-          <span className="inline-flex items-center gap-1.5">
-            <LayoutGrid
-              size={14}
-              strokeWidth={1.5}
-              className="text-[#737373]"
-            />
-            <span>전체</span>
-          </span>
-        ),
+        label: "전체 부",
+        count: (categoriesArray || []).length,
+        hasGap: anyGapAll,
       },
-      ...names.map((name) => ({
-        key: name,
-        label: (
-          <span className="inline-flex items-center gap-1.5">
-            <Layers size={14} strokeWidth={1.5} className="text-[#737373]" />
-            <span>{name}</span>
-          </span>
-        ),
-      })),
+      ...names.map((name) => {
+        const inSec = (categoriesArray || []).filter(
+          (c) => normalizeSectionName(c?.contestCategorySection) === name
+        );
+        const hasGap = inSec.some(
+          (c) => categoryStatsById[c?.contestCategoryId]?.hasGap
+        );
+        return {
+          key: name,
+          label: name,
+          count: inSec.length,
+          hasGap,
+        };
+      }),
     ];
-    return { sectionNames: names, sectionTabs: items };
-  }, [categoriesArray]);
+  }, [categoriesArray, categoryStatsById]);
 
   const filteredCategories = useMemo(() => {
-    if (activeSection === "__ALL__") return categoriesArray || [];
-    return (categoriesArray || []).filter(
-      (c) => normalizeSectionName(c?.contestCategorySection) === activeSection
-    );
-  }, [categoriesArray, activeSection]);
+    const kw = categoryKeyword.trim().toLowerCase();
+    return (categoriesArray || []).filter((c) => {
+      if (
+        activeSection !== "__ALL__" &&
+        normalizeSectionName(c?.contestCategorySection) !== activeSection
+      ) {
+        return false;
+      }
+      if (onlyMissing && !categoryStatsById[c?.contestCategoryId]?.hasGap) {
+        return false;
+      }
+      if (kw) {
+        const title = (
+          c?.contestCategoryTitle ||
+          c?.contestCategoryName ||
+          c?.contestCategoryInfo?.name ||
+          ""
+        ).toLowerCase();
+        return title.includes(kw);
+      }
+      return true;
+    });
+  }, [categoriesArray, activeSection, onlyMissing, categoryKeyword, categoryStatsById]);
 
   return (
-    <div className="flex w-full flex-col gap-4 pt-2">
-      <Tabs
-        activeKey={activeSection}
-        onChange={setActiveSection}
-        items={sectionTabs.map((tab) => {
-          const count =
-            tab.key === "__ALL__"
-              ? (categoriesArray || []).length
-              : (categoriesArray || []).filter(
-                  (c) =>
-                    normalizeSectionName(c?.contestCategorySection) === tab.key
-                ).length;
+    <div className="flex w-full flex-col gap-4">
+      {/* 섹션 필터 + 종목 검색 바 */}
+      <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <SectionFilterBar
+          items={sectionItems}
+          activeKey={activeSection}
+          onChange={setActiveSection}
+        />
 
-          return {
-            ...tab,
-            label: (
-              <span className="inline-flex items-center gap-2 text-sm">
-                {tab.label}
-                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#f4f4f5] px-1.5 py-0.5 rounded-[4px]">
-                  {count}
-                </span>
-              </span>
-            ),
-          };
-        })}
-      />
-
-      {(filteredCategories || []).map((category, idx) => {
-        const allSeats = Array.from(
-          { length: Number(category.contestCategoryJudgeCount || 0) },
-          (_, i) => i + 1
-        );
-
-        const categoryGrades = (gradesArray || []).filter(
-          (g) => g.refCategoryId === category.contestCategoryId
-        );
-        const categoryGradeIds = new Set(
-          categoryGrades.map((g) => g.contestGradeId).filter(Boolean)
-        );
-
-        const assignedJudges = Array.from(
-          new Set(
-            (judgesAssignInfo.judges || [])
-              .filter((r) => categoryGradeIds.has(r.contestGradeId))
-              .map((r) => r.judgeUid)
-              .filter(Boolean)
-          )
-        );
-
-        return (
-          <div
-            key={category.contestCategoryId || idx}
-            className="bg-[#ffffff] rounded-[12px] border border-[#171717]/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={() => setOnlyMissing((v) => !v)}
+            className={`h-8 px-3 rounded-[8px] text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border shrink-0 ${
+              onlyMissing
+                ? "bg-[#dc2626]/[0.08] text-[#dc2626] border-[#dc2626]/25"
+                : "bg-white text-[#525252] border-[#171717]/[0.10] hover:bg-[#f4f4f5]"
+            }`}
           >
-            <div className="px-4 py-3 bg-[#f4f4f5] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users size={16} strokeWidth={1.5} className="text-[#525252]" />
-                <span className="text-[15px] font-semibold text-[#171717]">
-                  {category.contestCategoryTitle ||
-                    category.contestCategoryName ||
-                    category.contestCategoryInfo?.name ||
-                    "이름 없는 카테고리"}
-                </span>
-                <span className="px-2 py-0.5 rounded-[4px] bg-[#ffffff] border border-[#171717]/[0.08] text-xs text-[#525252]">
-                  {normalizeSectionName(category.contestCategorySection)}
-                </span>
-                <span className="font-mono text-xs tabular-nums text-[#737373] bg-[#ffffff] border border-[#171717]/[0.08] px-2 py-0.5 rounded-[4px]">
-                  {allSeats.length}석 · {categoryGrades.length}체급
-                </span>
+            <AlertTriangle size={13} strokeWidth={1.6} />
+            <span>미배정 종목만</span>
+          </button>
+
+          <div className="relative flex-1 sm:w-56 flex items-center">
+            <Search
+              size={14}
+              strokeWidth={1.5}
+              className="absolute left-3 text-[#737373] pointer-events-none"
+            />
+            <input
+              type="text"
+              value={categoryKeyword}
+              onChange={(e) => setCategoryKeyword(e.target.value)}
+              placeholder="종목명 검색"
+              className="h-8 w-full rounded-[8px] border border-[#171717]/[0.12] bg-[#fafafa] focus:bg-white pl-8 pr-7 text-xs text-[#171717] placeholder:text-[#737373] outline-none focus:border-[#2563eb] transition-colors duration-150"
+            />
+            {categoryKeyword && (
+              <button
+                type="button"
+                onClick={() => setCategoryKeyword("")}
+                className="absolute right-2 w-4 h-4 rounded-[4px] inline-flex items-center justify-center text-[#737373] hover:text-[#171717] bg-transparent border-0 cursor-pointer"
+              >
+                <X size={12} strokeWidth={1.6} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {filteredCategories.length === 0 ? (
+        <div className="bg-white rounded-[12px] border border-[#171717]/[0.08] py-12 text-center text-sm text-[#737373]">
+          해당 조건의 종목이 없습니다
+        </div>
+      ) : (
+        filteredCategories.map((category, idx) => {
+          const allSeats = Array.from(
+            { length: Number(category.contestCategoryJudgeCount || 0) },
+            (_, i) => i + 1
+          );
+
+          const categoryGrades = (gradesArray || []).filter(
+            (g) => g.refCategoryId === category.contestCategoryId
+          );
+          const categoryGradeIds = new Set(
+            categoryGrades.map((g) => g.contestGradeId).filter(Boolean)
+          );
+
+          const assignedJudges = Array.from(
+            new Set(
+              (judgesAssignInfo.judges || [])
+                .filter((r) => categoryGradeIds.has(r.contestGradeId))
+                .map((r) => r.judgeUid)
+                .filter(Boolean)
+            )
+          );
+
+          const cStat = categoryStatsById[category.contestCategoryId] || {
+            expected: 0,
+            assigned: 0,
+            hasGap: false,
+          };
+          const isComplete = cStat.expected > 0 && !cStat.hasGap;
+
+          return (
+            <div
+              key={category.contestCategoryId || idx}
+              className="bg-white rounded-[12px] border border-[#171717]/[0.08] overflow-hidden"
+            >
+              <div className="px-5 py-3.5 bg-[#fafafa] border-b border-[#171717]/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="w-7 h-7 rounded-[6px] bg-white border border-[#171717]/[0.08] flex items-center justify-center shrink-0">
+                    <Users
+                      size={14}
+                      strokeWidth={1.6}
+                      className="text-[#525252]"
+                    />
+                  </div>
+                  <span className="text-base font-semibold text-[#171717]">
+                    {category.contestCategoryTitle ||
+                      category.contestCategoryName ||
+                      category.contestCategoryInfo?.name ||
+                      "이름 없는 종목"}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-[5px] bg-white border border-[#171717]/[0.08] text-xs text-[#525252]">
+                    {normalizeSectionName(category.contestCategorySection)}
+                  </span>
+                  <span className="font-mono text-xs tabular-nums text-[#737373] bg-white border border-[#171717]/[0.08] px-2 py-0.5 rounded-[5px]">
+                    {allSeats.length}심제 · {categoryGrades.length}체급
+                  </span>
+                  {cStat.expected > 0 && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] font-mono text-xs tabular-nums border ${
+                        isComplete
+                          ? "bg-[#16a34a]/[0.08] text-[#16a34a] border-[#16a34a]/20 font-medium"
+                          : "bg-[#dc2626]/[0.06] text-[#dc2626] border-[#dc2626]/20 font-medium"
+                      }`}
+                    >
+                      {isComplete && (
+                        <CheckCircle2 size={12} strokeWidth={1.8} />
+                      )}
+                      <span>
+                        {cStat.assigned}/{cStat.expected}석
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={categoryGrades.length === 0}
+                    onClick={() =>
+                      handleRandomAssign(category, categoryGrades, allSeats)
+                    }
+                    className="h-8 px-3 rounded-[7px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-50 text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer border-0"
+                  >
+                    <RotateCcw size={13} strokeWidth={1.6} />
+                    <span>빈·누락 좌석 채우기</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={categoryGrades.length === 0}
+                    onClick={() =>
+                      handleAllRandomAssign(category, categoryGrades, allSeats)
+                    }
+                    className="h-8 px-3 rounded-[7px] bg-white hover:bg-[#f4f4f5] disabled:opacity-50 border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+                  >
+                    <Shuffle
+                      size={13}
+                      strokeWidth={1.6}
+                      className="text-[#525252]"
+                    />
+                    <span>모두 재배정</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResetAssign(categoryGrades)}
+                    className="h-8 px-2.5 rounded-[7px] bg-white hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer"
+                  >
+                    <Trash2 size={13} strokeWidth={1.6} />
+                    <span>초기화</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  disabled={categoryGrades.length === 0}
-                  onClick={() =>
-                    handleRandomAssign(category, categoryGrades, allSeats)
-                  }
-                  className="h-9 px-3 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-50 text-xs font-medium text-white inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <RotateCcw size={14} strokeWidth={1.5} />
-                  <span>{isMobile ? "랜덤" : "빈·누락 좌석 채우기"}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={categoryGrades.length === 0}
-                  onClick={() =>
-                    handleAllRandomAssign(category, categoryGrades, allSeats)
-                  }
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#eaeaea] disabled:opacity-50 border border-[#171717]/[0.12] text-xs font-medium text-[#171717] inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <Shuffle
-                    size={14}
-                    strokeWidth={1.5}
-                    className="text-[#525252]"
-                  />
-                  <span>{isMobile ? "전체" : "모두 재배정"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleResetAssign(categoryGrades)}
-                  className="h-9 px-3 rounded-[8px] bg-[#ffffff] hover:bg-[#dc2626]/[0.08] border border-[#dc2626]/20 text-xs font-medium text-[#dc2626] inline-flex items-center gap-1.5 transition-colors duration-150"
-                >
-                  <Trash2 size={14} strokeWidth={1.5} />
-                  <span>초기화</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 flex flex-col gap-2">
               {categoryGrades.length === 0 ? (
-                <div className="py-4 text-center text-xs text-[#737373] bg-[#fafafa] rounded-[8px] border border-[#171717]/[0.06]">
-                  이 종목에 등록된 하위 체급이 없습니다.
+                <div className="p-5 text-center text-xs text-[#737373]">
+                  이 종목에 등록된 하위 체급이 없습니다
                 </div>
               ) : (
-                allSeats.map((seatNumber) => {
-                  const seatState = inspectScopeSeat({
-                    judges: judgesAssignInfo.judges || [],
-                    targetGrades: categoryGrades,
-                    categoryById,
-                    seatIndex: seatNumber,
-                  });
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {allSeats.map((seatNumber) => {
+                    const seatState = inspectScopeSeat({
+                      judges: judgesAssignInfo.judges || [],
+                      targetGrades: categoryGrades,
+                      categoryById,
+                      seatIndex: seatNumber,
+                    });
 
-                  const selectValue =
-                    seatState.status === "multi"
-                      ? "__MULTI__"
-                      : seatState.primaryJudgeUid || "unselect";
+                    const selectValue =
+                      seatState.status === "multi"
+                        ? "__MULTI__"
+                        : seatState.primaryJudgeUid || "unselect";
 
-                  const selectedJudgeInfo = seatState.primaryJudgeUid
-                    ? poolByUid[seatState.primaryJudgeUid]
-                    : null;
-                  const isRemovedFromPool =
-                    Boolean(seatState.primaryJudgeUid) &&
-                    seatState.status !== "multi" &&
-                    !selectedJudgeInfo;
+                    const selectedJudgeInfo = seatState.primaryJudgeUid
+                      ? poolByUid[seatState.primaryJudgeUid]
+                      : null;
+                    const isRemovedFromPool =
+                      Boolean(seatState.primaryJudgeUid) &&
+                      seatState.status !== "multi" &&
+                      !selectedJudgeInfo;
 
-                  const selectableSorted = sortJudgesByName(
-                    judgesPoolArray.filter(
-                      (judge) =>
-                        !assignedJudges.includes(judge.judgeUid) ||
-                        judge.judgeUid === seatState.primaryJudgeUid
-                    )
-                  );
+                    const selectableSorted = sortJudgesByName(
+                      judgesPoolArray.filter(
+                        (judge) =>
+                          !assignedJudges.includes(judge.judgeUid) ||
+                          judge.judgeUid === seatState.primaryJudgeUid
+                      )
+                    );
 
-                  const breakdownText =
-                    seatState.status === "multi"
-                      ? seatState.judgeBreakdown
-                          .map(
-                            (b) =>
-                              `${
-                                poolByUid[b.judgeUid]?.judgeName ||
-                                b.judgeName ||
-                                "미상"
-                              }(${b.count})`
-                          )
-                          .join(", ") +
-                        (seatState.missingCount > 0
-                          ? ` · 미배정(${seatState.missingCount})`
-                          : "")
-                      : "";
+                    const breakdownText =
+                      seatState.status === "multi"
+                        ? seatState.judgeBreakdown
+                            .map(
+                              (b) =>
+                                `${
+                                  poolByUid[b.judgeUid]?.judgeName ||
+                                  b.judgeName ||
+                                  "미상"
+                                }(${b.count})`
+                            )
+                            .join(", ") +
+                          (seatState.missingCount > 0
+                            ? ` · 미배정(${seatState.missingCount})`
+                            : "")
+                        : "";
 
-                  const statusBadges = (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {seatState.status === "multi" && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#2563eb]/[0.08] text-[#2563eb]">
-                          <AlertTriangle size={12} strokeWidth={1.5} />
-                          <span>체급별 상이</span>
-                        </span>
-                      )}
-                      {seatState.status === "partial" && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.10] text-[#b45309] tabular-nums">
-                          <AlertTriangle size={12} strokeWidth={1.5} />
-                          <span>누락 {seatState.missingCount}체급</span>
-                        </span>
-                      )}
-                      {isRemovedFromPool && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#dc2626]/[0.10] text-[#dc2626]">
-                          선발 해제됨
-                        </span>
-                      )}
-                    </div>
-                  );
-
-                  const selectElement = (
-                    <div className="flex flex-col gap-1 w-full">
-                      <div className="flex items-center gap-2">
-                        <Select
-                          {...commonSelectProps}
-                          className="flex-1"
-                          value={selectValue}
-                          onChange={(val) => {
-                            if (val === "__MULTI__") return;
-                            if (val === "unselect") {
-                              handleRemoveAssign(categoryGrades, seatNumber);
-                            } else {
-                              handleSelectJudge(
-                                category,
-                                categoryGrades,
-                                seatNumber,
-                                val
-                              );
-                            }
-                          }}
-                        >
-                          <Select.Option value="unselect" data-search="">
-                            선택 안함
-                          </Select.Option>
-
-                          {seatState.status === "multi" && (
-                            <Select.Option value="__MULTI__" data-search="">
-                              체급별 개별 배정됨 ({breakdownText})
-                            </Select.Option>
-                          )}
-
-                          {isRemovedFromPool && (
-                            <Select.Option
-                              value={seatState.primaryJudgeUid}
-                              data-search=""
-                            >
-                              [선발 해제됨]{" "}
-                              {seatState.judgeBreakdown[0]?.judgeName ||
-                                seatState.primaryJudgeUid}
-                            </Select.Option>
-                          )}
-
-                          {selectableSorted.map((judge) => {
-                            const label = `${judge.isHead ? "위원장 / " : ""}${
-                              judge.judgeName
-                            } (${judge.judgePromoter || "-"} / ${
-                              judge.judgeTel || "-"
-                            })`;
-                            const searchBlob = `${judge.judgeName || ""} ${
-                              judge.judgePromoter || ""
-                            } ${judge.judgeTel || ""}`;
-                            return (
-                              <Select.Option
-                                key={judge.judgeUid}
-                                value={judge.judgeUid}
-                                data-search={searchBlob}
-                              >
-                                {label}
-                              </Select.Option>
+                    return (
+                      <JudgeSeatSlotCard
+                        key={seatNumber}
+                        seatNumber={seatNumber}
+                        status={seatState.status}
+                        selectValue={selectValue}
+                        selectedJudgeInfo={selectedJudgeInfo}
+                        fallbackJudgeName={
+                          seatState.judgeBreakdown[0]?.judgeName ||
+                          seatState.primaryJudgeUid
+                        }
+                        isRemovedFromPool={isRemovedFromPool}
+                        missingCount={seatState.missingCount}
+                        multiLabel="체급별 상이"
+                        breakdownText={breakdownText}
+                        selectableJudges={selectableSorted}
+                        workloadByUid={workloadByUid}
+                        onSelectChange={(val) => {
+                          if (val === "__MULTI__") return;
+                          if (val === "unselect") {
+                            handleRemoveAssign(categoryGrades, seatNumber);
+                          } else {
+                            handleSelectJudge(
+                              category,
+                              categoryGrades,
+                              seatNumber,
+                              val
                             );
-                          })}
-                        </Select>
-
-                        {seatState.status === "partial" &&
-                          seatState.primaryJudgeUid &&
-                          !isRemovedFromPool && (
-                            <button
-                              type="button"
-                              onClick={() =>
+                          }
+                        }}
+                        onClearSeat={() =>
+                          handleRemoveAssign(categoryGrades, seatNumber)
+                        }
+                        onFillPartial={
+                          seatState.status === "partial" &&
+                          seatState.primaryJudgeUid
+                            ? () =>
                                 handleFillPartialSeat(
                                   category,
                                   categoryGrades,
                                   seatNumber,
                                   seatState.primaryJudgeUid
                                 )
-                              }
-                              className="h-8 px-2.5 rounded-[6px] bg-[#b45309] hover:bg-[#92400e] text-white text-xs font-medium inline-flex items-center gap-1 shrink-0 transition-colors"
-                            >
-                              <Check size={13} strokeWidth={1.75} />
-                              <span>누락 채우기</span>
-                            </button>
-                          )}
-                      </div>
-
-                      {seatState.status === "multi" && (
-                        <span className="text-[11px] text-[#737373] pl-1">
-                          현재 체급별 배정: {breakdownText} (새 심판 선택 시 종목
-                          일괄 변경)
-                        </span>
-                      )}
-                    </div>
-                  );
-
-                  if (isMobile) {
-                    return (
-                      <div
-                        key={seatNumber}
-                        className={`p-3 border rounded-[8px] space-y-2.5 ${
-                          seatState.status === "partial" || isRemovedFromPool
-                            ? "bg-[#b45309]/[0.03] border-[#b45309]/25"
-                            : "bg-[#fafafa] border-[#171717]/[0.08]"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-sm font-medium tabular-nums text-[#171717]">
-                            좌석 {seatNumber}
-                          </span>
-                          {statusBadges}
-                        </div>
-
-                        {selectedJudgeInfo && seatState.status !== "multi" && (
-                          <div className="p-2.5 bg-[#ffffff] border border-[#171717]/[0.08] rounded-[8px] space-y-1">
-                            <div className="flex items-center gap-2">
-                              <User
-                                size={14}
-                                strokeWidth={1.5}
-                                className="text-[#525252]"
-                              />
-                              <span className="text-sm font-medium text-[#171717]">
-                                {selectedJudgeInfo.judgeName}
-                              </span>
-                              {selectedJudgeInfo.isHead && (
-                                <span className="px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#b45309]/[0.08] text-[#b45309]">
-                                  위원장
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-[#525252] tabular-nums">
-                              <Phone
-                                size={12}
-                                strokeWidth={1.5}
-                                className="text-[#737373]"
-                              />
-                              <span>{selectedJudgeInfo.judgeTel}</span>
-                            </div>
-                            <div className="text-xs text-[#737373]">
-                              {selectedJudgeInfo.judgePromoter}
-                            </div>
-                          </div>
-                        )}
-
-                        {selectElement}
-                      </div>
+                            : undefined
+                        }
+                      />
                     );
-                  }
-
-                  return (
-                    <div
-                      key={seatNumber}
-                      className={`flex items-center gap-4 px-3.5 py-2 border rounded-[8px] transition-colors duration-150 ${
-                        seatState.status === "partial" || isRemovedFromPool
-                          ? "bg-[#b45309]/[0.03] border-[#b45309]/25"
-                          : "bg-[#fafafa] border-[#171717]/[0.06] hover:bg-[#f4f4f5]"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 w-44 shrink-0">
-                        <span className="font-mono text-sm font-medium tabular-nums text-[#525252]">
-                          좌석 {seatNumber}
-                        </span>
-                        {statusBadges}
-                      </div>
-
-                      <div className="flex-1">{selectElement}</div>
-                    </div>
-                  );
-                })
+                  })}
+                </div>
               )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })
+      )}
     </div>
   );
 };

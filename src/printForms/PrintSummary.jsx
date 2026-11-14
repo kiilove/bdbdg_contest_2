@@ -189,15 +189,11 @@ const PrintSummary = () => {
       return;
     }
 
-    const selectedCategory = categoriesArray.find(
-      (cat) => cat.contestCategoryId === currentCategoryId
-    );
-
     setSearchParams({
       contestId: currentContest.contests.id,
       categoryId: currentCategoryId,
       gradeId: currentGradeId,
-      categoryJudgeType: selectedCategory?.contestCategoryJudgeType,
+      categoryJudgeType: "ranking",
     });
 
     fetchResultsData(

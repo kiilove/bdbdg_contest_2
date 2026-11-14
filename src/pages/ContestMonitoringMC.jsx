@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   Mic,
   Monitor,
@@ -551,7 +551,29 @@ const ContestMonitoringMC = () => {
     });
   };
 
+  const isCombinedStage = useMemo(() => {
+    const matchedStage = allStages.find((s) => s.stageId === currentStageId);
+    if (Array.isArray(matchedStage?.grades) && matchedStage.grades.length > 0) {
+      return matchedStage.grades.length > 1;
+    }
+    if (
+      Array.isArray(currentStageRealtime?.stageGrades) &&
+      currentStageRealtime.stageGrades.length > 0
+    ) {
+      return currentStageRealtime.stageGrades.length > 1;
+    }
+    return /\s+통합$/.test(
+      String(currentStageRealtime?.gradeTitle || "").trim()
+    );
+  }, [
+    allStages,
+    currentStageId,
+    currentStageRealtime?.stageGrades,
+    currentStageRealtime?.gradeTitle,
+  ]);
+
   const togglePlayerSelect = (pNum) => {
+    if (isCombinedStage) return;
     setSelectedCalloutPlayers((prev) =>
       prev.includes(pNum) ? prev.filter((n) => n !== pNum) : [...prev, pNum]
     );
@@ -726,7 +748,9 @@ const ContestMonitoringMC = () => {
                 </span>
               </div>
               <span className="text-xs text-[#85858b]">
-                번호 영역 선택 시 비교심사 지정 · 소개 송출 시 전광판 전환
+                {isCombinedStage
+                  ? "통합무대 진행 중 · 소개 송출 시 전광판 전환"
+                  : "번호 영역 선택 시 비교심사 지정 · 소개 송출 시 전광판 전환"}
               </span>
             </div>
 
@@ -798,51 +822,53 @@ const ContestMonitoringMC = () => {
             )}
           </div>
 
-          {/* 우측 (1열): 비교심사 호명 & 규정 포즈 대본 */}
+          {/* 우측 (1열): 비교심사 호명(단일 체급 시) & 규정 포즈 대본 */}
           <div className="bg-[#19191b] border border-[#ededed]/[0.08] rounded-[12px] p-5 flex flex-col justify-between gap-5">
-            <div className="space-y-3.5">
-              <div className="flex items-center justify-between border-b border-[#ededed]/[0.08] pb-3">
-                <div className="flex items-center gap-2">
-                  <Users
-                    size={16}
-                    strokeWidth={1.5}
-                    className="text-[#85858b]"
-                  />
-                  <span className="font-semibold text-sm text-[#ededed]">
-                    비교심사 호명 컨트롤
+            {!isCombinedStage && (
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between border-b border-[#ededed]/[0.08] pb-3">
+                  <div className="flex items-center gap-2">
+                    <Users
+                      size={16}
+                      strokeWidth={1.5}
+                      className="text-[#85858b]"
+                    />
+                    <span className="font-semibold text-sm text-[#ededed]">
+                      비교심사 호명 컨트롤
+                    </span>
+                  </div>
+                  <span className="font-mono tabular-nums text-xs font-medium text-[#4cc38a]">
+                    선택 {selectedCalloutPlayers.length}명
                   </span>
                 </div>
-                <span className="font-mono tabular-nums text-xs font-medium text-[#4cc38a]">
-                  선택 {selectedCalloutPlayers.length}명
-                </span>
+
+                <p className="text-xs text-[#a1a1a6] m-0 leading-5">
+                  좌측 명단에서 비교심사 대상 선수를 선택한 뒤 전광판에 송출하세요
+                </p>
+
+                {selectedCalloutPlayers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2.5 rounded-[8px] bg-[#141415] border border-[#ededed]/[0.08]">
+                    {selectedCalloutPlayers.map((num) => (
+                      <BibTag key={num} variant="dark" size="sm" number={num} />
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSendCallout}
+                  disabled={selectedCalloutPlayers.length === 0}
+                  className={`w-full h-11 rounded-[8px] font-medium text-sm flex items-center justify-center gap-2 transition-colors active:scale-[0.98] ${
+                    selectedCalloutPlayers.length > 0
+                      ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+                      : "bg-[#232325] text-[#85858b] border border-[#ededed]/[0.08] cursor-not-allowed"
+                  }`}
+                >
+                  <Send size={16} strokeWidth={1.5} />
+                  <span>비교심사 호명 전광판 송출</span>
+                </button>
               </div>
-
-              <p className="text-xs text-[#a1a1a6] m-0 leading-5">
-                좌측 명단에서 비교심사 대상 선수를 선택한 뒤 전광판에 송출하세요
-              </p>
-
-              {selectedCalloutPlayers.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 p-2.5 rounded-[8px] bg-[#141415] border border-[#ededed]/[0.08]">
-                  {selectedCalloutPlayers.map((num) => (
-                    <BibTag key={num} variant="dark" size="sm" number={num} />
-                  ))}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSendCallout}
-                disabled={selectedCalloutPlayers.length === 0}
-                className={`w-full h-11 rounded-[8px] font-medium text-sm flex items-center justify-center gap-2 transition-colors active:scale-[0.98] ${
-                  selectedCalloutPlayers.length > 0
-                    ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
-                    : "bg-[#232325] text-[#85858b] border border-[#ededed]/[0.08] cursor-not-allowed"
-                }`}
-              >
-                <Send size={16} strokeWidth={1.5} />
-                <span>비교심사 호명 전광판 송출</span>
-              </button>
-            </div>
+            )}
 
             {/* 규정 포즈 진행 멘트 */}
             <div className="bg-[#141415] border border-[#ededed]/[0.08] rounded-[10px] p-4 space-y-2.5">

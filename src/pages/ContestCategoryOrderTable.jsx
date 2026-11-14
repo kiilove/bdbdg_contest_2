@@ -311,7 +311,6 @@ const ContestCategoryOrderTable = () => {
                       contestCategoryTitle: categoryTitle,
                       contestCategoryJudgeCount: judgeCount,
                       contestCategorySection: categorySection,
-                      contestCategoryJudgeType: categoryJudgeType,
                       contestCategoryIsOverall: categoryIsOverall,
                     } = category;
 
@@ -367,11 +366,6 @@ const ContestCategoryOrderTable = () => {
                                       {categorySection}
                                     </span>
                                   )}
-                                  <span className="px-2 py-0.5 rounded-[4px] bg-[#f4f4f5] border border-[#171717]/[0.08] text-xs text-[#737373]">
-                                    {categoryJudgeType === "ranking"
-                                      ? "랭킹형"
-                                      : "점수형"}
-                                  </span>
                                   {categoryIsOverall && (
                                     <span className="px-2 py-0.5 rounded-[4px] bg-[#2563eb]/[0.08] text-xs font-medium text-[#2563eb]">
                                       그랑프리 대상
