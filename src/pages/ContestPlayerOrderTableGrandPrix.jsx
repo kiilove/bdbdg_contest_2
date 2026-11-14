@@ -8,13 +8,14 @@ import { doc, runTransaction, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import {
-  generateToday,
-  isGrandPrixPlayerEntry,
-} from "../functions/functions";
 import { sanitizeForFirestore } from "../utils/firestoreSanitize";
 import { resolveOriginalGradeTitle } from "../utils/playerEntryUtils";
 import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
+import {
+  buildGrandPrixPlayersFromResults,
+  getGrandPrixPlayerUniqueKey,
+  sortByWonGradeOrder,
+} from "../utils/grandPrixAutoSyncUtils";
 import {
   Trophy,
   Save,
@@ -30,8 +31,7 @@ import {
   applyStage3FinalDirectEdit,
 } from "../utils/layerPlayerEditUtils";
 
-const getPlayerUniqueKey = (p) =>
-  String(p?.playerUid || p?.playerNumber || p?.playerName || "");
+const getPlayerUniqueKey = getGrandPrixPlayerUniqueKey;
 
 const normalizeGradeGrandPrixOrder = (gradePlayers, markCustom = false) =>
   gradePlayers.map((player, idx) => {
@@ -51,14 +51,6 @@ const normalizeGradeGrandPrixOrder = (gradePlayers, markCustom = false) =>
       ...(markCustom ? { isCustomGrandPrixIndex: true } : {}),
     };
   });
-
-const sortByWonGradeOrder = (a, b) => {
-  const gradeOrderDiff =
-    Number(a?.originalGradeIndex ?? 9999) -
-    Number(b?.originalGradeIndex ?? 9999);
-  if (gradeOrderDiff !== 0) return gradeOrderDiff;
-  return Number(a?.playerNumber || 0) - Number(b?.playerNumber || 0);
-};
 
 const ContestPlayerOrderTableGrandPrix = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -118,7 +110,7 @@ const ContestPlayerOrderTableGrandPrix = () => {
       setGradesArray([...(gradeDoc?.grades || [])]);
       setPlayersFinalArray([...(finalDoc?.players || [])]);
       setPlayersFinalList({ ...(finalDoc || {}) });
-      setResultFinalArray([...(resultDocs || [])]);
+      setResultFinalArray(dedupeContestResultsByGrade(resultDocs || [], contestId));
     } catch (error) {
       console.error(error);
     }
@@ -129,368 +121,14 @@ const ContestPlayerOrderTableGrandPrix = () => {
     categories,
     grades,
     existingFinalPlayers = []
-  ) => {
-    let dummy = [];
-
-    const gradeById = new Map(
-      (grades || []).map((g) => [g?.contestGradeId, g])
-    );
-    const categoryById = new Map(
-      (categories || []).map((c) => [c?.contestCategoryId, c])
-    );
-
-    // 정규 종목 출전 엔트리에서 프로필/무대 사진 및 원체급 월체 이력(참고용) 조회
-    const regularByUidAndGrade = new Map();
-    const photoByUid = new Map();
-    const savedGpByGradeAndKey = new Map();
-    const savedGpByGradeAndOrigGrade = new Map();
-
-    (existingFinalPlayers || []).forEach((fp) => {
-      if (!fp) return;
-      const uKey = getPlayerUniqueKey(fp);
-      const isGpLike = isGrandPrixPlayerEntry(fp);
-
-      if (isGpLike && fp.contestGradeId && uKey) {
-        savedGpByGradeAndKey.set(`${fp.contestGradeId}_${uKey}`, fp);
-        if (fp.originalGradeId) {
-          savedGpByGradeAndOrigGrade.set(
-            `${fp.contestGradeId}__orig:${fp.originalGradeId}`,
-            fp
-          );
-        }
-      } else {
-        if (fp.contestGradeId && uKey) {
-          regularByUidAndGrade.set(`${fp.contestGradeId}_${uKey}`, fp);
-        }
-        if (fp.playerUid && !photoByUid.has(fp.playerUid)) {
-          const photoFields = {};
-          [
-            "stagePhoto1",
-            "stagePhoto2",
-            "stagePhotoUrl1",
-            "stagePhotoUrl2",
-            "stagePhotoUrl",
-            "profileImageUrl",
-            "photoUrl",
-            "playerPhoto",
-            "photos",
-          ].forEach((field) => {
-            if (fp[field] !== undefined && fp[field] !== "") {
-              photoFields[field] = fp[field];
-            }
-          });
-          if (Object.keys(photoFields).length > 0) {
-            photoByUid.set(fp.playerUid, photoFields);
-          }
-        }
-      }
+  ) =>
+    buildGrandPrixPlayersFromResults({
+      resultDocs: resultInfo,
+      categories,
+      grades,
+      existingFinalPlayers,
+      contestId: currentContest?.contests?.id || "",
     });
-
-    const isGrandPrixCategory = (cat) =>
-      cat?.contestCategorySection === "그랑프리" ||
-      String(cat?.contestCategoryTitle || "").includes("그랑프리");
-
-    const filteredCategories = (categories || [])
-      .filter(isGrandPrixCategory)
-      .sort(
-        (a, b) =>
-          (Number(a?.contestCategoryIndex) || 0) -
-          (Number(b?.contestCategoryIndex) || 0)
-      );
-
-    const filteredGrades = filteredCategories.reduce((acc, category) => {
-      const matchingGrades = (grades || [])
-        .filter((grade) => grade.refCategoryId === category.contestCategoryId)
-        .sort(
-          (a, b) =>
-            (Number(a?.contestGradeIndex) || 0) -
-            (Number(b?.contestGradeIndex) || 0)
-        );
-      return [...acc, ...matchingGrades];
-    }, []);
-
-    const dedupedResults = dedupeContestResultsByGrade(
-      resultInfo,
-      currentContest?.contests?.id
-    );
-
-    const flattenedWinner = dedupedResults
-      .map((infoItem) => {
-        const {
-          result: playerResult,
-          contestId,
-          categoryId,
-          gradeId,
-          categoryTitle,
-          gradeTitle,
-        } = infoItem || {};
-
-        const findWinner = playerResult?.find(
-          (f) => Number(f?.playerRank) === 1
-        );
-        if (!findWinner) return null;
-
-        const wonGrade =
-          gradeById.get(gradeId) ||
-          (grades || []).find(
-            (g) =>
-              g.refCategoryId === categoryId &&
-              g.contestGradeTitle === gradeTitle
-          );
-        const originalGradeIndex = Number.isFinite(
-          Number(wonGrade?.contestGradeIndex)
-        )
-          ? Number(wonGrade.contestGradeIndex)
-          : 9999;
-
-        const winnerKey = getPlayerUniqueKey(findWinner);
-        const regularEntry = regularByUidAndGrade.get(
-          `${gradeId}_${winnerKey}`
-        );
-        const inheritedPhotos = findWinner.playerUid
-          ? photoByUid.get(findWinner.playerUid) || {}
-          : {};
-        const resolvedWonCategoryTitle = categoryTitle || "";
-        const resolvedWonGradeTitle =
-          wonGrade?.contestGradeTitle || gradeTitle || "";
-
-        return {
-          ...inheritedPhotos,
-          contestId,
-          originalCategoryId: categoryId,
-          originalGradeId: gradeId,
-          originalGradeIndex,
-          originalcategoryTitle: resolvedWonCategoryTitle,
-          originalCategoryTitle: resolvedWonCategoryTitle,
-          originalgradeTitle: resolvedWonGradeTitle,
-          originalGradeTitle: resolvedWonGradeTitle,
-          wasGradeChangedInOriginal: Boolean(
-            regularEntry?.isGradeChanged || regularEntry?.isGradeChange
-          ),
-          regularPlayerIndex:
-            regularEntry?.playerIndex ??
-            findWinner?.playerIndex ??
-            findWinner?.playerNumber ??
-            null,
-          playerName: regularEntry?.playerName || findWinner.playerName,
-          playerNumber:
-            regularEntry?.playerNumber ?? findWinner.playerNumber,
-          playerGym:
-            regularEntry?.playerGym !== undefined
-              ? regularEntry.playerGym
-              : findWinner.playerGym,
-          playerUid: findWinner.playerUid,
-          totalScore: findWinner.totalScore,
-          // 그랑프리에서는 월체를 완전히 무시하고 체급 순서(grandPrixIndex)로만 무대에 정렬
-          isGradeChange: false,
-          isGradeChanged: false,
-          createBy: "web",
-          id: "",
-          invoiceCreateAt: generateToday(),
-          invoiceId: "",
-          playerTel: regularEntry?.playerTel || "",
-          playerBirth: regularEntry?.playerBirth || "",
-          playerText: regularEntry?.playerText || "",
-          playerNoShow: false,
-        };
-      })
-      .filter(Boolean);
-
-    filteredGrades.forEach((grade) => {
-      const parentCategory = categoryById.get(grade.refCategoryId);
-      const filteredMatching = flattenedWinner.filter(
-        (f) => f.originalCategoryId === grade.originalRefCategoryId
-      );
-
-      // 강제 등록(createdBy === 'force')으로 해당 그랑프리 체급에 직접 추가된 선수도 함께 포함
-      const forceEntriesInGrade = (existingFinalPlayers || []).filter(
-        (fp) =>
-          fp?.contestGradeId === grade.contestGradeId &&
-          (fp?.createdBy === "force" || fp?.createBy === "force")
-      );
-
-      const seenPlayers = new Set();
-      const seenOriginalGrades = new Set();
-      const candidates = [];
-
-      filteredMatching.forEach((match) => {
-        const playerKey = getPlayerUniqueKey(match);
-        if (!playerKey || seenPlayers.has(playerKey)) return;
-        if (
-          match.originalGradeId &&
-          seenOriginalGrades.has(match.originalGradeId)
-        ) {
-          return;
-        }
-        seenPlayers.add(playerKey);
-        if (match.originalGradeId) {
-          seenOriginalGrades.add(match.originalGradeId);
-        }
-
-        const saved =
-          savedGpByGradeAndKey.get(`${grade.contestGradeId}_${playerKey}`) ||
-          (match.originalGradeId
-            ? savedGpByGradeAndOrigGrade.get(
-                `${grade.contestGradeId}__orig:${match.originalGradeId}`
-              )
-            : null);
-        const { regularPlayerIndex, ...matchRest } = match;
-        const resolvedOriginalIndex =
-          saved?.playerIndexOriginal !== undefined &&
-          saved?.playerIndexOriginal !== null
-            ? saved.playerIndexOriginal
-            : regularPlayerIndex !== undefined && regularPlayerIndex !== null
-            ? regularPlayerIndex
-            : saved?.playerIndex ?? matchRest.playerNumber ?? null;
-
-        const savedOrigTitle = saved ? resolveOriginalGradeTitle(saved) : "";
-
-        candidates.push({
-          ...matchRest,
-          ...(saved?._entryId ? { _entryId: saved._entryId } : {}),
-          // 이미 그랑프리 레이어에 저장된 값이 있으면 역연동 덮어쓰기 없이 저장값 우선 보존!
-          playerName: saved?.playerName || matchRest.playerName,
-          playerNumber:
-            saved?.playerNumber !== undefined && saved?.playerNumber !== null
-              ? saved.playerNumber
-              : matchRest.playerNumber,
-          playerGym:
-            saved?.playerGym !== undefined
-              ? saved.playerGym
-              : matchRest.playerGym,
-          playerTel:
-            saved?.playerTel !== undefined
-              ? saved.playerTel
-              : matchRest.playerTel,
-          playerBirth:
-            saved?.playerBirth !== undefined
-              ? saved.playerBirth
-              : matchRest.playerBirth,
-          playerText:
-            saved?.playerText !== undefined
-              ? saved.playerText
-              : matchRest.playerText,
-          ...(savedOrigTitle
-            ? {
-                originalGradeTitle: savedOrigTitle,
-                originalgradeTitle: savedOrigTitle,
-              }
-            : {}),
-          ...(saved?.layer3Edited ? { layer3Edited: true } : {}),
-          ...(saved?.gpLayerSaved ? { gpLayerSaved: true } : {}),
-          contestCategoryId: grade.refCategoryId,
-          contestCategoryTitle:
-            parentCategory?.contestCategoryTitle || "그랑프리",
-          contestCategorySection: "그랑프리",
-          contestGradeId: grade.contestGradeId,
-          contestGradeTitle: grade.contestGradeTitle,
-          playerIndexOriginal: resolvedOriginalIndex,
-          playerNoShow: Boolean(saved?.playerNoShow ?? matchRest.playerNoShow),
-          savedGrandPrixIndex: Number.isFinite(Number(saved?.grandPrixIndex))
-            ? Number(saved.grandPrixIndex)
-            : null,
-          isCustomGrandPrixIndex: Boolean(saved?.isCustomGrandPrixIndex),
-        });
-      });
-
-      forceEntriesInGrade.forEach((fp) => {
-        const playerKey = getPlayerUniqueKey(fp);
-        if (!playerKey || seenPlayers.has(playerKey)) return;
-        seenPlayers.add(playerKey);
-
-        const wonGrade = fp.originalGradeId
-          ? gradeById.get(fp.originalGradeId)
-          : null;
-        const resolvedWonOrder = Number.isFinite(
-          Number(fp.originalGradeIndex ?? wonGrade?.contestGradeIndex)
-        )
-          ? Number(fp.originalGradeIndex ?? wonGrade?.contestGradeIndex)
-          : 9999;
-        const resolvedForceOriginalIndex =
-          fp?.playerIndexOriginal !== undefined &&
-          fp?.playerIndexOriginal !== null
-            ? fp.playerIndexOriginal
-            : fp?.playerIndex ?? fp?.playerNumber ?? null;
-        const resolvedForceOrigGradeTitle =
-          resolveOriginalGradeTitle(fp) || wonGrade?.contestGradeTitle || "";
-        const resolvedForceOrigCategoryTitle =
-          fp.originalcategoryTitle || fp.originalCategoryTitle || "";
-
-        candidates.push({
-          ...fp,
-          contestCategoryId: grade.refCategoryId,
-          contestCategoryTitle:
-            parentCategory?.contestCategoryTitle ||
-            fp.contestCategoryTitle ||
-            "그랑프리",
-          contestCategorySection: "그랑프리",
-          contestGradeId: grade.contestGradeId,
-          contestGradeTitle: grade.contestGradeTitle,
-          originalgradeTitle: resolvedForceOrigGradeTitle,
-          originalGradeTitle: resolvedForceOrigGradeTitle,
-          ...(resolvedForceOrigCategoryTitle
-            ? {
-                originalcategoryTitle: resolvedForceOrigCategoryTitle,
-                originalCategoryTitle: resolvedForceOrigCategoryTitle,
-              }
-            : {}),
-          originalGradeIndex: resolvedWonOrder,
-          playerIndexOriginal: resolvedForceOriginalIndex,
-          isGradeChange: false,
-          isGradeChanged: false,
-          savedGrandPrixIndex: Number.isFinite(Number(fp?.grandPrixIndex))
-            ? Number(fp.grandPrixIndex)
-            : null,
-          isCustomGrandPrixIndex: Boolean(fp?.isCustomGrandPrixIndex),
-        });
-      });
-
-      // 기본 정렬: 월체/선수번호 무시, 오직 하위 우승 체급 순서(contestGradeIndex) 기준!
-      // 단, 운영자가 수동 조정 후 저장한 경우(isCustomGrandPrixIndex) 저장된 grandPrixIndex 우선 반영
-      const hasCustomSavedOrder = candidates.some(
-        (c) => c.isCustomGrandPrixIndex && c.savedGrandPrixIndex !== null
-      );
-
-      candidates.sort((a, b) => {
-        if (hasCustomSavedOrder) {
-          const aSaved = a.savedGrandPrixIndex ?? 9999;
-          const bSaved = b.savedGrandPrixIndex ?? 9999;
-          if (aSaved !== bSaved) return aSaved - bSaved;
-        }
-        return sortByWonGradeOrder(a, b);
-      });
-
-      const orderedForGrade = candidates.map((item, idx) => {
-        const { savedGrandPrixIndex, ...rest } = item;
-        const gpIndex = idx + 1;
-        const preservedOriginal =
-          rest.playerIndexOriginal !== undefined &&
-          rest.playerIndexOriginal !== null
-            ? rest.playerIndexOriginal
-            : rest.playerIndex ?? rest.playerNumber ?? null;
-        return {
-          ...rest,
-          playerIndexOriginal: preservedOriginal,
-          grandPrixIndex: gpIndex,
-          playerIndex: gpIndex,
-          isGradeChange: false,
-          isGradeChanged: false,
-        };
-      });
-
-      dummy = [...dummy, ...orderedForGrade];
-    });
-
-    const uniqueMap = new Map();
-    dummy.forEach((p) => {
-      const uniqueKey = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
-      if (!uniqueMap.has(uniqueKey)) {
-        uniqueMap.set(uniqueKey, p);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
 
   // 그랑프리 체급 내 무대 순번(grandPrixIndex) 상/하 이동
   const handleMoveGrandPrixOrder = (gradeId, currentIndex, direction) => {

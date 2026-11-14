@@ -60,6 +60,8 @@ import {
 import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
 import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
+import { syncGrandPrixRosterIntoFinalPlayers } from "../utils/grandPrixAutoSyncUtils";
 import {
   buildLiveStageRealtimeSnapshot,
   extractRtdbPlayerArray,
@@ -785,6 +787,65 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
       if (isGrandPrixStage && finalDocId) {
         try {
+          const stageGpGradeIds = Array.from(
+            new Set(
+              [
+                ...(Array.isArray(grades)
+                  ? grades.map((g) => g?.gradeId || g?.contestGradeId)
+                  : []),
+                gradeId,
+              ].filter(Boolean)
+            )
+          );
+
+          // 1) 최신 확정 결과(contest_results_list) 조회 및 필요 시 종목·체급 설정 최신화
+          let latestResultDocs = [];
+          try {
+            const resDocs = await fetchResultQuery.getDocuments(
+              "contest_results_list",
+              [where("contestId", "==", contestId)]
+            );
+            latestResultDocs = Array.isArray(resDocs) ? resDocs : [];
+          } catch (resFetchErr) {
+            console.warn(
+              "[Basecamp] 그랑프리 자동 편성용 contest_results_list 조회 실패:",
+              resFetchErr
+            );
+          }
+
+          let effectiveCategories = categoriesArray || [];
+          let effectiveGrades = gradesArray || [];
+          const hasAllStageGrades = stageGpGradeIds.every((gid) =>
+            effectiveGrades.some((g) => g?.contestGradeId === gid)
+          );
+          if (!hasAllStageGrades || effectiveCategories.length === 0) {
+            const catListId =
+              currentContest?.contests?.contestCategorysListId ||
+              currentContest?.contestCategorysListId;
+            const grdListId =
+              currentContest?.contests?.contestGradesListId ||
+              currentContest?.contestGradesListId;
+            const [freshCatDoc, freshGradeDoc] = await Promise.all([
+              catListId
+                ? fetchCategories.getDocument(catListId).catch(() => null)
+                : Promise.resolve(null),
+              grdListId
+                ? fetchGrades.getDocument(grdListId).catch(() => null)
+                : Promise.resolve(null),
+            ]);
+            if (Array.isArray(freshCatDoc?.categorys)) {
+              effectiveCategories = freshCatDoc.categorys;
+              setCategoriesArray(freshCatDoc.categorys);
+            }
+            if (Array.isArray(freshGradeDoc?.grades)) {
+              effectiveGrades = freshGradeDoc.grades;
+              setGradesArray(freshGradeDoc.grades);
+            }
+          }
+
+          let gpSyncSummary = null;
+
+          // 2) 그랑프리 명단 미저장/누락분 자동 편성 + playerIndex 동기화를 단일 트랜잭션으로 수행
           await runTransaction(db, async (transaction) => {
             const finalRef = doc(db, "contest_players_final", finalDocId);
             const finalSnap = await transaction.get(finalRef);
@@ -794,19 +855,28 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             const remotePlayers = Array.isArray(remoteData.players)
               ? remoteData.players
               : [];
-            const syncResult = syncGrandPrixPlayerIndexForStage(
-              remotePlayers,
-              targetStage,
-              categoriesArray
-            );
-            syncedPlayersPool = syncResult.players;
 
-            if (syncResult.changed) {
-              transaction.update(finalRef, {
-                contestId: remoteData.contestId || contestId,
-                players: syncResult.players,
-                updatedAt: new Date().toISOString(),
-              });
+            const gpSync = syncGrandPrixRosterIntoFinalPlayers({
+              existingFinalPlayers: remotePlayers,
+              resultDocs: latestResultDocs,
+              categories: effectiveCategories,
+              grades: effectiveGrades,
+              contestId,
+              targetGpGradeIds: stageGpGradeIds,
+              targetStage,
+            });
+            syncedPlayersPool = gpSync.players;
+            gpSyncSummary = gpSync;
+
+            if (gpSync.changed) {
+              transaction.update(
+                finalRef,
+                sanitizeForFirestore({
+                  contestId: remoteData.contestId || contestId,
+                  players: gpSync.players,
+                  updatedAt: new Date().toISOString(),
+                })
+              );
             }
           });
 
@@ -821,9 +891,50 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                 )
             );
           }
+
+          // 3) 원 종목 미확정 체급 경고 또는 자동 편성 안내 반영
+          if (gpSyncSummary?.missingSourceGrades?.length > 0) {
+            const missingTitles = gpSyncSummary.missingSourceGrades
+              .map((m) => m.gradeTitle || m.gradeId)
+              .filter(Boolean)
+              .join(", ");
+            if (stageNoticeModal && stageNoticeModal.variant === "warning") {
+              stageNoticeModal = {
+                ...stageNoticeModal,
+                body3: `또한 원 종목 중 아직 순위 확정이 저장되지 않은 체급(${missingTitles})이 있습니다. 순위 확정 후 무대를 재시작해 주세요.`,
+              };
+            } else {
+              stageNoticeModal = {
+                variant: "warning",
+                title: "그랑프리 하위 체급 순위 미확정 확인",
+                body: `원 종목 중 아직 순위 확정이 저장되지 않은 체급(${missingTitles})이 있습니다.`,
+                body2:
+                  gpSyncSummary.totalGpPlayersInScope > 0
+                    ? `현재 확정된 1위 선수 ${gpSyncSummary.totalGpPlayersInScope}명만 우선 송출되었습니다. 누락 체급 순위 확정 후 무대 [재시작]을 눌러주세요.`
+                    : "심판위원장 화면에서 하위 체급 순위 확정을 먼저 저장한 뒤 무대 [재시작]을 눌러주세요.",
+                isButton: true,
+                confirmButtonText: "확인",
+              };
+            }
+          } else if (gpSyncSummary?.addedCount > 0) {
+            if (stageNoticeModal) {
+              stageNoticeModal = {
+                ...stageNoticeModal,
+                body3: `그랑프리 명단에 미저장된 1위 선수 ${gpSyncSummary.addedCount}명(총 ${gpSyncSummary.totalGpPlayersInScope}명)은 자동 편성되어 송출되었습니다.`,
+              };
+            } else {
+              stageNoticeModal = {
+                variant: "info",
+                title: "그랑프리 진출 명단 자동 편성 완료",
+                body: `확정된 각 체급 1위 선수(신규 ${gpSyncSummary.addedCount}명 포함, 총 ${gpSyncSummary.totalGpPlayersInScope}명)를 자동으로 편성하여 심판 태블릿 및 전광판에 송출했습니다.`,
+                isButton: true,
+                confirmButtonText: "확인",
+              };
+            }
+          }
         } catch (gpSyncError) {
           console.error(
-            "[Basecamp] 그랑프리 무대 playerIndex 동기화 오류:",
+            "[Basecamp] 그랑프리 무대 자동 편성 및 playerIndex 동기화 오류:",
             gpSyncError
           );
         }

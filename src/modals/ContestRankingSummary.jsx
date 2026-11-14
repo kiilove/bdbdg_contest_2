@@ -14,7 +14,15 @@ import {
   useFirestoreQuery,
   useFirestoreUpdateData,
 } from "../hooks/useFirestores";
-import { where } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  runTransaction,
+  where,
+} from "firebase/firestore";
 import {
   useFirebaseRealtimeGetDocument,
   useFirebaseRealtimeUpdateData,
@@ -33,6 +41,11 @@ import {
 import { saveGradeResultsAtomically } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 import { extractTieBreakGroupsFromResult } from "../utils/compareVoteUtils";
+import { sanitizeForFirestore } from "../utils/firestoreSanitize";
+import {
+  findLinkedGrandPrixGradeIdsForCategory,
+  syncGrandPrixRosterIntoFinalPlayers,
+} from "../utils/grandPrixAutoSyncUtils";
 
 const ContestRankingSummary = ({
   categoryId,
@@ -347,12 +360,96 @@ const ContestRankingSummary = ({
 
       await handleRealtimeUpdate(currentContest.contests.id, gradeId);
 
+      // 원 종목 순위 확정 시 연결된 그랑프리 명단(contest_players_final)도 즉시 자동 동기화 (명단 저장 누락 원천 방어)
+      let gpAutoSynced = false;
+      try {
+        const contestMeta = currentContest?.contests || {};
+        const targetContestId = contestMeta.id || "";
+        const categorysListId = contestMeta.contestCategorysListId;
+        const gradesListId = contestMeta.contestGradesListId;
+        const playersFinalId = contestMeta.contestPlayersFinalId;
+
+        if (
+          targetContestId &&
+          categoryId &&
+          categorysListId &&
+          gradesListId &&
+          playersFinalId
+        ) {
+          const [catSnap, gradeSnap] = await Promise.all([
+            getDoc(doc(db, "contest_categorys_list", categorysListId)),
+            getDoc(doc(db, "contest_grades_list", gradesListId)),
+          ]);
+          const cats = Array.isArray(catSnap.data()?.categorys)
+            ? catSnap.data().categorys
+            : [];
+          const grds = Array.isArray(gradeSnap.data()?.grades)
+            ? gradeSnap.data().grades
+            : [];
+          const linkedGpGradeIds = findLinkedGrandPrixGradeIdsForCategory(
+            categoryId,
+            cats,
+            grds
+          );
+
+          if (linkedGpGradeIds.length > 0) {
+            const resultSnap = await getDocs(
+              query(
+                collection(db, "contest_results_list"),
+                where("contestId", "==", targetContestId)
+              )
+            );
+            const allResultDocs = resultSnap.docs.map((d) => ({
+              id: d.id,
+              ...d.data(),
+            }));
+
+            await runTransaction(db, async (tx) => {
+              const finalRef = doc(db, "contest_players_final", playersFinalId);
+              const finalSnap = await tx.get(finalRef);
+              if (!finalSnap.exists()) return;
+              const finalData = finalSnap.data() || {};
+              const remotePlayers = Array.isArray(finalData.players)
+                ? finalData.players
+                : [];
+
+              const gpSync = syncGrandPrixRosterIntoFinalPlayers({
+                existingFinalPlayers: remotePlayers,
+                resultDocs: allResultDocs,
+                categories: cats,
+                grades: grds,
+                contestId: targetContestId,
+                targetGpGradeIds: linkedGpGradeIds,
+              });
+
+              if (gpSync.changed) {
+                tx.update(
+                  finalRef,
+                  sanitizeForFirestore({
+                    contestId: finalData.contestId || targetContestId,
+                    players: gpSync.players,
+                    updatedAt: new Date().toISOString(),
+                  })
+                );
+                gpAutoSynced = true;
+              }
+            });
+          }
+        }
+      } catch (gpAutoErr) {
+        console.warn(
+          "[ContestRankingSummary] 그랑프리 명단 자동 동기화 건너뜀:",
+          gpAutoErr
+        );
+      }
+
       setIsSaveSuccess(true);
       setMessage({
         title: "순위표 최종 확정 완료",
         body: "순위 결과가 정상적으로 저장되었습니다.",
-        body2:
-          "본부석 · 사회자 프롬프터 · 전광판 집계 데이터에 즉시 반영되었습니다.",
+        body2: gpAutoSynced
+          ? "본부석 · 사회자 프롬프터 · 전광판 · 그랑프리 진출 명단에 즉시 자동 반영되었습니다."
+          : "본부석 · 사회자 프롬프터 · 전광판 집계 데이터에 즉시 반영되었습니다.",
       });
       setMsgOpen(true);
     } catch (error) {

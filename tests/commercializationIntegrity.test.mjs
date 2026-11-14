@@ -69,6 +69,10 @@ import {
   forwardWeighInToFinalPlayers,
   applyStage3FinalDirectEdit,
 } from "../src/utils/layerPlayerEditUtils.js";
+import {
+  findLinkedGrandPrixGradeIdsForCategory,
+  syncGrandPrixRosterIntoFinalPlayers,
+} from "../src/utils/grandPrixAutoSyncUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1198,4 +1202,300 @@ test("16. Live Judge Swap Sparse RTDB Object Safety — zero undefined holes whe
   );
   assert.equal(plan.nextRealtimeJudges[1].judgeUid, null);
   assert.equal(plan.nextRealtimeJudges[3].judgeUid, "j4");
+});
+
+test("17. Grand Prix Roster Auto-Sync Defense — zero-save rescue, idempotency, custom order/noShow preservation, winner re-confirmation, and missing source grade detection", () => {
+  const categories = [
+    {
+      contestCategoryId: "cat_bb",
+      contestCategoryTitle: "남자 일반부 보디빌딩",
+      contestCategorySection: "1부",
+      contestCategoryIndex: 1,
+    },
+    {
+      contestCategoryId: "cat_gp",
+      contestCategoryTitle: "그랑프리",
+      contestCategorySection: "그랑프리",
+      contestCategoryIndex: 99,
+    },
+  ];
+  const grades = [
+    {
+      contestGradeId: "g_65",
+      contestGradeTitle: "-65kg",
+      contestGradeIndex: 1,
+      refCategoryId: "cat_bb",
+    },
+    {
+      contestGradeId: "g_70",
+      contestGradeTitle: "-70kg",
+      contestGradeIndex: 2,
+      refCategoryId: "cat_bb",
+    },
+    {
+      contestGradeId: "g_75",
+      contestGradeTitle: "-75kg",
+      contestGradeIndex: 3,
+      refCategoryId: "cat_bb",
+    },
+    {
+      contestGradeId: "g_empty",
+      contestGradeTitle: "-60kg (출전자없음)",
+      contestGradeIndex: 0,
+      refCategoryId: "cat_bb",
+    },
+    {
+      contestGradeId: "gp_bb",
+      contestGradeTitle: "남자 일반부 보디빌딩 그랑프리",
+      contestGradeIndex: 1,
+      refCategoryId: "cat_gp",
+      originalRefCategoryId: "cat_bb",
+    },
+  ];
+
+  assert.deepEqual(
+    findLinkedGrandPrixGradeIdsForCategory("cat_bb", categories, grades),
+    ["gp_bb"]
+  );
+  assert.deepEqual(
+    findLinkedGrandPrixGradeIdsForCategory("cat_gp", categories, grades),
+    []
+  );
+
+  const regularFinalPlayers = [
+    {
+      contestCategoryId: "cat_bb",
+      contestCategoryTitle: "남자 일반부 보디빌딩",
+      contestGradeId: "g_65",
+      contestGradeTitle: "-65kg",
+      playerUid: "u_101",
+      playerNumber: 101,
+      playerIndex: 3,
+      playerName: "김육오",
+      playerGym: "A짐",
+      stagePhoto1: "https://cdn.example.com/101.jpg",
+      playerNoShow: false,
+    },
+    {
+      contestCategoryId: "cat_bb",
+      contestCategoryTitle: "남자 일반부 보디빌딩",
+      contestGradeId: "g_70",
+      contestGradeTitle: "-70kg",
+      playerUid: "u_202",
+      playerNumber: 202,
+      playerIndex: 5,
+      playerName: "박칠공",
+      playerGym: "B짐",
+      stagePhoto1: "https://cdn.example.com/202.jpg",
+      playerNoShow: false,
+    },
+    {
+      contestCategoryId: "cat_bb",
+      contestCategoryTitle: "남자 일반부 보디빌딩",
+      contestGradeId: "g_70",
+      contestGradeTitle: "-70kg",
+      playerUid: "u_205",
+      playerNumber: 205,
+      playerIndex: 6,
+      playerName: "정재집계",
+      playerGym: "B2짐",
+      stagePhoto1: "https://cdn.example.com/205.jpg",
+      playerNoShow: false,
+    },
+    {
+      contestCategoryId: "cat_bb",
+      contestCategoryTitle: "남자 일반부 보디빌딩",
+      contestGradeId: "g_75",
+      contestGradeTitle: "-75kg",
+      playerUid: "u_303",
+      playerNumber: 303,
+      playerIndex: 2,
+      playerName: "이칠오",
+      playerGym: "C짐",
+      stagePhoto1: "https://cdn.example.com/303.jpg",
+      playerNoShow: false,
+    },
+  ];
+
+  const gpStage = {
+    stageId: "stage_gp_1",
+    stageNumber: 20,
+    categoryId: "cat_gp",
+    categoryTitle: "그랑프리",
+    categorySection: "그랑프리",
+    grades: [{ gradeId: "gp_bb", gradeTitle: "남자 일반부 보디빌딩 그랑프리" }],
+  };
+
+  // (A) -65kg, -70kg만 확정되고 -75kg는 미확정인 상태에서 무대 오픈 시도 (0명 출전자 체급 g_empty는 오탐 없어야 함)
+  const partialResults = [
+    {
+      id: "res_g65",
+      contestId: "c1",
+      categoryId: "cat_bb",
+      categoryTitle: "남자 일반부 보디빌딩",
+      gradeId: "g_65",
+      gradeTitle: "-65kg",
+      savedAt: 1000,
+      result: [{ playerUid: "u_101", playerNumber: 101, playerName: "김육오", playerRank: 1, totalScore: 3 }],
+    },
+    {
+      id: "res_g70",
+      contestId: "c1",
+      categoryId: "cat_bb",
+      categoryTitle: "남자 일반부 보디빌딩",
+      gradeId: "g_70",
+      gradeTitle: "-70kg",
+      savedAt: 2000,
+      result: [{ playerUid: "u_202", playerNumber: 202, playerName: "박칠공", playerRank: 1, totalScore: 4 }],
+    },
+  ];
+
+  const syncA = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: regularFinalPlayers,
+    resultDocs: partialResults,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_bb"],
+    targetStage: gpStage,
+    invoiceCreateAt: "2026-11-15 17:00",
+  });
+
+  assert.equal(syncA.changed, true);
+  assert.equal(syncA.addedCount, 2);
+  assert.equal(syncA.totalGpPlayersInScope, 2);
+  assert.deepEqual(
+    syncA.missingSourceGrades.map((m) => m.gradeId),
+    ["g_75"]
+  );
+
+  const gpEntriesA = syncA.players.filter((p) => p.contestGradeId === "gp_bb");
+  assert.equal(gpEntriesA.length, 2);
+  assert.deepEqual(
+    gpEntriesA.map((p) => ({
+      uid: p.playerUid,
+      gpIdx: p.grandPrixIndex,
+      pIdx: p.playerIndex,
+      origIdx: p.playerIndexOriginal,
+      photo: p.stagePhoto1,
+    })),
+    [
+      { uid: "u_101", gpIdx: 1, pIdx: 1, origIdx: 3, photo: "https://cdn.example.com/101.jpg" },
+      { uid: "u_202", gpIdx: 2, pIdx: 2, origIdx: 5, photo: "https://cdn.example.com/202.jpg" },
+    ]
+  );
+
+  // (B) 멱등성 검증: 변경 사항 없을 때 재실행 시 changed === false
+  const syncB = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: syncA.players,
+    resultDocs: partialResults,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_bb"],
+    targetStage: gpStage,
+    invoiceCreateAt: "2026-11-15 17:00",
+  });
+  assert.equal(syncB.changed, false);
+  assert.equal(syncB.addedCount, 0);
+
+  // (C) 운영자가 수동으로 순번 변경(202 -> 1번, 101 -> 2번 + 101 불참 체크) 후 -75kg 추가 확정 시 수동 순번/불참 보존 + 신규 합류
+  const manuallyEditedPlayers = syncA.players.map((p) => {
+    if (p.contestGradeId !== "gp_bb") return p;
+    if (p.playerUid === "u_202") {
+      return { ...p, grandPrixIndex: 1, playerIndex: 1, isCustomGrandPrixIndex: true, gpLayerSaved: true };
+    }
+    return {
+      ...p,
+      grandPrixIndex: 2,
+      playerIndex: 2,
+      isCustomGrandPrixIndex: true,
+      playerNoShow: true,
+      gpLayerSaved: true,
+    };
+  });
+
+  const fullResults = [
+    ...partialResults,
+    {
+      id: "res_g75",
+      contestId: "c1",
+      categoryId: "cat_bb",
+      categoryTitle: "남자 일반부 보디빌딩",
+      gradeId: "g_75",
+      gradeTitle: "-75kg",
+      savedAt: 3000,
+      result: [{ playerUid: "u_303", playerNumber: 303, playerName: "이칠오", playerRank: 1, totalScore: 3 }],
+    },
+  ];
+
+  const syncC = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: manuallyEditedPlayers,
+    resultDocs: fullResults,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_bb"],
+    targetStage: gpStage,
+    invoiceCreateAt: "2026-11-15 17:05",
+  });
+
+  assert.equal(syncC.changed, true);
+  assert.equal(syncC.addedCount, 1);
+  assert.equal(syncC.missingSourceGrades.length, 0);
+  const gpEntriesC = syncC.players.filter((p) => p.contestGradeId === "gp_bb");
+  assert.deepEqual(
+    gpEntriesC.map((p) => ({
+      uid: p.playerUid,
+      gpIdx: p.grandPrixIndex,
+      noShow: p.playerNoShow,
+    })),
+    [
+      { uid: "u_202", gpIdx: 1, noShow: false },
+      { uid: "u_101", gpIdx: 2, noShow: true },
+      { uid: "u_303", gpIdx: 3, noShow: false },
+    ]
+  );
+
+  // (D) -70kg 재집계로 1위가 박칠공(202) -> 정재집계(205)로 변경된 경우 이전 우승자 이름/번호 오염 없이 교체
+  const reconfirmedResults = [
+    partialResults[0],
+    {
+      id: "res_g70_v2",
+      contestId: "c1",
+      categoryId: "cat_bb",
+      categoryTitle: "남자 일반부 보디빌딩",
+      gradeId: "g_70",
+      gradeTitle: "-70kg",
+      savedAt: 5000,
+      result: [{ playerUid: "u_205", playerNumber: 205, playerName: "정재집계", playerRank: 1, totalScore: 3 }],
+    },
+    fullResults[2],
+  ];
+
+  const syncD = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: syncA.players,
+    resultDocs: reconfirmedResults,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_bb"],
+    targetStage: gpStage,
+    invoiceCreateAt: "2026-11-15 17:10",
+  });
+
+  const gpEntriesD = syncD.players.filter((p) => p.contestGradeId === "gp_bb");
+  assert.deepEqual(
+    gpEntriesD.map((p) => ({
+      uid: p.playerUid,
+      num: p.playerNumber,
+      name: p.playerName,
+      gpIdx: p.grandPrixIndex,
+    })),
+    [
+      { uid: "u_101", num: 101, name: "김육오", gpIdx: 1 },
+      { uid: "u_205", num: 205, name: "정재집계", gpIdx: 2 },
+      { uid: "u_303", num: 303, name: "이칠오", gpIdx: 3 },
+    ]
+  );
 });

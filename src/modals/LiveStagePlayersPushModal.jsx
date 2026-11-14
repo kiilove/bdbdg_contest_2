@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { db, database } from "../firebase";
+import { isGrandPrixPlayerEntry } from "../functions/functions";
 import {
   sanitizeForFirestore,
   sanitizeForRealtimeDb,
@@ -481,10 +482,19 @@ const LiveStagePlayersPushModal = ({
               `${p.contestGradeId}::${String(p.playerNumber)}`
             );
             if (!matchedDraft) return p;
+            const nextIdx =
+              Number(matchedDraft.playerIndex) || p.playerIndex || 1;
+            const isGpEntry = isGrandPrixPlayerEntry(p, currentStageInfo);
             return {
               ...p,
               playerNoShow: !matchedDraft.included,
-              playerIndex: Number(matchedDraft.playerIndex) || p.playerIndex || 1,
+              playerIndex: nextIdx,
+              ...(isGpEntry
+                ? {
+                    grandPrixIndex: nextIdx,
+                    isCustomGrandPrixIndex: true,
+                  }
+                : {}),
             };
           });
 
