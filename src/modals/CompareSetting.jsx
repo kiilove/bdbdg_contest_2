@@ -18,6 +18,8 @@ import {
   getComparePlayerKey,
   buildAuthorityComparePlayers,
 } from "../utils/compareVoteUtils";
+import { normalizeDenseRealtimeJudges } from "../utils/judgeAssignUtils";
+import { extractRtdbPlayerArray } from "../utils/liveStageSnapshotUtils";
 import { Card, Button, Space, Tag, InputNumber, Progress, Badge } from "antd";
 import {
   TrophyOutlined,
@@ -216,19 +218,21 @@ const CompareSetting = ({
           compareCancel: true,
         },
         canceledAt: Date.now(),
-        judges: (realtimeData?.compares?.judges || []).map((j) => ({
-          ...j,
-          messageStatus: "확인전",
-        })),
+        judges: extractRtdbPlayerArray(realtimeData?.compares?.judges).map(
+          (j) => ({
+            ...j,
+            messageStatus: "확인전",
+          })
+        ),
       });
 
       // 1-2) 이미 확정된 비교심사 채점 도중 취소한 경우, 먼저 제출한 심판석(isEnd: true) 잠금을 즉시 해제
-      if (
-        wasCompareIng &&
-        Array.isArray(realtimeData?.judges) &&
-        realtimeData.judges.length > 0
-      ) {
-        const unlockedJudges = realtimeData.judges.map((j, idx) => ({
+      const denseStageJudges = normalizeDenseRealtimeJudges(
+        realtimeData?.judges,
+        realtimeData?.stageJudgeCount
+      );
+      if (wasCompareIng && denseStageJudges.length > 0) {
+        const unlockedJudges = denseStageJudges.map((j, idx) => ({
           ...j,
           seatIndex: j?.seatIndex ?? idx + 1,
           isEnd: false,
@@ -274,8 +278,11 @@ const CompareSetting = ({
       compareIng: false,
     };
 
-    const judgeMessageInfo = (realtimeData?.judges || []).map((judge) => {
-      const { seatIndex } = judge;
+    const judgeMessageInfo = normalizeDenseRealtimeJudges(
+      realtimeData?.judges,
+      realtimeData?.stageJudgeCount
+    ).map((judge, idx) => {
+      const seatIndex = judge?.seatIndex ?? idx + 1;
       return { seatIndex, messageStatus: "확인전" };
     });
 
@@ -446,8 +453,12 @@ const CompareSetting = ({
       });
 
       // 비교심사 확정 시 기존 채점 종료(isEnd: true) 좌석을 재채점 가능 상태(isEnd: false)로 동기화
-      if (Array.isArray(realtimeData?.judges) && realtimeData.judges.length > 0) {
-        const resetJudges = realtimeData.judges.map((j, idx) => ({
+      const denseStageJudges = normalizeDenseRealtimeJudges(
+        realtimeData?.judges,
+        realtimeData?.stageJudgeCount
+      );
+      if (denseStageJudges.length > 0) {
+        const resetJudges = denseStageJudges.map((j, idx) => ({
           ...j,
           seatIndex: j?.seatIndex ?? idx + 1,
           isEnd: false,
@@ -634,10 +645,13 @@ const CompareSetting = ({
   ]);
 
   useEffect(() => {
-    if (realtimeData?.compares?.judges?.length > 0) {
-      setVotedResult(handleCountPlayerVotes(realtimeData.compares.judges));
-      const validatedMessages = realtimeData.compares.judges.some(
-        (s) => s.messageStatus !== "투표완료"
+    const compareJudgesList = extractRtdbPlayerArray(
+      realtimeData?.compares?.judges
+    );
+    if (compareJudgesList.length > 0) {
+      setVotedResult(handleCountPlayerVotes(compareJudgesList));
+      const validatedMessages = compareJudgesList.some(
+        (s) => s?.messageStatus !== "투표완료"
       );
       setVotedValidate(validatedMessages);
     }
@@ -1840,14 +1854,16 @@ const CompareSetting = ({
                             <th className="border border-gray-300 p-3 text-left font-bold">
                               심판번호
                             </th>
-                            {(realtimeData?.judges || []).map((judge, pIdx) => (
-                              <th
-                                key={pIdx}
-                                className="border border-gray-300 p-3 text-center font-bold"
-                              >
-                                {judge.seatIndex}
-                              </th>
-                            ))}
+                            {extractRtdbPlayerArray(realtimeData?.judges).map(
+                              (judge, pIdx) => (
+                                <th
+                                  key={pIdx}
+                                  className="border border-gray-300 p-3 text-center font-bold"
+                                >
+                                  {judge.seatIndex}
+                                </th>
+                              )
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -1855,25 +1871,25 @@ const CompareSetting = ({
                             <td className="border border-gray-300 p-3 font-bold bg-[#f8fafc]">
                               투표상황
                             </td>
-                            {(realtimeData?.compares?.judges || []).map(
-                              (judge, pIdx) => (
-                                <td
-                                  key={pIdx}
-                                  className="border border-gray-300 p-3 text-center"
+                            {extractRtdbPlayerArray(
+                              realtimeData?.compares?.judges
+                            ).map((judge, pIdx) => (
+                              <td
+                                key={pIdx}
+                                className="border border-gray-300 p-3 text-center"
+                              >
+                                <Tag
+                                  color={
+                                    judge.messageStatus === "투표완료"
+                                      ? "success"
+                                      : "default"
+                                  }
+                                  className="font-bold m-0"
                                 >
-                                  <Tag
-                                    color={
-                                      judge.messageStatus === "투표완료"
-                                        ? "success"
-                                        : "default"
-                                    }
-                                    className="font-bold m-0"
-                                  >
-                                    {judge.messageStatus}
-                                  </Tag>
-                                </td>
-                              )
-                            )}
+                                  {judge.messageStatus}
+                                </Tag>
+                              </td>
+                            ))}
                           </tr>
                         </tbody>
                       </table>
@@ -1884,8 +1900,9 @@ const CompareSetting = ({
                       size="middle"
                       className="w-full"
                     >
-                      {(realtimeData?.compares?.judges || []).map(
-                        (judge, pIdx) => (
+                      {extractRtdbPlayerArray(
+                        realtimeData?.compares?.judges
+                      ).map((judge, pIdx) => (
                           <Card key={pIdx} size="small">
                             <div className="flex justify-between items-center">
                               <span className="font-bold">

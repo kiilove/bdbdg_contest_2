@@ -762,6 +762,69 @@ export const summarizeJudgeSeatGaps = ({
  * V1 / V2 / V3 하위 호환을 위해 Firestore `contest_judges_assign` 배열과
  * RTDB `currentStage/{contestId}/judges` 배열을 동시에 정합성 있게 생성합니다.
  */
+/**
+ * RTDB `currentStage/{contestId}/judges` 데이터가 희소 배열(Sparse Array) 또는
+ * 객체(`{ 0: {...}, 3: {...} }`) 형태로 반환되더라도, 심판 태블릿(`judges/${seatIndex - 1}`)과
+ * 1:1 인덱스 호환(`index === seatIndex - 1`)을 유지하면서 `undefined` 구멍이 0개인
+ * 조밀한(Dense) 좌석 배열로 정규화합니다.
+ */
+export const normalizeDenseRealtimeJudges = (rawJudges, minSeatCount = 0) => {
+  const entries = [];
+  if (Array.isArray(rawJudges)) {
+    rawJudges.forEach((item, idx) => {
+      if (!item) return;
+      const seat = Number(item?.seatIndex || idx + 1);
+      if (Number.isFinite(seat) && seat >= 1) {
+        entries.push({ ...item, seatIndex: seat });
+      }
+    });
+  } else if (rawJudges && typeof rawJudges === "object") {
+    Object.entries(rawJudges).forEach(([key, item]) => {
+      if (!item) return;
+      const parsedKey = Number(key);
+      const fallbackSeat =
+        Number.isFinite(parsedKey) && parsedKey >= 0 ? parsedKey + 1 : 0;
+      const seat = Number(item?.seatIndex || fallbackSeat);
+      if (Number.isFinite(seat) && seat >= 1) {
+        entries.push({ ...item, seatIndex: seat });
+      }
+    });
+  }
+
+  const maxEntrySeat = entries.reduce(
+    (max, item) => Math.max(max, Number(item.seatIndex) || 0),
+    0
+  );
+  const totalSeats = Math.max(maxEntrySeat, Number(minSeatCount) || 0);
+  if (totalSeats <= 0) return [];
+
+  const bySeat = new Map();
+  entries.forEach((item) => {
+    bySeat.set(item.seatIndex, item);
+  });
+
+  return Array.from({ length: totalSeats }, (_, idx) => {
+    const seat = idx + 1;
+    const found = bySeat.get(seat);
+    if (found) {
+      return {
+        ...found,
+        seatIndex: seat,
+      };
+    }
+    return {
+      seatIndex: seat,
+      judgeUid: null,
+      judgeName: null,
+      onedayPassword: null,
+      isHead: false,
+      isLogined: false,
+      isEnd: false,
+      errors: "",
+    };
+  });
+};
+
 export const applyEmergencyJudgeSeatSwap = ({
   judges = [],
   categories = [],
@@ -866,17 +929,20 @@ export const applyEmergencyJudgeSeatSwap = ({
     targetStages = [matchedCurrentStage, ...remainingInSection];
   }
 
-  const rawRealtimeList = Array.isArray(currentRealtimeJudges)
-    ? currentRealtimeJudges
-    : currentRealtimeJudges && typeof currentRealtimeJudges === "object"
-    ? Object.values(currentRealtimeJudges)
-    : [];
-  const realtimeList = rawRealtimeList
-    .filter(Boolean)
-    .map((j, idx) => ({
-      ...j,
-      seatIndex: Number(j?.seatIndex || idx + 1),
-    }));
+  const numericPartnerSeatForInit = Number(partnerSeatIndex);
+  const isExchangeCandidate =
+    swapMode === "exchange" &&
+    Number.isFinite(numericPartnerSeatForInit) &&
+    numericPartnerSeatForInit >= 1 &&
+    numericPartnerSeatForInit !== targetSeat;
+  const requiredMinSeats = Math.max(
+    targetSeat >= 1 ? targetSeat : 0,
+    isExchangeCandidate ? numericPartnerSeatForInit : 0
+  );
+  const realtimeList = normalizeDenseRealtimeJudges(
+    currentRealtimeJudges,
+    requiredMinSeats
+  );
 
   const findRealtimeSlotIndex = (sIdx) => {
     return realtimeList.findIndex(
@@ -1034,11 +1100,6 @@ export const applyEmergencyJudgeSeatSwap = ({
       targetSeat,
       replacementJudge
     );
-  } else if (targetSeat >= 1) {
-    realtimeList.push(buildSwappedSlot(null, targetSeat, replacementJudge));
-    realtimeList.sort(
-      (a, b) => Number(a?.seatIndex || 0) - Number(b?.seatIndex || 0)
-    );
   }
 
   const affectedSeats = [targetSeat];
@@ -1050,14 +1111,6 @@ export const applyEmergencyJudgeSeatSwap = ({
         realtimeList[partnerSlotIdx],
         numericPartnerSeat,
         outgoingJudge
-      );
-      affectedSeats.push(numericPartnerSeat);
-    } else if (numericPartnerSeat >= 1 && outgoingJudge) {
-      realtimeList.push(
-        buildSwappedSlot(null, numericPartnerSeat, outgoingJudge)
-      );
-      realtimeList.sort(
-        (a, b) => Number(a?.seatIndex || 0) - Number(b?.seatIndex || 0)
       );
       affectedSeats.push(numericPartnerSeat);
     }

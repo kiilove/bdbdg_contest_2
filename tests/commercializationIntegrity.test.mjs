@@ -1194,6 +1194,8 @@ test("16. Live Judge Swap Sparse RTDB Object Safety — zero undefined holes whe
   assert.equal(plan.nextRealtimeJudges.some((item) => item === undefined), false);
   assert.deepEqual(
     plan.nextRealtimeJudges.map((j) => j.seatIndex),
-    [1, 3, 4]
+    [1, 2, 3, 4]
   );
+  assert.equal(plan.nextRealtimeJudges[1].judgeUid, null);
+  assert.equal(plan.nextRealtimeJudges[3].judgeUid, "j4");
 });

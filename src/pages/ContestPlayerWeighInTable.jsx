@@ -629,24 +629,20 @@ const ContestPlayerWeighInTable = () => {
                 ? resolvedGradeChanged
                   ? lp.contestGradeId || dbPlayer.contestGradeId
                   : lp.contestGradeId ||
-                    dbPlayer.originalGradeId ||
-                    dbPlayer.contestGradeId
-                : resolvedGradeChanged
-                ? dbPlayer.contestGradeId || lp.contestGradeId
-                : dbPlayer.originalGradeId ||
-                  dbPlayer.contestGradeId ||
-                  lp.contestGradeId,
+                    dbPlayer.contestGradeId ||
+                    dbPlayer.originalGradeId
+                : dbPlayer.contestGradeId ||
+                  lp.contestGradeId ||
+                  dbPlayer.originalGradeId,
               contestGradeTitle: isLocalDirty
                 ? resolvedGradeChanged
                   ? lp.contestGradeTitle || dbPlayer.contestGradeTitle
                   : lp.contestGradeTitle ||
-                    dbPlayer.originalGradeTitle ||
-                    dbPlayer.contestGradeTitle
-                : resolvedGradeChanged
-                ? dbPlayer.contestGradeTitle || lp.contestGradeTitle
-                : dbPlayer.originalGradeTitle ||
-                  dbPlayer.contestGradeTitle ||
-                  lp.contestGradeTitle,
+                    dbPlayer.contestGradeTitle ||
+                    dbPlayer.originalGradeTitle
+                : dbPlayer.contestGradeTitle ||
+                  lp.contestGradeTitle ||
+                  dbPlayer.originalGradeTitle,
               playerNumber: isLocalDirty
                 ? Number(lp.playerNumber) || Number(dbPlayer.playerNumber) || 0
                 : Number(dbPlayer.playerNumber) || Number(lp.playerNumber) || 0,

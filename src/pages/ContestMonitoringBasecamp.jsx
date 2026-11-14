@@ -916,9 +916,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   };
 
   const handleJudgeIsEndValidated = (judgesList) => {
-    if (!Array.isArray(judgesList) || judgesList.length <= 0) return true;
-    const validate = judgesList.some((s) => s.isEnd === false);
-    return validate;
+    const normalized = extractRtdbPlayerArray(judgesList);
+    if (normalized.length <= 0) return true;
+    const activeAssigned = normalized.filter(
+      (s) => Boolean(s?.judgeUid || s?.judgeName || s?.isLogined)
+    );
+    const pool = activeAssigned.length > 0 ? activeAssigned : normalized;
+    return pool.some((s) => s.isEnd === false);
   };
 
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -1331,7 +1335,10 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
               <button
                 type="button"
                 onClick={() =>
-                  handleForceReStart(index, currentContest.contests.id)
+                  handleForceReStart(
+                    Math.max(0, Number(seatIndex || index + 1) - 1),
+                    currentContest.contests.id
+                  )
                 }
                 className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-[#171717]/15 bg-white hover:bg-[#f4f4f5] text-[#171717] text-xs font-medium shrink-0 cursor-pointer transition-colors"
               >
@@ -2261,7 +2268,13 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
                                                 type="button"
                                                 onClick={() =>
                                                   handleForceReStart(
-                                                    idx,
+                                                    Math.max(
+                                                      0,
+                                                      Number(
+                                                        judge.seatIndex ||
+                                                          idx + 1
+                                                      ) - 1
+                                                    ),
                                                     currentContest.contests.id
                                                   )
                                                 }

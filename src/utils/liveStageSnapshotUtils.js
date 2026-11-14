@@ -2,6 +2,7 @@ import { doc, runTransaction } from "firebase/firestore";
 import { ref, remove, update } from "firebase/database";
 import { getStagePlayerSortIndex } from "../functions/functions.js";
 import { isActiveStagePlayer } from "./playerEntryUtils.js";
+import { normalizeDenseRealtimeJudges } from "./judgeAssignUtils.js";
 
 export const getStageBackupKey = (stageId, gradeIds = []) => {
   if (stageId) return String(stageId);
@@ -365,7 +366,10 @@ export const rollbackLiveStageToOriginal = async ({
     preservedOriginalPlayers: restoredActivePlayers,
   });
 
-  const nextJudges = extractRtdbPlayerArray(realtimeData?.judges).map((j) => ({
+  const nextJudges = normalizeDenseRealtimeJudges(
+    realtimeData?.judges,
+    realtimeData?.stageJudgeCount
+  ).map((j) => ({
     ...j,
     isEnd: false,
   }));

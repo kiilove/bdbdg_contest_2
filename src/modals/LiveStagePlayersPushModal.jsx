@@ -19,6 +19,7 @@ import {
   sanitizeForFirestore,
   sanitizeForRealtimeDb,
 } from "../utils/firestoreSanitize";
+import { normalizeDenseRealtimeJudges } from "../utils/judgeAssignUtils";
 import {
   buildLiveStageRealtimeSnapshot,
   extractRtdbPlayerArray,
@@ -542,7 +543,10 @@ const LiveStagePlayersPushModal = ({
       });
 
       // 이미 로그인한 심판은 로그인 상태를 유지하되, 채점 제출 완료(isEnd)만 해제하여 재채점 가능화
-      const nextJudges = extractRtdbPlayerArray(realtimeData?.judges).map((j) => ({
+      const nextJudges = normalizeDenseRealtimeJudges(
+        realtimeData?.judges,
+        realtimeData?.stageJudgeCount
+      ).map((j) => ({
         ...j,
         isEnd: false,
       }));

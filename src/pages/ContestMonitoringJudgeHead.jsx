@@ -48,12 +48,18 @@ import {
   MonitoringDiagnosticsBar,
   resolveEffectiveCollectionName,
 } from "../components/monitoring/MonitoringDiagnosticsBar";
-import { summarizeJudgeSeatGaps } from "../utils/judgeAssignUtils";
+import {
+  normalizeDenseRealtimeJudges,
+  summarizeJudgeSeatGaps,
+} from "../utils/judgeAssignUtils";
 import {
   removeStageCompareByLocalIndex,
   buildRealtimeCompareAfterCancel,
 } from "../utils/compareVoteUtils";
-import { resolveEffectiveStagePlayers } from "../utils/liveStageSnapshotUtils";
+import {
+  extractRtdbPlayerArray,
+  resolveEffectiveStagePlayers,
+} from "../utils/liveStageSnapshotUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 
 const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
@@ -555,8 +561,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
         },
         canceledAt: Date.now(),
       });
-      if (Array.isArray(realtimeData?.judges) && realtimeData.judges.length > 0) {
-        const unlockedJudges = realtimeData.judges.map((j, idx) => ({
+      const denseJudges = normalizeDenseRealtimeJudges(
+        realtimeData?.judges,
+        realtimeData?.stageJudgeCount
+      );
+      if (denseJudges.length > 0) {
+        const unlockedJudges = denseJudges.map((j, idx) => ({
           ...j,
           seatIndex: j?.seatIndex ?? idx + 1,
           isEnd: false,
@@ -858,11 +868,11 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
 
   // 모든 심사위원 채점 완료 감지 및 자동 캡처 + 5초 후 순위확정 안내 표시
   useEffect(() => {
+    const activeRealtimeJudges = extractRtdbPlayerArray(realtimeData?.judges);
     if (
       !currentStageInfo?.grades ||
       currentStageInfo.grades.length === 0 ||
-      !realtimeData?.judges ||
-      realtimeData.judges.length === 0 ||
+      activeRealtimeJudges.length === 0 ||
       rankingSummaryOpen
     ) {
       if (alertTimerRef.current) {
@@ -872,7 +882,12 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
-    const allJudgesSubmitted = realtimeData.judges.every((j) =>
+    const assignedSeats = activeRealtimeJudges.filter(
+      (j) => Boolean(j?.judgeUid || j?.judgeName || j?.isLogined)
+    );
+    const judgeSeatsToCheck =
+      assignedSeats.length > 0 ? assignedSeats : activeRealtimeJudges;
+    const allJudgesSubmitted = judgeSeatsToCheck.every((j) =>
       Boolean(j?.isEnd)
     );
     const isCompareVoting = Boolean(
@@ -914,20 +929,22 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
     }
 
     const fullyScoredUnconfirmedGrade = unconfirmedGrades.find((grade) => {
-      const filtered = playersArray.filter(
-        (f) =>
-          f.contestGradeId === grade.gradeId && isActiveStagePlayer(f)
-      );
+      const filtered = resolveEffectiveStagePlayers({
+        realtimeData,
+        fallbackPlayers: playersArray,
+        gradeIds: grade.gradeId,
+        stageInfo: currentStageInfo,
+      });
 
       if (filtered.length === 0) return false;
 
       const isComplete = filtered.every((player) =>
-        realtimeData.judges.every((judge) => {
+        judgeSeatsToCheck.every((judge) => {
           const scoreEntry = normalScoreData.find(
             (f) =>
               (!f.gradeId || f.gradeId === grade.gradeId) &&
-              f.playerNumber === player.playerNumber &&
-              f.seatIndex === judge.seatIndex
+              String(f.playerNumber) === String(player.playerNumber) &&
+              Number(f.seatIndex) === Number(judge.seatIndex)
           );
           return (
             scoreEntry &&
@@ -1050,9 +1067,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   }, [isCombinedStage, compareOpen]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
-    const realtimeJudges = Array.isArray(realtimeData?.judges)
-      ? realtimeData.judges
-      : [];
+    const realtimeJudges = extractRtdbPlayerArray(realtimeData?.judges);
     const expectedCount =
       Number(realtimeData?.stageJudgeCount) || realtimeJudges.length;
     if (expectedCount > 0 && realtimeJudges.length > 0) {
@@ -1254,7 +1269,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                 currentResultSaved={realtimeData?.resultSaved}
                 expectedJudgeCount={
                   realtimeData?.stageJudgeCount ||
-                  realtimeData?.judges?.length ||
+                  extractRtdbPlayerArray(realtimeData?.judges).length ||
                   0
                 }
                 stagePlayers={resolveEffectiveStagePlayers({
@@ -1587,7 +1602,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                       stageInfo: currentStageInfo,
                     });
 
-                    const judges = realtimeData?.judges || [];
+                    const judges = extractRtdbPlayerArray(realtimeData?.judges);
 
                     // 좌석별 미채점 여부 및 전체 미채점 칸 수 실시간 계산
                     const missingSeatSet = new Set();
@@ -1598,8 +1613,9 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
                         const scoreEntry = normalScoreData.find(
                           (f) =>
                             (!f.gradeId || f.gradeId === gradeId) &&
-                            f.playerNumber === player.playerNumber &&
-                            f.seatIndex === judge.seatIndex
+                            String(f.playerNumber) ===
+                              String(player.playerNumber) &&
+                            Number(f.seatIndex) === Number(judge.seatIndex)
                         );
                         const hasScore =
                           scoreEntry &&
