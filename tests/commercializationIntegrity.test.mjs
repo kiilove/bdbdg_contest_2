@@ -60,6 +60,7 @@ import {
 } from "../src/utils/liveIntercomRules.js";
 import {
   buildLiveStageRealtimeSnapshot,
+  extractRtdbPlayerArray,
   resolveEffectiveStagePlayers,
 } from "../src/utils/liveStageSnapshotUtils.js";
 import { applyEmergencyJudgeSeatSwap } from "../src/utils/judgeAssignUtils.js";
@@ -1497,5 +1498,100 @@ test("17. Grand Prix Roster Auto-Sync Defense — zero-save rescue, idempotency,
       { uid: "u_205", num: 205, name: "정재집계", gpIdx: 2 },
       { uid: "u_303", num: 303, name: "이칠오", gpIdx: 3 },
     ]
+  );
+});
+
+test("18. 3rd-pass hardening: GP physical specs inheritance, sparse RTDB array extraction, and audio safeRevokeBlobUrl contract", () => {
+  const categories = [
+    { contestCategoryId: "cat_phys", contestCategoryTitle: "남자 피지크" },
+    {
+      contestCategoryId: "cat_phys_gp",
+      contestCategoryTitle: "남자 피지크 그랑프리",
+      contestCategoryJudgeType: "grandprix",
+    },
+  ];
+  const grades = [
+    { contestGradeId: "g_175", contestGradeTitle: "-175cm", refCategoryId: "cat_phys", contestGradeIndex: 1 },
+    {
+      contestGradeId: "gp_phys",
+      contestGradeTitle: "그랑프리",
+      refCategoryId: "cat_phys_gp",
+      originalRefCategoryId: "cat_phys",
+      contestGradeIndex: 1,
+    },
+  ];
+  const regularPlayers = [
+    {
+      playerUid: "u_phys_1",
+      playerNumber: 77,
+      playerName: "최피지크",
+      playerGym: "챔프짐",
+      contestCategoryId: "cat_phys",
+      contestCategoryTitle: "남자 피지크",
+      contestGradeId: "g_175",
+      contestGradeTitle: "-175cm",
+      heightWeight: "174.2cm / 76.5kg",
+      playerHeight: 174.2,
+      playerWeight: 76.5,
+      playerIndex: 1,
+      playerNoShow: false,
+    },
+  ];
+  const results = [
+    {
+      id: "res_175",
+      contestId: "c1",
+      categoryId: "cat_phys",
+      categoryTitle: "남자 피지크",
+      gradeId: "g_175",
+      gradeTitle: "-175cm",
+      savedAt: 1000,
+      result: [{ playerUid: "u_phys_1", playerNumber: 77, playerName: "최피지크", playerRank: 1, totalScore: 5 }],
+    },
+  ];
+
+  const firstSync = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: regularPlayers,
+    resultDocs: results,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_phys"],
+  });
+  const gpRow = firstSync.players.find((p) => p.contestGradeId === "gp_phys");
+  assert.ok(gpRow, "GP row should be created");
+  assert.equal(gpRow.heightWeight, "174.2cm / 76.5kg");
+  assert.equal(gpRow.playerHeight, 174.2);
+  assert.equal(gpRow.playerWeight, 76.5);
+  assert.equal(gpRow.originalGradeTitle, "-175cm");
+
+  // Re-sync with identical data must be idempotent (changed === false)
+  const secondSync = syncGrandPrixRosterIntoFinalPlayers({
+    existingFinalPlayers: firstSync.players,
+    resultDocs: results,
+    categories,
+    grades,
+    contestId: "c1",
+    targetGpGradeIds: ["gp_phys"],
+  });
+  assert.equal(secondSync.changed, false);
+
+  // Sparse RTDB object extraction for judges/resultSaved
+  const sparseJudges = {
+    1: { seatIndex: 2, judgeUid: "j2", isLogined: true },
+    3: { seatIndex: 4, judgeUid: "j4", isLogined: false },
+  };
+  const extracted = extractRtdbPlayerArray(sparseJudges);
+  assert.equal(extracted.length, 2);
+  assert.equal(extracted[0].seatIndex, 2);
+
+  // Verify safeRevokeBlobUrl is wired in indexedDbAudioStorage.js
+  const audioStorageSrc = fs.readFileSync(
+    path.join(SRC_DIR, "utils", "indexedDbAudioStorage.js"),
+    "utf8"
+  );
+  assert.ok(
+    audioStorageSrc.includes("const safeRevokeBlobUrl ="),
+    "indexedDbAudioStorage.js must guard URL.revokeObjectURL via safeRevokeBlobUrl"
   );
 });

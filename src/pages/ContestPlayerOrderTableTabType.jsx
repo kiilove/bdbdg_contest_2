@@ -443,11 +443,13 @@ const ContestPlayerOrderTable = () => {
         updatedAt: Date.now(),
       });
 
-      // 2. final 문서 비우기 (있을 경우)
+      // 2. final 문서 비우기 (계측 레이어 및 현장 오버라이드 백업까지 함께 초기화하여 이전 배번 부활 원천 차단)
       if (finalId) {
         await updatePlayersFinal.updateData(finalId, {
           contestId,
           players: [],
+          weighInPlayers: [],
+          stageOverrideBackups: {},
           updatedAt: Date.now(),
         });
       }

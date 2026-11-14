@@ -4,7 +4,14 @@ import {
   useFirestoreGetDocument,
   useFirestoreQuery,
 } from "../hooks/useFirestores";
-import { doc, runTransaction, where } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  runTransaction,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
@@ -358,23 +365,8 @@ const ContestPlayerOrderTableGrandPrix = () => {
         return;
       }
 
-      const grandPrixCategoryIds = new Set(
-        (categoriesArray || [])
-          .filter(
-            (c) =>
-              c?.contestCategorySection === "그랑프리" ||
-              String(c?.contestCategoryTitle || "").includes("그랑프리")
-          )
-          .map((c) => c.contestCategoryId)
-          .filter(Boolean)
-      );
-      const grandPrixGradeIds = new Set(
-        [
-          ...(gradesArray || [])
-            .filter((g) => grandPrixCategoryIds.has(g?.refCategoryId))
-            .map((g) => g.contestGradeId),
-          ...dedupedGrandPrixData.map((p) => p?.contestGradeId),
-        ].filter(Boolean)
+      const incomingGpGradeIds = new Set(
+        dedupedGrandPrixData.map((p) => p?.contestGradeId).filter(Boolean)
       );
 
       const incomingKeySet = new Set(
@@ -395,13 +387,16 @@ const ContestPlayerOrderTableGrandPrix = () => {
           ? latestFinalDoc.players
           : playersFinalArray || [];
 
-        // 기존 baseFinalPlayers에서 일반 종목 엔트리는 그대로 유지하고,
-        // 아직 집계되지 않은 다른 그랑프리 체급의 강제 등록(force) 선수도 보존
+        // 기존 baseFinalPlayers에서 일반 종목 엔트리와 현재 저장 대상에 포함되지 않은 타 그랑프리 체급(자동 동기화분 포함)은 그대로 보존
         const nonGrandPrixPlayers = baseFinalPlayers.filter((p) => {
-          if (!grandPrixGradeIds.has(p?.contestGradeId)) return true;
+          if (!incomingGpGradeIds.has(p?.contestGradeId)) return true;
           const pKey = `${p.contestGradeId}_${getPlayerUniqueKey(p)}`;
           if (incomingKeySet.has(pKey)) return false;
-          return p?.createdBy === "force" || p?.createBy === "force";
+          return (
+            p?.createdBy === "force" ||
+            p?.createBy === "force" ||
+            p?.isLiveOverride === true
+          );
         });
 
         const finalPlayersMap = new Map();
@@ -550,6 +545,57 @@ const ContestPlayerOrderTableGrandPrix = () => {
   ]);
 
   useEffect(() => {
+    const contestId = currentContest?.contests?.id;
+    const playersFinalId = currentContest?.contests?.contestPlayersFinalId;
+    if (!contestId) return undefined;
+
+    const unsubs = [];
+
+    const resultsQ = query(
+      collection(db, "contest_results_list"),
+      where("contestId", "==", contestId)
+    );
+    unsubs.push(
+      onSnapshot(
+        resultsQ,
+        (snap) => {
+          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setResultFinalArray(dedupeContestResultsByGrade(docs, contestId));
+        },
+        (err) => {
+          console.warn("[GrandPrix] contest_results_list 실시간 구독 오류:", err);
+        }
+      )
+    );
+
+    if (playersFinalId) {
+      unsubs.push(
+        onSnapshot(
+          doc(db, "contest_players_final", playersFinalId),
+          (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data() || {};
+            setPlayersFinalList({ id: snap.id, ...data });
+            if (Array.isArray(data.players)) {
+              setPlayersFinalArray([...data.players]);
+            }
+          },
+          (err) => {
+            console.warn("[GrandPrix] contest_players_final 실시간 구독 오류:", err);
+          }
+        )
+      );
+    }
+
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [
+    currentContest?.contests?.id,
+    currentContest?.contests?.contestPlayersFinalId,
+  ]);
+
+  useEffect(() => {
     if (grandPrixArray.length > 0) {
       initPlayersFinalList(categoriesArray, gradesArray, grandPrixArray);
     } else {
@@ -559,14 +605,38 @@ const ContestPlayerOrderTableGrandPrix = () => {
 
   useEffect(() => {
     if (categoriesArray?.length > 0 && gradesArray?.length > 0) {
-      setGrandPrixArray([
-        ...initGrandPrixPlayers(
-          resultPlayersArray,
-          categoriesArray,
-          gradesArray,
-          playersFinalArray
-        ),
-      ]);
+      setGrandPrixArray((prev) => {
+        // 화면에서 아직 저장 버튼을 누르기 전 수동으로 조정 중인 순번(isCustomGrandPrixIndex)도 보존
+        const localCustomByKey = new Map();
+        (prev || []).forEach((item) => {
+          if (item?.isCustomGrandPrixIndex && item?.contestGradeId) {
+            localCustomByKey.set(
+              `${item.contestGradeId}_${getPlayerUniqueKey(item)}`,
+              item
+            );
+          }
+        });
+
+        const mergedSeedPlayers =
+          localCustomByKey.size > 0
+            ? [
+                ...playersFinalArray.filter((fp) => {
+                  const k = `${fp?.contestGradeId}_${getPlayerUniqueKey(fp)}`;
+                  return !localCustomByKey.has(k);
+                }),
+                ...Array.from(localCustomByKey.values()),
+              ]
+            : playersFinalArray;
+
+        return [
+          ...initGrandPrixPlayers(
+            resultPlayersArray,
+            categoriesArray,
+            gradesArray,
+            mergedSeedPlayers
+          ),
+        ];
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultPlayersArray, categoriesArray, gradesArray, playersFinalArray]);

@@ -17,7 +17,10 @@ import {
   isNonPlayerUrl,
 } from "../../utils/playerPhotoUtils";
 import { dedupeContestResultsByGrade } from "../../utils/contestResultsUtils";
-import { isActiveStagePlayer } from "../../utils/playerEntryUtils";
+import {
+  isActiveStagePlayer,
+  resolveOriginalGradeTitle,
+} from "../../utils/playerEntryUtils";
 import { storage, db } from "../../firebase";
 import {
   ref as storageRef,
@@ -487,21 +490,43 @@ const StageBroadcastController = ({
           );
           if (finalSnap.exists()) {
             const finalPlayers = finalSnap.data()?.players || [];
-            const matched = finalPlayers.find(
-              (fp) =>
-                (fp.playerUid &&
-                  player.playerUid &&
-                  fp.playerUid === player.playerUid &&
-                  fp.contestCategoryId === player.contestCategoryId) ||
-                (fp.playerNumber &&
-                  player.playerNumber &&
-                  String(fp.playerNumber) === String(player.playerNumber) &&
-                  fp.contestCategoryId === player.contestCategoryId) ||
-                (fp.playerName === player.playerName &&
-                  String(fp.playerNumber) === String(player.playerNumber))
-            );
+            const targetGradeId =
+              player.contestGradeId || activeGradeId || "";
+            const matched =
+              (targetGradeId
+                ? finalPlayers.find(
+                    (fp) =>
+                      fp?.contestGradeId === targetGradeId &&
+                      ((fp.playerUid &&
+                        player.playerUid &&
+                        fp.playerUid === player.playerUid) ||
+                        (fp.playerNumber !== undefined &&
+                          player.playerNumber !== undefined &&
+                          String(fp.playerNumber) ===
+                            String(player.playerNumber)))
+                  )
+                : null) ||
+              finalPlayers.find(
+                (fp) =>
+                  (fp.playerUid &&
+                    player.playerUid &&
+                    fp.playerUid === player.playerUid &&
+                    fp.contestCategoryId === player.contestCategoryId) ||
+                  (fp.playerNumber &&
+                    player.playerNumber &&
+                    String(fp.playerNumber) === String(player.playerNumber) &&
+                    fp.contestCategoryId === player.contestCategoryId)
+              ) ||
+              finalPlayers.find(
+                (fp) =>
+                  (fp.playerUid &&
+                    player.playerUid &&
+                    fp.playerUid === player.playerUid) ||
+                  (fp.playerName === player.playerName &&
+                    String(fp.playerNumber) === String(player.playerNumber))
+              );
             if (matched) {
-              latestPlayer = { ...player, ...matched };
+              latestPlayer = { ...matched, ...player, ...matched };
             }
           }
         } catch (fErr) {
@@ -539,9 +564,25 @@ const StageBroadcastController = ({
         resolvedPhotos[0] ||
         "";
 
+      const origWonGradeTitle = resolveOriginalGradeTitle(latestPlayer);
+      const resolvedStageCategoryTitle =
+        currentStage?.categoryTitle ||
+        currentStage?.contestCategoryTitle ||
+        "";
+      const resolvedStageGradeTitle =
+        currentStage?.gradeTitle || currentStage?.contestGradeTitle || "";
+
       const payload = {
         mode: "ATHLETE_INTRO",
         contestTitle: realContestTitle,
+        stageInfo: {
+          stageId: currentStage?.stageId || "",
+          stageNumber: currentStage?.stageNumber || "",
+          categoryId: currentStage?.categoryId || "",
+          categoryTitle: resolvedStageCategoryTitle,
+          gradeId: activeGradeId || latestPlayer.contestGradeId || "",
+          gradeTitle: resolvedStageGradeTitle,
+        },
         activePlayer: {
           playerNumber: latestPlayer.playerNumber,
           playerName: latestPlayer.playerName,
@@ -562,12 +603,9 @@ const StageBroadcastController = ({
           stagePhotoUrl: designatedStagePhoto,
           profileImageUrl: designatedStagePhoto,
           photos: resolvedPhotos,
-          categoryTitle:
-            currentStage?.categoryTitle ||
-            currentStage?.contestCategoryTitle ||
-            "",
-          gradeTitle:
-            currentStage?.gradeTitle || currentStage?.contestGradeTitle || "",
+          categoryTitle: resolvedStageCategoryTitle,
+          gradeTitle: resolvedStageGradeTitle,
+          ...(origWonGradeTitle ? { originalGradeTitle: origWonGradeTitle } : {}),
         },
         specialScreenData: null,
         videoCommand: null,
@@ -749,12 +787,15 @@ const StageBroadcastController = ({
 
   const enrichRankingsWithPhotos = (reliableRanks) =>
     reliableRanks.map((r) => {
-      const p = (currentPlayers || []).find(
-        (cp) =>
-          String(cp.playerNumber).trim() === String(r.playerNumber).trim() ||
-          cp.playerName === r.playerName ||
-          cp.playerUid === r.playerUid
-      );
+      const p =
+        (currentPlayers || []).find(
+          (cp) =>
+            (r.playerUid && cp.playerUid && cp.playerUid === r.playerUid) ||
+            (r.playerNumber !== undefined &&
+              cp.playerNumber !== undefined &&
+              String(cp.playerNumber).trim() === String(r.playerNumber).trim())
+        ) ||
+        (currentPlayers || []).find((cp) => cp.playerName === r.playerName);
       if (p) {
         const photos = extractPlayerPhotos(p);
         const stage1 =
@@ -769,15 +810,16 @@ const StageBroadcastController = ({
           photos[1] ||
           "";
         return {
-          ...r,
           ...p,
+          ...r,
           stagePhoto1: stage1,
           stagePhoto2: stage2,
           stagePhotoUrl1: stage1,
           stagePhotoUrl2: stage2,
           stagePhotoUrl: stage1 || r.stagePhotoUrl,
           profileImageUrl: p.profileImageUrl || photos[0] || r.profileImageUrl,
-          playerGym: p.playerGym || r.playerGym,
+          playerGym: r.playerGym || p.playerGym,
+          heightWeight: p.heightWeight || r.heightWeight || "",
           playerHeight: p.playerHeight || p.height || r.playerHeight || "",
           playerWeight: p.playerWeight || p.weight || r.playerWeight || "",
         };

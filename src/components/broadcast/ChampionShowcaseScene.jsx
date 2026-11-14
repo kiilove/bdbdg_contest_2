@@ -8,8 +8,9 @@ import {
   ThunderboltOutlined,
   FieldTimeOutlined,
 } from "@ant-design/icons";
-import { where, doc, getDoc } from "firebase/firestore";
+import { where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase";
+import { isGrandPrixPlayerEntry } from "../../functions/functions";
 import { THEME_CONFIGS } from "./AthleteIntroScene";
 import { LaurelBranch } from "./LaurelWreathWings";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
@@ -33,34 +34,73 @@ const ChampionShowcaseScene = ({
   const fetchResultQuery = useFirestoreQuery();
   const theme = THEME_CONFIGS[colorTheme] || THEME_CONFIGS.GOLD;
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진/이름/소속 실시간 조회 (누락 100% 방지)
-  const [realPlayersMap, setRealPlayersMap] = useState({});
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final) 실시간 조회 (체급 스코프 우선 매칭으로 그랑프리 엔트리 체급명 오염 차단)
+  const [realPlayersList, setRealPlayersList] = useState([]);
 
   useEffect(() => {
-    const fetchRealPlayers = async () => {
-      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
-      if (!finalDocId) return;
-      try {
-        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+    const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+    if (!finalDocId) return undefined;
+    const unsub = onSnapshot(
+      doc(db, "contest_players_final", finalDocId),
+      (snap) => {
         if (snap.exists()) {
-          const players = snap.data()?.players || [];
-          const map = {};
-          players.forEach((p) => {
-            if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
-            if (p.playerName) map[String(p.playerName).trim()] = p;
-          });
-          setRealPlayersMap(map);
+          setRealPlayersList(
+            Array.isArray(snap.data()?.players) ? snap.data().players : []
+          );
         }
-      } catch (e) {
+      },
+      (e) => {
         console.error("챔피언 선수 데이터 로드 실패:", e);
       }
-    };
-    fetchRealPlayers();
+    );
+    return () => unsub();
   }, [currentContest?.contests?.contestPlayersFinalId]);
 
   const rawPNum = topPlayer?.playerNumber || "";
   const rawPName = topPlayer?.playerName || "";
-  const matchedReal = realPlayersMap[String(rawPNum).trim()] || realPlayersMap[String(rawPName).trim()] || null;
+  const rawPUid = topPlayer?.playerUid || "";
+  const targetGradeId = stageInfo?.gradeId || topPlayer?.contestGradeId || "";
+
+  const matchedReal = useMemo(() => {
+    const numStr = String(rawPNum ?? "").trim();
+    const nameStr = String(rawPName || "").trim();
+    const uidStr = String(rawPUid || "").trim();
+    const isCurrentGp = isGrandPrixPlayerEntry(topPlayer, stageInfo);
+
+    const matchesIdentity = (p) =>
+      (uidStr && String(p?.playerUid || "").trim() === uidStr) ||
+      (numStr &&
+        numStr !== "-" &&
+        String(p?.playerNumber ?? "").trim() === numStr);
+
+    if (targetGradeId) {
+      const exact = realPlayersList.find(
+        (p) => p && p.contestGradeId === targetGradeId && matchesIdentity(p)
+      );
+      if (exact) return exact;
+    }
+
+    const sameTier = realPlayersList.find(
+      (p) =>
+        p &&
+        Boolean(isGrandPrixPlayerEntry(p)) === Boolean(isCurrentGp) &&
+        matchesIdentity(p)
+    );
+    if (sameTier) return sameTier;
+
+    return (
+      realPlayersList.find((p) => p && matchesIdentity(p)) ||
+      (nameStr && nameStr !== "데이터 없음"
+        ? realPlayersList.find(
+            (p) =>
+              p &&
+              (!targetGradeId || p.contestGradeId === targetGradeId) &&
+              String(p.playerName || "").trim() === nameStr
+          )
+        : null) ||
+      null
+    );
+  }, [realPlayersList, rawPNum, rawPName, rawPUid, targetGradeId, topPlayer, stageInfo]);
 
   const hasChampionData = Boolean(
     topPlayer && (topPlayer.playerName || topPlayer.playerNumber || matchedReal)
@@ -126,10 +166,24 @@ const ChampionShowcaseScene = ({
   const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
     if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
     if (athlete?.gradeTitle) return athlete.gradeTitle;
-    if (matched?.contestGradeTitle) return matched.contestGradeTitle;
-    if (matched?.gradeTitle) return matched.gradeTitle;
-    if (!rawGradeTitle) return "";
-    let cleaned = rawGradeTitle.replace(/\s*통합\s*/g, " ").trim();
+    const trimmed = rawGradeTitle ? String(rawGradeTitle).trim() : "";
+    if (trimmed && !/통합\s*$/.test(trimmed)) {
+      return trimmed;
+    }
+    if (
+      matched?.contestGradeTitle &&
+      (!targetGradeId || matched.contestGradeId === targetGradeId)
+    ) {
+      return matched.contestGradeTitle;
+    }
+    if (
+      matched?.gradeTitle &&
+      (!targetGradeId || matched.contestGradeId === targetGradeId)
+    ) {
+      return matched.gradeTitle;
+    }
+    if (!trimmed) return "";
+    const cleaned = trimmed.replace(/\s*통합\s*/g, " ").trim();
     const parts = cleaned.split(/\s+/).filter(Boolean);
     if (parts.length > 1) {
       return parts[0];

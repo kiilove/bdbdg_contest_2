@@ -298,9 +298,6 @@ const LiveStagePlayersPushModal = ({
       const gradeItems = prev.filter(
         (r) => r.contestGradeId === activeGradeMeta.gradeId
       );
-      const others = prev.filter(
-        (r) => r.contestGradeId !== activeGradeMeta.gradeId
-      );
       const idx = gradeItems.indexOf(targetRow);
       const swapIdx = idx + direction;
       if (idx < 0 || swapIdx < 0 || swapIdx >= gradeItems.length) return prev;
@@ -314,7 +311,28 @@ const LiveStagePlayersPushModal = ({
         playerIndex: i + 1,
         orderIndex: i + 1,
       }));
-      return [...others, ...reindexed];
+
+      const orderedGradeIds = [];
+      grades.forEach((g) => {
+        if (g?.gradeId && !orderedGradeIds.includes(g.gradeId)) {
+          orderedGradeIds.push(g.gradeId);
+        }
+      });
+      prev.forEach((r) => {
+        if (r?.contestGradeId && !orderedGradeIds.includes(r.contestGradeId)) {
+          orderedGradeIds.push(r.contestGradeId);
+        }
+      });
+
+      const merged = [];
+      orderedGradeIds.forEach((gid) => {
+        if (gid === activeGradeMeta.gradeId) {
+          merged.push(...reindexed);
+        } else {
+          merged.push(...prev.filter((r) => r.contestGradeId === gid));
+        }
+      });
+      return merged;
     });
   };
 
@@ -395,13 +413,20 @@ const LiveStagePlayersPushModal = ({
 
   const handlePushLiveStage = async () => {
     if (!contestId || submitting) return;
+    const perGradeCounter = new Map();
     const activePlayers = draftRoster
       .filter((r) => r.included)
-      .map((r, idx) => ({
-        ...r,
-        playerIndex: idx + 1,
-        playerNoShow: false,
-      }));
+      .map((r) => {
+        const gid = r.contestGradeId || "_default";
+        const nextInGrade = (perGradeCounter.get(gid) || 0) + 1;
+        perGradeCounter.set(gid, nextInGrade);
+        return {
+          ...r,
+          playerIndex: nextInGrade,
+          orderIndex: nextInGrade,
+          playerNoShow: false,
+        };
+      });
 
     if (activePlayers.length === 0) {
       setErrorMsg("최소 1명 이상의 출전 선수를 선택해 주세요.");

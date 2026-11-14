@@ -20,6 +20,7 @@ import {
 } from "../utils/compareVoteUtils";
 import { normalizeDenseRealtimeJudges } from "../utils/judgeAssignUtils";
 import { extractRtdbPlayerArray } from "../utils/liveStageSnapshotUtils";
+import { getStagePlayerSortIndex } from "../functions/functions";
 import { Card, Button, Space, Tag, InputNumber, Progress, Badge } from "antd";
 import {
   TrophyOutlined,
@@ -292,6 +293,7 @@ const CompareSetting = ({
       playerLength: votedInfo.playerLength,
       scoreMode: votedInfo.scoreMode,
       voteRange: votedInfo.voteRange,
+      prevPlayers: Number(propCompareIndex) > 1 ? [...prevRoundPlayers] : [],
       judges: [...judgeMessageInfo],
     };
 
@@ -524,11 +526,12 @@ const CompareSetting = ({
           entry.votedPlayerNumber.length > 0
         ) {
           entry.votedPlayerNumber.forEach((vote) => {
-            const key = `${vote.playerNumber}-${vote.playerUid}`;
+            const safeUid = vote?.playerUid || "";
+            const key = `${vote.playerNumber}-${safeUid}`;
             if (!voteCounts[key]) {
               voteCounts[key] = {
                 playerNumber: vote.playerNumber,
-                playerUid: vote.playerUid,
+                playerUid: safeUid,
                 votedCount: 0,
               };
             }
@@ -565,6 +568,11 @@ const CompareSetting = ({
       `currentStage/${currentContest.contests.id}/compares`,
       {
         ...realtimeData?.compares,
+        prevPlayers:
+          realtimeData?.compares?.prevPlayers ||
+          (Number(realtimeData?.compares?.compareIndex) > 1
+            ? [...prevRoundPlayers]
+            : []),
         players: [...newTop],
         confirmed: {
           count: confirmedNumbers.length,
@@ -676,9 +684,12 @@ const CompareSetting = ({
       ? [...matchedOriginalPlayers]
       : [];
     return list.sort(
-      (a, b) => Number(a?.playerNumber || 0) - Number(b?.playerNumber || 0)
+      (a, b) =>
+        getStagePlayerSortIndex(a, stageInfo) -
+          getStagePlayerSortIndex(b, stageInfo) ||
+        Number(a?.playerNumber || 0) - Number(b?.playerNumber || 0)
     );
-  }, [matchedOriginalPlayers]);
+  }, [matchedOriginalPlayers, stageInfo]);
 
   const prevRoundPlayers = useMemo(() => {
     if (!Array.isArray(currentCompareArray) || currentCompareArray.length === 0) {

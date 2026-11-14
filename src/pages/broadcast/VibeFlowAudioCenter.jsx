@@ -935,14 +935,32 @@ export const VibeFlowAudioCenter = () => {
         setIsPlaying(false);
         setCurrentTrack(null);
         currentTrackRef.current = null;
+        setPreCuedTrack(null);
+        isPreCuedRef.current = false;
+        preCuedTrackRef.current = null;
         stopTracking();
         if (deckARef.current) {
           deckARef.current.pause();
-          deckARef.current.src = "";
+          deckARef.current.removeAttribute("src");
+          deckARef.current.load();
         }
         if (deckBRef.current) {
           deckBRef.current.pause();
-          deckBRef.current.src = "";
+          deckBRef.current.removeAttribute("src");
+          deckBRef.current.load();
+        }
+      } else if (isTrackEqual(preCuedTrackRef.current?.track, track)) {
+        const idleAudio = activeDeckRef.current === "A" ? deckBRef.current : deckARef.current;
+        setPreCuedTrack(null);
+        isPreCuedRef.current = false;
+        preCuedTrackRef.current = null;
+        if (idleAudio) {
+          try {
+            idleAudio.pause();
+            idleAudio.removeAttribute("src");
+            idleAudio.load();
+            idleAudio.volume = 0;
+          } catch {}
         }
       }
 
@@ -1329,6 +1347,53 @@ export const VibeFlowAudioCenter = () => {
 
   const handleClearAudioCache = async () => {
     if (isBatchCaching) return;
+    const idleAudio = activeDeckRef.current === "A" ? deckBRef.current : deckARef.current;
+    const curAudio = activeDeckRef.current === "A" ? deckARef.current : deckBRef.current;
+
+    setPreCuedTrack(null);
+    isPreCuedRef.current = false;
+    preCuedTrackRef.current = null;
+    if (idleAudio) {
+      try {
+        idleAudio.pause();
+        idleAudio.removeAttribute("src");
+        idleAudio.load();
+        idleAudio.volume = 0;
+      } catch {}
+    }
+
+    if (curAudio && String(curAudio.src || "").startsWith("blob:") && currentTrackRef.current) {
+      const remoteUrl = getTrackAudioUrl(currentTrackRef.current);
+      if (remoteUrl && (!ssdOnlyModeRef.current || isCustomTrack(currentTrackRef.current))) {
+        const savedTime = curAudio.currentTime || 0;
+        const wasPaused = curAudio.paused;
+        try {
+          curAudio.src = remoteUrl;
+          curAudio.load();
+          if (savedTime > 0) {
+            curAudio.currentTime = savedTime;
+          }
+          if (!wasPaused && isPlayingRef.current) {
+            curAudio.play().catch(() => {});
+          }
+        } catch {}
+      } else if (ssdOnlyModeRef.current && !isCustomTrack(currentTrackRef.current)) {
+        playRequestIdRef.current += 1;
+        deckRequestIdRef.current = { A: 0, B: 0 };
+        stopAllFades(true);
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setCurrentTrack(null);
+        currentTrackRef.current = null;
+        stopTracking();
+        try {
+          curAudio.pause();
+          curAudio.removeAttribute("src");
+          curAudio.load();
+        } catch {}
+      }
+    }
+
     await clearAllCachedAudio();
     setAudioCacheMap({});
     setBatchCacheProgress(null);
@@ -1976,7 +2041,25 @@ export const VibeFlowAudioCenter = () => {
           startedAt: Date.now(),
         });
 
-        // 🔊 [다시재생] 2단계: 0에서 시작하여 2.0초 동안 부드럽게 페이드인
+        // 🔊 [다시재생] 2단계: 무효화된 Blob URL 또는 미디어 에러 감지 시 최신 소스로 자동 복구 후 2.0초 페이드인
+        const freshResolved = resolvePlayableAudioSource(track);
+        const freshSrc = freshResolved?.src || playableUrl;
+        if (
+          freshSrc &&
+          (curAudio.error ||
+            !curAudio.src ||
+            (String(curAudio.src).startsWith("blob:") && curAudio.src !== freshSrc))
+        ) {
+          const savedTime = curAudio.currentTime || 0;
+          try {
+            curAudio.src = freshSrc;
+            curAudio.load();
+            if (savedTime > 0) {
+              curAudio.currentTime = savedTime;
+            }
+          } catch {}
+        }
+
         curAudio.volume = 0;
         curAudio
           .play()

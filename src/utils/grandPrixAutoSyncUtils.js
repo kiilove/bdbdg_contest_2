@@ -269,6 +269,13 @@ export const buildGrandPrixPlayersFromResults = ({
         playerTel: regularEntry?.playerTel || "",
         playerBirth: regularEntry?.playerBirth || "",
         playerText: regularEntry?.playerText || "",
+        heightWeight: regularEntry?.heightWeight || "",
+        playerHeight:
+          regularEntry?.playerHeight || regularEntry?.height || "",
+        playerWeight:
+          regularEntry?.playerWeight || regularEntry?.weight || "",
+        height: regularEntry?.height || regularEntry?.playerHeight || "",
+        weight: regularEntry?.weight || regularEntry?.playerWeight || "",
         playerNoShow: false,
       };
     })
@@ -371,6 +378,34 @@ export const buildGrandPrixPlayersFromResults = ({
           saved?.playerText !== undefined
             ? saved.playerText
             : matchRest.playerText,
+        heightWeight:
+          saved?.heightWeight !== undefined && saved?.heightWeight !== ""
+            ? saved.heightWeight
+            : matchRest.heightWeight,
+        playerHeight:
+          saved?.playerHeight ||
+          saved?.height ||
+          matchRest.playerHeight ||
+          matchRest.height ||
+          "",
+        playerWeight:
+          saved?.playerWeight ||
+          saved?.weight ||
+          matchRest.playerWeight ||
+          matchRest.weight ||
+          "",
+        height:
+          saved?.height ||
+          saved?.playerHeight ||
+          matchRest.height ||
+          matchRest.playerHeight ||
+          "",
+        weight:
+          saved?.weight ||
+          saved?.playerWeight ||
+          matchRest.weight ||
+          matchRest.playerWeight ||
+          "",
         ...(savedOrigTitle
           ? {
               originalGradeTitle: savedOrigTitle,
@@ -516,6 +551,9 @@ const COMPARE_SCALAR_FIELDS = [
   "playerIndexOriginal",
   "playerNoShow",
   "isCustomGrandPrixIndex",
+  "heightWeight",
+  "playerHeight",
+  "playerWeight",
   "stagePhoto1",
   "stagePhoto2",
   "profileImageUrl",

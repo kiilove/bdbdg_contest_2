@@ -3,8 +3,9 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { CurrentContestContext } from "../../contexts/CurrentContestContext";
 import { useFirestoreQuery } from "../../hooks/useFirestores";
-import { where, doc, getDoc } from "firebase/firestore";
+import { where, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase";
+import { isGrandPrixPlayerEntry } from "../../functions/functions";
 import { gsap } from "gsap";
 import {
   TrophyOutlined,
@@ -141,35 +142,79 @@ const SquareRankingCeremonyScene = ({
   const displayTop3 = top3 || null;
   const displayRestRanks = restRanks && restRanks.length > 0 ? restRanks : [];
 
-  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final)에서 사진 실시간 조회
-  const [realPlayersMap, setRealPlayersMap] = useState({});
+  // 🗄️ 현재 대회의 실제 등록 선수 목록(contest_players_final) 실시간 조회 (체급 스코프 우선 매칭으로 그랑프리 엔트리 체급명 오염 원천 차단)
+  const [realPlayersList, setRealPlayersList] = useState([]);
 
   useEffect(() => {
-    const fetchRealPlayers = async () => {
-      const finalDocId = currentContest?.contests?.contestPlayersFinalId;
-      if (!finalDocId) return;
-      try {
-        const snap = await getDoc(doc(db, "contest_players_final", finalDocId));
+    const finalDocId = currentContest?.contests?.contestPlayersFinalId;
+    if (!finalDocId) return undefined;
+    const unsub = onSnapshot(
+      doc(db, "contest_players_final", finalDocId),
+      (snap) => {
         if (snap.exists()) {
-          const players = snap.data()?.players || [];
-          const map = {};
-          players.forEach((p) => {
-            if (p.playerNumber) map[String(p.playerNumber).trim()] = p;
-            if (p.playerName) map[String(p.playerName).trim()] = p;
-          });
-          setRealPlayersMap(map);
+          setRealPlayersList(
+            Array.isArray(snap.data()?.players) ? snap.data().players : []
+          );
         }
-      } catch (e) {
+      },
+      (e) => {
         console.error("정방형 순위 선수 사진 데이터 로드 실패:", e);
       }
-    };
-    fetchRealPlayers();
+    );
+    return () => unsub();
   }, [currentContest?.contests?.contestPlayersFinalId]);
 
-  const matchedReal =
-    realPlayersMap[String(displayTop1.playerNumber).trim()] ||
-    realPlayersMap[String(displayTop1.playerName).trim()] ||
-    {};
+  const matchedReal = React.useMemo(() => {
+    const targetUid = String(displayTop1?.playerUid || "").trim();
+    const targetNum = String(displayTop1?.playerNumber ?? "").trim();
+    const targetName = String(displayTop1?.playerName || "").trim();
+    const isCurrentGp = isGrandPrixPlayerEntry(null, {
+      categoryTitle,
+      contestGradeTitle: gradeTitle,
+    });
+
+    const matchesIdentity = (p) =>
+      (targetUid && String(p?.playerUid || "").trim() === targetUid) ||
+      (targetNum &&
+        targetNum !== "-" &&
+        String(p?.playerNumber ?? "").trim() === targetNum);
+
+    const exactGradeMatch = gradeId
+      ? realPlayersList.find(
+          (p) => p && p.contestGradeId === gradeId && matchesIdentity(p)
+        )
+      : null;
+    if (exactGradeMatch) return exactGradeMatch;
+
+    const sameTierMatch = realPlayersList.find(
+      (p) =>
+        p &&
+        Boolean(isGrandPrixPlayerEntry(p)) === Boolean(isCurrentGp) &&
+        matchesIdentity(p)
+    );
+    if (sameTierMatch) return sameTierMatch;
+
+    return (
+      realPlayersList.find((p) => p && matchesIdentity(p)) ||
+      (targetName && targetName !== "데이터 없음"
+        ? realPlayersList.find(
+            (p) =>
+              p &&
+              (!gradeId || p.contestGradeId === gradeId) &&
+              String(p.playerName || "").trim() === targetName
+          )
+        : null) ||
+      {}
+    );
+  }, [
+    realPlayersList,
+    displayTop1?.playerUid,
+    displayTop1?.playerNumber,
+    displayTop1?.playerName,
+    gradeId,
+    categoryTitle,
+    gradeTitle,
+  ]);
 
   // 📸 [실제 무대 사진 stagePhoto1, stagePhoto2 전용 구성 (잡다한 프로필 사진 제외)]
   // 1번 사진: stagePhoto1 전면 컷
@@ -218,17 +263,24 @@ const SquareRankingCeremonyScene = ({
   const heightValue = rawH ? (rawH.includes("cm") ? rawH : `${rawH}cm`) : "-";
   const weightValue = rawW ? (rawW.includes("kg") ? rawW : `${rawW}kg`) : "-";
   
-  // 🏷️ 순위표 체급 표기: 통합 무대(끝이 '통합')일 때만 분리·정규화하고 단일 체급명('주니어 -75kg' 등)은 그대로 보존
+  // 🏷️ 순위표 체급 표기: 명시된 단일 체급명('주니어 -75kg' 등)을 최우선 보존하며, 통합 무대('... 통합')일 때만 선수 소속 체급으로 세분화
   const getSingleGradeTitle = (rawGradeTitle, athlete, matched) => {
     if (athlete?.contestGradeTitle) return athlete.contestGradeTitle;
     if (athlete?.gradeTitle) return athlete.gradeTitle;
-    if (matched?.contestGradeTitle) return matched.contestGradeTitle;
-    if (matched?.gradeTitle) return matched.gradeTitle;
-    if (!rawGradeTitle) return "";
-    const trimmed = String(rawGradeTitle).trim();
-    if (!/통합\s*$/.test(trimmed)) {
+    const trimmed = rawGradeTitle ? String(rawGradeTitle).trim() : "";
+    if (trimmed && !/통합\s*$/.test(trimmed)) {
       return trimmed;
     }
+    if (
+      matched?.contestGradeTitle &&
+      (!gradeId || matched.contestGradeId === gradeId)
+    ) {
+      return matched.contestGradeTitle;
+    }
+    if (matched?.gradeTitle && (!gradeId || matched.contestGradeId === gradeId)) {
+      return matched.gradeTitle;
+    }
+    if (!trimmed) return "";
     const cleaned = trimmed.replace(/\s*통합\s*$/, "").trim();
     const parts = cleaned.split(/\s+/).filter(Boolean);
     if (parts.length > 1) {

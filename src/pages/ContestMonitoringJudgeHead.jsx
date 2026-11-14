@@ -57,6 +57,7 @@ import {
   buildRealtimeCompareAfterCancel,
 } from "../utils/compareVoteUtils";
 import {
+  buildLiveStageRealtimeSnapshot,
   extractRtdbPlayerArray,
   resolveEffectiveStagePlayers,
 } from "../utils/liveStageSnapshotUtils";
@@ -496,33 +497,74 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
   };
 
   const handleAddCurrentStage = async () => {
+    const firstStage = stagesArray?.[0];
+    if (!firstStage) return;
+
     const {
       stageId,
       stageNumber,
       categoryJudgeCount,
+      categoryJudgeType,
       categoryId,
       categoryTitle,
       grades,
-    } = stagesArray[0];
+    } = firstStage;
 
     const { gradeTitle, gradeId } = handleGradeInfo(grades);
+    const targetJudgeCount = Number(categoryJudgeCount) || 5;
 
     const judgeInitState = Array.from(
-      { length: categoryJudgeCount },
-      (_, jIdx) => jIdx + 1
-    ).map((number) => {
-      return { seatIndex: number, isLogined: false, isEnd: false };
+      { length: targetJudgeCount },
+      (_, jIdx) => {
+        const seat = jIdx + 1;
+        const matchingRows = (judgesAssignArray || []).filter(
+          (j) =>
+            (j?.contestGradeId === gradeId || j?.gradeId === gradeId) &&
+            Number(j?.seatIndex) === seat
+        );
+        const assigned =
+          matchingRows.length > 0
+            ? matchingRows[matchingRows.length - 1]
+            : null;
+        return {
+          seatIndex: seat,
+          isLogined: false,
+          isEnd: false,
+          judgeName: assigned?.judgeName ?? null,
+          judgeUid: assigned?.judgeUid ?? null,
+          onedayPassword: assigned?.onedayPassword ?? null,
+        };
+      }
+    );
+
+    const stageSnapshot = buildLiveStageRealtimeSnapshot({
+      targetStage: firstStage,
+      playersPool: playersArray,
+      pushIdPrefix: "stage",
     });
 
     const newCurrentStateInfo = {
-      stageId,
-      stageNumber,
-      categoryId,
-      categoryTitle,
-      gradeId,
-      gradeTitle,
-      stageJudgeCount: categoryJudgeCount,
+      stageId: stageId || "",
+      stageNumber: stageNumber || 1,
+      categoryId: categoryId || "",
+      categoryTitle: categoryTitle || "",
+      categoryJudgeType: categoryJudgeType || "ranking",
+      gradeId: gradeId || "",
+      gradeTitle: gradeTitle || "",
+      stageJudgeCount: targetJudgeCount,
       judges: judgeInitState,
+      resultSaved: [],
+      compares: {
+        status: {
+          compareStart: false,
+          compareEnd: false,
+          compareCancel: false,
+          compareIng: false,
+        },
+        confirmed: { count: 0 },
+      },
+      screen: { status: { playStart: false } },
+      ...stageSnapshot,
     };
     try {
       await addCurrentStage.addData(
@@ -928,7 +970,7 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return;
     }
 
-    const fullyScoredUnconfirmedGrade = unconfirmedGrades.find((grade) => {
+    const fullyScoredUnconfirmedGrades = unconfirmedGrades.filter((grade) => {
       const filtered = resolveEffectiveStagePlayers({
         realtimeData,
         fallbackPlayers: playersArray,
@@ -958,21 +1000,26 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
       return isComplete;
     });
 
-    if (fullyScoredUnconfirmedGrade) {
-      // 1. 점수 모두 들어왔을 때 자동으로 집계상황 카드 캡처 및 로컬 파일 저장 (1회)
-      if (!hasCapturedRef.current[fullyScoredUnconfirmedGrade.gradeId]) {
-        hasCapturedRef.current[fullyScoredUnconfirmedGrade.gradeId] = true;
-        setTimeout(() => {
-          captureScoreTable(
-            fullyScoredUnconfirmedGrade.gradeId,
-            fullyScoredUnconfirmedGrade.categoryTitle,
-            fullyScoredUnconfirmedGrade.gradeTitle
-          );
-        }, 500);
-      }
+    const fullyScoredUnconfirmedGrade = fullyScoredUnconfirmedGrades[0] || null;
+
+    if (fullyScoredUnconfirmedGrades.length > 0) {
+      // 1. 점수 모두 들어왔을 때 자동으로 집계상황 카드 캡처 및 로컬 파일 저장 (통합 무대의 모든 미확정 체급 개별 1회씩)
+      fullyScoredUnconfirmedGrades.forEach((doneGrade, idx) => {
+        if (!hasCapturedRef.current[doneGrade.gradeId]) {
+          hasCapturedRef.current[doneGrade.gradeId] = true;
+          setTimeout(() => {
+            captureScoreTable(
+              doneGrade.gradeId,
+              doneGrade.categoryTitle || currentStageInfo?.categoryTitle || "",
+              doneGrade.gradeTitle
+            );
+          }, 500 + idx * 350);
+        }
+      });
 
       // 2. 5초 후에도 순위확정을 안 누르면 순위확정 안내 다이얼로그 표시
       if (
+        fullyScoredUnconfirmedGrade &&
         !alertTimerRef.current &&
         !hasAlertedRef.current[fullyScoredUnconfirmedGrade.gradeId]
       ) {
@@ -1592,8 +1639,16 @@ const ContestMonitoringJudgeHead = ({ isHolding, setIsHolding }) => {
               <div className="p-4 space-y-4">
                 {currentStageInfo?.grades?.length > 0 ? (
                   currentStageInfo.grades.map((grade, gIdx) => {
-                    const { categoryTitle, categoryId, gradeTitle, gradeId } =
-                      grade;
+                    const {
+                      gradeTitle,
+                      gradeId,
+                    } = grade;
+                    const categoryTitle =
+                      grade.categoryTitle ||
+                      currentStageInfo?.categoryTitle ||
+                      "";
+                    const categoryId =
+                      grade.categoryId || currentStageInfo?.categoryId || "";
 
                     const filterdPlayers = resolveEffectiveStagePlayers({
                       realtimeData,

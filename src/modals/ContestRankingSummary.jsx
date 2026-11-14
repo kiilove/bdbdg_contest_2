@@ -42,6 +42,8 @@ import { saveGradeResultsAtomically } from "../utils/contestResultsUtils";
 import { isActiveStagePlayer } from "../utils/playerEntryUtils";
 import { extractTieBreakGroupsFromResult } from "../utils/compareVoteUtils";
 import { sanitizeForFirestore } from "../utils/firestoreSanitize";
+import { normalizeDenseRealtimeJudges } from "../utils/judgeAssignUtils";
+import { extractRtdbPlayerArray } from "../utils/liveStageSnapshotUtils";
 import {
   findLinkedGrandPrixGradeIdsForCategory,
   syncGrandPrixRosterIntoFinalPlayers,
@@ -287,17 +289,15 @@ const ContestRankingSummary = ({
     });
   };
 
-  const handleRealtimeUpdate = async (contestId, targetGradeId = gradeId) => {
+  const handleRealtimeUpdate = async (contestId, targetGradeIds = gradeId) => {
     const collectionInfo = `currentStage/${contestId}`;
-    const base = Array.isArray(realtimeStage?.resultSaved)
-      ? realtimeStage.resultSaved
-      : Array.isArray(currentResultSaved)
-      ? currentResultSaved
-      : [];
-    const newResultSaved =
-      targetGradeId && !base.includes(targetGradeId)
-        ? [...base, targetGradeId]
-        : base;
+    const rtSaved = extractRtdbPlayerArray(realtimeStage?.resultSaved);
+    const propSaved = extractRtdbPlayerArray(currentResultSaved);
+    const base = rtSaved.length > 0 ? rtSaved : propSaved;
+    const incomingIds = (
+      Array.isArray(targetGradeIds) ? targetGradeIds : [targetGradeIds]
+    ).filter(Boolean);
+    const newResultSaved = Array.from(new Set([...base, ...incomingIds]));
 
     const patch = {
       resultSaved: newResultSaved,
@@ -307,21 +307,25 @@ const ContestRankingSummary = ({
     const isSameLiveStage =
       !stageId || !realtimeStage?.stageId || realtimeStage.stageId === stageId;
     if (isSameLiveStage && realtimeStage) {
+      const normalizedStageGrades = extractRtdbPlayerArray(
+        realtimeStage.stageGrades
+      );
       const liveGradeIds =
-        Array.isArray(realtimeStage.stageGrades) &&
-        realtimeStage.stageGrades.length > 0
-          ? realtimeStage.stageGrades.map((g) => g?.gradeId).filter(Boolean)
+        normalizedStageGrades.length > 0
+          ? normalizedStageGrades.map((g) => g?.gradeId).filter(Boolean)
           : realtimeStage.gradeId
           ? [realtimeStage.gradeId]
-          : targetGradeId
-          ? [targetGradeId]
-          : [];
+          : incomingIds;
       const allLiveGradesConfirmed =
         liveGradeIds.length > 0 &&
         liveGradeIds.every((gid) => newResultSaved.includes(gid));
 
-      if (allLiveGradesConfirmed && Array.isArray(realtimeStage.judges)) {
-        patch.judges = realtimeStage.judges.map((j, idx) => ({
+      const normalizedJudges = normalizeDenseRealtimeJudges(
+        realtimeStage.judges,
+        realtimeStage.stageJudgeCount
+      );
+      if (allLiveGradesConfirmed && normalizedJudges.length > 0) {
+        patch.judges = normalizedJudges.map((j, idx) => ({
           ...j,
           seatIndex: j?.seatIndex ?? idx + 1,
           isEnd: j?.isLogined ? true : Boolean(j?.isEnd),
@@ -358,7 +362,20 @@ const ContestRankingSummary = ({
         includePointArray: false,
       });
 
-      await handleRealtimeUpdate(currentContest.contests.id, gradeId);
+      const confirmedGradeIds = Array.from(
+        new Set(
+          [
+            ...(Array.isArray(resultData)
+              ? resultData.map((t) => t?.gradeId)
+              : []),
+            gradeId,
+          ].filter(Boolean)
+        )
+      );
+      await handleRealtimeUpdate(
+        currentContest.contests.id,
+        confirmedGradeIds
+      );
 
       // 원 종목 순위 확정 시 연결된 그랑프리 명단(contest_players_final)도 즉시 자동 동기화 (명단 저장 누락 원천 방어)
       let gpAutoSynced = false;
@@ -368,10 +385,20 @@ const ContestRankingSummary = ({
         const categorysListId = contestMeta.contestCategorysListId;
         const gradesListId = contestMeta.contestGradesListId;
         const playersFinalId = contestMeta.contestPlayersFinalId;
+        const confirmedCategoryIds = Array.from(
+          new Set(
+            [
+              ...(Array.isArray(resultData)
+                ? resultData.map((t) => t?.categoryId)
+                : []),
+              categoryId,
+            ].filter(Boolean)
+          )
+        );
 
         if (
           targetContestId &&
-          categoryId &&
+          confirmedCategoryIds.length > 0 &&
           categorysListId &&
           gradesListId &&
           playersFinalId
@@ -386,10 +413,12 @@ const ContestRankingSummary = ({
           const grds = Array.isArray(gradeSnap.data()?.grades)
             ? gradeSnap.data().grades
             : [];
-          const linkedGpGradeIds = findLinkedGrandPrixGradeIdsForCategory(
-            categoryId,
-            cats,
-            grds
+          const linkedGpGradeIds = Array.from(
+            new Set(
+              confirmedCategoryIds.flatMap((cid) =>
+                findLinkedGrandPrixGradeIdsForCategory(cid, cats, grds)
+              )
+            )
           );
 
           if (linkedGpGradeIds.length > 0) {
@@ -481,7 +510,7 @@ const ContestRankingSummary = ({
     setIsLoadingScores(true);
     const condition = [
       where("contestId", "==", currentContest.contests.id),
-      where("categoryId", "==", categoryId),
+      ...(categoryId ? [where("categoryId", "==", categoryId)] : []),
       where("gradeId", "==", gradeId),
       where("categoryJudgeType", "==", "ranking"),
     ];
@@ -677,20 +706,24 @@ const ContestRankingSummary = ({
       }
 
       // 2) RTDB 심판석 완료 잠금 해제 + 확정 체급 해제 + 동점자 전용 채점판(tieBreak) 푸시
-      const unlockedJudges = Array.isArray(realtimeStage?.judges)
-        ? realtimeStage.judges.map((j, idx) => ({
-            ...j,
-            seatIndex: j?.seatIndex ?? idx + 1,
-            isEnd: false,
-            errors: "",
-          }))
-        : undefined;
+      const normalizedTieJudges = normalizeDenseRealtimeJudges(
+        realtimeStage?.judges,
+        realtimeStage?.stageJudgeCount
+      );
+      const unlockedJudges =
+        normalizedTieJudges.length > 0
+          ? normalizedTieJudges.map((j, idx) => ({
+              ...j,
+              seatIndex: j?.seatIndex ?? idx + 1,
+              isEnd: false,
+              errors: "",
+            }))
+          : undefined;
 
-      const baseSaved = Array.isArray(realtimeStage?.resultSaved)
-        ? realtimeStage.resultSaved
-        : Array.isArray(currentResultSaved)
-        ? currentResultSaved
-        : [];
+      const rtSavedForTie = extractRtdbPlayerArray(realtimeStage?.resultSaved);
+      const propSavedForTie = extractRtdbPlayerArray(currentResultSaved);
+      const baseSaved =
+        rtSavedForTie.length > 0 ? rtSavedForTie : propSavedForTie;
       const nextResultSaved = baseSaved.filter((gid) => gid !== meta.gradeId);
 
       const nextRealtimeCompares = {

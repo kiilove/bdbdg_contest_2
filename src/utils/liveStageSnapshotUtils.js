@@ -3,6 +3,10 @@ import { ref, remove, update } from "firebase/database";
 import { getStagePlayerSortIndex } from "../functions/functions.js";
 import { isActiveStagePlayer } from "./playerEntryUtils.js";
 import { normalizeDenseRealtimeJudges } from "./judgeAssignUtils.js";
+import {
+  sanitizeForFirestore,
+  sanitizeForRealtimeDb,
+} from "./firestoreSanitize.js";
 
 export const getStageBackupKey = (stageId, gradeIds = []) => {
   if (stageId) return String(stageId);
@@ -304,11 +308,14 @@ export const rollbackLiveStageToOriginal = async ({
 
       restoredFirestoreGradePlayers = restoredForStage;
 
-      tx.update(finalRef, {
-        players: [...otherGradePlayers, ...restoredForStage],
-        stageOverrideBackups: existingBackups,
-        updatedAt: new Date().toISOString(),
-      });
+      tx.update(
+        finalRef,
+        sanitizeForFirestore({
+          players: [...otherGradePlayers, ...restoredForStage],
+          stageOverrideBackups: existingBackups,
+          updatedAt: new Date().toISOString(),
+        })
+      );
     });
   }
 
@@ -380,21 +387,24 @@ export const rollbackLiveStageToOriginal = async ({
     // ignore
   }
 
-  await update(ref(database, `currentStage/${contestId}`), {
-    ...rollbackSnapshot,
-    isLiveOverridden: false,
-    judges: nextJudges,
-    resultSaved: [],
-    compares: {
-      status: {
-        compareStart: false,
-        compareEnd: false,
-        compareCancel: false,
-        compareIng: false,
+  await update(
+    ref(database, `currentStage/${contestId}`),
+    sanitizeForRealtimeDb({
+      ...rollbackSnapshot,
+      isLiveOverridden: false,
+      judges: nextJudges,
+      resultSaved: [],
+      compares: {
+        status: {
+          compareStart: false,
+          compareEnd: false,
+          compareCancel: false,
+          compareIng: false,
+        },
+        confirmed: { count: 0 },
       },
-      confirmed: { count: 0 },
-    },
-  });
+    })
+  );
 
   return {
     restoredCount: rollbackSnapshot.stagePlayerCount,

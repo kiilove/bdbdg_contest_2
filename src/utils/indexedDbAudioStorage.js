@@ -239,6 +239,39 @@ const getStoredAudioRecord = async (cacheKey) => {
   }
 };
 
+const isBlobUrlAttachedToAudioElement = (blobUrl) => {
+  if (!blobUrl || typeof document === "undefined" || typeof document.querySelectorAll !== "function") {
+    return false;
+  }
+  try {
+    const audioElements = document.querySelectorAll("audio");
+    for (let i = 0; i < audioElements.length; i += 1) {
+      const el = audioElements[i];
+      if (el?.src === blobUrl || el?.currentSrc === blobUrl) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+};
+
+const safeRevokeBlobUrl = (blobUrl) => {
+  if (!blobUrl || typeof URL === "undefined" || typeof URL.revokeObjectURL !== "function") return;
+  if (isBlobUrlAttachedToAudioElement(blobUrl)) {
+    setTimeout(() => {
+      if (!isBlobUrlAttachedToAudioElement(blobUrl)) {
+        try {
+          URL.revokeObjectURL(blobUrl);
+        } catch {}
+      }
+    }, 300_000);
+    return;
+  }
+  try {
+    URL.revokeObjectURL(blobUrl);
+  } catch {}
+};
+
 const saveAudioBlobRecord = async (cacheKey, blob, metadata = {}) => {
   const db = await openAudioCacheDB();
   return new Promise((resolve, reject) => {
@@ -257,9 +290,7 @@ const saveAudioBlobRecord = async (cacheKey, blob, metadata = {}) => {
     req.onsuccess = () => {
       const prevUrl = memoryAudioBlobUrlMap.get(cacheKey);
       if (prevUrl) {
-        try {
-          URL.revokeObjectURL(prevUrl);
-        } catch {}
+        safeRevokeBlobUrl(prevUrl);
       }
       const nextUrl = URL.createObjectURL(blob);
       memoryAudioBlobUrlMap.set(cacheKey, nextUrl);
@@ -282,9 +313,7 @@ export const evictCachedAudioTrack = async (trackOrKey) => {
 
   const existingUrl = memoryAudioBlobUrlMap.get(cacheKey);
   if (existingUrl) {
-    try {
-      URL.revokeObjectURL(existingUrl);
-    } catch {}
+    safeRevokeBlobUrl(existingUrl);
     memoryAudioBlobUrlMap.delete(cacheKey);
   }
   removeTrackWarmed(cacheKey);
@@ -306,9 +335,7 @@ export const evictCachedAudioTrack = async (trackOrKey) => {
  */
 export const clearAllCachedAudio = async () => {
   for (const [, blobUrl] of memoryAudioBlobUrlMap.entries()) {
-    try {
-      URL.revokeObjectURL(blobUrl);
-    } catch {}
+    safeRevokeBlobUrl(blobUrl);
   }
   memoryAudioBlobUrlMap.clear();
 

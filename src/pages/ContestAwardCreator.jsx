@@ -116,10 +116,21 @@ const ContestAwardCreator = ({ props, setClose }) => {
     return Math.max(existingAwards.length, maxNum);
   };
 
+  const issuedKeySet = React.useMemo(() => {
+    const set = new Set();
+    (awardArray || []).forEach((item) => {
+      if (!gradeId || item?.gradeId === gradeId) {
+        set.add(getAwardAthleteKey(item));
+      }
+    });
+    return set;
+  }, [awardArray, gradeId]);
+
   const handleAwardCheck = (e, targetAthlete) => {
     if (!targetAthlete) return;
     const { checked } = e.target;
     const targetKey = getAwardAthleteKey(targetAthlete);
+    if (issuedKeySet.has(targetKey)) return;
     const baseNo = computeBaseAwardNumber(awardArray);
 
     let nextSelected;
@@ -149,15 +160,25 @@ const ContestAwardCreator = ({ props, setClose }) => {
   };
 
   const handleSaveAwardList = async (addArr = []) => {
-    if (addArr.length > 0) {
+    const freshFiltered = (addArr || []).filter(
+      (item) => !issuedKeySet.has(getAwardAthleteKey(item))
+    );
+    if (freshFiltered.length > 0) {
       try {
-        await Promise.all(addArr.map((add) => addDataAward.addData({ ...add })));
+        const baseNo = computeBaseAwardNumber(awardArray);
+        const finalToSave = freshFiltered.map((add, idx) => ({
+          ...add,
+          awardNumber: baseNo + idx + 1,
+        }));
+        await Promise.all(
+          finalToSave.map((add) => addDataAward.addData({ ...add }))
+        );
         setAwardAddArray([]);
         await fetchPool();
         setMessage({
           variant: "success",
           title: "상장 목록 저장 완료",
-          body: `${addArr.length}건의 상장 발급 데이터가 저장되었습니다.`,
+          body: `${finalToSave.length}건의 상장 발급 데이터가 저장되었습니다.`,
           isButton: true,
           confirmButtonText: "확인",
         });
@@ -251,30 +272,50 @@ const ContestAwardCreator = ({ props, setClose }) => {
                   playerNumber,
                 } = curr;
                 const athleteKey = getAwardAthleteKey(curr);
+                const isAlreadyIssued = issuedKeySet.has(athleteKey);
                 const selectedEntry = awardAddArray.find(
                   (item) => getAwardAthleteKey(item) === athleteKey
                 );
                 const isChecked = Boolean(selectedEntry);
-                const displayAwardNo = selectedEntry
+                const existingAwardItem = isAlreadyIssued
+                  ? awardArray.find(
+                      (a) =>
+                        (!gradeId || a?.gradeId === gradeId) &&
+                        getAwardAthleteKey(a) === athleteKey
+                    )
+                  : null;
+                const displayAwardNo = isAlreadyIssued
+                  ? existingAwardItem?.awardNumber || "-"
+                  : selectedEntry
                   ? selectedEntry.awardNumber
                   : awardUniqeNumber + awardAddArray.length + 1;
                 return (
                   <tr
                     key={athleteKey || cIdx}
-                    className="hover:bg-[#fafafa] transition-colors"
+                    className={`transition-colors ${
+                      isAlreadyIssued
+                        ? "bg-[#fafafa] opacity-65"
+                        : "hover:bg-[#fafafa]"
+                    }`}
                   >
                     <td className="py-2.5 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        name="playerAward"
-                        className="w-4 h-4 accent-[#2563eb] cursor-pointer"
-                        value={playerUid || playerNumber || ""}
-                        checked={isChecked}
-                        onChange={(e) => handleAwardCheck(e, curr)}
-                      />
+                      {isAlreadyIssued ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#f4f4f5] text-[#525252] text-[10px] font-semibold">
+                          발급완료
+                        </span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          name="playerAward"
+                          className="w-4 h-4 accent-[#2563eb] cursor-pointer"
+                          value={playerUid || playerNumber || ""}
+                          checked={isChecked}
+                          onChange={(e) => handleAwardCheck(e, curr)}
+                        />
+                      )}
                     </td>
                     <td className="py-2.5 px-3 text-center font-mono tabular-nums text-xs text-[#737373]">
-                      {isChecked ? displayAwardNo : "-"}
+                      {isAlreadyIssued || isChecked ? displayAwardNo : "-"}
                     </td>
                     <td className="py-2.5 px-3 text-center font-mono tabular-nums font-medium text-[#171717]">
                       {playerRank}위

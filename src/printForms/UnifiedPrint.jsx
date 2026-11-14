@@ -670,10 +670,9 @@ const UnifiedPrint = ({ forcedPrintType, hideTopTabs = false }) => {
                         : "text-[#525252] hover:text-[#171717]"
                     }`}
                     onClick={() => {
+                      setCurrentCategoryId("all");
+                      setCurrentGradeId("all");
                       setCurrentSection(section);
-                      if (printType === "ranking") {
-                        handleSearch("all", "all", section);
-                      }
                     }}
                   >
                     {section === "all" ? "전체 보기" : section}

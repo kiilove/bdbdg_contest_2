@@ -33,7 +33,11 @@ import { doc, onSnapshot, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { CurrentContestContext } from "../contexts/CurrentContestContext";
 import { dedupeContestResultsByGrade } from "../utils/contestResultsUtils";
-import { isActiveStagePlayer } from "../utils/playerEntryUtils";
+import {
+  isActiveStagePlayer,
+  resolveOriginalGradeTitle,
+} from "../utils/playerEntryUtils";
+import { isNonPlayerUrl } from "../utils/playerPhotoUtils";
 import { Spin } from "antd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
 import { BibTag, StatusDot } from "../components/ui/BibTag";
@@ -98,20 +102,30 @@ const ContestMonitoringHost = ({ contestId }) => {
   );
   const updateBroadcast = useFirebaseRealtimeUpdateData();
 
-  // 전체 선수 풀에서 playerUid 기준 사진 맵 구축
+  // 전체 선수 풀에서 playerUid 기준 사진 맵 구축 (무대 사진 우선 + 포스터 URL 제외)
   const uidPhotoMap = useMemo(() => {
     const map = new Map();
     (currentPlayersArray || []).forEach((g) => {
       (g.players || []).forEach((p) => {
         if (p?.playerUid) {
           const list = [
+            p.stagePhoto1,
+            p.stagePhotoUrl1,
+            p.stagePhotoUrl,
+            p.stagePhoto2,
+            p.stagePhotoUrl2,
             ...(Array.isArray(p.photos) ? p.photos : []),
             ...(Array.isArray(p.playerPhotos) ? p.playerPhotos : []),
             ...(Array.isArray(p.gallery) ? p.gallery : []),
             p.profileImageUrl,
             p.playerPhoto,
             p.photoUrl,
-          ].filter((u) => typeof u === "string" && u.trim().length > 5);
+          ].filter(
+            (u) =>
+              typeof u === "string" &&
+              u.trim().length > 5 &&
+              !isNonPlayerUrl(u)
+          );
           if (list.length > 0) {
             const existing = map.get(p.playerUid) || [];
             map.set(p.playerUid, Array.from(new Set([...existing, ...list])));
@@ -543,8 +557,23 @@ const ContestMonitoringHost = ({ contestId }) => {
         }
       }
 
+      const activeGradeIdForStage =
+        realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+      const activeGradeTitleForStage =
+        realtimeData?.gradeTitle || currentPlayersArray[0]?.gradeTitle || "";
+      const defaultStageInfo = {
+        stageId: realtimeData?.stageId || "",
+        stageNumber: realtimeData?.stageNumber || "",
+        categoryId: realtimeData?.categoryId || "",
+        categoryTitle: realtimeData?.categoryTitle || "",
+        gradeId: activeGradeIdForStage,
+        gradeTitle: activeGradeTitleForStage,
+        players: (currentPlayersArray || []).flatMap((g) => g.players || []),
+      };
+
       const payload = {
         mode,
+        stageInfo: resolvedExtra.stageInfo || defaultStageInfo,
         updatedAt: Date.now(),
         ...resolvedExtra,
       };
@@ -576,20 +605,31 @@ const ContestMonitoringHost = ({ contestId }) => {
     const uidPhotos =
       (player.playerUid && uidPhotoMap.get(player.playerUid)) || [];
     const directPhotos = [
+      player.stagePhoto1,
+      player.stagePhotoUrl1,
+      player.stagePhotoUrl,
+      player.stagePhoto2,
+      player.stagePhotoUrl2,
       ...(Array.isArray(player.photos) ? player.photos : []),
       ...(Array.isArray(player.playerPhotos) ? player.playerPhotos : []),
       player.profileImageUrl,
       player.playerPhoto,
       player.photoUrl,
-    ].filter((u) => typeof u === "string" && u.trim().length > 5);
+    ].filter(
+      (u) => typeof u === "string" && u.trim().length > 5 && !isNonPlayerUrl(u)
+    );
 
     const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
 
-    let stage1 = player.stagePhoto1 || player.stagePhotoUrl1 || "";
+    let stage1 =
+      (!isNonPlayerUrl(player.stagePhoto1) && player.stagePhoto1) ||
+      (!isNonPlayerUrl(player.stagePhotoUrl1) && player.stagePhotoUrl1) ||
+      "";
     let stage2 =
-      player.stagePhoto2 ||
-      player.stagePhotoUrl2 ||
-      player.backgroundPhotoUrl ||
+      (!isNonPlayerUrl(player.stagePhoto2) && player.stagePhoto2) ||
+      (!isNonPlayerUrl(player.stagePhotoUrl2) && player.stagePhotoUrl2) ||
+      (!isNonPlayerUrl(player.backgroundPhotoUrl) &&
+        player.backgroundPhotoUrl) ||
       "";
 
     if (!stage1 && allPhotos.length > 0) stage1 = allPhotos[0];
@@ -598,25 +638,31 @@ const ContestMonitoringHost = ({ contestId }) => {
     const primary =
       stage1 ||
       allPhotos[0] ||
-      player.profileImageUrl ||
-      player.playerPhoto ||
+      (!isNonPlayerUrl(player.profileImageUrl) && player.profileImageUrl) ||
+      (!isNonPlayerUrl(player.playerPhoto) && player.playerPhoto) ||
       "";
+
+    const origWonGradeTitle = resolveOriginalGradeTitle(player);
 
     const playerObj = {
       playerUid: player.playerUid || "",
-      playerNumber: player.playerNumber || "100",
+      playerNumber: player.playerNumber ?? "",
       playerName: player.playerName || "",
       playerGym: player.playerGym || "",
       heightWeight: player.heightWeight || "",
+      playerHeight: player.playerHeight || player.height || "",
+      playerWeight: player.playerWeight || player.weight || "",
       stagePhoto1: stage1,
       stagePhoto2: stage2,
       stagePhotoUrl1: stage1,
       stagePhotoUrl2: stage2,
+      stagePhotoUrl: primary,
       backgroundPhotoUrl: stage2,
       profileImageUrl: primary,
       photoUrl: primary,
       playerMotivation: player.playerMotivation || player.playerText || "",
       photos: allPhotos,
+      ...(origWonGradeTitle ? { originalGradeTitle: origWonGradeTitle } : {}),
     };
 
     handleSwitchBroadcastMode("ATHLETE_INTRO", {
@@ -683,6 +729,11 @@ const ContestMonitoringHost = ({ contestId }) => {
     const uidPhotos =
       (confirmed1st.playerUid && uidPhotoMap.get(confirmed1st.playerUid)) || [];
     const directPhotos = [
+      confirmed1st.stagePhoto1,
+      confirmed1st.stagePhotoUrl1,
+      confirmed1st.stagePhotoUrl,
+      confirmed1st.stagePhoto2,
+      confirmed1st.stagePhotoUrl2,
       ...(Array.isArray(confirmed1st.photos) ? confirmed1st.photos : []),
       ...(Array.isArray(confirmed1st.playerPhotos)
         ? confirmed1st.playerPhotos
@@ -690,17 +741,39 @@ const ContestMonitoringHost = ({ contestId }) => {
       confirmed1st.profileImageUrl,
       confirmed1st.playerPhoto,
       confirmed1st.photoUrl,
-    ].filter((u) => typeof u === "string" && u.trim().length > 5);
+    ].filter(
+      (u) => typeof u === "string" && u.trim().length > 5 && !isNonPlayerUrl(u)
+    );
 
     const allPhotos = Array.from(new Set([...directPhotos, ...uidPhotos]));
-    const primary =
+    const stage1 =
+      (!isNonPlayerUrl(confirmed1st.stagePhoto1) && confirmed1st.stagePhoto1) ||
+      (!isNonPlayerUrl(confirmed1st.stagePhotoUrl1) &&
+        confirmed1st.stagePhotoUrl1) ||
       allPhotos[0] ||
-      confirmed1st.profileImageUrl ||
-      confirmed1st.playerPhoto ||
+      "";
+    const stage2 =
+      (!isNonPlayerUrl(confirmed1st.stagePhoto2) && confirmed1st.stagePhoto2) ||
+      (!isNonPlayerUrl(confirmed1st.stagePhotoUrl2) &&
+        confirmed1st.stagePhotoUrl2) ||
+      allPhotos[1] ||
+      stage1 ||
+      "";
+    const primary =
+      stage1 ||
+      allPhotos[0] ||
+      (!isNonPlayerUrl(confirmed1st.profileImageUrl) &&
+        confirmed1st.profileImageUrl) ||
+      (!isNonPlayerUrl(confirmed1st.playerPhoto) && confirmed1st.playerPhoto) ||
       "";
 
     const topPlayerObj = {
       ...confirmed1st,
+      stagePhoto1: stage1,
+      stagePhoto2: stage2,
+      stagePhotoUrl1: stage1,
+      stagePhotoUrl2: stage2,
+      stagePhotoUrl: primary,
       profileImageUrl: primary,
       photoUrl: primary,
       photos: allPhotos,
@@ -1282,6 +1355,11 @@ const ContestMonitoringHost = ({ contestId }) => {
                                     >
                                       {player.playerGym || "무소속"}
                                     </span>
+                                    {resolveOriginalGradeTitle(player) && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/30 text-[#fbbf24] text-xs font-medium">
+                                        {resolveOriginalGradeTitle(player)} 1위
+                                      </span>
+                                    )}
                                   </div>
 
                                   {isCalled ? (

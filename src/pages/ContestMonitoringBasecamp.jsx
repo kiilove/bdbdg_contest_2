@@ -1153,11 +1153,14 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
             categoriesArray
           );
           if (syncResult.changed) {
-            transaction.update(finalRef, {
-              contestId: remoteData.contestId || contestId,
-              players: syncResult.players,
-              updatedAt: new Date().toISOString(),
-            });
+            transaction.update(
+              finalRef,
+              sanitizeForFirestore({
+                contestId: remoteData.contestId || contestId,
+                players: syncResult.players,
+                updatedAt: new Date().toISOString(),
+              })
+            );
           }
         });
       } catch (err) {
@@ -1321,7 +1324,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
 
   const isAllStageScoresEntered = useMemo(() => {
     const grades = currentStageInfo?.grades || [];
-    const judges = realtimeData?.judges || [];
+    const judges = extractRtdbPlayerArray(realtimeData?.judges);
     if (grades.length === 0 || judges.length === 0 || normalScoreData.length === 0) {
       return false;
     }
@@ -1759,9 +1762,7 @@ const ContestMonitoringBasecamp = ({ isHolding, setIsHolding }) => {
   }, [realtimeData, currentStageInfo, playersArray]);
 
   const emptyJudgeSeatsForDiag = useMemo(() => {
-    const realtimeJudges = Array.isArray(realtimeData?.judges)
-      ? realtimeData.judges
-      : [];
+    const realtimeJudges = extractRtdbPlayerArray(realtimeData?.judges);
     const expectedCount =
       Number(realtimeData?.stageJudgeCount) || realtimeJudges.length;
     if (expectedCount > 0 && realtimeJudges.length > 0) {
