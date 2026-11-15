@@ -951,12 +951,9 @@ const ContestMonitoringHost = ({ contestId }) => {
                 현재 진행 무대
               </span>
               {realtimeData?.stageNumber && (
-                <BibTag
-                  variant="dark"
-                  size="sm"
-                  prefix="#"
-                  number={realtimeData.stageNumber}
-                />
+                <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.1] text-[11px] font-medium text-[#a1a1a6] tabular-nums">
+                  제 {realtimeData.stageNumber} 무대
+                </span>
               )}
             </div>
 
@@ -1179,36 +1176,47 @@ const ContestMonitoringHost = ({ contestId }) => {
                   선수 번호를 순서대로 호명하고 터치하여 완료 표시하세요
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {compareNumbers.map((num) => {
+                  {compareNumbers.map((num, cNumIdx) => {
                     const isCalled = calledCompareNums[num];
+                    const matchedCalloutPlayer =
+                      currentPlayersArray
+                        .flatMap((g) => g.players || [])
+                        .find(
+                          (p) => String(p?.playerNumber) === String(num)
+                        ) || null;
                     return (
                       <button
                         type="button"
                         key={num}
                         onClick={() => toggleCompareNumCalled(num)}
-                        className={`p-6 rounded-[12px] text-center cursor-pointer transition-colors active:scale-[0.98] border flex flex-col items-center justify-center gap-3 ${
+                        className={`p-5 rounded-[12px] text-center cursor-pointer transition-colors active:scale-[0.98] border flex flex-col items-center justify-center gap-2 ${
                           isCalled
                             ? "bg-[#141415] border-[#ededed]/[0.06] opacity-50"
-                            : "bg-[#232325] hover:bg-[#2c2c2f] border-[#2563eb]/60"
+                            : "bg-[#232325] hover:bg-[#2c2c2f] border-[#fbbf24]/50"
                         }`}
                       >
-                        <BibTag
-                          variant={isCalled ? "dark" : "active"}
-                          size="lg"
-                          prefix="#"
-                          number={num}
-                        />
+                        <div className="flex items-center justify-between w-full text-[11px] text-[#85858b] px-1">
+                          <span>{cNumIdx + 1}번째 호명</span>
+                          <span className="font-semibold text-[#fbbf24]">
+                            선수번호
+                          </span>
+                        </div>
                         <div
-                          className={`font-mono tabular-nums font-semibold leading-none ${
+                          className={`font-mono tabular-nums font-bold leading-none py-1 ${
                             textClasses.compareNum
                           } ${
                             isCalled
                               ? "text-[#85858b] line-through"
-                              : "text-[#ededed]"
+                              : "text-[#fbbf24]"
                           }`}
                         >
-                          {num}
+                          {num}번
                         </div>
+                        {matchedCalloutPlayer?.playerName && (
+                          <div className="text-sm font-semibold text-[#ededed] truncate max-w-full">
+                            {matchedCalloutPlayer.playerName}
+                          </div>
+                        )}
                         <div className="flex items-center justify-center gap-1.5">
                           {isCalled ? (
                             <span className="text-xs font-medium text-[#4cc38a] inline-flex items-center gap-1">
@@ -1256,6 +1264,9 @@ const ContestMonitoringHost = ({ contestId }) => {
                                 : "bg-[#19191b] text-[#ededed] border-[#ededed]/[0.1]"
                             }`}
                           >
+                            <span className="text-[11px] block opacity-80 mb-0.5">
+                              최종 순위
+                            </span>
                             <span className="text-lg sm:text-xl font-semibold">
                               {rank}위
                             </span>
@@ -1263,15 +1274,15 @@ const ContestMonitoringHost = ({ contestId }) => {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 flex-wrap">
-                              <BibTag
-                                variant={isFirst ? "active" : "dark"}
-                                size="lg"
-                                number={player.playerNumber}
-                              />
-                              <span
-                                className={`font-mono tabular-nums font-semibold text-[#a1a1a6] ${textClasses.playerNum}`}
-                              >
-                                {player.playerNumber}번
+                              <span className="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#141415] border border-[#fbbf24]/40">
+                                <span className="text-xs font-medium text-[#a1a1a6]">
+                                  선수번호
+                                </span>
+                                <span
+                                  className={`font-mono tabular-nums font-bold text-[#fbbf24] leading-none ${textClasses.playerNum}`}
+                                >
+                                  {player.playerNumber}번
+                                </span>
                               </span>
                               <span
                                 className={`font-semibold text-[#ededed] ${textClasses.playerName}`}
@@ -1280,7 +1291,7 @@ const ContestMonitoringHost = ({ contestId }) => {
                               </span>
                             </div>
                             <div
-                              className={`text-[#a1a1a6] mt-1 ${textClasses.playerGym}`}
+                              className={`text-[#a1a1a6] mt-1.5 ${textClasses.playerGym}`}
                             >
                               소속: {player.playerGym || "무소속"}
                             </div>
@@ -1306,16 +1317,17 @@ const ContestMonitoringHost = ({ contestId }) => {
 
                   {current.players.length > 0 ? (
                     <div className="space-y-3">
-                      {current.players.map((player) => {
-                        const isCalled = calledPlayers[player.playerUid];
-                        const isSelected =
-                          selectedPlayerUid === player.playerUid;
+                      {current.players.map((player, pIdx) => {
+                        const callKey =
+                          player.playerUid || `num_${player.playerNumber}`;
+                        const isCalled = calledPlayers[callKey];
+                        const isSelected = selectedPlayerUid === callKey;
 
                         return (
                           <div
-                            key={player.playerUid}
+                            key={callKey || `${player.playerNumber}-${pIdx}`}
                             onClick={() => {
-                              togglePlayerCalled(player.playerUid);
+                              togglePlayerCalled(callKey);
                               handleIntroPlayerToScreen(player);
                             }}
                             className={`p-4 sm:p-5 rounded-[12px] cursor-pointer transition-colors border active:scale-[0.99] ${
@@ -1327,21 +1339,29 @@ const ContestMonitoringHost = ({ contestId }) => {
                             }`}
                           >
                             <div className="flex items-start gap-4 sm:gap-5">
-                              {/* 선수 번호 블록 */}
-                              <div className="flex flex-col items-center gap-1.5 shrink-0">
-                                <BibTag
-                                  variant={isCalled ? "active" : "dark"}
-                                  size="lg"
-                                  number={player.playerNumber}
-                                />
+                              {/* 호명할 선수번호 전용 대형 박스 (연번과 절대 혼동되지 않도록 한글 라벨 + '번' 명시) */}
+                              <div
+                                className={`min-w-[104px] sm:min-w-[122px] px-3 py-2.5 rounded-[10px] border flex flex-col items-center justify-center shrink-0 ${
+                                  isCalled
+                                    ? "bg-[#4cc38a]/15 border-[#4cc38a]/50 text-[#4cc38a]"
+                                    : "bg-[#0f0f10] border-[#fbbf24]/45 text-[#fbbf24]"
+                                }`}
+                              >
                                 <span
-                                  className={`font-mono tabular-nums font-semibold leading-none text-[#ededed] ${textClasses.playerNum}`}
+                                  className={`text-[11px] font-semibold tracking-wide mb-1 ${
+                                    isCalled ? "text-[#4cc38a]" : "text-[#d4d4d8]"
+                                  }`}
                                 >
-                                  {player.playerNumber}
+                                  호명 선수번호
+                                </span>
+                                <span
+                                  className={`font-mono tabular-nums font-bold leading-none ${textClasses.playerNum}`}
+                                >
+                                  {player.playerNumber}번
                                 </span>
                               </div>
 
-                              {/* 선수 이름, 소속, 출전 동기 */}
+                              {/* 선수 이름, 소속, 입장 순서(보조 표기), 출전 동기 */}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                   <div className="flex items-baseline gap-3 flex-wrap">
@@ -1354,6 +1374,9 @@ const ContestMonitoringHost = ({ contestId }) => {
                                       className={`text-[#a1a1a6] ${textClasses.playerGym}`}
                                     >
                                       {player.playerGym || "무소속"}
+                                    </span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.08] text-[11px] font-normal text-[#85858b]">
+                                      입장순서 {pIdx + 1}번째
                                     </span>
                                     {resolveOriginalGradeTitle(player) && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/30 text-[#fbbf24] text-xs font-medium">

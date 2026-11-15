@@ -828,7 +828,7 @@ const ContestMonitoringMC = () => {
               />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
-                {playersArray.map((player) => {
+                {playersArray.map((player, pIdx) => {
                   const isSelected = selectedCalloutPlayers.includes(
                     player.playerNumber
                   );
@@ -845,17 +845,34 @@ const ContestMonitoringMC = () => {
                         onClick={() => togglePlayerSelect(player.playerNumber)}
                         className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
                       >
-                        <BibTag
-                          variant={isSelected ? "active" : "dark"}
-                          size="lg"
-                          prefix="#"
-                          number={player.playerNumber}
-                        />
+                        <div
+                          className={`min-w-[78px] px-2.5 py-1.5 rounded-[8px] border flex flex-col items-center justify-center shrink-0 ${
+                            isSelected
+                              ? "bg-[#2563eb] text-white border-[#2563eb]"
+                              : "bg-[#141415] text-[#fbbf24] border-[#fbbf24]/35"
+                          }`}
+                        >
+                          <span
+                            className={`text-[10px] font-medium leading-none mb-1 ${
+                              isSelected ? "text-white/85" : "text-[#a1a1a6]"
+                            }`}
+                          >
+                            선수번호
+                          </span>
+                          <span className="font-mono tabular-nums text-lg font-bold leading-none">
+                            {player.playerNumber}번
+                          </span>
+                        </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-[#ededed] truncate">
-                            {player.playerName}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-[#ededed] truncate">
+                              {player.playerName}
+                            </span>
+                            <span className="text-[11px] text-[#71717a] shrink-0">
+                              ({pIdx + 1}번째 입장)
+                            </span>
                           </div>
-                          <div className="text-xs text-[#a1a1a6] truncate flex items-center gap-1.5 flex-wrap">
+                          <div className="text-xs text-[#a1a1a6] truncate flex items-center gap-1.5 flex-wrap mt-0.5">
                             <span>{player.playerGym || "무소속"}</span>
                             {resolveOriginalGradeTitle(player) && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/30 text-[#fbbf24] text-[10px] font-medium">
@@ -908,7 +925,12 @@ const ContestMonitoringMC = () => {
                 {selectedCalloutPlayers.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 p-2.5 rounded-[8px] bg-[#141415] border border-[#ededed]/[0.08]">
                     {selectedCalloutPlayers.map((num) => (
-                      <BibTag key={num} variant="dark" size="sm" number={num} />
+                      <span
+                        key={num}
+                        className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#232325] border border-[#fbbf24]/35 font-mono tabular-nums text-xs font-bold text-[#fbbf24]"
+                      >
+                        {num}번
+                      </span>
                     ))}
                   </div>
                 )}
