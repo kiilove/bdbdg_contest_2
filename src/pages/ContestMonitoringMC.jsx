@@ -864,21 +864,21 @@ const ContestMonitoringMC = () => {
                           </span>
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-[#ededed] truncate">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base sm:text-lg font-bold text-[#ffffff] truncate">
                               {player.playerName}
                             </span>
                             <span className="text-[11px] text-[#71717a] shrink-0">
                               ({pIdx + 1}번째 입장)
                             </span>
                           </div>
-                          <div className="text-xs text-[#a1a1a6] truncate flex items-center gap-1.5 flex-wrap mt-0.5">
-                            <span>{player.playerGym || "무소속"}</span>
-                            {resolveOriginalGradeTitle(player) && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] bg-[#f59e0b]/15 border border-[#f59e0b]/30 text-[#fbbf24] text-[10px] font-medium">
-                                {resolveOriginalGradeTitle(player)} 1위
-                              </span>
-                            )}
+                          <div className="text-sm sm:text-base font-semibold text-[#e4e4e7] truncate flex items-center gap-1.5 mt-1">
+                            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-[#27272a] text-[#a1a1aa] shrink-0">
+                              소속
+                            </span>
+                            <span className="truncate">
+                              {player.playerGym || "무소속"}
+                            </span>
                           </div>
                         </div>
                       </div>
