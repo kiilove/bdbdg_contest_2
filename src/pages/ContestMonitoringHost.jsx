@@ -211,10 +211,17 @@ const ContestMonitoringHost = ({ contestId }) => {
     );
   };
 
-  const handleViewRanking = async (gradeId, gradeTitle = "") => {
+  const handleViewRanking = async (
+    gradeId,
+    gradeTitle = "",
+    categoryTitle = "",
+    categoryId = ""
+  ) => {
     if (
       isRankingView &&
-      (!gradeId || !activeRankingGrade?.gradeId || activeRankingGrade.gradeId === gradeId)
+      (!gradeId ||
+        !activeRankingGrade?.gradeId ||
+        activeRankingGrade.gradeId === gradeId)
     ) {
       setIsRankingView(false);
       setRankingData(null);
@@ -237,7 +244,12 @@ const ContestMonitoringHost = ({ contestId }) => {
         }
 
         setRankingData(standingData);
-        setActiveRankingGrade({ gradeId, gradeTitle });
+        setActiveRankingGrade({
+          gradeId,
+          gradeTitle,
+          categoryTitle: categoryTitle || realtimeData?.categoryTitle || "",
+          categoryId: categoryId || realtimeData?.categoryId || "",
+        });
         setIsRankingView(true);
         setIsCompareView(false);
       } catch (error) {
@@ -433,6 +445,33 @@ const ContestMonitoringHost = ({ contestId }) => {
     return () => unsub();
   }, [effectiveContestId]);
 
+  // contest_stages_assign 실시간 동기화 (대회 중 통합무대 병합·분리 변경 시 즉시 반영)
+  useEffect(() => {
+    const stageAssignId =
+      currentContest?.contests?.contestStagesAssignId || "";
+    if (!stageAssignId) return undefined;
+
+    const unsub = onSnapshot(
+      doc(db, "contest_stages_assign", stageAssignId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (Array.isArray(data?.stages)) {
+          setStagesArray(
+            [...data.stages].sort(
+              (a, b) => (a.stageNumber || 0) - (b.stageNumber || 0)
+            )
+          );
+        }
+      },
+      (err) => {
+        console.error("사회자 무대배정 실시간 구독 오류:", err);
+      }
+    );
+
+    return () => unsub();
+  }, [currentContest?.contests?.contestStagesAssignId]);
+
   // 현재 진행 무대(stageId) 변경 시 출전 선수 매칭 동기화
   useEffect(() => {
     setCalledPlayers({});
@@ -453,6 +492,16 @@ const ContestMonitoringHost = ({ contestId }) => {
     const currentStageGrades = currentStage?.grades || [];
     const playerList = currentStageGrades.length
       ? currentStageGrades.map((grade) => ({
+          categoryId:
+            grade.categoryId ||
+            currentStage?.categoryId ||
+            realtimeData?.categoryId ||
+            "",
+          categoryTitle:
+            grade.categoryTitle ||
+            currentStage?.categoryTitle ||
+            realtimeData?.categoryTitle ||
+            "",
           gradeTitle: grade.gradeTitle,
           gradeId: grade.gradeId,
           players: matchedGradewWithPlayers(
@@ -465,6 +514,8 @@ const ContestMonitoringHost = ({ contestId }) => {
     setCurrentPlayersArray(playerList);
   }, [
     realtimeData?.stageId,
+    realtimeData?.categoryId,
+    realtimeData?.categoryTitle,
     stagesArray,
     allFinalPlayers,
     effectiveContestId,
@@ -595,9 +646,25 @@ const ContestMonitoringHost = ({ contestId }) => {
       let resolvedExtra = { ...extraData };
       if (mode === "RANKING" && !resolvedExtra.rankingData) {
         const activeGradeId =
-          realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+          activeRankingGrade?.gradeId ||
+          realtimeData?.gradeId ||
+          currentPlayersArray[0]?.gradeId ||
+          "";
         const activeGradeTitle =
-          realtimeData?.gradeTitle || currentPlayersArray[0]?.gradeTitle || "";
+          activeRankingGrade?.gradeTitle ||
+          realtimeData?.gradeTitle ||
+          currentPlayersArray[0]?.gradeTitle ||
+          "";
+        const activeCategoryId =
+          activeRankingGrade?.categoryId ||
+          realtimeData?.categoryId ||
+          currentPlayersArray[0]?.categoryId ||
+          "";
+        const activeCategoryTitle =
+          activeRankingGrade?.categoryTitle ||
+          realtimeData?.categoryTitle ||
+          currentPlayersArray[0]?.categoryTitle ||
+          "";
         if (activeGradeId) {
           const standing = await fetchDedupedGradeStanding(activeGradeId);
           if (standing.length > 0) {
@@ -607,8 +674,8 @@ const ContestMonitoringHost = ({ contestId }) => {
               stageInfo: {
                 stageId: realtimeData?.stageId || "",
                 stageNumber: realtimeData?.stageNumber || "",
-                categoryId: realtimeData?.categoryId || "",
-                categoryTitle: realtimeData?.categoryTitle || "",
+                categoryId: activeCategoryId,
+                categoryTitle: activeCategoryTitle,
                 gradeId: activeGradeId,
                 gradeTitle: activeGradeTitle,
               },
@@ -618,14 +685,30 @@ const ContestMonitoringHost = ({ contestId }) => {
       }
 
       const activeGradeIdForStage =
-        realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+        activeRankingGrade?.gradeId ||
+        realtimeData?.gradeId ||
+        currentPlayersArray[0]?.gradeId ||
+        "";
       const activeGradeTitleForStage =
-        realtimeData?.gradeTitle || currentPlayersArray[0]?.gradeTitle || "";
+        activeRankingGrade?.gradeTitle ||
+        realtimeData?.gradeTitle ||
+        currentPlayersArray[0]?.gradeTitle ||
+        "";
+      const activeCategoryIdForStage =
+        activeRankingGrade?.categoryId ||
+        realtimeData?.categoryId ||
+        currentPlayersArray[0]?.categoryId ||
+        "";
+      const activeCategoryTitleForStage =
+        activeRankingGrade?.categoryTitle ||
+        realtimeData?.categoryTitle ||
+        currentPlayersArray[0]?.categoryTitle ||
+        "";
       const defaultStageInfo = {
         stageId: realtimeData?.stageId || "",
         stageNumber: realtimeData?.stageNumber || "",
-        categoryId: realtimeData?.categoryId || "",
-        categoryTitle: realtimeData?.categoryTitle || "",
+        categoryId: activeCategoryIdForStage,
+        categoryTitle: activeCategoryTitleForStage,
         gradeId: activeGradeIdForStage,
         gradeTitle: activeGradeTitleForStage,
         players: (currentPlayersArray || []).flatMap((g) => g.players || []),
@@ -661,7 +744,7 @@ const ContestMonitoringHost = ({ contestId }) => {
     }
   };
 
-  const handleIntroPlayerToScreen = (player) => {
+  const handleIntroPlayerToScreen = (player, gradeContext = null) => {
     const uidPhotos =
       (player.playerUid && uidPhotoMap.get(player.playerUid)) || [];
     const directPhotos = [
@@ -725,9 +808,25 @@ const ContestMonitoringHost = ({ contestId }) => {
       ...(origWonGradeTitle ? { originalGradeTitle: origWonGradeTitle } : {}),
     };
 
+    const customStageInfo = gradeContext
+      ? {
+          stageId: realtimeData?.stageId || "",
+          stageNumber: realtimeData?.stageNumber || "",
+          categoryId:
+            gradeContext.categoryId || realtimeData?.categoryId || "",
+          categoryTitle:
+            gradeContext.categoryTitle || realtimeData?.categoryTitle || "",
+          gradeId: gradeContext.gradeId || realtimeData?.gradeId || "",
+          gradeTitle:
+            gradeContext.gradeTitle || realtimeData?.gradeTitle || "",
+          players: gradeContext.players || [],
+        }
+      : undefined;
+
     handleSwitchBroadcastMode("ATHLETE_INTRO", {
       activePlayer: playerObj,
       player: playerObj,
+      ...(customStageInfo ? { stageInfo: customStageInfo } : {}),
     });
   };
 
@@ -761,7 +860,10 @@ const ContestMonitoringHost = ({ contestId }) => {
 
     if (!confirmed1st) {
       const activeGradeId =
-        realtimeData?.gradeId || currentPlayersArray[0]?.gradeId || "";
+        activeRankingGrade?.gradeId ||
+        realtimeData?.gradeId ||
+        currentPlayersArray[0]?.gradeId ||
+        "";
       if (activeGradeId) {
         try {
           const standing = await fetchDedupedGradeStanding(activeGradeId);
@@ -1004,24 +1106,24 @@ const ContestMonitoringHost = ({ contestId }) => {
               : "w-full flex flex-col gap-3"
           }
         >
-          {/* 현재 진행 중인 무대 카드 */}
-          <div className="bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-[#85858b]">
+          {/* 현재 진행 중인 무대 카드 (종목·체급 초대형 시인성 강화) */}
+          <div className="bg-[#19191b] rounded-[14px] border border-[#fbbf24]/30 p-4 sm:p-5 space-y-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-[#a1a1aa]">
                 현재 진행 무대
               </span>
               {realtimeData?.stageNumber && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#232325] border border-[#ededed]/[0.1] text-[11px] font-medium text-[#a1a1a6] tabular-nums">
+                <span className="inline-flex items-center px-3 py-1 rounded-[6px] bg-[#fbbf24]/15 border border-[#fbbf24]/35 text-sm font-bold text-[#fbbf24] tabular-nums">
                   제 {realtimeData.stageNumber} 무대
                 </span>
               )}
             </div>
 
-            <div>
-              <div className="text-xl lg:text-2xl font-semibold text-[#ededed] leading-snug">
+            <div className="space-y-1.5">
+              <div className="text-2xl sm:text-3xl lg:text-[32px] font-extrabold text-[#ffffff] leading-tight tracking-tight">
                 {realtimeData?.categoryTitle || "진행 종목 없음"}
               </div>
-              <div className="text-base lg:text-lg font-medium text-[#a1a1a6] mt-1">
+              <div className="text-xl sm:text-2xl lg:text-[26px] font-extrabold text-[#fbbf24] leading-snug">
                 {realtimeData?.gradeTitle || "대기 중"}
               </div>
             </div>
@@ -1033,22 +1135,22 @@ const ContestMonitoringHost = ({ contestId }) => {
                   return (
                     <div
                       key={cIdx}
-                      className={`flex items-center justify-between px-3 py-2 rounded-[8px] border ${
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-[8px] border ${
                         isSaved
                           ? "bg-[#11241a] border-[#4cc38a]/50"
                           : "bg-[#1d1d20] border-[#27272a]"
                       }`}
                     >
-                      <span className="text-sm font-medium text-[#ededed]">
+                      <span className="text-base sm:text-lg font-bold text-[#ffffff]">
                         {current.gradeTitle}
                       </span>
                       {isSaved ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4cc38a]">
+                        <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#4cc38a] shrink-0">
                           <span className="w-2 h-2 rounded-full bg-[#4cc38a] animate-pulse" />
                           <span>순위 확정 완료</span>
                         </span>
                       ) : (
-                        <span className="text-xs font-medium text-[#636369]">
+                        <span className="text-xs sm:text-sm font-medium text-[#636369] shrink-0">
                           심사 진행 중
                         </span>
                       )}
@@ -1142,19 +1244,19 @@ const ContestMonitoringHost = ({ contestId }) => {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span
-                      className={`text-sm font-semibold ${
-                        isSaved ? "text-[#fef08a]" : "text-[#636369]"
+                      className={`text-base sm:text-lg font-bold ${
+                        isSaved ? "text-[#fef08a]" : "text-[#71717a]"
                       }`}
                     >
                       {current.gradeTitle} 발표 제어
                     </span>
                     {isSaved ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#4cc38a]/20 border border-[#4cc38a]/50 text-[#4cc38a] text-xs font-bold">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#4cc38a]/20 border border-[#4cc38a]/50 text-[#4cc38a] text-xs font-bold shrink-0">
                         <span className="w-2 h-2 rounded-full bg-[#4cc38a] animate-pulse" />
                         <span>발표 가능</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#1f1f23] text-[#52525b] text-[11px] font-medium">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#1f1f23] text-[#52525b] text-xs font-medium shrink-0">
                         집계 대기
                       </span>
                     )}
@@ -1163,7 +1265,12 @@ const ContestMonitoringHost = ({ contestId }) => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleViewRanking(current.gradeId, current.gradeTitle)
+                      handleViewRanking(
+                        current.gradeId,
+                        current.gradeTitle,
+                        current.categoryTitle,
+                        current.categoryId
+                      )
                     }
                     className={`w-full min-h-[76px] py-4 px-5 rounded-[12px] font-extrabold text-lg sm:text-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer border ${
                       isThisGradeRankingOpen
@@ -1227,26 +1334,43 @@ const ContestMonitoringHost = ({ contestId }) => {
 
         {/* 우측 메인 프롬프터 뷰 */}
         <main className="flex-1 bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] flex flex-col overflow-hidden">
-          {/* 프롬프터 상단 바 */}
-          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5">
-              {isCompareView && compareNumbers.length > 0 ? (
-                <Users size={18} strokeWidth={1.8} className="text-[#4cc38a]" />
-              ) : isRankingView ? (
-                <Trophy size={18} strokeWidth={1.8} className="text-[#fbbf24]" />
-              ) : (
-                <Mic size={18} strokeWidth={1.8} className="text-[#a1a1a6]" />
-              )}
-              <h2 className="text-base sm:text-lg font-semibold text-[#ededed] m-0">
-                {isCompareView && compareNumbers.length > 0
-                  ? "비교심사 호명 대상 번호판"
-                  : isRankingView
-                  ? `${
-                      activeRankingGrade?.gradeTitle
-                        ? `[${activeRankingGrade.gradeTitle}] `
-                        : ""
-                    }시상식 순위 발표 프롬프터`
-                  : "참가 선수 호명 프롬프터"}
+          {/* 프롬프터 상단 바 (현재 진행 종목·체급 대형 헤더 표출) */}
+          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.1] px-5 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#a1a1aa]">
+                {isCompareView && compareNumbers.length > 0 ? (
+                  <>
+                    <Users size={16} strokeWidth={2} className="text-[#4cc38a]" />
+                    <span>비교심사 호명 대상 번호판</span>
+                  </>
+                ) : isRankingView ? (
+                  <>
+                    <Trophy size={16} strokeWidth={2} className="text-[#fbbf24]" />
+                    <span>시상식 순위 발표 프롬프터</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic size={16} strokeWidth={2} className="text-[#a1a1aa]" />
+                    <span>참가 선수 호명 프롬프터</span>
+                  </>
+                )}
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#ffffff] m-0 leading-snug flex items-center gap-2.5 flex-wrap">
+                <span>
+                  {(isRankingView && activeRankingGrade?.categoryTitle) ||
+                    realtimeData?.categoryTitle ||
+                    "진행 종목 대기 중"}
+                </span>
+                {((isRankingView && activeRankingGrade?.gradeTitle) ||
+                  realtimeData?.gradeTitle) && (
+                  <>
+                    <span className="text-[#52525b] font-light">/</span>
+                    <span className="text-[#fbbf24]">
+                      {(isRankingView && activeRankingGrade?.gradeTitle) ||
+                        realtimeData?.gradeTitle}
+                    </span>
+                  </>
+                )}
               </h2>
             </div>
 
@@ -1291,7 +1415,12 @@ const ContestMonitoringHost = ({ contestId }) => {
                       key={cIdx}
                       type="button"
                       onClick={() =>
-                        handleViewRanking(current.gradeId, current.gradeTitle)
+                        handleViewRanking(
+                          current.gradeId,
+                          current.gradeTitle,
+                          current.categoryTitle,
+                          current.categoryId
+                        )
                       }
                       className={`inline-flex items-center gap-2.5 min-h-[50px] px-5 rounded-[10px] text-sm sm:text-base transition-all active:scale-[0.98] cursor-pointer border ${
                         isSaved
@@ -1463,13 +1592,21 @@ const ContestMonitoringHost = ({ contestId }) => {
               activeStageMatchedPlayersCount > 0 ? (
               /* 3. 참가 선수 명단 및 멘트 프롬프터 */
               currentPlayersArray.map((current, cIdx) => (
-                <div key={cIdx} className="space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#ededed]/[0.08]">
-                    <h3 className="text-sm font-medium text-[#a1a1a6] m-0">
-                      {current.gradeTitle} 선수 명단
-                    </h3>
-                    <span className="font-mono tabular-nums text-xs text-[#85858b]">
-                      총 {current.players.length}명
+                <div key={cIdx} className="space-y-3.5 pb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 rounded-[12px] bg-[#202024] border border-[#ededed]/[0.12] border-l-4 border-l-[#fbbf24]">
+                    <div className="flex items-baseline gap-2.5 flex-wrap">
+                      {(current.categoryTitle ||
+                        realtimeData?.categoryTitle) && (
+                        <span className="text-lg sm:text-xl lg:text-2xl font-bold text-[#e4e4e7]">
+                          {current.categoryTitle || realtimeData?.categoryTitle}
+                        </span>
+                      )}
+                      <h3 className="text-2xl sm:text-3xl font-extrabold text-[#fbbf24] m-0 leading-tight">
+                        {current.gradeTitle}
+                      </h3>
+                    </div>
+                    <span className="font-mono tabular-nums text-sm sm:text-base font-bold text-[#ededed] bg-[#141415] px-3 py-1 rounded-[6px] border border-[#ededed]/[0.1]">
+                      출전 {current.players.length}명
                     </span>
                   </div>
 
@@ -1486,7 +1623,7 @@ const ContestMonitoringHost = ({ contestId }) => {
                             key={callKey || `${player.playerNumber}-${pIdx}`}
                             onClick={() => {
                               togglePlayerCalled(callKey);
-                              handleIntroPlayerToScreen(player);
+                              handleIntroPlayerToScreen(player, current);
                             }}
                             className={`p-4 sm:p-5 rounded-[12px] cursor-pointer transition-colors border active:scale-[0.99] ${
                               isCalled

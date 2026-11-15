@@ -711,7 +711,7 @@ const ContestMonitoringMC = () => {
               {currentContest?.contests?.contestTitle ||
                 "2026 보디빌딩 챔피언십"}
             </h1>
-            <div className="text-xs font-medium text-[#a1a1a6] flex items-center gap-2 pt-1">
+            <div className="text-lg sm:text-2xl font-extrabold text-[#fbbf24] flex items-center gap-2.5 pt-1.5 leading-snug">
               <StatusDot
                 status={varStageTitle ? "live" : "idle"}
                 live={Boolean(varStageTitle)}
