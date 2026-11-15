@@ -118,7 +118,13 @@ const ContestMonitoring = () => {
   }
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-[#fafafa] text-[#171717]">
+    <div
+      className={`flex flex-col w-full min-h-screen ${
+        isDarkScreen
+          ? "bg-[#141415] text-[#ededed]"
+          : "bg-[#fafafa] text-[#171717]"
+      }`}
+    >
       {normalizedTarget === "all" && (
         <div className="flex items-center gap-1 w-full bg-[#f4f4f5] border-b border-[#171717]/[0.08] px-6 pt-2">
           {tabArray.map((tab) => {

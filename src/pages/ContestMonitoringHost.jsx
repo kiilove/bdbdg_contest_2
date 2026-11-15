@@ -1,16 +1,11 @@
 "use client";
 
 import React, { useContext, useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mic,
-  Type,
-  Maximize2,
-  Minimize2,
-  Monitor,
-  Timer,
-  BarChart3,
+  ArrowLeft,
   Trophy,
-  Award,
   Users,
   Send,
   ArrowDownUp,
@@ -41,16 +36,22 @@ import {
 import { isNonPlayerUrl } from "../utils/playerPhotoUtils";
 import { Spin } from "antd";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import { BibTag, StatusDot } from "../components/ui/BibTag";
-import {
-  MonitoringBlockingState,
-  MonitoringDiagnosticsBar,
-} from "../components/monitoring/MonitoringDiagnosticsBar";
+import { StatusDot } from "../components/ui/BibTag";
+import { MonitoringBlockingState } from "../components/monitoring/MonitoringDiagnosticsBar";
 
 const ContestMonitoringHost = ({ contestId }) => {
+  const navigate = useNavigate();
   const { currentContest } = useContext(CurrentContestContext);
   const effectiveContestId =
     contestId || currentContest?.contests?.id || currentContest?.id || "";
+
+  const handleGoBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/contestmonitoring/main");
+    }
+  };
 
   const [stagesArray, setStagesArray] = useState([]);
   const [allFinalPlayers, setAllFinalPlayers] = useState([]);
@@ -946,172 +947,44 @@ const ContestMonitoringHost = ({ contestId }) => {
     });
   };
 
-  const quickScenes = [
-    {
-      mode: "STANDBY",
-      label: "대기 화면",
-      icon: Monitor,
-      onClick: () => handleSwitchBroadcastMode("STANDBY"),
-    },
-    {
-      mode: "POSEDOWN",
-      label: "포즈다운 60초",
-      icon: Timer,
-      onClick: () => handleSwitchBroadcastMode("POSEDOWN"),
-    },
-    {
-      mode: "COMMERCIAL",
-      label: "점수 집계 중",
-      icon: BarChart3,
-      onClick: () => handleSwitchBroadcastMode("COMMERCIAL"),
-    },
-    {
-      mode: "RANKING",
-      label: "순위 발표",
-      icon: Trophy,
-      onClick: () => handleSwitchBroadcastMode("RANKING"),
-    },
-    {
-      mode: "CHAMPION_SHOWCASE",
-      label: "1위 단독 송출",
-      icon: Award,
-      onClick: () => triggerChampionShowcase(),
-      spanClass: "col-span-2 sm:col-span-1",
-    },
-  ];
-
   return (
-    <div className="w-full min-h-screen bg-[#141415] text-[#ededed] flex flex-col select-none">
+    <div
+      className={`w-full bg-[#141415] text-[#ededed] flex flex-col select-none ${
+        isLandscape ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh]"
+      }`}
+    >
       <ConfirmationModal
         isOpen={msgOpen}
         message={modalMessage}
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setMsgOpen(false)}
       />
-      {/* 사회자 상단 헤더 바 (#0f0f10 deepest) */}
-      <header className="sticky top-0 z-30 bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-4 h-14 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-[8px] bg-[#232325] border border-[#ededed]/[0.08] flex items-center justify-center shrink-0">
-            <Mic size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
-          </div>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-[4px] bg-[#232325] text-[#a1a1a6] border border-[#ededed]/[0.08] text-xs font-medium shrink-0">
-              사회자 콘솔
-            </span>
-            <h1 className="text-sm sm:text-base font-medium text-[#ededed] m-0 truncate">
-              {currentContest?.contests?.contestTitle || "보디빌딩 대회"}
-            </h1>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden sm:flex items-center gap-2 bg-[#19191b] px-3 h-9 rounded-[8px] border border-[#ededed]/[0.08]">
-            <StatusDot
-              status={currentBroadcastMode === "STANDBY" ? "idle" : "live"}
-              live={currentBroadcastMode !== "STANDBY"}
-            />
-            <span className="text-xs text-[#85858b]">전광판</span>
-            <span className="text-xs font-medium text-[#ededed]">
-              {broadcastLabel}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={cycleFontSize}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border border-[#ededed]/[0.08] font-medium text-xs transition-colors active:scale-[0.98] cursor-pointer"
-            title="글자 크기 변경"
-          >
-            <Type size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
-            <span>
-              크기:{" "}
-              {fontScale === "normal"
-                ? "보통"
-                : fontScale === "large"
-                ? "크게"
-                : "아주 크게"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="w-9 h-9 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border border-[#ededed]/[0.08] flex items-center justify-center transition-colors active:scale-[0.98] cursor-pointer"
-            title="전체화면 전환"
-          >
-            {isFullscreen ? (
-              <Minimize2 size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
-            ) : (
-              <Maximize2 size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
-            )}
-          </button>
-        </div>
-      </header>
-
-      {/* 전광판 원터치 방송 제어 스튜디오 스위처 바 */}
-      <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
-        {quickScenes.map((scene) => {
-          const Icon = scene.icon;
-          const isActive = currentBroadcastMode === scene.mode;
-          return (
-            <button
-              key={scene.mode}
-              type="button"
-              onClick={scene.onClick}
-              className={`${
-                scene.spanClass || ""
-              } flex items-center justify-center gap-2 h-12 px-3 rounded-[10px] font-medium text-sm transition-colors active:scale-[0.98] cursor-pointer border ${
-                isActive
-                  ? "bg-[#2563eb] text-white border-[#2563eb]"
-                  : "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border-[#ededed]/[0.08]"
-              }`}
-            >
-              <Icon
-                size={16}
-                strokeWidth={1.5}
-                className={isActive ? "text-white" : "text-[#a1a1a6]"}
-              />
-              <span>{scene.label}</span>
-              {isActive && <StatusDot status="live" live />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 운영 데이터 점검 및 빠른 보강 바 (다크 스튜디오 테마) */}
-      <div className="px-4 pt-3">
-        <MonitoringDiagnosticsBar
-          variant="dark"
-          screenType="host"
-          contestInfo={contestInfo}
-          stagesCount={stagesArray.length}
-          playersCount={allFinalPlayers.length}
-          realtimeData={realtimeData}
-          currentStagePlayersCount={activeStageMatchedPlayersCount}
-          onRefreshData={reloadHostData}
-        />
-      </div>
-
-      {/* 메인 바디 영역 */}
+      {/* 메인 바디 영역 (상단 헤더 전면 제거 — 뒤로가기만 유지하여 프롬프터 화면 극대화) */}
       <div
         className={`flex-1 flex ${
-          isLandscape ? "flex-row" : "flex-col"
-        } p-4 gap-4 overflow-hidden`}
+          isLandscape ? "flex-row overflow-hidden" : "flex-col"
+        } p-3 gap-3`}
       >
         {/* 좌측 패널 (현재 무대 및 상태 제어) */}
         <div
           className={
             isLandscape
-              ? "w-[340px] lg:w-[384px] flex flex-col gap-3 shrink-0 overflow-y-auto pr-1"
+              ? "w-[336px] lg:w-[376px] flex flex-col gap-3 shrink-0 overflow-y-auto pr-1"
               : "w-full flex flex-col gap-3"
           }
         >
-          {/* 현재 진행 중인 무대 카드 (종목·체급 초대형 시인성 강화) */}
-          <div className="bg-[#19191b] rounded-[14px] border border-[#fbbf24]/30 p-4 sm:p-5 space-y-3.5">
+          {/* 현재 진행 중인 무대 카드 (상단 좌측 뒤로가기 버튼 통합 + 종목·체급 초대형 시인성) */}
+          <div className="bg-[#19191b] rounded-[14px] border border-[#fbbf24]/30 p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-[#a1a1aa]">
-                현재 진행 무대
-              </span>
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.14] text-xs sm:text-sm font-semibold text-[#ededed] transition-colors active:scale-[0.98] cursor-pointer"
+              >
+                <ArrowLeft size={16} strokeWidth={2} />
+                <span>뒤로가기</span>
+              </button>
               {realtimeData?.stageNumber && (
                 <span className="inline-flex items-center px-3 py-1 rounded-[6px] bg-[#fbbf24]/15 border border-[#fbbf24]/35 text-sm font-bold text-[#fbbf24] tabular-nums">
                   제 {realtimeData.stageNumber} 무대

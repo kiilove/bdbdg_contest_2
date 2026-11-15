@@ -88,6 +88,15 @@ const LiveMonitoringHub = () => {
   const roleShortLabel =
     STATION_ROLES[effectiveRole]?.shortLabel || "본부석";
   const hasUnread = intercomState.unreadCount > 0;
+  const isMcChromeless = activeKey === "mc" || activeKey === "host";
+
+  if (isMcChromeless) {
+    return (
+      <div className="w-full min-h-screen bg-[#141415]">
+        <ContestMonitoring />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-[#fafafa]">

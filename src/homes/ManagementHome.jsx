@@ -549,6 +549,18 @@ const ManagementHome = ({ children }) => {
     );
   }
 
+  const isMcChromelessRoute = /^\/contestmonitoring\/(mc|host)(\/|$)/i.test(
+    location.pathname || ""
+  );
+
+  if (isMcChromelessRoute) {
+    return (
+      <main className="w-full min-h-screen bg-[#141415] text-[#ededed]">
+        {children}
+      </main>
+    );
+  }
+
   return (
     <div
       className={`min-h-screen flex ${

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Mic,
+  ArrowLeft,
   Monitor,
   Timer,
   BarChart3,
@@ -32,12 +33,9 @@ import {
   resolveOriginalGradeTitle,
 } from "../utils/playerEntryUtils";
 import { isNonPlayerUrl } from "../utils/playerPhotoUtils";
-import { BibTag, StatusDot } from "../components/ui/BibTag";
+import { StatusDot } from "../components/ui/BibTag";
 import ConfirmationModal from "../messageBox/ConfirmationModal";
-import {
-  MonitoringBlockingState,
-  MonitoringDiagnosticsBar,
-} from "../components/monitoring/MonitoringDiagnosticsBar";
+import { MonitoringBlockingState } from "../components/monitoring/MonitoringDiagnosticsBar";
 
 // 규정 포즈 멘트 가이드 (사회자 진행용)
 const POSES_GUIDE = [
@@ -54,9 +52,18 @@ const POSES_GUIDE = [
 ];
 
 const ContestMonitoringMC = () => {
+  const navigate = useNavigate();
   const { currentContest } = useContext(CurrentContestContext);
   const contestId =
     currentContest?.contests?.id || currentContest?.id || "";
+
+  const handleGoBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/contestmonitoring/main");
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentStageId, setCurrentStageId] = useState("");
@@ -697,21 +704,18 @@ const ContestMonitoringMC = () => {
         onCancel={() => setMsgOpen(false)}
         onConfirm={() => setMsgOpen(false)}
       />
-      {/* 1. 상단 글로벌 헤더 (#0f0f10 deepest) */}
-      <header className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-10 h-10 rounded-[10px] bg-[#232325] border border-[#ededed]/[0.08] flex items-center justify-center shrink-0">
-            <Mic size={18} strokeWidth={1.5} className="text-[#a1a1a6]" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-[#85858b]">
-              사회자 방송 제어 콘솔
-            </div>
-            <h1 className="text-base sm:text-lg font-semibold text-[#ededed] m-0 truncate">
-              {currentContest?.contests?.contestTitle ||
-                "2026 보디빌딩 챔피언십"}
-            </h1>
-            <div className="text-lg sm:text-2xl font-extrabold text-[#fbbf24] flex items-center gap-2.5 pt-1.5 leading-snug">
+      <div className="p-3 sm:p-4 space-y-3.5 flex-1">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={handleGoBack}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.14] text-xs sm:text-sm font-semibold text-[#ededed] transition-colors active:scale-[0.98] cursor-pointer shrink-0"
+            >
+              <ArrowLeft size={16} strokeWidth={2} />
+              <span>뒤로가기</span>
+            </button>
+            <div className="text-xl sm:text-2xl font-extrabold text-[#fbbf24] flex items-center gap-2.5 leading-snug">
               <StatusDot
                 status={varStageTitle ? "live" : "idle"}
                 live={Boolean(varStageTitle)}
@@ -720,44 +724,6 @@ const ContestMonitoringMC = () => {
             </div>
           </div>
         </div>
-
-        <div className="flex items-center gap-3 bg-[#19191b] border border-[#ededed]/[0.08] px-4 py-2.5 rounded-[10px] shrink-0">
-          <Monitor size={16} strokeWidth={1.5} className="text-[#85858b]" />
-          <div>
-            <span className="text-[11px] text-[#85858b] block">
-              전광판 실시간 송출 상태
-            </span>
-            <div className="flex items-center gap-2 mt-0.5">
-              <StatusDot
-                status={currentMode === "STANDBY" ? "idle" : "live"}
-                live={currentMode !== "STANDBY"}
-              />
-              <span className="text-sm font-medium text-[#ededed]">
-                {modeLabel}
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="p-4 sm:p-6 space-y-5 flex-1">
-        {/* 운영 데이터 점검 및 빠른 보강 바 */}
-        <MonitoringDiagnosticsBar
-          variant="dark"
-          screenType="mc"
-          stagesCount={allStages.length}
-          playersCount={allFinalPlayers.length}
-          realtimeData={currentStageRealtime}
-          currentStagePlayersCount={
-            currentStageRealtime?.stageId ? playersArray.length : undefined
-          }
-          onRefreshData={() => {
-            preloadContestPools();
-            if (contestId && currentStageId) {
-              loadStageData(contestId, currentStageId);
-            }
-          }}
-        />
 
         {/* 2. 원터치 방송 제어 스튜디오 스위처 그리드 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
