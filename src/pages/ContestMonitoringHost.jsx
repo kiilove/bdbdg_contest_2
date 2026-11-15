@@ -1000,38 +1000,6 @@ const ContestMonitoringHost = ({ contestId }) => {
                 {realtimeData?.gradeTitle || "대기 중"}
               </div>
             </div>
-
-            {currentPlayersArray.length > 0 && (
-              <div className="pt-3 border-t border-[#ededed]/[0.08] space-y-2">
-                {currentPlayersArray.map((current, cIdx) => {
-                  const isSaved = isGradeResultReady(current.gradeId);
-                  return (
-                    <div
-                      key={cIdx}
-                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-[8px] border ${
-                        isSaved
-                          ? "bg-[#11241a] border-[#4cc38a]/50"
-                          : "bg-[#1d1d20] border-[#27272a]"
-                      }`}
-                    >
-                      <span className="text-base sm:text-lg font-bold text-[#ffffff]">
-                        {current.gradeTitle}
-                      </span>
-                      {isSaved ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#4cc38a] shrink-0">
-                          <span className="w-2 h-2 rounded-full bg-[#4cc38a] animate-pulse" />
-                          <span>순위 확정 완료</span>
-                        </span>
-                      ) : (
-                        <span className="text-xs sm:text-sm font-medium text-[#636369] shrink-0">
-                          심사 진행 중
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {/* 비교심사 진행 상태 알림 */}
@@ -1121,7 +1089,9 @@ const ContestMonitoringHost = ({ contestId }) => {
                         isSaved ? "text-[#fef08a]" : "text-[#71717a]"
                       }`}
                     >
-                      {current.gradeTitle} 발표 제어
+                      {currentPlayersArray.length > 1
+                        ? `${current.gradeTitle} 발표 제어`
+                        : "순위 발표 제어"}
                     </span>
                     {isSaved ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#4cc38a]/20 border border-[#4cc38a]/50 text-[#4cc38a] text-xs font-bold shrink-0">
@@ -1207,119 +1177,69 @@ const ContestMonitoringHost = ({ contestId }) => {
 
         {/* 우측 메인 프롬프터 뷰 */}
         <main className="flex-1 bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] flex flex-col overflow-hidden">
-          {/* 프롬프터 상단 바 (현재 진행 종목·체급 대형 헤더 표출) */}
-          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.1] px-5 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#a1a1aa]">
-                {isCompareView && compareNumbers.length > 0 ? (
-                  <>
-                    <Users size={16} strokeWidth={2} className="text-[#4cc38a]" />
-                    <span>비교심사 호명 대상 번호판</span>
-                  </>
-                ) : isRankingView ? (
-                  <>
-                    <Trophy size={16} strokeWidth={2} className="text-[#fbbf24]" />
-                    <span>시상식 순위 발표 프롬프터</span>
-                  </>
-                ) : (
-                  <>
-                    <Mic size={16} strokeWidth={2} className="text-[#a1a1aa]" />
-                    <span>참가 선수 호명 프롬프터</span>
-                  </>
-                )}
-              </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#ffffff] m-0 leading-snug flex items-center gap-2.5 flex-wrap">
-                <span>
-                  {(isRankingView && activeRankingGrade?.categoryTitle) ||
-                    realtimeData?.categoryTitle ||
-                    "진행 종목 대기 중"}
-                </span>
-                {((isRankingView && activeRankingGrade?.gradeTitle) ||
-                  realtimeData?.gradeTitle) && (
-                  <>
-                    <span className="text-[#52525b] font-light">/</span>
-                    <span className="text-[#fbbf24]">
-                      {(isRankingView && activeRankingGrade?.gradeTitle) ||
-                        realtimeData?.gradeTitle}
-                    </span>
-                  </>
-                )}
+          {/* 프롬프터 상단 바 (종목·체급 중복 표기 제거 — 깔끔한 단일 모드 헤더) */}
+          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {isCompareView && compareNumbers.length > 0 ? (
+                <Users size={18} strokeWidth={1.8} className="text-[#4cc38a]" />
+              ) : isRankingView ? (
+                <Trophy size={18} strokeWidth={1.8} className="text-[#fbbf24]" />
+              ) : (
+                <Mic size={18} strokeWidth={1.8} className="text-[#a1a1aa]" />
+              )}
+              <h2 className="text-base sm:text-lg font-bold text-[#ededed] m-0">
+                {isCompareView && compareNumbers.length > 0
+                  ? "비교심사 호명 대상 번호판"
+                  : isRankingView
+                  ? `${
+                      currentPlayersArray.length > 1 &&
+                      activeRankingGrade?.gradeTitle
+                        ? `[${activeRankingGrade.gradeTitle}] `
+                        : ""
+                    }시상식 순위 발표 프롬프터`
+                  : "참가 선수 호명 프롬프터"}
               </h2>
+              {!isCompareView &&
+                !isRankingView &&
+                typeof activeStageMatchedPlayersCount === "number" && (
+                  <span className="font-mono tabular-nums text-xs sm:text-sm font-semibold text-[#a1a1aa] bg-[#1d1d20] px-2.5 py-0.5 rounded-[6px] border border-[#2c2c30]">
+                    출전 {activeStageMatchedPlayersCount}명
+                  </span>
+                )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              {isRankingView ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setIsReversed((prev) => !prev)}
-                    className="inline-flex items-center gap-2 min-h-[48px] px-4 rounded-[10px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.15] text-[#ededed] font-semibold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
-                  >
-                    <ArrowDownUp
-                      size={18}
-                      strokeWidth={1.8}
-                      className="text-[#fbbf24]"
-                    />
-                    <span>
-                      {isReversed
-                        ? "역순 발표 (하위 → 1위)"
-                        : "정순 발표 (1위 → 하위)"}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRankingView(false);
-                      setRankingData(null);
-                      setActiveRankingGrade(null);
-                    }}
-                    className="inline-flex items-center gap-2 min-h-[48px] px-5 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
-                  >
-                    <Users size={18} strokeWidth={1.8} />
-                    <span>선수 명단으로 돌아가기</span>
-                  </button>
-                </>
-              ) : (
-                currentPlayersArray.map((current, cIdx) => {
-                  const isSaved = isGradeResultReady(current.gradeId);
-                  const multiGrade = currentPlayersArray.length > 1;
-                  return (
-                    <button
-                      key={cIdx}
-                      type="button"
-                      onClick={() =>
-                        handleViewRanking(
-                          current.gradeId,
-                          current.gradeTitle,
-                          current.categoryTitle,
-                          current.categoryId
-                        )
-                      }
-                      className={`inline-flex items-center gap-2.5 min-h-[50px] px-5 rounded-[10px] text-sm sm:text-base transition-all active:scale-[0.98] cursor-pointer border ${
-                        isSaved
-                          ? "bg-gradient-to-r from-[#f59e0b] via-[#fbbf24] to-[#fde047] hover:brightness-105 text-[#09090b] font-extrabold border-2 border-[#fef9c3] shadow-[0_0_20px_rgba(251,191,36,0.45)] ring-2 ring-[#fbbf24]/40"
-                          : "bg-[#1a1a1d] hover:bg-[#222226] text-[#52525b] font-medium border-[#27272a] opacity-70"
-                      }`}
-                    >
-                      {isSaved && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#16a34a] animate-pulse shrink-0" />
-                      )}
-                      <Trophy
-                        size={19}
-                        strokeWidth={isSaved ? 2.3 : 1.6}
-                        className={isSaved ? "text-[#09090b]" : "text-[#52525b]"}
-                      />
-                      <span>
-                        {multiGrade ? `${current.gradeTitle} ` : ""}
-                        {isSaved
-                          ? "순위 결과 확인 · 발표 열기"
-                          : "순위 집계 대기 중"}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+            {isRankingView && (
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsReversed((prev) => !prev)}
+                  className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.15] text-[#ededed] font-semibold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
+                >
+                  <ArrowDownUp
+                    size={18}
+                    strokeWidth={1.8}
+                    className="text-[#fbbf24]"
+                  />
+                  <span>
+                    {isReversed
+                      ? "역순 발표 (하위 → 1위)"
+                      : "정순 발표 (1위 → 하위)"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRankingView(false);
+                    setRankingData(null);
+                    setActiveRankingGrade(null);
+                  }}
+                  className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
+                >
+                  <Users size={18} strokeWidth={1.8} />
+                  <span>선수 명단으로 돌아가기</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 스크롤 가능한 프롬프터 본문 */}
@@ -1463,25 +1383,28 @@ const ContestMonitoringHost = ({ contestId }) => {
               </div>
             ) : currentPlayersArray.length > 0 &&
               activeStageMatchedPlayersCount > 0 ? (
-              /* 3. 참가 선수 명단 및 멘트 프롬프터 */
+              /* 3. 참가 선수 명단 및 멘트 프롬프터 (단일 체급 시 중복 배너 제거, 통합 무대 시에만 체급 구분선 표시) */
               currentPlayersArray.map((current, cIdx) => (
-                <div key={cIdx} className="space-y-3.5 pb-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 rounded-[12px] bg-[#202024] border border-[#ededed]/[0.12] border-l-4 border-l-[#fbbf24]">
-                    <div className="flex items-baseline gap-2.5 flex-wrap">
-                      {(current.categoryTitle ||
-                        realtimeData?.categoryTitle) && (
-                        <span className="text-lg sm:text-xl lg:text-2xl font-bold text-[#e4e4e7]">
-                          {current.categoryTitle || realtimeData?.categoryTitle}
-                        </span>
-                      )}
-                      <h3 className="text-2xl sm:text-3xl font-extrabold text-[#fbbf24] m-0 leading-tight">
-                        {current.gradeTitle}
-                      </h3>
+                <div key={cIdx} className="space-y-3 pb-3">
+                  {currentPlayersArray.length > 1 && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-[10px] bg-[#202024] border border-[#ededed]/[0.12] border-l-4 border-l-[#fbbf24]">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        {current.categoryTitle &&
+                          current.categoryTitle !==
+                            realtimeData?.categoryTitle && (
+                            <span className="text-base sm:text-lg font-bold text-[#e4e4e7]">
+                              {current.categoryTitle}
+                            </span>
+                          )}
+                        <h3 className="text-xl sm:text-2xl font-extrabold text-[#fbbf24] m-0 leading-tight">
+                          {current.gradeTitle}
+                        </h3>
+                      </div>
+                      <span className="font-mono tabular-nums text-xs sm:text-sm font-bold text-[#ededed] bg-[#141415] px-2.5 py-1 rounded-[6px] border border-[#ededed]/[0.1]">
+                        출전 {current.players.length}명
+                      </span>
                     </div>
-                    <span className="font-mono tabular-nums text-sm sm:text-base font-bold text-[#ededed] bg-[#141415] px-3 py-1 rounded-[6px] border border-[#ededed]/[0.1]">
-                      출전 {current.players.length}명
-                    </span>
-                  </div>
+                  )}
 
                   {current.players.length > 0 ? (
                     <div className="space-y-3">
