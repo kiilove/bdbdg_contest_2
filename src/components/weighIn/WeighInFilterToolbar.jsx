@@ -11,6 +11,8 @@ const WeighInFilterToolbar = ({
   filterWeighedStatus,
   onSelectStatus,
   totalPlayersCount,
+  weighedPlayersCount = 0,
+  unweighedPlayersCount = 0,
   activePlayersCount,
   gradeChangedCount,
   noShowCount,
@@ -64,6 +66,28 @@ const WeighInFilterToolbar = ({
             }`}
           >
             전체 ({totalPlayersCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectStatus("weighed")}
+            className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
+              filterWeighedStatus === "weighed"
+                ? "bg-[#16a34a] text-white"
+                : "bg-transparent text-[#16a34a] hover:bg-[#16a34a]/[0.08]"
+            }`}
+          >
+            계측완료 ({weighedPlayersCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectStatus("unweighed")}
+            className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border-0 cursor-pointer transition-colors duration-150 ${
+              filterWeighedStatus === "unweighed"
+                ? "bg-[#2563eb] text-white"
+                : "bg-transparent text-[#2563eb] hover:bg-[#2563eb]/[0.08]"
+            }`}
+          >
+            미계측 ({unweighedPlayersCount})
           </button>
           <button
             type="button"

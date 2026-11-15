@@ -608,7 +608,7 @@ const ContestPlayerWeighInTable = () => {
                 ? !!dbPlayer.playerNoShow
                 : !!lp.playerNoShow,
               isWeighedIn: isLocalDirty
-                ? !!lp.isWeighedIn
+                ? Boolean(lp.isWeighedIn || safeHeight || safeWeight)
                 : Boolean(dbPlayer.isWeighedIn || lp.isWeighedIn),
               isGradeChanged: resolvedGradeChanged,
               originalGradeId: isLocalDirty
@@ -1740,7 +1740,7 @@ const ContestPlayerWeighInTable = () => {
     }
   };
 
-  /** 신장/체중 입력란 옆 [계측완료] 버튼 클릭 시 DB 즉시 저장 */
+  /** 신장/체중 입력란 옆 [계측 저장] 버튼 클릭(또는 Enter) 시 DB 즉시 저장 */
   const handleSavePlayerWeighIn = async (player) => {
     const entryKey = getPlayerEntryKey(player);
     const { height, weight } = parseHeightWeight(player.heightWeight);
@@ -1755,6 +1755,22 @@ const ContestPlayerWeighInTable = () => {
       height: safeH,
       weight: safeW,
       isWeighedIn: true,
+    });
+  };
+
+  /** [계측 취소] 버튼 클릭 시 개별 선수 계측 완료 상태 및 입력된 신장/체중 즉시 원복 (미계측 전환) */
+  const handleCancelPlayerWeighIn = async (player) => {
+    if (!player) return;
+    const entryKey = getPlayerEntryKey(player);
+    dirtyPlayerKeysRef.current.delete(entryKey);
+
+    await persistSinglePlayerWeighIn(entryKey, {
+      heightWeight: "",
+      playerHeight: "",
+      playerWeight: "",
+      height: "",
+      weight: "",
+      isWeighedIn: false,
     });
   };
 
@@ -1891,7 +1907,7 @@ const ContestPlayerWeighInTable = () => {
     await persistSinglePlayerWeighIn(playerEntryKey, gradeUpdate);
   };
 
-  /** 📏 신장(height) 개별 수정 (로컬 dirty 등록으로 onSnapshot 입력 증발 방지) */
+  /** 📏 신장(height) 개별 수정 (수정 즉시 미저장 상태인 [계측 저장]으로 전환 + dirty 보호) */
   const handleHeightChange = (playerEntryKey, newHeight) => {
     if (playerEntryKey) {
       dirtyPlayerKeysRef.current.add(playerEntryKey);
@@ -1901,14 +1917,14 @@ const ContestPlayerWeighInTable = () => {
         if (getPlayerEntryKey(p) === playerEntryKey) {
           const { weight } = parseHeightWeight(p.heightWeight);
           const combined = formatHeightWeight(newHeight, weight);
-          return { ...p, heightWeight: combined };
+          return { ...p, heightWeight: combined, isWeighedIn: false };
         }
         return p;
       })
     );
   };
 
-  /** 📏 체중(weight) 개별 수정 (로컬 dirty 등록으로 onSnapshot 입력 증발 방지) */
+  /** 📏 체중(weight) 개별 수정 (수정 즉시 미저장 상태인 [계측 저장]으로 전환 + dirty 보호) */
   const handleWeightChange = (playerEntryKey, newWeight) => {
     if (playerEntryKey) {
       dirtyPlayerKeysRef.current.add(playerEntryKey);
@@ -1918,7 +1934,7 @@ const ContestPlayerWeighInTable = () => {
         if (getPlayerEntryKey(p) === playerEntryKey) {
           const { height } = parseHeightWeight(p.heightWeight);
           const combined = formatHeightWeight(height, newWeight);
-          return { ...p, heightWeight: combined };
+          return { ...p, heightWeight: combined, isWeighedIn: false };
         }
         return p;
       })
@@ -2021,10 +2037,15 @@ const ContestPlayerWeighInTable = () => {
   }, [categorysArray, gradesArray, playersArray]);
 
   // 통계 계산
-  // 통계 계산
   const totalPlayersCount = playersArray.length;
   const noShowCount = playersArray.filter((p) => p.playerNoShow).length;
   const activePlayersCount = totalPlayersCount - noShowCount;
+  const weighedPlayersCount = playersArray.filter(
+    (p) => p.isWeighedIn && !p.playerNoShow
+  ).length;
+  const unweighedPlayersCount = playersArray.filter(
+    (p) => !p.isWeighedIn && !p.playerNoShow
+  ).length;
   const gradeChangedCount = playersArray.filter((p) => p.isGradeChanged).length;
 
   // 부문(Section) 목록
@@ -2061,7 +2082,11 @@ const ContestPlayerWeighInTable = () => {
           });
         }
 
-        if (filterWeighedStatus === "active") {
+        if (filterWeighedStatus === "weighed") {
+          players = players.filter((p) => p.isWeighedIn && !p.playerNoShow);
+        } else if (filterWeighedStatus === "unweighed") {
+          players = players.filter((p) => !p.isWeighedIn && !p.playerNoShow);
+        } else if (filterWeighedStatus === "active") {
           players = players.filter((p) => !p.playerNoShow);
         } else if (filterWeighedStatus === "noshow") {
           players = players.filter((p) => p.playerNoShow);
@@ -2161,6 +2186,8 @@ const ContestPlayerWeighInTable = () => {
             filterWeighedStatus={filterWeighedStatus}
             onSelectStatus={setFilterWeighedStatus}
             totalPlayersCount={totalPlayersCount}
+            weighedPlayersCount={weighedPlayersCount}
+            unweighedPlayersCount={unweighedPlayersCount}
             activePlayersCount={activePlayersCount}
             gradeChangedCount={gradeChangedCount}
             noShowCount={noShowCount}
@@ -2179,6 +2206,7 @@ const ContestPlayerWeighInTable = () => {
             onHeightChange={handleHeightChange}
             onWeightChange={handleWeightChange}
             onSavePlayerWeighIn={handleSavePlayerWeighIn}
+            onCancelPlayerWeighIn={handleCancelPlayerWeighIn}
             onGradeChange={handleGradeChage}
             onNoShowChange={handleNoShow}
             onOpenNumberModal={openNumberModal}

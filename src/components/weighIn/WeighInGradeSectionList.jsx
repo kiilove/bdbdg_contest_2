@@ -1,6 +1,6 @@
 import React from "react";
 import { Checkbox, Input, Tooltip } from "antd";
-import { Save, Pencil, Check, User } from "lucide-react";
+import { Save, Pencil, Check, User, RotateCcw } from "lucide-react";
 import BibTag from "../ui/BibTag";
 import { getStagePlayerSortIndex } from "../../functions/functions";
 import {
@@ -17,6 +17,7 @@ const WeighInGradeSectionList = ({
   onHeightChange,
   onWeightChange,
   onSavePlayerWeighIn,
+  onCancelPlayerWeighIn,
   onGradeChange,
   onNoShowChange,
   onOpenNumberModal,
@@ -262,6 +263,11 @@ const WeighInGradeSectionList = ({
                                       onChange={(e) =>
                                         onHeightChange(entryKey, e.target.value)
                                       }
+                                      onPressEnter={() => {
+                                        if (!playerNoShow) {
+                                          onSavePlayerWeighIn(player);
+                                        }
+                                      }}
                                       className={`w-24 h-9 text-sm font-medium font-mono tabular-nums pr-7 text-center rounded-[8px] transition-colors duration-150 ${
                                         playerNoShow
                                           ? "bg-[#f4f4f5] text-[#737373] border-[#171717]/[0.08]"
@@ -296,6 +302,11 @@ const WeighInGradeSectionList = ({
                                       onChange={(e) =>
                                         onWeightChange(entryKey, e.target.value)
                                       }
+                                      onPressEnter={() => {
+                                        if (!playerNoShow) {
+                                          onSavePlayerWeighIn(player);
+                                        }
+                                      }}
                                       className={`w-24 h-9 text-sm font-medium font-mono tabular-nums pr-7 text-center rounded-[8px] transition-colors duration-150 ${
                                         playerNoShow
                                           ? "bg-[#f4f4f5] text-[#737373] border-[#171717]/[0.08]"
@@ -307,28 +318,41 @@ const WeighInGradeSectionList = ({
                                     </span>
                                   </div>
 
-                                  <button
-                                    type="button"
-                                    disabled={playerNoShow}
-                                    onClick={() => onSavePlayerWeighIn(player)}
-                                    className={`inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-[8px] font-medium text-xs transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
-                                      isWeighedIn && !playerNoShow
-                                        ? "bg-[#16a34a]/[0.10] hover:bg-[#16a34a]/[0.16] text-[#16a34a] border border-[#16a34a]/25"
-                                        : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-transparent"
-                                    }`}
-                                  >
-                                    {isWeighedIn && !playerNoShow ? (
-                                      <>
-                                        <Check size={14} strokeWidth={1.75} />
+                                  {isWeighedIn && !playerNoShow ? (
+                                    <div className="inline-flex items-center gap-1.5 shrink-0">
+                                      <span className="inline-flex items-center justify-center gap-1 px-2.5 h-9 rounded-[8px] font-semibold text-xs bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/25 select-none">
+                                        <Check size={14} strokeWidth={2} />
                                         <span>계측 완료</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Save size={14} strokeWidth={1.5} />
-                                        <span>계측 저장</span>
-                                      </>
-                                    )}
-                                  </button>
+                                      </span>
+                                      {onCancelPlayerWeighIn && (
+                                        <Tooltip title="이 선수의 계측 완료 상태와 입력값을 취소(미계측 원복)합니다">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              onCancelPlayerWeighIn(player)
+                                            }
+                                            className="inline-flex items-center justify-center gap-1 px-2.5 h-9 rounded-[8px] font-medium text-xs bg-[#ffffff] hover:bg-[#dc2626]/[0.08] text-[#525252] hover:text-[#dc2626] border border-[#171717]/[0.14] hover:border-[#dc2626]/30 transition-colors duration-150 cursor-pointer shrink-0"
+                                          >
+                                            <RotateCcw
+                                              size={13}
+                                              strokeWidth={1.75}
+                                            />
+                                            <span>계측 취소</span>
+                                          </button>
+                                        </Tooltip>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={playerNoShow}
+                                      onClick={() => onSavePlayerWeighIn(player)}
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-[8px] font-medium text-xs bg-[#2563eb] hover:bg-[#1d4ed8] text-white border border-transparent transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      <Save size={14} strokeWidth={1.5} />
+                                      <span>계측 저장</span>
+                                    </button>
+                                  )}
                                 </div>
                               </td>
 
@@ -504,6 +528,11 @@ const WeighInGradeSectionList = ({
                                 onChange={(e) =>
                                   onHeightChange(entryKey, e.target.value)
                                 }
+                                onPressEnter={() => {
+                                  if (!playerNoShow) {
+                                    onSavePlayerWeighIn(player);
+                                  }
+                                }}
                                 className="h-9 text-sm font-medium font-mono tabular-nums text-center pr-7 rounded-[8px] border-[#171717]/[0.14] bg-[#ffffff]"
                               />
                               <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
@@ -529,6 +558,11 @@ const WeighInGradeSectionList = ({
                                 onChange={(e) =>
                                   onWeightChange(entryKey, e.target.value)
                                 }
+                                onPressEnter={() => {
+                                  if (!playerNoShow) {
+                                    onSavePlayerWeighIn(player);
+                                  }
+                                }}
                                 className="h-9 text-sm font-medium font-mono tabular-nums text-center pr-7 rounded-[8px] border-[#171717]/[0.14] bg-[#ffffff]"
                               />
                               <span className="absolute right-2 text-[11px] text-[#737373] pointer-events-none">
@@ -536,20 +570,34 @@ const WeighInGradeSectionList = ({
                               </span>
                             </div>
 
-                            <button
-                              type="button"
-                              disabled={playerNoShow}
-                              onClick={() => onSavePlayerWeighIn(player)}
-                              className={`inline-flex items-center justify-center gap-1 px-3 h-9 rounded-[8px] font-medium text-xs transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
-                                isWeighedIn && !playerNoShow
-                                  ? "bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/25"
-                                  : "bg-[#2563eb] text-white border border-transparent"
-                              }`}
-                            >
-                              {isWeighedIn && !playerNoShow
-                                ? "계측 완료"
-                                : "계측 저장"}
-                            </button>
+                            {isWeighedIn && !playerNoShow ? (
+                              <div className="inline-flex items-center gap-1 shrink-0">
+                                <span className="inline-flex items-center justify-center px-2.5 h-9 rounded-[8px] font-semibold text-xs bg-[#16a34a]/[0.10] text-[#16a34a] border border-[#16a34a]/25">
+                                  계측 완료
+                                </span>
+                                {onCancelPlayerWeighIn && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onCancelPlayerWeighIn(player)
+                                    }
+                                    className="inline-flex items-center justify-center gap-1 px-2 h-9 rounded-[8px] font-medium text-xs bg-[#ffffff] hover:bg-[#dc2626]/[0.08] text-[#525252] hover:text-[#dc2626] border border-[#171717]/[0.14] cursor-pointer shrink-0"
+                                  >
+                                    <RotateCcw size={12} strokeWidth={1.75} />
+                                    <span>취소</span>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={playerNoShow}
+                                onClick={() => onSavePlayerWeighIn(player)}
+                                className="inline-flex items-center justify-center gap-1 px-3 h-9 rounded-[8px] font-medium text-xs bg-[#2563eb] text-white border border-transparent transition-colors duration-150 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                계측 저장
+                              </button>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-end gap-4 pt-2 border-t border-[#171717]/[0.06]">
