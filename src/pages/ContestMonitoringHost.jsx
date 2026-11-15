@@ -64,6 +64,7 @@ const ContestMonitoringHost = ({ contestId }) => {
   const fetchResultQuery = useFirestoreQuery();
   const [rankingData, setRankingData] = useState(null);
   const [isRankingView, setIsRankingView] = useState(false);
+  const [activeRankingGrade, setActiveRankingGrade] = useState(null);
   const [isReversed, setIsReversed] = useState(true);
   const [isLandscape, setIsLandscape] = useState(
     typeof window !== "undefined"
@@ -208,10 +209,14 @@ const ContestMonitoringHost = ({ contestId }) => {
     );
   };
 
-  const handleViewRanking = async (gradeId) => {
-    if (isRankingView) {
+  const handleViewRanking = async (gradeId, gradeTitle = "") => {
+    if (
+      isRankingView &&
+      (!gradeId || !activeRankingGrade?.gradeId || activeRankingGrade.gradeId === gradeId)
+    ) {
       setIsRankingView(false);
       setRankingData(null);
+      setActiveRankingGrade(null);
     } else {
       try {
         const standingData = await fetchDedupedGradeStanding(gradeId);
@@ -230,6 +235,7 @@ const ContestMonitoringHost = ({ contestId }) => {
         }
 
         setRankingData(standingData);
+        setActiveRankingGrade({ gradeId, gradeTitle });
         setIsRankingView(true);
         setIsCompareView(false);
       } catch (error) {
@@ -395,6 +401,9 @@ const ContestMonitoringHost = ({ contestId }) => {
   useEffect(() => {
     setCalledPlayers({});
     setCalledCompareNums({});
+    setIsRankingView(false);
+    setRankingData(null);
+    setActiveRankingGrade(null);
   }, [realtimeData?.stageId]);
 
   useEffect(() => {
@@ -940,7 +949,7 @@ const ContestMonitoringHost = ({ contestId }) => {
         <div
           className={
             isLandscape
-              ? "w-[320px] lg:w-[352px] flex flex-col gap-3 shrink-0"
+              ? "w-[340px] lg:w-[384px] flex flex-col gap-3 shrink-0 overflow-y-auto pr-1"
               : "w-full flex flex-col gap-3"
           }
         >
@@ -1060,19 +1069,35 @@ const ContestMonitoringHost = ({ contestId }) => {
             </button>
           )}
 
-          {/* 체급별 순위 확인 및 전광판 송출 버튼 */}
+          {/* 체급별 순위 확인 및 전광판 송출 버튼 (대형 터치 버튼) */}
           {currentPlayersArray.length > 0 &&
             currentPlayersArray.map((current, cIdx) => {
               const isSaved =
                 Array.isArray(realtimeData?.resultSaved) &&
                 realtimeData.resultSaved.includes(current.gradeId);
+              const isThisGradeRankingOpen =
+                isRankingView &&
+                (!activeRankingGrade?.gradeId ||
+                  activeRankingGrade.gradeId === current.gradeId);
+
               return (
                 <div
                   key={cIdx}
-                  className="bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] p-4 space-y-2.5"
+                  className={`rounded-[14px] border p-4 space-y-3 transition-colors ${
+                    isSaved
+                      ? "bg-[#1c1a14] border-[#fbbf24]/50"
+                      : "bg-[#19191b] border-[#ededed]/[0.14]"
+                  }`}
                 >
-                  <div className="text-xs font-medium text-[#85858b]">
-                    {current.gradeTitle} 발표 제어
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-[#ededed]">
+                      {current.gradeTitle} 발표 제어
+                    </span>
+                    {isSaved && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#fbbf24]/15 text-[#fbbf24] text-xs font-semibold">
+                        집계 완료
+                      </span>
+                    )}
                   </div>
 
                   <button
@@ -1080,24 +1105,32 @@ const ContestMonitoringHost = ({ contestId }) => {
                     onClick={() =>
                       handleViewRanking(current.gradeId, current.gradeTitle)
                     }
-                    className={`w-full h-11 px-4 rounded-[8px] font-medium text-sm transition-colors active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer border ${
-                      isRankingView
-                        ? "bg-[#232325] hover:bg-[#2c2c2f] text-[#ededed] border-[#2563eb]"
+                    className={`w-full min-h-[72px] py-4 px-5 rounded-[12px] font-bold text-lg sm:text-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 cursor-pointer border shadow-md ${
+                      isThisGradeRankingOpen
+                        ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white border-[#3b82f6]"
                         : isSaved
-                        ? "bg-[#ededed] hover:bg-white text-[#141415] border-[#ededed]"
-                        : "bg-[#232325] hover:bg-[#2c2c2f] text-[#a1a1a6] border-[#ededed]/[0.08]"
+                        ? "bg-[#fbbf24] hover:bg-[#fcd34d] text-[#141415] border-[#fbbf24]"
+                        : "bg-[#27272a] hover:bg-[#323236] text-[#f4f4f5] border-[#fbbf24]/45"
                     }`}
                   >
-                    {isRankingView ? (
+                    {isThisGradeRankingOpen ? (
                       <>
-                        <Users size={16} strokeWidth={1.5} />
+                        <Users size={22} strokeWidth={2} />
                         <span>참가 선수 명단으로 돌아가기</span>
                       </>
                     ) : (
                       <>
-                        <Trophy size={16} strokeWidth={1.5} />
+                        <Trophy
+                          size={24}
+                          strokeWidth={2}
+                          className={
+                            isSaved ? "text-[#141415]" : "text-[#fbbf24]"
+                          }
+                        />
                         <span>
-                          {isSaved ? "순위 발표 모드 열기" : "순위 결과 확인"}
+                          {isSaved
+                            ? "순위 결과 확인 · 발표 열기"
+                            : "순위 결과 확인"}
                         </span>
                       </>
                     )}
@@ -1109,9 +1142,9 @@ const ContestMonitoringHost = ({ contestId }) => {
                       onClick={() =>
                         handleSendToScreen(current.gradeId, current.gradeTitle)
                       }
-                      className="w-full h-10 px-4 rounded-[8px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors active:scale-[0.98] cursor-pointer"
+                      className="w-full min-h-[54px] py-3 px-4 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold text-base flex items-center justify-center gap-2.5 transition-colors active:scale-[0.98] cursor-pointer"
                     >
-                      <Send size={16} strokeWidth={1.5} />
+                      <Send size={18} strokeWidth={1.8} />
                       <span>전광판 순위 화면 송출</span>
                     </button>
                   )}
@@ -1123,48 +1156,93 @@ const ContestMonitoringHost = ({ contestId }) => {
         {/* 우측 메인 프롬프터 뷰 */}
         <main className="flex-1 bg-[#19191b] rounded-[12px] border border-[#ededed]/[0.08] flex flex-col overflow-hidden">
           {/* 프롬프터 상단 바 */}
-          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="bg-[#0f0f10] border-b border-[#ededed]/[0.08] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2.5">
               {isCompareView && compareNumbers.length > 0 ? (
-                <Users size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+                <Users size={18} strokeWidth={1.8} className="text-[#4cc38a]" />
               ) : isRankingView ? (
-                <Trophy size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+                <Trophy size={18} strokeWidth={1.8} className="text-[#fbbf24]" />
               ) : (
-                <Mic size={16} strokeWidth={1.5} className="text-[#a1a1a6]" />
+                <Mic size={18} strokeWidth={1.8} className="text-[#a1a1a6]" />
               )}
-              <h2 className="text-base font-semibold text-[#ededed] m-0">
+              <h2 className="text-base sm:text-lg font-semibold text-[#ededed] m-0">
                 {isCompareView && compareNumbers.length > 0
                   ? "비교심사 호명 대상 번호판"
                   : isRankingView
-                  ? "시상식 순위 발표 프롬프터"
+                  ? `${
+                      activeRankingGrade?.gradeTitle
+                        ? `[${activeRankingGrade.gradeTitle}] `
+                        : ""
+                    }시상식 순위 발표 프롬프터`
                   : "참가 선수 호명 프롬프터"}
               </h2>
             </div>
 
-            {isRankingView && (
-              <button
-                type="button"
-                onClick={() => setIsReversed((prev) => !prev)}
-                className="inline-flex items-center gap-2 h-8 px-3 rounded-[6px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.1] text-[#ededed] font-medium text-xs transition-colors active:scale-[0.98] cursor-pointer"
-              >
-                <ArrowDownUp
-                  size={14}
-                  strokeWidth={1.5}
-                  className="text-[#a1a1a6]"
-                />
-                <span>
-                  {isReversed
-                    ? "역순 발표 (하위 → 1위)"
-                    : "정순 발표 (1위 → 하위)"}
-                </span>
-              </button>
-            )}
-
-            {!isRankingView && !isCompareView && (
-              <span className="text-xs text-[#85858b]">
-                선수 카드를 터치하면 전광판에 단독 소개 화면이 송출됩니다
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {isRankingView ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsReversed((prev) => !prev)}
+                    className="inline-flex items-center gap-2 min-h-[48px] px-4 rounded-[10px] bg-[#232325] hover:bg-[#2c2c2f] border border-[#ededed]/[0.15] text-[#ededed] font-semibold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
+                  >
+                    <ArrowDownUp
+                      size={18}
+                      strokeWidth={1.8}
+                      className="text-[#fbbf24]"
+                    />
+                    <span>
+                      {isReversed
+                        ? "역순 발표 (하위 → 1위)"
+                        : "정순 발표 (1위 → 하위)"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRankingView(false);
+                      setRankingData(null);
+                      setActiveRankingGrade(null);
+                    }}
+                    className="inline-flex items-center gap-2 min-h-[48px] px-5 rounded-[10px] bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base transition-colors active:scale-[0.98] cursor-pointer"
+                  >
+                    <Users size={18} strokeWidth={1.8} />
+                    <span>선수 명단으로 돌아가기</span>
+                  </button>
+                </>
+              ) : (
+                currentPlayersArray.map((current, cIdx) => {
+                  const isSaved =
+                    Array.isArray(realtimeData?.resultSaved) &&
+                    realtimeData.resultSaved.includes(current.gradeId);
+                  const multiGrade = currentPlayersArray.length > 1;
+                  return (
+                    <button
+                      key={cIdx}
+                      type="button"
+                      onClick={() =>
+                        handleViewRanking(current.gradeId, current.gradeTitle)
+                      }
+                      className={`inline-flex items-center gap-2 min-h-[48px] px-5 rounded-[10px] font-bold text-sm sm:text-base transition-all active:scale-[0.98] cursor-pointer border ${
+                        isSaved
+                          ? "bg-[#fbbf24] hover:bg-[#fcd34d] text-[#141415] border-[#fbbf24]"
+                          : "bg-[#27272a] hover:bg-[#323236] text-[#f4f4f5] border-[#fbbf24]/45"
+                      }`}
+                    >
+                      <Trophy
+                        size={18}
+                        strokeWidth={2}
+                        className={isSaved ? "text-[#141415]" : "text-[#fbbf24]"}
+                      />
+                      <span>
+                        {multiGrade ? `${current.gradeTitle} ` : ""}
+                        {isSaved ? "순위 발표 열기" : "순위 결과 확인"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           {/* 스크롤 가능한 프롬프터 본문 */}
